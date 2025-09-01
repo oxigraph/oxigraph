@@ -138,10 +138,11 @@ fn do_load(store: &Store, data: &[u8]) {
 }
 
 fn do_bulk_load(store: &Store, data: &[u8]) {
-    store
-        .bulk_loader()
+    let loader = store.bulk_loader();
+    loader
         .load_from_slice(RdfParser::from_format(RdfFormat::NTriples).lenient(), data)
         .unwrap();
+    loader.commit().unwrap();
     store.optimize().unwrap();
 }
 

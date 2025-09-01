@@ -410,14 +410,18 @@ impl JsStore {
         } else if lenient {
             parser = parser.lenient();
         }
-        Ok(if no_transaction {
-            self.store
-                .bulk_loader()
+        if no_transaction {
+            let loader = self.store.bulk_loader();
+            loader
                 .load_from_slice(parser, data.as_bytes())
+                .map_err(JsError::from)?;
+            loader.commit().map_err(JsError::from)?;
         } else {
-            self.store.load_from_slice(parser, data)
+            self.store
+                .load_from_slice(parser, data)
+                .map_err(JsError::from)?;
         }
-        .map_err(JsError::from)?)
+        Ok(())
     }
 
     pub fn dump(&self, options: &JsValue, from_graph_name: &JsValue) -> Result<String, JsValue> {

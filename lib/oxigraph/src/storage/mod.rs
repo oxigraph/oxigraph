@@ -14,6 +14,7 @@ use crate::storage::rocksdb::{
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
+use std::{io, thread};
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod binary_encoder;
@@ -138,7 +139,7 @@ impl Storage {
         }
     }
 
-    pub fn bulk_loader(&self) -> StorageBulkLoader {
+    pub fn bulk_loader(&self) -> StorageBulkLoader<'_> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageKind::RocksDb(storage) => StorageBulkLoader {
@@ -557,17 +558,17 @@ impl StorageReadableTransaction<'_> {
 }
 
 #[must_use]
-pub struct StorageBulkLoader {
-    kind: StorageBulkLoaderKind,
+pub struct StorageBulkLoader<'a> {
+    kind: StorageBulkLoaderKind<'a>,
 }
 
-enum StorageBulkLoaderKind {
+enum StorageBulkLoaderKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    RocksDb(RocksDbStorageBulkLoader),
-    Memory(MemoryStorageBulkLoader),
+    RocksDb(RocksDbStorageBulkLoader<'a>),
+    Memory(MemoryStorageBulkLoader<'a>),
 }
 
-impl StorageBulkLoader {
+impl StorageBulkLoader<'_> {
     #[cfg_attr(
         not(all(not(target_family = "wasm"), feature = "rocksdb")),
         expect(unused_variables)
@@ -578,9 +579,7 @@ impl StorageBulkLoader {
             StorageBulkLoaderKind::RocksDb(loader) => Self {
                 kind: StorageBulkLoaderKind::RocksDb(loader.with_num_threads(num_threads)),
             },
-            StorageBulkLoaderKind::Memory(loader) => Self {
-                kind: StorageBulkLoaderKind::Memory(loader),
-            },
+            StorageBulkLoaderKind::Memory(_) => self,
         }
     }
 
@@ -611,14 +610,43 @@ impl StorageBulkLoader {
         }
     }
 
-    pub fn load<EI, EO: From<StorageError> + From<EI>>(
-        &self,
-        quads: impl IntoIterator<Item = Result<Quad, EI>>,
-    ) -> Result<(), EO> {
+    pub fn target_batch_size(&self) -> usize {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => loader.load(quads),
-            StorageBulkLoaderKind::Memory(loader) => loader.load(quads),
+            StorageBulkLoaderKind::RocksDb(loader) => loader.target_batch_size(),
+            StorageBulkLoaderKind::Memory(_) => usize::MAX,
         }
     }
+
+    pub fn load_batch(&self, quads: Vec<Quad>) -> Result<(), StorageError> {
+        match &self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageBulkLoaderKind::RocksDb(loader) => loader.load_batch(quads),
+            StorageBulkLoaderKind::Memory(loader) => {
+                loader.load_batch(quads);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn commit(self) -> Result<(), StorageError> {
+        match self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageBulkLoaderKind::RocksDb(loader) => loader.commit(),
+            StorageBulkLoaderKind::Memory(loader) => {
+                loader.commit();
+                Ok(())
+            }
+        }
+    }
+}
+
+pub fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
+    result.map_err(|e| {
+        io::Error::other(if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
+            format!("A loader processed crashed with {e}")
+        } else {
+            "A loader processed crashed with and unknown error".into()
+        })
+    })
 }

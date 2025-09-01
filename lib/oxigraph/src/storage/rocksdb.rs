@@ -10,6 +10,7 @@ use crate::storage::binary_encoder::{
     write_spo_quad, write_spog_quad, write_term,
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
+use crate::storage::map_thread_result;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
@@ -19,14 +20,16 @@ use crate::storage::rocksdb_wrapper::{
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
+use std::cmp::max;
 use std::collections::{HashMap, VecDeque};
 use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
 #[cfg(feature = "rdf-12")]
 use std::hash::Hash;
-use std::mem::{swap, take};
+use std::mem::take;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::{io, thread};
 
 const BATCH_SIZE: usize = 100_000;
@@ -367,12 +370,16 @@ impl RocksDbStorage {
         self.db.backup(target_directory)
     }
 
-    pub fn bulk_loader(&self) -> RocksDbStorageBulkLoader {
+    pub fn bulk_loader(&self) -> RocksDbStorageBulkLoader<'_> {
         RocksDbStorageBulkLoader {
-            storage: self.clone(),
+            storage: self,
             hooks: Vec::new(),
             num_threads: None,
             max_memory_size: None,
+            threads: Mutex::new(VecDeque::new()),
+            sst_files: Mutex::new(Vec::new()),
+            done_counter: Arc::new(Mutex::new(0)),
+            done_and_displayed_counter: Mutex::new(0),
         }
     }
 }
@@ -1326,14 +1333,28 @@ impl RocksDbStorageReadableTransaction<'_> {
 }
 
 #[must_use]
-pub struct RocksDbStorageBulkLoader {
-    storage: RocksDbStorage,
+pub struct RocksDbStorageBulkLoader<'a> {
+    storage: &'a RocksDbStorage,
     hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
+    threads: Mutex<VecDeque<JoinHandle<Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>>>,
+    sst_files: Mutex<Vec<(ColumnFamily, PathBuf)>>,
+    done_counter: Arc<Mutex<u64>>,
+    done_and_displayed_counter: Mutex<u64>,
 }
 
-impl RocksDbStorageBulkLoader {
+impl Drop for RocksDbStorageBulkLoader<'_> {
+    fn drop(&mut self) {
+        // We clean the created files
+        for (_, file) in self.sst_files.lock().unwrap().iter() {
+            #[expect(unused_must_use)] // We already have an error to report...
+            remove_file(file);
+        }
+    }
+}
+
+impl RocksDbStorageBulkLoader<'_> {
     pub fn with_num_threads(mut self, num_threads: usize) -> Self {
         self.num_threads = Some(num_threads);
         self
@@ -1349,121 +1370,78 @@ impl RocksDbStorageBulkLoader {
         self
     }
 
-    pub fn load<EI, EO: From<StorageError> + From<EI>>(
-        &self,
-        quads: impl IntoIterator<Item = Result<Quad, EI>>,
-    ) -> Result<(), EO> {
-        let num_threads = self.num_threads.unwrap_or(2);
-        if num_threads < 2 {
-            return Err(
-                StorageError::Other("The bulk loader needs at least 2 threads".into()).into(),
-            );
-        }
-        let batch_size = if let Some(max_memory_size) = self.max_memory_size {
-            max_memory_size * 1000 / num_threads
-        } else {
-            DEFAULT_BULK_LOAD_BATCH_SIZE
-        };
-        if batch_size < 10_000 {
-            return Err(StorageError::Other(
-                "The bulk loader memory bound is too low. It needs at least 100MB".into(),
-            )
-            .into());
-        }
-        let done_counter = Mutex::new(0);
-        let mut done_and_displayed_counter = 0;
-        let mut sst_files = Vec::new();
-        let result = thread::scope(|thread_scope| {
-            let mut threads = VecDeque::with_capacity(num_threads - 1);
-            let mut buffer = Vec::with_capacity(batch_size);
-            for quad in quads {
-                let quad = quad?;
-                buffer.push(quad);
-                if buffer.len() >= batch_size {
-                    self.spawn_load_thread(
-                        &mut buffer,
-                        &mut sst_files,
-                        &mut threads,
-                        thread_scope,
-                        &done_counter,
-                        &mut done_and_displayed_counter,
-                        num_threads,
-                        batch_size,
-                    )?;
-                }
-            }
-            self.spawn_load_thread(
-                &mut buffer,
-                &mut sst_files,
-                &mut threads,
-                thread_scope,
-                &done_counter,
-                &mut done_and_displayed_counter,
-                num_threads,
-                batch_size,
-            )?;
-            for thread in threads {
-                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
-                self.on_possible_progress(&done_counter, &mut done_and_displayed_counter)?;
-            }
-            self.storage.db.insert_stt_files(&sst_files)?;
-            Ok(())
-        });
-        if result.is_err() {
-            // We clean the created files
-            for (_, file) in sst_files {
-                #[expect(unused_must_use)] // We already have an error to report...
-                remove_file(file);
-            }
-        }
-        result
+    pub fn target_num_threads(&self) -> usize {
+        self.num_threads.map_or(1, |n| max(n, 1))
     }
 
-    fn spawn_load_thread<'scope>(
-        &'scope self,
-        buffer: &mut Vec<Quad>,
-        sst_files: &mut Vec<(ColumnFamily, PathBuf)>,
-        threads: &mut VecDeque<
-            thread::ScopedJoinHandle<'scope, Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>,
-        >,
-        thread_scope: &'scope thread::Scope<'scope, '_>,
-        done_counter: &'scope Mutex<u64>,
-        done_and_displayed_counter: &mut u64,
-        num_threads: usize,
-        batch_size: usize,
-    ) -> Result<(), StorageError> {
-        self.on_possible_progress(done_counter, done_and_displayed_counter)?;
-        // We avoid having too many threads
-        if threads.len() >= num_threads {
+    pub fn target_batch_size(&self) -> usize {
+        if let Some(max_memory_size) = self.max_memory_size {
+            max_memory_size * 1000 / self.target_num_threads()
+        } else {
+            DEFAULT_BULK_LOAD_BATCH_SIZE
+        }
+    }
+
+    pub fn load_batch(&self, batch: Vec<Quad>) -> Result<(), StorageError> {
+        self.on_possible_progress()?;
+        let mut threads = self
+            .threads
+            .lock()
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        while threads.len() >= self.target_num_threads() {
             if let Some(thread) = threads.pop_front() {
-                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
-                self.on_possible_progress(done_counter, done_and_displayed_counter)?;
+                self.sst_files
+                    .lock()
+                    .map_err(|e| io::Error::other(e.to_string()))?
+                    .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
+                self.on_possible_progress()?;
             }
         }
-        let mut buffer_to_load = Vec::with_capacity(batch_size);
-        swap(buffer, &mut buffer_to_load);
-        let storage = &self.storage;
-        threads.push_back(thread_scope.spawn(move || {
-            FileBulkLoader::new(storage, batch_size).load(buffer_to_load, done_counter)
+        // TODO: better spawn
+        let storage = self.storage.clone();
+        let counter = Arc::clone(&self.done_counter);
+        threads.push_back(thread::spawn(move || {
+            FileBulkLoader::new(&storage, batch.len()).load(batch, &counter)
         }));
         Ok(())
     }
 
-    fn on_possible_progress(
-        &self,
-        done: &Mutex<u64>,
-        done_and_displayed: &mut u64,
-    ) -> Result<(), StorageError> {
-        let new_counter = *done
+    fn on_possible_progress(&self) -> Result<(), StorageError> {
+        let new_counter = *self
+            .done_counter
+            .lock()
+            .map_err(|_| io::Error::other("Mutex poisoned"))?;
+        let mut done_and_displayed_counter = self
+            .done_and_displayed_counter
             .lock()
             .map_err(|_| io::Error::other("Mutex poisoned"))?;
         let display_step = DEFAULT_BULK_LOAD_BATCH_SIZE as u64;
-        if new_counter / display_step > *done_and_displayed / display_step {
+        if new_counter / display_step > *done_and_displayed_counter / display_step {
             for hook in &self.hooks {
                 hook(new_counter);
             }
         }
-        *done_and_displayed = new_counter;
+        *done_and_displayed_counter = new_counter;
+        Ok(())
+    }
+
+    pub fn commit(self) -> Result<(), StorageError> {
+        let mut threads = self
+            .threads
+            .lock()
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        let mut sst_files = self
+            .sst_files
+            .lock()
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        {
+            while let Some(thread) = threads.pop_front() {
+                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
+                self.on_possible_progress()?;
+            }
+        }
+        self.storage.db.insert_stt_files(&sst_files)?;
+        take(&mut *sst_files); // We clear the Vec to not remove them on Drop
         Ok(())
     }
 }
@@ -1682,16 +1660,6 @@ impl<'a> FileBulkLoader<'a> {
     }
 }
 
-fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
-    result.map_err(|e| {
-        io::Error::other(if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
-            format!("A loader processed crashed with {e}")
-        } else {
-            "A loader processed crashed with and unknown error".into()
-        })
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1706,7 +1674,7 @@ mod tests {
         is_send_sync::<RocksDbStorage>();
         is_send_sync::<RocksDbStorageReader<'static>>();
         is_send_sync::<RocksDbStorageReadableTransaction<'_>>();
-        is_send_sync::<RocksDbStorageBulkLoader>();
+        is_send_sync::<RocksDbStorageBulkLoader<'_>>();
     }
 
     #[test]
@@ -1777,10 +1745,12 @@ mod tests {
         storage.snapshot().validate()?;
 
         // We add quads and graph, then clear
-        storage.bulk_loader().load::<StorageError, StorageError>([
-            Ok(default_quad.into_owned()),
-            Ok(named_graph_quad.into_owned()),
+        let loader = storage.bulk_loader();
+        loader.load_batch(vec![
+            default_quad.into_owned(),
+            named_graph_quad.into_owned(),
         ])?;
+        loader.commit()?;
         let mut transaction = storage.start_transaction()?;
         transaction.insert_named_graph(example2.into());
         transaction.commit()?;

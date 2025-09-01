@@ -40,15 +40,17 @@ use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::{
     DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader,
-    StorageReadableTransaction, StorageReader,
+    StorageReadableTransaction, StorageReader, map_thread_result,
 };
-use std::fmt;
 use std::io::{Read, Write};
+use std::mem::take;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
+use std::sync::Arc;
+use std::{fmt, thread};
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
-/// Allows querying and update it using SPARQL.
+/// Allows querying and updating it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
 /// This store ensures the "repeatable read" isolation level: the store only exposes changes that have
@@ -561,11 +563,11 @@ impl Store {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// store.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
     /// store.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
@@ -606,11 +608,11 @@ impl Store {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// store.load_from_slice(RdfFormat::NQuads, file)?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
     /// store.load_from_slice(
     ///     RdfParser::from_format(RdfFormat::Turtle)
@@ -986,16 +988,16 @@ impl Store {
     /// // quads file insertion
     /// let file =
     ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store
-    ///     .bulk_loader()
-    ///     .load_from_slice(RdfFormat::NQuads, file)?;
+    /// let mut loader = store.bulk_loader();
+    /// loader.load_from_slice(RdfFormat::NQuads, file)?;
+    /// loader.commit()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn bulk_loader(&self) -> BulkLoader {
+    pub fn bulk_loader(&self) -> BulkLoader<'_> {
         BulkLoader {
             storage: self.storage.bulk_loader(),
             on_parse_error: None,
@@ -1263,13 +1265,13 @@ impl<'a> Transaction<'a> {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// let mut transaction = store.start_transaction()?;
     /// transaction.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
     /// transaction.commit()?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
     /// let mut transaction = store.start_transaction()?;
     /// transaction.load_from_reader(
@@ -1311,13 +1313,13 @@ impl<'a> Transaction<'a> {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// let mut transaction = store.start_transaction()?;
     /// transaction.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
     /// transaction.commit()?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
     /// let mut transaction = store.start_transaction()?;
     /// transaction.load_from_slice(
@@ -1629,9 +1631,9 @@ impl Iterator for GraphNameIter<'_> {
 /// // quads file insertion
 /// let file =
 ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-/// store
-///     .bulk_loader()
-///     .load_from_slice(RdfFormat::NQuads, file)?;
+/// let mut loader = store.bulk_loader();
+/// loader.load_from_slice(RdfFormat::NQuads, file)?;
+/// loader.commit()?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1639,12 +1641,12 @@ impl Iterator for GraphNameIter<'_> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct BulkLoader {
-    storage: StorageBulkLoader,
-    on_parse_error: Option<Box<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
+pub struct BulkLoader<'a> {
+    storage: StorageBulkLoader<'a>,
+    on_parse_error: Option<Arc<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
 }
 
-impl BulkLoader {
+impl BulkLoader<'_> {
     /// Sets the maximal number of threads to be used by the bulk loader per operation.
     ///
     /// This number must be at last 2 (one for parsing and one for loading).
@@ -1685,7 +1687,7 @@ impl BulkLoader {
         mut self,
         callback: impl Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync + 'static,
     ) -> Self {
-        self.on_parse_error = Some(Box::new(callback));
+        self.on_parse_error = Some(Arc::new(callback));
         self
     }
 
@@ -1705,22 +1707,26 @@ impl BulkLoader {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.bulk_loader().load_from_reader(
+    /// let mut loader = store.bulk_loader();
+    /// loader.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
     ///     file.as_bytes()
     /// )?;
+    /// loader.commit()?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
-    /// store.bulk_loader().load_from_reader(
+    /// let mut loader = store.bulk_loader();
+    /// loader.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file.as_bytes()
     /// )?;
+    /// loader.commit()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1733,6 +1739,7 @@ impl BulkLoader {
         parser: impl Into<RdfParser>,
         reader: impl Read,
     ) -> Result<(), LoaderError> {
+        let on_parse_error = self.on_parse_error.as_ref().map(Arc::clone);
         self.load_ok_quads(
             parser
                 .into()
@@ -1741,7 +1748,7 @@ impl BulkLoader {
                 .filter_map(|r| match r {
                     Ok(q) => Some(Ok(q)),
                     Err(e) => {
-                        if let Some(callback) = &self.on_parse_error {
+                        if let Some(callback) = &on_parse_error {
                             if let Err(e) = callback(e) {
                                 Some(Err(e))
                             } else {
@@ -1771,22 +1778,26 @@ impl BulkLoader {
     ///
     /// let store = Store::new()?;
     ///
-    /// // insert a dataset file (former load_dataset method)
+    /// // insert a dataset file
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.bulk_loader().load_from_slice(
+    /// let mut loader = store.bulk_loader();
+    /// loader.load_from_slice(
     ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
     ///     file
     /// )?;
+    /// loader.commit()?;
     ///
-    /// // insert a graph file (former load_graph method)
+    /// // insert a graph file
     /// let file = "<> <> <> .";
-    /// store.bulk_loader().load_from_slice(
+    /// let mut loader = store.bulk_loader();
+    /// loader.bulk_loader().load_from_slice(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file
     /// )?;
+    /// loader.commit()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1799,6 +1810,7 @@ impl BulkLoader {
         parser: impl Into<RdfParser>,
         slice: &(impl AsRef<[u8]> + ?Sized),
     ) -> Result<(), LoaderError> {
+        let on_parse_error = self.on_parse_error.as_ref().map(Arc::clone);
         self.load_ok_quads(
             parser
                 .into()
@@ -1807,18 +1819,110 @@ impl BulkLoader {
                 .filter_map(|r| match r {
                     Ok(q) => Some(Ok(q)),
                     Err(e) => {
-                        if let Some(callback) = &self.on_parse_error {
-                            if let Err(e) = callback(RdfParseError::Syntax(e)) {
+                        if let Some(callback) = &on_parse_error {
+                            if let Err(e) = callback(e.into()) {
                                 Some(Err(e))
                             } else {
                                 None
                             }
                         } else {
-                            Some(Err(RdfParseError::Syntax(e)))
+                            Some(Err(e.into()))
                         }
                     }
                 }),
         )
+    }
+
+    /// Loads serialized RDF in a slice using the bulk loader.
+    ///
+    /// If the input format is N-Triples or N-Quads, it will spawn up to `target_parallelism` quads.
+    ///
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
+    ///
+    /// See [the struct](Self) documentation for more details.
+    ///
+    /// To get better speed on valid datasets, consider enabling [`RdfParser::lenient`] option to skip some validations.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
+    /// use oxigraph::model::*;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// let mut loader = store.bulk_loader();
+    /// loader.parallel_load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
+    ///     file, 4 // Use at most 4 threads
+    /// )?;
+    /// loader.commit()?;
+    ///
+    /// // insert a graph file
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> .";
+    /// let mut loader = store.bulk_loader();
+    /// loader.bulk_loader().parallel_load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::NTriples)
+    ///         .with_base_iri("http://example.com")?
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///     file,
+    ///     4 // Use at most 4 threads
+    /// )?;
+    /// loader.commit()?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parallel_load_from_slice(
+        &self,
+        parser: impl Into<RdfParser>,
+        slice: &(impl AsRef<[u8]> + ?Sized),
+        target_parallelism: usize,
+    ) -> Result<(), LoaderError> {
+        let on_parse_error = self.on_parse_error.as_ref().map(Arc::clone);
+        let parsers = parser
+            .into()
+            .rename_blank_nodes()
+            .split_slice_for_parallel_parsing(slice, target_parallelism);
+        let target_batch_size = self.storage.target_batch_size();
+        thread::scope(|scope| {
+            let threads = parsers
+                .into_iter()
+                .map(|parser| {
+                    scope.spawn(|| {
+                        let mut batch = Vec::new();
+                        for result in parser {
+                            match result {
+                                Ok(quad) => {
+                                    batch.push(quad);
+                                    if batch.len() >= target_batch_size {
+                                        self.storage.load_batch(take(&mut batch))?;
+                                    }
+                                }
+                                Err(e) => {
+                                    if let Some(callback) = &on_parse_error {
+                                        callback(e.into())?;
+                                    } else {
+                                        return Err(LoaderError::from(RdfParseError::from(e)));
+                                    }
+                                }
+                            }
+                        }
+                        Ok(())
+                    })
+                })
+                .collect::<Vec<_>>();
+            for thread in threads {
+                map_thread_result(thread.join()).map_err(StorageError::from)??;
+            }
+            Ok(())
+        })
     }
 
     /// Adds a set of quads using the bulk loader.
@@ -1838,8 +1942,23 @@ impl BulkLoader {
         &self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
     ) -> Result<(), EO> {
-        self.storage
-            .load(quads.into_iter().map(|q| q.map(Into::into)))
+        let target_batch_size = self.storage.target_batch_size();
+        let mut batch = Vec::new();
+        for quad in quads {
+            batch.push(quad?.into());
+            if batch.len() >= target_batch_size {
+                self.storage.load_batch(take(&mut batch))?;
+            }
+        }
+        if !batch.is_empty() {
+            self.storage.load_batch(batch)?;
+        }
+        Ok(())
+    }
+
+    /// Saves all the quads loaded using the bulk loader into the store.
+    pub fn commit(self) -> Result<(), StorageError> {
+        self.storage.commit()
     }
 }
 
@@ -1852,7 +1971,7 @@ mod tests {
     fn test_send_sync() {
         fn is_send_sync<T: Send + Sync>() {}
         is_send_sync::<Store>();
-        is_send_sync::<BulkLoader>();
+        is_send_sync::<BulkLoader<'_>>();
     }
 
     #[test]
