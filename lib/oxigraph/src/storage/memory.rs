@@ -86,8 +86,8 @@ impl MemoryStorage {
 
     pub fn bulk_loader(&self) -> MemoryStorageBulkLoader<'_> {
         MemoryStorageBulkLoader {
-            store: self,
-            quads: Mutex::new(Vec::new()),
+            transaction: self.start_transaction(),
+            done: 0,
             hooks: Vec::new(),
         }
     }
@@ -802,8 +802,8 @@ impl Iterator for MemoryDecodingGraphIterator<'_> {
 
 #[must_use]
 pub struct MemoryStorageBulkLoader<'a> {
-    store: &'a MemoryStorage,
-    quads: Mutex<Vec<Quad>>,
+    transaction: MemoryStorageTransaction<'a>,
+    done: u64,
     hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
 }
 
@@ -813,36 +813,20 @@ impl MemoryStorageBulkLoader<'_> {
         self
     }
 
-    pub fn load_batch(&self, new_quads: Vec<Quad>) {
-        let mut quads = self.quads.lock().unwrap();
-        let start_size = quads.len();
-        quads.extend(new_quads);
-        let end_size = quads.len();
-        for i in start_size / 1_000_000 + 1..=end_size / 1_000_000 {
-            for hook in &self.hooks {
-                hook((i * 1_000_000).try_into().unwrap());
+    pub fn load_batch(&mut self, new_quads: Vec<Quad>) {
+        for quad in new_quads {
+            self.transaction.insert(quad.as_ref());
+            self.done += 1;
+            if self.done.is_multiple_of(1_000_000) {
+                for hook in &self.hooks {
+                    hook(self.done);
+                }
             }
         }
     }
 
     pub fn commit(self) {
-        let transaction_mutex = self.store.transaction_counter.lock().unwrap();
-        let new_version_id = self.store.version_counter.load(Ordering::Acquire) + 1;
-        let mut transaction = MemoryStorageTransaction {
-            storage: self.store,
-            log: Vec::new(),
-            transaction_id: new_version_id,
-            snapshot_id: new_version_id,
-            _transaction_mutex: transaction_mutex,
-            committed: true,
-        };
-        for quad in self.quads.into_inner().unwrap() {
-            transaction.insert(quad.as_ref());
-            transaction.log.clear();
-        }
-        self.store
-            .version_counter
-            .store(new_version_id, Ordering::Release);
+        self.transaction.commit();
     }
 }
 

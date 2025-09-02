@@ -10,13 +10,13 @@ use crate::storage::binary_encoder::{
     write_spo_quad, write_spog_quad, write_term,
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
-use crate::storage::map_thread_result;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, ReadableTransaction, Reader, Transaction,
 };
+use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
@@ -46,7 +46,6 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
-const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -376,10 +375,10 @@ impl RocksDbStorage {
             hooks: Vec::new(),
             num_threads: None,
             max_memory_size: None,
-            threads: Mutex::new(VecDeque::new()),
-            sst_files: Mutex::new(Vec::new()),
+            threads: VecDeque::new(),
+            sst_files: Vec::new(),
             done_counter: Arc::new(Mutex::new(0)),
-            done_and_displayed_counter: Mutex::new(0),
+            done_and_displayed_counter: 0,
         }
     }
 }
@@ -1338,16 +1337,16 @@ pub struct RocksDbStorageBulkLoader<'a> {
     hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
-    threads: Mutex<VecDeque<JoinHandle<Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>>>,
-    sst_files: Mutex<Vec<(ColumnFamily, PathBuf)>>,
+    threads: VecDeque<JoinHandle<Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>>,
+    sst_files: Vec<(ColumnFamily, PathBuf)>,
     done_counter: Arc<Mutex<u64>>,
-    done_and_displayed_counter: Mutex<u64>,
+    done_and_displayed_counter: u64,
 }
 
 impl Drop for RocksDbStorageBulkLoader<'_> {
     fn drop(&mut self) {
         // We clean the created files
-        for (_, file) in self.sst_files.lock().unwrap().iter() {
+        for (_, file) in &self.sst_files {
             #[expect(unused_must_use)] // We already have an error to report...
             remove_file(file);
         }
@@ -1382,17 +1381,11 @@ impl RocksDbStorageBulkLoader<'_> {
         }
     }
 
-    pub fn load_batch(&self, batch: Vec<Quad>) -> Result<(), StorageError> {
+    pub fn load_batch(&mut self, batch: Vec<Quad>) -> Result<(), StorageError> {
         self.on_possible_progress()?;
-        let mut threads = self
-            .threads
-            .lock()
-            .map_err(|e| io::Error::other(e.to_string()))?;
-        while threads.len() >= self.target_num_threads() {
-            if let Some(thread) = threads.pop_front() {
+        while self.threads.len() >= self.target_num_threads() {
+            if let Some(thread) = self.threads.pop_front() {
                 self.sst_files
-                    .lock()
-                    .map_err(|e| io::Error::other(e.to_string()))?
                     .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
                 self.on_possible_progress()?;
             }
@@ -1400,48 +1393,35 @@ impl RocksDbStorageBulkLoader<'_> {
         // TODO: better spawn
         let storage = self.storage.clone();
         let counter = Arc::clone(&self.done_counter);
-        threads.push_back(thread::spawn(move || {
+        self.threads.push_back(thread::spawn(move || {
             FileBulkLoader::new(&storage, batch.len()).load(batch, &counter)
         }));
         Ok(())
     }
 
-    fn on_possible_progress(&self) -> Result<(), StorageError> {
+    fn on_possible_progress(&mut self) -> Result<(), StorageError> {
         let new_counter = *self
             .done_counter
             .lock()
             .map_err(|_| io::Error::other("Mutex poisoned"))?;
-        let mut done_and_displayed_counter = self
-            .done_and_displayed_counter
-            .lock()
-            .map_err(|_| io::Error::other("Mutex poisoned"))?;
         let display_step = DEFAULT_BULK_LOAD_BATCH_SIZE as u64;
-        if new_counter / display_step > *done_and_displayed_counter / display_step {
+        if new_counter / display_step > self.done_and_displayed_counter / display_step {
             for hook in &self.hooks {
                 hook(new_counter);
             }
         }
-        *done_and_displayed_counter = new_counter;
+        self.done_and_displayed_counter = new_counter;
         Ok(())
     }
 
-    pub fn commit(self) -> Result<(), StorageError> {
-        let mut threads = self
-            .threads
-            .lock()
-            .map_err(|e| io::Error::other(e.to_string()))?;
-        let mut sst_files = self
-            .sst_files
-            .lock()
-            .map_err(|e| io::Error::other(e.to_string()))?;
-        {
-            while let Some(thread) = threads.pop_front() {
-                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
-                self.on_possible_progress()?;
-            }
+    pub fn commit(mut self) -> Result<(), StorageError> {
+        while let Some(thread) = self.threads.pop_front() {
+            self.sst_files
+                .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
+            self.on_possible_progress()?;
         }
-        self.storage.db.insert_stt_files(&sst_files)?;
-        take(&mut *sst_files); // We clear the Vec to not remove them on Drop
+        self.storage.db.insert_stt_files(&self.sst_files)?;
+        self.sst_files.clear(); // We clear the Vec to not remove them on Drop
         Ok(())
     }
 }
@@ -1745,7 +1725,7 @@ mod tests {
         storage.snapshot().validate()?;
 
         // We add quads and graph, then clear
-        let loader = storage.bulk_loader();
+        let mut loader = storage.bulk_loader();
         loader.load_batch(vec![
             default_quad.into_owned(),
             named_graph_quad.into_owned(),

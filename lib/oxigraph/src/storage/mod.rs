@@ -14,6 +14,7 @@ use crate::storage::rocksdb::{
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
+#[cfg(not(target_family = "wasm"))]
 use std::{io, thread};
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -26,6 +27,8 @@ mod rocksdb;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod rocksdb_wrapper;
 pub mod small_string;
+
+const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -614,12 +617,16 @@ impl StorageBulkLoader<'_> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.target_batch_size(),
-            StorageBulkLoaderKind::Memory(_) => usize::MAX,
+            StorageBulkLoaderKind::Memory(_) => DEFAULT_BULK_LOAD_BATCH_SIZE,
         }
     }
 
-    pub fn load_batch(&self, quads: Vec<Quad>) -> Result<(), StorageError> {
-        match &self.kind {
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(clippy::unnecessary_wraps)
+    )]
+    pub fn load_batch(&mut self, quads: Vec<Quad>) -> Result<(), StorageError> {
+        match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.load_batch(quads),
             StorageBulkLoaderKind::Memory(loader) => {
@@ -629,6 +636,10 @@ impl StorageBulkLoader<'_> {
         }
     }
 
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(clippy::unnecessary_wraps)
+    )]
     pub fn commit(self) -> Result<(), StorageError> {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -641,6 +652,7 @@ impl StorageBulkLoader<'_> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
     result.map_err(|e| {
         io::Error::other(if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
