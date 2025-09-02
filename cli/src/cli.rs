@@ -86,6 +86,8 @@ pub enum Command {
     /// Load file(s) into the store
     ///
     /// Feel free to enable the --lenient option if you know your input is valid to get better performances.
+    ///
+    /// Files are loaded atomically, either the file is fully loaded into the store or not at all.
     Load {
         /// Directory in which Oxigraph data are persisted
         #[arg(short, long, value_hint = ValueHint::DirPath)]

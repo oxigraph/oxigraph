@@ -137,7 +137,7 @@ fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     loader.commit()?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -152,7 +152,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     loader.commit()?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -165,7 +165,7 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    let loader = store.bulk_loader().on_parse_error(|_| Ok(()));
+    let mut loader = store.bulk_loader().on_parse_error(|_| Ok(()));
     loader.load_from_slice(
         RdfFormat::NTriples,
         b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
@@ -185,7 +185,7 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_empty() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_quads(empty::<Quad>())?;
     loader.commit()?;
     assert!(store.is_empty()?);
@@ -209,7 +209,7 @@ fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     loader.commit()?;
     let graph_name =
@@ -318,7 +318,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
     );
     let store = Store::new()?;
     store.remove(quad)?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_quads([quad.into_owned()])?;
     loader.commit()?;
     assert_eq!(store.len()?, 1);
@@ -337,7 +337,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete_on_disk() -> Result<()
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
     store.remove(quad)?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_quads([quad.into_owned()])?;
     loader.commit()?;
     assert_eq!(store.len()?, 1);
@@ -362,7 +362,7 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
     remove_dir_all(&dir.0)?;
-    let loader = store.bulk_loader();
+    let mut loader = store.bulk_loader();
     loader.load_quads(once(Quad::new(
         NamedNode::new_unchecked("http://example.com/s"),
         NamedNode::new_unchecked("http://example.com/p"),

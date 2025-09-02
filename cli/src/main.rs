@@ -138,7 +138,7 @@ pub fn main() -> anyhow::Result<()> {
                     })
                 }
                 bulk_load(
-                    &loader,
+                    &mut loader,
                     stdin().lock(),
                     format.context("The --format option must be set when loading from stdin")?,
                     base.as_deref(),
@@ -191,7 +191,7 @@ pub fn main() -> anyhow::Result<()> {
                                 if let Err(error) = {
                                     if file.extension().is_some_and(|e| e == OsStr::new("gz")) {
                                         bulk_load(
-                                            &loader,
+                                            &mut loader,
                                             MultiGzDecoder::new(fp),
                                             format.unwrap_or_else(|| {
                                                 rdf_format_from_path(&file.with_extension(""))
@@ -203,7 +203,7 @@ pub fn main() -> anyhow::Result<()> {
                                         )
                                     } else {
                                         bulk_load(
-                                            &loader,
+                                            &mut loader,
                                             fp,
                                             format.unwrap_or_else(|| {
                                                 rdf_format_from_path(&file).unwrap()
@@ -561,7 +561,7 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn bulk_load(
-    loader: &BulkLoader<'_>,
+    loader: &mut BulkLoader<'_>,
     reader: impl Read,
     format: RdfFormat,
     base_iri: Option<&str>,
@@ -1621,7 +1621,7 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        let loader = web_bulk_loader(store, request);
+        let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
@@ -1643,7 +1643,7 @@ fn web_load_dataset(
         parser = parser.lenient();
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        let loader = web_bulk_loader(store, request);
+        let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;

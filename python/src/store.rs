@@ -133,7 +133,9 @@ impl PyStore {
         })
     }
 
-    /// Adds a set of quads to this store.
+    /// Adds a set of quads to this store without keeping them all into memory.
+    ///
+    /// It always writes new files to disk, the :py:func:`extend` method is also available for fast insertion of a small number of quads.
     ///
     /// :param quads: the quads to add.
     /// :type quads: collections.abc.Iterable[Quad]
@@ -146,7 +148,7 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[cfg(not(target_family = "wasm"))]
     fn bulk_extend(&self, quads: &Bound<'_, PyAny>) -> PyResult<()> {
-        let loader = self.inner.bulk_loader();
+        let mut loader = self.inner.bulk_loader();
         loader.load_ok_quads::<PyErr, PythonOrStorageError>(
             quads.try_iter()?.map(|q| q?.extract::<PyQuad>()),
         )?;
@@ -439,12 +441,11 @@ impl PyStore {
         })
     }
 
-    /// Loads some RDF serialization into the store.
+    /// Loads some RDF serialization into the store without keeping it all into memory.
     ///
-    /// This function is designed to be as fast as possible on big files **without** transactional guarantees.
-    /// If the file is invalid, only a piece of it might be written to the store.
+    /// This function is designed to be as fast as possible on big files.
     ///
-    /// The :py:func:`load` method is also available for loads with transactional guarantees.
+    /// It always writes new files to disk, the :py:func:`load` method is also available for fast insertion of small files.
     ///
     /// It currently supports the following formats:
     ///
@@ -505,7 +506,7 @@ impl PyStore {
             if lenient {
                 parser = parser.lenient();
             }
-            let loader = self.inner.bulk_loader();
+            let mut loader = self.inner.bulk_loader();
             loader
                 .load_from_reader(parser, input)
                 .map_err(|e| map_loader_error(e, path))?;
