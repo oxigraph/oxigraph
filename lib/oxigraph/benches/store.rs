@@ -6,14 +6,13 @@ use oxhttp::model::{Request, Uri};
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
-use rand::random;
 use spargebra::{Query, Update};
-use std::env::temp_dir;
-use std::fs::{File, remove_dir_all};
+use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str;
 use std::str::FromStr;
+use tempfile::TempDir;
 
 fn parse_bsbm(c: &mut Criterion) {
     let data = read_bz2_data("https://zenodo.org/records/12663333/files/dataset-1000.nt.bz2");
@@ -112,7 +111,7 @@ fn store_load(c: &mut Criterion) {
     });
     group.bench_function("load BSBM explore 1000 in on disk", |b| {
         b.iter(|| {
-            let path = TempDir::default();
+            let path = TempDir::new().unwrap();
             let store = Store::open(&path).unwrap();
             do_load(&store, &data);
         })
@@ -125,7 +124,7 @@ fn store_load(c: &mut Criterion) {
     });
     group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
         b.iter(|| {
-            let path = TempDir::default();
+            let path = TempDir::new().unwrap();
             let store = Store::open(&path).unwrap();
             do_bulk_load(&store, &data);
         })
@@ -210,7 +209,7 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
     }
 
     {
-        let path = TempDir::default();
+        let path = TempDir::new().unwrap();
         let disk_store = Store::open(&path).unwrap();
         do_bulk_load(&disk_store, &data);
         group.bench_function(format!("BSBM explore {data_size} query on disk"), |b| {
@@ -352,24 +351,4 @@ enum RawOperation {
 enum Operation {
     Query(Query),
     Update(Update),
-}
-
-struct TempDir(PathBuf);
-
-impl Default for TempDir {
-    fn default() -> Self {
-        Self(temp_dir().join(format!("oxigraph-bench-{}", random::<u128>())))
-    }
-}
-
-impl AsRef<Path> for TempDir {
-    fn as_ref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        remove_dir_all(&self.0).unwrap()
-    }
 }

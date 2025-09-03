@@ -2,7 +2,7 @@
 //! and a serializer implemented by [`TurtleSerializer`].
 
 use crate::MIN_PARALLEL_CHUNK_SIZE;
-use crate::chunker::get_turtle_file_chunks;
+use crate::chunker::get_turtle_slice_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
@@ -262,7 +262,7 @@ impl TurtleParser {
             }
         }
 
-        get_turtle_file_chunks(slice, n_chunks, &self)
+        get_turtle_slice_chunks(slice, n_chunks, &self)
             .into_iter()
             .map(|(start, end)| self.clone().for_slice(&slice[start..end]))
             .collect()

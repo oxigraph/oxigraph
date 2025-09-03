@@ -1551,6 +1551,7 @@ dependencies = [
  "sparesults",
  "spareval",
  "spargebra",
+ "tempfile",
  "thiserror 2.0.16",
 ]
 
@@ -1653,6 +1654,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
 ]
@@ -1695,6 +1697,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "rayon",
+ "tempfile",
  "thiserror 2.0.16",
  "tokio",
 ]

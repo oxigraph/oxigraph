@@ -1644,9 +1644,7 @@ impl<'a> FileBulkLoader<'a> {
 mod tests {
     use super::*;
     use oxrdf::NamedNodeRef;
-    use rand::random;
-    use std::env::temp_dir;
-    use std::fs::remove_dir_all;
+    use tempfile::TempDir;
 
     #[test]
     fn test_send_sync() {
@@ -1669,7 +1667,7 @@ mod tests {
         let named_graph_quad = QuadRef::new(example, example, example, example);
         let encoded_named_graph_quad = EncodedQuad::from(named_graph_quad);
 
-        let path = TempDir::default();
+        let path = TempDir::new()?;
         let storage = RocksDbStorage::open(path.as_ref())?;
 
         // We start with a graph
@@ -1745,31 +1743,5 @@ mod tests {
         storage.snapshot().validate()?;
 
         Ok(())
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    struct TempDir(PathBuf);
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    impl Default for TempDir {
-        fn default() -> Self {
-            Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
-        }
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    impl AsRef<Path> for TempDir {
-        fn as_ref(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            if self.0.is_dir() {
-                remove_dir_all(&self.0).unwrap();
-            }
-        }
     }
 }

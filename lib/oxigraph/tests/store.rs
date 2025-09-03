@@ -5,13 +5,9 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use rand::random;
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use std::env::temp_dir;
 use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use std::fs::{File, create_dir_all, remove_dir_all};
+use std::fs::{File, create_dir_all, remove_dir, remove_dir_all};
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::fs::{read, read_dir, write};
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
@@ -22,7 +18,9 @@ use std::iter::empty;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::iter::once;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use tempfile::TempDir;
 
 #[expect(clippy::non_ascii_literal)]
 const DATA: &str = r#"
@@ -124,8 +122,8 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
-    let dir = TempDir::default();
-    let store = Store::open(&dir.0)?;
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -150,8 +148,8 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
-    let dir = TempDir::default();
-    let store = Store::open(&dir.0)?;
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
     let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     loader.commit()?;
@@ -295,8 +293,8 @@ fn test_snapshot_isolation_iterator_on_disk() -> Result<(), Box<dyn Error>> {
         NamedNodeRef::new("http://example.com/o")?,
         NamedNodeRef::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
     );
-    let dir = TempDir::default();
-    let store = Store::open(&dir.0)?;
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
     store.insert(quad)?;
     let iter = store.iter();
     store.remove(quad)?;
@@ -334,8 +332,8 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete_on_disk() -> Result<()
         NamedNodeRef::new_unchecked("http://example.com/o"),
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
-    let dir = TempDir::default();
-    let store = Store::open(&dir.0)?;
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
     store.remove(quad)?;
     let mut loader = store.bulk_loader();
     loader.load_quads([quad.into_owned()])?;
@@ -347,21 +345,21 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete_on_disk() -> Result<()
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
-    let dir = TempDir::default();
-    create_dir_all(&dir.0)?;
+    let dir = TempDir::new()?;
+    create_dir_all(&dir)?;
     {
-        File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
+        File::create(dir.as_ref().join("CURRENT"))?.write_all(b"foo")?;
     }
-    assert!(Store::open(&dir.0).is_err());
+    assert!(Store::open(&dir).is_err());
     Ok(())
 }
 
 #[test]
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
-    let dir = TempDir::default();
-    let store = Store::open(&dir.0)?;
-    remove_dir_all(&dir.0)?;
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    remove_dir_all(&dir)?;
     let mut loader = store.bulk_loader();
     loader.load_quads(once(Quad::new(
         NamedNode::new_unchecked("http://example.com/s"),
@@ -382,9 +380,11 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
         NamedNodeRef::new_unchecked("http://example.com/o"),
         GraphNameRef::DefaultGraph,
     );
-    let store_dir = TempDir::default();
-    let backup_from_rw_dir = TempDir::default();
-    let backup_from_ro_dir = TempDir::default();
+    let store_dir = TempDir::new()?;
+    let backup_from_rw_dir = TempDir::new()?;
+    remove_dir(&backup_from_rw_dir)?;
+    let backup_from_ro_dir = TempDir::new()?;
+    remove_dir(&backup_from_ro_dir)?;
 
     let store = Store::open(&store_dir)?;
     store.insert(quad)?;
@@ -392,12 +392,12 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     store.remove(quad)?;
     assert!(!store.contains(quad)?);
 
-    let backup_from_rw = Store::open_read_only(&backup_from_rw_dir.0)?;
+    let backup_from_rw = Store::open_read_only(&backup_from_rw_dir)?;
     backup_from_rw.validate()?;
     assert!(backup_from_rw.contains(quad)?);
     backup_from_rw.backup(&backup_from_ro_dir)?;
 
-    let backup_from_ro = Store::open_read_only(&backup_from_ro_dir.0)?;
+    let backup_from_ro = Store::open_read_only(&backup_from_ro_dir)?;
     backup_from_ro.validate()?;
     assert!(backup_from_ro.contains(quad)?);
 
@@ -407,18 +407,18 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_bad_backup() -> Result<(), Box<dyn Error>> {
-    let store_dir = TempDir::default();
-    let backup_dir = TempDir::default();
+    let store_dir = TempDir::new()?;
+    let backup_dir = TempDir::new()?;
 
-    create_dir_all(&backup_dir.0)?;
-    Store::open(&store_dir)?.backup(&backup_dir.0).unwrap_err();
+    create_dir_all(&backup_dir)?;
+    Store::open(&store_dir)?.backup(&backup_dir).unwrap_err();
     Ok(())
 }
 
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
-    let backup_dir = TempDir::default();
+    let backup_dir = TempDir::new()?;
     Store::new()?.backup(&backup_dir).unwrap_err();
     Ok(())
 }
@@ -498,7 +498,7 @@ fn test_read_only() -> Result<(), Box<dyn Error>> {
         NamedNodeRef::new_unchecked("http://example.com/o2"),
         GraphNameRef::DefaultGraph,
     );
-    let store_dir = TempDir::default();
+    let store_dir = TempDir::new()?;
 
     // We write to the store and close it
     {
@@ -533,10 +533,10 @@ fn test_read_only() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
-    let dir = TempDir::default();
-    create_dir_all(&dir.0)?;
+    let dir = TempDir::new()?;
+    create_dir_all(&dir)?;
     {
-        File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
+        File::create(dir.as_ref().join("CURRENT"))?.write_all(b"foo")?;
     }
     assert!(Store::open_read_only(&dir).is_err());
     Ok(())
@@ -571,32 +571,6 @@ impl Drop for DirSaver {
         create_dir_all(&self.path).unwrap();
         for (path, content) in &self.elements {
             write(path, content).unwrap();
-        }
-    }
-}
-
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-struct TempDir(PathBuf);
-
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-impl Default for TempDir {
-    fn default() -> Self {
-        Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
-    }
-}
-
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-impl AsRef<Path> for TempDir {
-    fn as_ref(&self) -> &Path {
-        &self.0
-    }
-}
-
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        if self.0.is_dir() {
-            remove_dir_all(&self.0).unwrap();
         }
     }
 }

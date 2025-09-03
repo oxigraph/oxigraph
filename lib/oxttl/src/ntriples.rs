@@ -2,13 +2,15 @@
 //! and a serializer implemented by [`NTriplesSerializer`].
 
 use crate::MIN_PARALLEL_CHUNK_SIZE;
-use crate::chunker::get_ntriples_file_chunks;
+use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use oxrdf::{Triple, TripleRef};
-use std::io::{self, Read, Write};
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom, Take, Write};
+use std::path::Path;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
@@ -202,13 +204,70 @@ impl NTriplesParser {
     ) -> Vec<SliceNTriplesParser<'_>> {
         let slice = slice.as_ref();
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
-        get_ntriples_file_chunks(slice, n_chunks)
+        get_ntriples_slice_chunks(slice, n_chunks)
             .into_iter()
             .map(|(start, end)| self.clone().for_slice(&slice[start..end]))
             .collect()
     }
 
-    /// Allows to parse a N-Triples file by using a low-level API.
+    /// Creates a vector of parsers that may be used to parse an NTriples file in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    /// Intended to work on large documents.
+    ///
+    /// Count the number of people:
+    /// ```no_run
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::NTriplesParser;
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    /// # let path = tempfile::NamedTempFile::new()?;
+    /// # std::fs::write(&path, r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// # <http://example.com/foo> <http://schema.org/name> "Foo" .
+    /// # <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// # <http://example.com/bar> <http://schema.org/name> "Bar" ."#)?;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers = NTriplesParser::new().split_file_for_parallel_parsing(&path, 2)?;
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for triple in reader {
+    ///             let triple = triple.unwrap();
+    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn split_file_for_parallel_parsing(
+        self,
+        path: impl AsRef<Path>,
+        target_parallelism: usize,
+    ) -> io::Result<Vec<ReaderNTriplesParser<Take<File>>>> {
+        let path = path.as_ref();
+        let mut file = File::open(path)?;
+        let file_size = file.metadata()?.len();
+        let n_chunks = usize::try_from(
+            file_size / u64::try_from(MIN_PARALLEL_CHUNK_SIZE).map_err(io::Error::other)?,
+        )
+        .map_err(io::Error::other)?
+        .clamp(1, target_parallelism);
+        get_ntriples_file_chunks(&mut file, file_size, n_chunks)?
+            .into_iter()
+            .map(|(start, end)| {
+                let mut file = File::open(path)?;
+                file.seek(SeekFrom::Start(start))?;
+                Ok(self.clone().for_reader(file.take(end - start)))
+            })
+            .collect()
+    }
+
+    /// Allows parsing an N-Triples file by using a low-level API.
     ///
     /// Count the number of people:
     /// ```

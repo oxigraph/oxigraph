@@ -12,6 +12,8 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+#[cfg(not(target_family = "wasm"))]
+use std::thread::available_parallelism;
 
 /// RDF store.
 ///
@@ -491,28 +493,59 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
-        let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
-        py.detach(|| {
-            let mut parser = RdfParser::from_format(format);
-            if let Some(base_iri) = base_iri {
-                parser = parser.with_base_iri(base_iri).map_err(|e| {
-                    PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
-                })?;
+        let mut parser = RdfParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(base_iri).map_err(|e| {
+                PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+            })?;
+        }
+        if let Some(to_graph_name) = to_graph_name {
+            parser = parser.with_default_graph(to_graph_name);
+        }
+        if lenient {
+            parser = parser.lenient();
+        }
+        match (path, input) {
+            #[cfg(not(target_family = "wasm"))]
+            (Some(path), None) => py.detach(|| {
+                let mut loader = self.inner.bulk_loader();
+                loader
+                    .parallel_load_from_file(parser, &path, available_parallelism()?.get())
+                    .map_err(|e| map_loader_error(e, Some(path)))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            #[cfg(not(target_family = "wasm"))]
+            (None, Some(PyReadableInput::Bytes(input))) => py.detach(|| {
+                let mut loader = self.inner.bulk_loader();
+                loader
+                    .parallel_load_from_slice(parser, &input, available_parallelism()?.get())
+                    .map_err(|e| map_loader_error(e, None))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            #[cfg(not(target_family = "wasm"))]
+            (None, Some(PyReadableInput::String(input))) => py.detach(|| {
+                let mut loader = self.inner.bulk_loader();
+                loader
+                    .parallel_load_from_slice(parser, &input, available_parallelism()?.get())
+                    .map_err(|e| map_loader_error(e, None))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            (path, input) => {
+                let input = PyReadable::from_args(&path, input, py)?;
+                py.detach(|| {
+                    let mut loader = self.inner.bulk_loader();
+                    loader
+                        .load_from_reader(parser, input)
+                        .map_err(|e| map_loader_error(e, path))?;
+                    loader.commit().map_err(map_storage_error)?;
+                    Ok(())
+                })
             }
-            if let Some(to_graph_name) = to_graph_name {
-                parser = parser.with_default_graph(to_graph_name);
-            }
-            if lenient {
-                parser = parser.lenient();
-            }
-            let mut loader = self.inner.bulk_loader();
-            loader
-                .load_from_reader(parser, input)
-                .map_err(|e| map_loader_error(e, path))?;
-            loader.commit().map_err(map_storage_error)?;
-            Ok(())
-        })
+        }
     }
 
     /// Dumps the store quads or triples into a file.

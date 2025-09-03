@@ -53,6 +53,7 @@ codspeed-criterion-compat.workspace = true
 csv.workspace = true
 oxhttp = { workspace = true, features = ["rustls-ring-native"] }
 bzip2.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
