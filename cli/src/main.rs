@@ -137,7 +137,7 @@ pub fn main() -> anyhow::Result<()> {
                         Ok(())
                     })
                 }
-                bulk_load(
+                bulk_load_read(
                     &mut loader,
                     stdin().lock(),
                     format.context("The --format option must be set when loading from stdin")?,
@@ -177,20 +177,20 @@ pub fn main() -> anyhow::Result<()> {
                                         Ok(())
                                     })
                                 }
-                                let fp = match File::open(&file) {
-                                    Ok(fp) => fp,
-                                    Err(error) => {
-                                        eprintln!(
-                                            "Error while opening file {}: {}",
-                                            file.display(),
-                                            error
-                                        );
-                                        return;
-                                    }
-                                };
                                 if let Err(error) = {
                                     if file.extension().is_some_and(|e| e == OsStr::new("gz")) {
-                                        bulk_load(
+                                        let fp = match File::open(&file) {
+                                            Ok(fp) => fp,
+                                            Err(error) => {
+                                                eprintln!(
+                                                    "Error while opening file {}: {}",
+                                                    file.display(),
+                                                    error
+                                                );
+                                                return;
+                                            }
+                                        };
+                                        bulk_load_read(
                                             &mut loader,
                                             MultiGzDecoder::new(fp),
                                             format.unwrap_or_else(|| {
@@ -202,9 +202,9 @@ pub fn main() -> anyhow::Result<()> {
                                             lenient,
                                         )
                                     } else {
-                                        bulk_load(
+                                        bulk_load_file(
                                             &mut loader,
-                                            fp,
+                                            &file,
                                             format.unwrap_or_else(|| {
                                                 rdf_format_from_path(&file).unwrap()
                                             }),
@@ -560,7 +560,7 @@ pub fn main() -> anyhow::Result<()> {
     }
 }
 
-fn bulk_load(
+fn bulk_load_read(
     loader: &mut BulkLoader<'_>,
     reader: impl Read,
     format: RdfFormat,
@@ -581,6 +581,30 @@ fn bulk_load(
         parser = parser.lenient();
     }
     loader.load_from_reader(parser, reader)?;
+    Ok(())
+}
+
+fn bulk_load_file(
+    loader: &mut BulkLoader<'_>,
+    path: &Path,
+    format: RdfFormat,
+    base_iri: Option<&str>,
+    to_graph_name: Option<NamedNode>,
+    lenient: bool,
+) -> anyhow::Result<()> {
+    let mut parser = RdfParser::from_format(format);
+    if let Some(to_graph_name) = to_graph_name {
+        parser = parser.with_default_graph(to_graph_name);
+    }
+    if let Some(base_iri) = base_iri {
+        parser = parser
+            .with_base_iri(base_iri)
+            .with_context(|| format!("Invalid base IRI {base_iri}"))?;
+    }
+    if lenient {
+        parser = parser.lenient();
+    }
+    loader.parallel_load_from_file(parser, path, available_parallelism()?.get())?;
     Ok(())
 }
 

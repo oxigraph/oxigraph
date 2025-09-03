@@ -30,8 +30,11 @@ use oxttl::turtle::TokioAsyncReaderTurtleParser;
 use oxttl::turtle::{ReaderTurtleParser, SliceTurtleParser, TurtleParser, TurtlePrefixesIter};
 use std::collections::HashMap;
 use std::error::Error;
-use std::io::Read;
+use std::fs::File;
+use std::io;
+use std::io::{Read, Take};
 use std::panic::{RefUnwindSafe, UnwindSafe};
+use std::path::Path;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
@@ -430,6 +433,60 @@ impl RdfParser {
                 .collect(),
             _ => vec![self.for_slice(slice)],
         }
+    }
+
+    /// Creates a vector of parsers that may be used to parse the file in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    ///
+    /// This only works for N-Triples and N-Quads and is only interesting on large documents.
+    ///
+    /// ```no_run
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    /// # let path = tempfile::NamedTempFile::new()?;
+    /// # std::fs::write(&path, "<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+    ///
+    /// let quads = RdfParser::from_format(RdfFormat::NTriples)
+    ///     .split_file_for_parallel_parsing(&path, 4)?
+    ///     .into_iter()
+    ///     .flatten()
+    ///     .collect::<Result<Vec<_>, _>>()?;
+    ///
+    /// assert_eq!(quads.len(), 1);
+    /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
+    /// # std::io::Result::Ok(())
+    /// ```
+    pub fn split_file_for_parallel_parsing(
+        self,
+        path: impl AsRef<Path>,
+        target_parallelism: usize,
+    ) -> io::Result<Vec<ReaderQuadParser<Take<File>>>> {
+        Ok(match self.inner {
+            RdfParserKind::NTriples(p) => p
+                .split_file_for_parallel_parsing(path, target_parallelism)?
+                .into_iter()
+                .map(|p| ReaderQuadParser {
+                    inner: ReaderQuadParserKind::NTriples(p),
+                    mapper: QuadMapper {
+                        default_graph: self.default_graph.clone(),
+                        without_named_graphs: self.without_named_graphs,
+                        blank_node_map: self.rename_blank_nodes.then(HashMap::new),
+                    },
+                })
+                .collect(),
+            RdfParserKind::NQuads(p) => p
+                .split_file_for_parallel_parsing(path, target_parallelism)?
+                .into_iter()
+                .map(|p| ReaderQuadParser {
+                    inner: ReaderQuadParserKind::NQuads(p),
+                    mapper: QuadMapper {
+                        default_graph: self.default_graph.clone(),
+                        without_named_graphs: self.without_named_graphs,
+                        blank_node_map: self.rename_blank_nodes.then(HashMap::new),
+                    },
+                })
+                .collect(),
+            _ => vec![self.for_reader(File::open(path)?.take(u64::MAX))],
+        })
     }
 }
 
