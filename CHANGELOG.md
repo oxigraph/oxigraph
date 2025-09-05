@@ -1,10 +1,24 @@
+# [0.5.2-beta.5] - 2025-09-07
+
+### Added
+- `spareval`: a `CancellationToken` to easily cancel a running SPARQL query.
+- CLI: `--timeout-s` option to the `query` command to set a timeout for the query.
+- `oxttl` and `oxrdfio`: `split_file_for_parallel_parsing` method to enable easier NTriples and NQuads parallel parsing from a file.
+- `oxigraph`: `parallel_load_from_file` and `parallel_load_from_slice` methods to load RDF data from a file or a slice in parallel.
+
+### Changed
+- JSON-LD: fixes parsing of aliased `@type`
+- `oxigraph`: `bulk_loader` method now takes a `mut` reference and there is a new `commit` method that is required to save the loaded data.
+- CLI and Python bindings: bulk loading data from a file and a buffer (in Python) is now done in parallel.
+- Bump `rand` to 0.9 and `getrandom` to 0.3.
+
 # [0.5.2-beta.4] - 2025-08-23
 
 ### Added
 - `spareval`: expose `QueryEvaluator::evaluate_expression` to evaluate expressions
 
 ### Changed
-- Oxigraph: `Transaction` has now stronger lifetime bounds to ensure operations on a transactions are not running longer than the transaction itself. 
+- Oxigraph: `Transaction` has now stronger lifetime bounds to ensure operations on a transaction are not running longer than the transaction itself. 
   It also affects types like `QuadIter` or `GraphNameIter` that now carry a lifetime.
 - SPARQL: raise an error when blank nodes are shared between different INSERT DATA statements (follows SPARQL spec).
 - SPARQL: Makes single DELETE/INSERT and LOAD statements slightly faster by not indexing the changes.

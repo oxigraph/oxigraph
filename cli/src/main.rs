@@ -105,7 +105,7 @@ pub fn main() -> anyhow::Result<()> {
             base,
             graph,
         } => {
-            let store = Store::open(location)?;
+            let store = Store::open(&location)?;
             let format = if let Some(format) = format {
                 Some(rdf_format_from_name(&format)?)
             } else {
@@ -146,7 +146,6 @@ pub fn main() -> anyhow::Result<()> {
                     lenient,
                 )?;
                 loader.commit()?;
-                Ok(())
             } else {
                 ThreadPoolBuilder::new()
                     .num_threads(max(1, available_parallelism()?.get() / 2))
@@ -226,8 +225,12 @@ pub fn main() -> anyhow::Result<()> {
                             })
                         }
                     });
-                Ok(())
             }
+            eprintln!(
+                "If you plan to run a read-heavy workload, consider running `oxigraph optimize -l {}` before",
+                location.display()
+            );
+            Ok(())
         }
         Command::Dump {
             location,
