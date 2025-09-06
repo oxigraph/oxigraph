@@ -81,7 +81,7 @@ pub fn get_ntriples_file_chunks(
             break;
         }
 
-        let Some(pos) = ({
+        let Some(end_pos) = ({
             file.seek(SeekFrom::Start(search_pos))?;
             let mut pos = search_pos;
             loop {
@@ -99,7 +99,6 @@ pub fn get_ntriples_file_chunks(
             // We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
             break;
         };
-        let end_pos = search_pos + pos;
         offsets.push((last_pos, end_pos));
         last_pos = end_pos;
     }
