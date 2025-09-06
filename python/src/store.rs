@@ -258,7 +258,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
-    #[expect(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, clippy::doc_link_with_quotes)]
     #[pyo3(signature = (query, *, base_iri = None, prefixes = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
     fn query<'py>(
         &self,
