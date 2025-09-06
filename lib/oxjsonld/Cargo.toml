@@ -1,6 +1,6 @@
 [package]
 name = "oxjsonld"
-version = "0.2.0-beta.2"
+version = "0.2.0-beta.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
