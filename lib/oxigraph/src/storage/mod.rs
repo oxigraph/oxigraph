@@ -28,7 +28,7 @@ mod rocksdb;
 mod rocksdb_wrapper;
 pub mod small_string;
 
-const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
+pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -572,35 +572,6 @@ enum StorageBulkLoaderKind<'a> {
 }
 
 impl StorageBulkLoader<'_> {
-    #[cfg_attr(
-        not(all(not(target_family = "wasm"), feature = "rocksdb")),
-        expect(unused_variables)
-    )]
-    pub fn with_num_threads(self, num_threads: usize) -> Self {
-        match self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => Self {
-                kind: StorageBulkLoaderKind::RocksDb(loader.with_num_threads(num_threads)),
-            },
-            StorageBulkLoaderKind::Memory(_) => self,
-        }
-    }
-
-    #[allow(unused_variables, clippy::allow_attributes)]
-    pub fn with_max_memory_size_in_megabytes(self, max_memory_size: usize) -> Self {
-        match self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => Self {
-                kind: StorageBulkLoaderKind::RocksDb(
-                    loader.with_max_memory_size_in_megabytes(max_memory_size),
-                ),
-            },
-            StorageBulkLoaderKind::Memory(loader) => Self {
-                kind: StorageBulkLoaderKind::Memory(loader),
-            },
-        }
-    }
-
     pub fn on_progress(self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -613,22 +584,18 @@ impl StorageBulkLoader<'_> {
         }
     }
 
-    pub fn target_batch_size(&self) -> usize {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => loader.target_batch_size(),
-            StorageBulkLoaderKind::Memory(_) => DEFAULT_BULK_LOAD_BATCH_SIZE,
-        }
-    }
-
     #[cfg_attr(
         any(target_family = "wasm", not(feature = "rocksdb")),
-        expect(clippy::unnecessary_wraps)
+        expect(clippy::unnecessary_wraps, unused_variables)
     )]
-    pub fn load_batch(&mut self, quads: Vec<Quad>) -> Result<(), StorageError> {
+    pub fn load_batch(
+        &mut self,
+        quads: Vec<Quad>,
+        max_num_threads: usize,
+    ) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => loader.load_batch(quads),
+            StorageBulkLoaderKind::RocksDb(loader) => loader.load_batch(quads, max_num_threads),
             StorageBulkLoaderKind::Memory(loader) => {
                 loader.load_batch(quads);
                 Ok(())

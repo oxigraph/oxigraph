@@ -12,8 +12,6 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-#[cfg(not(target_family = "wasm"))]
-use std::thread::available_parallelism;
 
 /// RDF store.
 ///
@@ -511,7 +509,7 @@ impl PyStore {
             (Some(path), None) => py.detach(|| {
                 let mut loader = self.inner.bulk_loader();
                 loader
-                    .parallel_load_from_file(parser, &path, available_parallelism()?.get())
+                    .parallel_load_from_file(parser, &path)
                     .map_err(|e| map_loader_error(e, Some(path)))?;
                 loader.commit().map_err(map_storage_error)?;
                 Ok(())
@@ -520,7 +518,7 @@ impl PyStore {
             (None, Some(PyReadableInput::Bytes(input))) => py.detach(|| {
                 let mut loader = self.inner.bulk_loader();
                 loader
-                    .parallel_load_from_slice(parser, &input, available_parallelism()?.get())
+                    .parallel_load_from_slice(parser, &input)
                     .map_err(|e| map_loader_error(e, None))?;
                 loader.commit().map_err(map_storage_error)?;
                 Ok(())
@@ -529,7 +527,7 @@ impl PyStore {
             (None, Some(PyReadableInput::String(input))) => py.detach(|| {
                 let mut loader = self.inner.bulk_loader();
                 loader
-                    .parallel_load_from_slice(parser, &input, available_parallelism()?.get())
+                    .parallel_load_from_slice(parser, &input)
                     .map_err(|e| map_loader_error(e, None))?;
                 loader.commit().map_err(map_storage_error)?;
                 Ok(())

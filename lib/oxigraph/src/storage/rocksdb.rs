@@ -20,7 +20,6 @@ use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
-use std::cmp::max;
 use std::collections::{HashMap, VecDeque};
 use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
@@ -373,8 +372,6 @@ impl RocksDbStorage {
         RocksDbStorageBulkLoader {
             storage: self,
             hooks: Vec::new(),
-            num_threads: None,
-            max_memory_size: None,
             threads: VecDeque::new(),
             sst_files: Vec::new(),
             done_counter: Arc::new(Mutex::new(0)),
@@ -1335,8 +1332,6 @@ impl RocksDbStorageReadableTransaction<'_> {
 pub struct RocksDbStorageBulkLoader<'a> {
     storage: &'a RocksDbStorage,
     hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
-    num_threads: Option<usize>,
-    max_memory_size: Option<usize>,
     threads: VecDeque<JoinHandle<Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>>,
     sst_files: Vec<(ColumnFamily, PathBuf)>,
     done_counter: Arc<Mutex<u64>>,
@@ -1354,36 +1349,18 @@ impl Drop for RocksDbStorageBulkLoader<'_> {
 }
 
 impl RocksDbStorageBulkLoader<'_> {
-    pub fn with_num_threads(mut self, num_threads: usize) -> Self {
-        self.num_threads = Some(num_threads);
-        self
-    }
-
-    pub fn with_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
-        self.max_memory_size = Some(max_memory_size);
-        self
-    }
-
     pub fn on_progress(mut self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self
     }
 
-    pub fn target_num_threads(&self) -> usize {
-        self.num_threads.map_or(1, |n| max(n, 1))
-    }
-
-    pub fn target_batch_size(&self) -> usize {
-        if let Some(max_memory_size) = self.max_memory_size {
-            max_memory_size * 1000 / self.target_num_threads()
-        } else {
-            DEFAULT_BULK_LOAD_BATCH_SIZE
-        }
-    }
-
-    pub fn load_batch(&mut self, batch: Vec<Quad>) -> Result<(), StorageError> {
+    pub fn load_batch(
+        &mut self,
+        batch: Vec<Quad>,
+        max_num_threads: usize,
+    ) -> Result<(), StorageError> {
         self.on_possible_progress()?;
-        while self.threads.len() >= self.target_num_threads() {
+        while self.threads.len() >= max_num_threads {
             if let Some(thread) = self.threads.pop_front() {
                 self.sst_files
                     .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
@@ -1724,10 +1701,10 @@ mod tests {
 
         // We add quads and graph, then clear
         let mut loader = storage.bulk_loader();
-        loader.load_batch(vec![
-            default_quad.into_owned(),
-            named_graph_quad.into_owned(),
-        ])?;
+        loader.load_batch(
+            vec![default_quad.into_owned(), named_graph_quad.into_owned()],
+            1,
+        )?;
         loader.commit()?;
         let mut transaction = storage.start_transaction()?;
         transaction.insert_named_graph(example2.into());

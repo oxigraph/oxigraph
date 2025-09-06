@@ -41,12 +41,18 @@ use crate::storage::map_thread_result;
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::{
-    DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader,
-    StorageReadableTransaction, StorageReader,
+    DEFAULT_BULK_LOAD_BATCH_SIZE, DecodingGraphIterator, DecodingQuadIterator, Storage,
+    StorageBulkLoader, StorageReadableTransaction, StorageReader,
 };
+#[cfg(not(target_family = "wasm"))]
+use std::cmp::max;
 use std::fmt;
+#[cfg(not(target_family = "wasm"))]
+use std::fs::File;
 use std::io::{Read, Write};
 use std::mem::swap;
+#[cfg(not(target_family = "wasm"))]
+use std::num::NonZero;
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 use std::sync::Arc;
@@ -54,6 +60,8 @@ use std::sync::Arc;
 use std::sync::mpsc;
 #[cfg(not(target_family = "wasm"))]
 use std::thread;
+#[cfg(not(target_family = "wasm"))]
+use std::thread::available_parallelism;
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows querying and updating it using SPARQL.
@@ -1006,6 +1014,8 @@ impl Store {
     pub fn bulk_loader(&self) -> BulkLoader<'_> {
         BulkLoader {
             storage: self.storage.bulk_loader(),
+            num_threads: None,
+            max_memory_size: None,
             on_parse_error: None,
         }
     }
@@ -1649,17 +1659,17 @@ impl Iterator for GraphNameIter<'_> {
 #[must_use]
 pub struct BulkLoader<'a> {
     storage: StorageBulkLoader<'a>,
+    num_threads: Option<usize>,
+    max_memory_size: Option<usize>,
     on_parse_error: Option<Arc<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
 }
 
 impl BulkLoader<'_> {
-    /// Sets the maximal number of threads to be used by the bulk loader per operation.
+    /// Sets the maximal number of background threads to be used by the bulk loader.
     ///
-    /// This number must be at last 2 (one for parsing and one for loading).
-    ///
-    /// The default value is 2.
+    /// The default value is the number of threads on the machine.
     pub fn with_num_threads(mut self, num_threads: usize) -> Self {
-        self.storage = self.storage.with_num_threads(num_threads);
+        self.num_threads = Some(num_threads);
         self
     }
 
@@ -1673,10 +1683,31 @@ impl BulkLoader<'_> {
     ///
     /// By default, a target 2GB per used thread is used.
     pub fn with_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
-        self.storage = self
-            .storage
-            .with_max_memory_size_in_megabytes(max_memory_size);
+        self.max_memory_size = Some(max_memory_size);
         self
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn target_num_threads(&self) -> usize {
+        max(
+            1,
+            self.num_threads
+                .unwrap_or_else(|| available_parallelism().map_or(1, NonZero::get)),
+        )
+    }
+
+    #[cfg(target_family = "wasm")]
+    #[expect(clippy::unused_self)]
+    fn target_num_threads(&self) -> usize {
+        1
+    }
+
+    fn target_batch_size(&self) -> usize {
+        if let Some(max_memory_size) = self.max_memory_size {
+            max_memory_size * 1000 / self.target_num_threads()
+        } else {
+            DEFAULT_BULK_LOAD_BATCH_SIZE
+        }
     }
 
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
@@ -1841,7 +1872,7 @@ impl BulkLoader<'_> {
 
     /// Loads RDF file using the bulk loader.
     ///
-    /// If the input format is N-Triples or N-Quads, it will spawn up to `target_parallelism` quads.
+    /// If the input format is N-Triples or N-Quads, it will spawn multiple parallel threads to parse the file.
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
     ///
@@ -1862,7 +1893,7 @@ impl BulkLoader<'_> {
     /// let mut loader = store.bulk_loader();
     /// loader.parallel_load_from_slice(
     ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
-    ///     file, 4 // Use at most 4 threads
+    ///     file,
     /// )?;
     /// loader.commit()?;
     ///
@@ -1875,7 +1906,6 @@ impl BulkLoader<'_> {
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file,
-    ///     4 // Use at most 4 threads
     /// )?;
     /// loader.commit()?;
     ///
@@ -1890,17 +1920,20 @@ impl BulkLoader<'_> {
         &mut self,
         parser: impl Into<RdfParser>,
         path: impl AsRef<Path>,
-        target_parallelism: usize,
     ) -> Result<(), LoaderError> {
+        let target_num_threads = self.target_num_threads() / 2;
+        if target_num_threads < 2 {
+            return self.load_from_reader(parser, File::open(path).map_err(RdfParseError::from)?);
+        }
+        let target_batch_size = self.target_batch_size();
         let on_parse_error = self.on_parse_error.as_ref().map(Arc::clone);
         let parsers = parser
             .into()
             .rename_blank_nodes()
-            .split_file_for_parallel_parsing(path, target_parallelism)
+            .split_file_for_parallel_parsing(path, target_num_threads)
             .map_err(RdfParseError::Io)?;
-        let target_batch_size = self.storage.target_batch_size();
-        let (sender, receiver) = mpsc::sync_channel(1);
         thread::scope(|scope| {
+            let (sender, receiver) = mpsc::sync_channel(1);
             let threads = parsers
                 .into_iter()
                 .map(|parser| {
@@ -1916,11 +1949,9 @@ impl BulkLoader<'_> {
                                         let mut batch_to_save =
                                             Vec::with_capacity(target_batch_size);
                                         swap(&mut batch, &mut batch_to_save);
-                                        sender.send(batch_to_save).map_err(|e| {
-                                            StorageError::Corruption(CorruptionError::msg(
-                                                e.to_string(),
-                                            ))
-                                        })?;
+                                        if sender.send(batch_to_save).is_err() {
+                                            return Ok(());
+                                        };
                                     }
                                 }
                                 Err(e) => {
@@ -1933,9 +1964,7 @@ impl BulkLoader<'_> {
                             }
                         }
                         if !batch.is_empty() {
-                            sender.send(batch).map_err(|e| {
-                                StorageError::Corruption(CorruptionError::msg(e.to_string()))
-                            })?;
+                            let _we_are_returning = sender.send(batch);
                         }
                         Ok(())
                     })
@@ -1943,7 +1972,7 @@ impl BulkLoader<'_> {
                 .collect::<Vec<_>>();
             drop(sender);
             while let Ok(batch) = receiver.recv() {
-                self.storage.load_batch(batch)?;
+                self.storage.load_batch(batch, target_num_threads)?;
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -1954,7 +1983,7 @@ impl BulkLoader<'_> {
 
     /// Loads serialized RDF in a slice using the bulk loader.
     ///
-    /// If the input format is N-Triples or N-Quads, it will spawn up to `target_parallelism` quads.
+    /// If the input format is N-Triples or N-Quads, it will spawn multiple parallel threads to parse the file.
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
     ///
@@ -1975,7 +2004,7 @@ impl BulkLoader<'_> {
     /// let mut loader = store.bulk_loader();
     /// loader.parallel_load_from_slice(
     ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
-    ///     file, 4 // Use at most 4 threads
+    ///     file,
     /// )?;
     /// loader.commit()?;
     ///
@@ -1987,8 +2016,7 @@ impl BulkLoader<'_> {
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
-    ///     file,
-    ///     4 // Use at most 4 threads
+    ///     file
     /// )?;
     /// loader.commit()?;
     ///
@@ -2003,16 +2031,19 @@ impl BulkLoader<'_> {
         &mut self,
         parser: impl Into<RdfParser>,
         slice: &(impl AsRef<[u8]> + ?Sized),
-        target_parallelism: usize,
     ) -> Result<(), LoaderError> {
+        let target_num_threads = self.target_num_threads() / 2;
+        if target_num_threads < 2 {
+            return self.load_from_slice(parser, slice);
+        }
+        let target_batch_size = self.target_batch_size();
         let on_parse_error = self.on_parse_error.as_ref().map(Arc::clone);
         let parsers = parser
             .into()
             .rename_blank_nodes()
-            .split_slice_for_parallel_parsing(slice, target_parallelism);
-        let target_batch_size = self.storage.target_batch_size();
-        let (sender, receiver) = mpsc::sync_channel(1);
+            .split_slice_for_parallel_parsing(slice, target_num_threads);
         thread::scope(|scope| {
+            let (sender, receiver) = mpsc::sync_channel(1);
             let threads = parsers
                 .into_iter()
                 .map(|parser| {
@@ -2028,11 +2059,9 @@ impl BulkLoader<'_> {
                                         let mut batch_to_save =
                                             Vec::with_capacity(target_batch_size);
                                         swap(&mut batch, &mut batch_to_save);
-                                        sender.send(batch_to_save).map_err(|e| {
-                                            StorageError::Corruption(CorruptionError::msg(
-                                                e.to_string(),
-                                            ))
-                                        })?;
+                                        if sender.send(batch_to_save).is_err() {
+                                            return Ok(());
+                                        }
                                     }
                                 }
                                 Err(e) => {
@@ -2045,9 +2074,7 @@ impl BulkLoader<'_> {
                             }
                         }
                         if !batch.is_empty() {
-                            sender.send(batch).map_err(|e| {
-                                StorageError::Corruption(CorruptionError::msg(e.to_string()))
-                            })?;
+                            let _we_are_returning = sender.send(batch);
                         }
                         Ok(())
                     })
@@ -2055,7 +2082,7 @@ impl BulkLoader<'_> {
                 .collect::<Vec<_>>();
             drop(sender);
             while let Ok(batch) = receiver.recv() {
-                self.storage.load_batch(batch)?;
+                self.storage.load_batch(batch, target_num_threads)?;
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -2081,18 +2108,19 @@ impl BulkLoader<'_> {
         &mut self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
     ) -> Result<(), EO> {
-        let target_batch_size = self.storage.target_batch_size();
+        let target_num_threads = self.target_num_threads();
+        let target_batch_size = self.target_batch_size();
         let mut batch = Vec::with_capacity(target_batch_size);
         for quad in quads {
             batch.push(quad?.into());
             if batch.len() >= target_batch_size {
                 let mut batch_to_save = Vec::with_capacity(target_batch_size);
                 swap(&mut batch, &mut batch_to_save);
-                self.storage.load_batch(batch_to_save)?;
+                self.storage.load_batch(batch_to_save, target_num_threads)?;
             }
         }
         if !batch.is_empty() {
-            self.storage.load_batch(batch)?;
+            self.storage.load_batch(batch, target_num_threads)?;
         }
         Ok(())
     }

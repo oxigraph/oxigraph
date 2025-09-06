@@ -226,7 +226,6 @@ pub fn main() -> anyhow::Result<()> {
                             })
                         }
                     });
-                store.flush()?;
                 Ok(())
             }
         }
@@ -449,7 +448,6 @@ pub fn main() -> anyhow::Result<()> {
                 .parse_update(&update)?
                 .on_store(&store)
                 .execute()?;
-            store.flush()?;
             Ok(())
         }
         Command::Optimize { location } => {
@@ -604,7 +602,7 @@ fn bulk_load_file(
     if lenient {
         parser = parser.lenient();
     }
-    loader.parallel_load_from_file(parser, path, available_parallelism()?.get())?;
+    loader.parallel_load_from_file(parser, path)?;
     Ok(())
 }
 
