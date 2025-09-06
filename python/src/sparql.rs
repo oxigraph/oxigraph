@@ -360,6 +360,7 @@ impl PyQuerySolutions {
     /// >>> results = store.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
     /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{"vars":["s","p","o"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"},"p":{"type":"uri","value":"http://example.com/p"},"o":{"type":"literal","value":"1"}}]}}'
+    #[expect(clippy::doc_link_with_quotes)]
     #[pyo3(signature = (output = None, format = None))]
     fn serialize(
         &mut self,
