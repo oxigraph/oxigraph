@@ -2111,8 +2111,8 @@ impl fmt::Display for MultiplicativeExpression {
 
 #[derive(Arbitrary)]
 enum UnaryExpression {
-    // [118]   UnaryExpression   ::=     '!' PrimaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
-    Not(PrimaryExpression),
+    // [135]   	UnaryExpression 	  ::=   	  '!' UnaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
+    Not(Box<UnaryExpression>),
     Plus(PrimaryExpression),
     Minus(PrimaryExpression),
     Base(PrimaryExpression),

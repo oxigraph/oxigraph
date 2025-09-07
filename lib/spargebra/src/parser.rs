@@ -2099,7 +2099,10 @@ parser! {
             (s, e)
         }
 
-        rule UnaryExpression() -> Expression = s: $("!" / "+" / "-")? _ e:PrimaryExpression() { match s {
+        rule UnaryExpression() -> Expression = s: "!" _ e:UnaryExpression() {?
+            #[cfg(feature = "sparql-12")]{Ok(Expression::Not(Box::new(e)))}
+            #[cfg(not(feature = "sparql-12"))]{Err("Double negation (!!) is only available in SPARQL 1.2")}
+        } / s: $("!" / "+" / "-")? _ e:PrimaryExpression() { match s {
             Some("!") => Expression::Not(Box::new(e)),
             Some("+") => Expression::UnaryPlus(Box::new(e)),
             Some("-") => Expression::UnaryMinus(Box::new(e)),
