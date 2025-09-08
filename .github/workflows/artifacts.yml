@@ -358,12 +358,12 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v3
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v3
         with:
           subject-name: index.docker.io/${{ github.repository }}
           subject-digest: ${{ steps.push.outputs.digest }}
