@@ -495,10 +495,11 @@ jobs:
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build ${{ matrix.build_args }}
-      - uses: CodSpeedHQ/action@v3
+      - uses: CodSpeedHQ/action@v4
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+          mode: instrumentation
 
   codecov:
     runs-on: ubuntu-latest
