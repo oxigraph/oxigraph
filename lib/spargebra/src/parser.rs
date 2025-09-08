@@ -1965,14 +1965,7 @@ parser! {
             }
         }
 
-        rule ReifiedTripleSubject() -> FocusedTriplePattern<TermPattern> =
-            v:Var() { FocusedTriplePattern::new(v) } /
-            ReifiedTriple() /
-            i:iri() { FocusedTriplePattern::new(i) } /
-            l:RDFLiteral() { FocusedTriplePattern::new(l) } /
-            l:NumericLiteral() { FocusedTriplePattern::new(l) } /
-            l:BooleanLiteral() { FocusedTriplePattern::new(l) } /
-            b:BlankNode() { FocusedTriplePattern::new(b) }
+        rule ReifiedTripleSubject() -> FocusedTriplePattern<TermPattern> = ReifiedTripleObject()
 
         rule ReifiedTripleObject() -> FocusedTriplePattern<TermPattern> =
             v:Var() { FocusedTriplePattern::new(v) } /
@@ -1995,13 +1988,7 @@ parser! {
             }
         }
 
-        rule TripleTermSubject() -> TermPattern =
-            v:Var() { v.into() } /
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            b:BlankNode() { b.into() }
+        rule TripleTermSubject() -> TermPattern = TripleTermObject()
 
         rule TripleTermObject() -> TermPattern =
             v:Var() { v.into() } /
@@ -2017,18 +2004,14 @@ parser! {
 
         rule TripleTermData() -> GroundTriple = "<<(" _ s:TripleTermDataSubject() _ p:TripleTermData_p() _ o:TripleTermDataObject() _ ")>>" {?
             Ok(GroundTriple {
-                subject: if let GroundTerm::NamedNode(s) = s { s } else { return Err("Literals are not allowed in subject position of nested patterns") },
+                subject: if let GroundTerm::NamedNode(s) = s { s } else { return Err("Literals or triple terms are not allowed in subject position of nested patterns") },
                 predicate: p,
                 object: o
             })
         }
         rule TripleTermData_p() -> NamedNode = i: iri() { i } / "a" { rdf::TYPE.into() }
 
-        rule TripleTermDataSubject() -> GroundTerm =
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() }
+        rule TripleTermDataSubject() -> GroundTerm = TripleTermDataObject()
 
         rule TripleTermDataObject() -> GroundTerm =
             t:TripleTermData() {?
@@ -2125,12 +2108,7 @@ parser! {
             #[cfg(not(feature = "sparql-12"))]{Err("Triple terms are only available in SPARQL 1.2")}
         }
 
-        rule ExprTripleTermSubject() -> Expression =
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            v:Var() { v.into() }
+        rule ExprTripleTermSubject() -> Expression = ExprTripleTermObject()
 
         rule ExprTripleTermObject() -> Expression =
             ExprTripleTerm() /
