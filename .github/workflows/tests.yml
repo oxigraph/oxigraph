@@ -499,6 +499,7 @@ jobs:
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+          mode: instrumentation
 
   codecov:
     runs-on: ubuntu-latest
