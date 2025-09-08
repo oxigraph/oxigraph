@@ -23,7 +23,7 @@ use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
 #[cfg(feature = "geosparql")]
-use spargeo::register_geosparql_functions;
+use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
@@ -1353,8 +1353,8 @@ fn evaluate_sparql_query(
 fn default_sparql_evaluator() -> SparqlEvaluator {
     let mut evaluator = SparqlEvaluator::new();
     #[cfg(feature = "geosparql")]
-    {
-        evaluator = register_geosparql_functions(evaluator);
+    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+        evaluator = evaluator.with_custom_function(name.into(), implementation)
     }
     evaluator
 }
