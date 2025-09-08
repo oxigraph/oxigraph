@@ -7,7 +7,7 @@ use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 #[cfg(feature = "geosparql")]
-use spargeo::register_geosparql_functions;
+use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use wasm_bindgen::prelude::*;
 
 // We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
@@ -216,8 +216,8 @@ impl JsStore {
 
         let mut evaluator = SparqlEvaluator::new();
         #[cfg(feature = "geosparql")]
-        {
-            evaluator = register_geosparql_functions(evaluator);
+        for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+            evaluator = evaluator.with_custom_function(name.into(), implementation)
         }
         if let Some(base_iri) = base_iri {
             evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
@@ -330,8 +330,8 @@ impl JsStore {
 
         let mut evaluator = SparqlEvaluator::new();
         #[cfg(feature = "geosparql")]
-        {
-            evaluator = register_geosparql_functions(evaluator);
+        for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+            evaluator = evaluator.with_custom_function(name.into(), implementation)
         }
         if let Some(base_iri) = base_iri {
             evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;

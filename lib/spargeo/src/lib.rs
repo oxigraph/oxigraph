@@ -6,54 +6,20 @@
 
 use geo::{Geometry, Relate};
 use geojson::GeoJson;
-use oxigraph::model::{Literal, NamedNodeRef, Term};
-use oxigraph::sparql::SparqlEvaluator;
-use spareval::QueryEvaluator;
+use oxrdf::{Literal, NamedNodeRef, Term};
 use std::str::FromStr;
 use wkt::TryFromWkt;
 
-/// Registers GeoSPARQL extension functions in the [`SparqlEvaluator`]
-pub fn register_geosparql_functions(evaluator: SparqlEvaluator) -> SparqlEvaluator {
-    evaluator
-        .with_custom_function(geosparql_functions::SF_EQUALS.into(), geof_sf_equals)
-        .with_custom_function(geosparql_functions::SF_DISJOINT.into(), geof_sf_disjoint)
-        .with_custom_function(
-            geosparql_functions::SF_INTERSECTS.into(),
-            geof_sf_intersects,
-        )
-        .with_custom_function(geosparql_functions::SF_TOUCHES.into(), geof_sf_touches)
-        .with_custom_function(geosparql_functions::SF_CROSSES.into(), geof_sf_crosses)
-        .with_custom_function(geosparql_functions::SF_WITHIN.into(), geof_sf_within)
-        .with_custom_function(geosparql_functions::SF_CONTAINS.into(), geof_sf_contains)
-        .with_custom_function(geosparql_functions::SF_OVERLAPS.into(), geof_sf_overlaps)
-}
-
-/// Registers GeoSPARQL extension functions in the [`QueryEvaluator`]
-pub fn add_geosparql_functions(evaluator: QueryEvaluator) -> QueryEvaluator {
-    evaluator
-        .with_custom_function(geosparql_functions::SF_EQUALS.into(), geof_sf_equals)
-        .with_custom_function(geosparql_functions::SF_DISJOINT.into(), geof_sf_disjoint)
-        .with_custom_function(
-            geosparql_functions::SF_INTERSECTS.into(),
-            geof_sf_intersects,
-        )
-        .with_custom_function(geosparql_functions::SF_TOUCHES.into(), geof_sf_touches)
-        .with_custom_function(geosparql_functions::SF_CROSSES.into(), geof_sf_crosses)
-        .with_custom_function(geosparql_functions::SF_WITHIN.into(), geof_sf_within)
-        .with_custom_function(geosparql_functions::SF_CONTAINS.into(), geof_sf_contains)
-        .with_custom_function(geosparql_functions::SF_OVERLAPS.into(), geof_sf_overlaps)
-}
-
-/// List of GeoSPARQL functions supported and registered by [`register_geosparql_functions`]
-pub const GEOSPARQL_EXTENSION_FUNCTIONS: [NamedNodeRef<'static>; 8] = [
-    geosparql_functions::SF_EQUALS,
-    geosparql_functions::SF_DISJOINT,
-    geosparql_functions::SF_INTERSECTS,
-    geosparql_functions::SF_TOUCHES,
-    geosparql_functions::SF_CROSSES,
-    geosparql_functions::SF_WITHIN,
-    geosparql_functions::SF_CONTAINS,
-    geosparql_functions::SF_OVERLAPS,
+/// GeoSPARQL functions in name and implementation pairs
+pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 8] = [
+    (geosparql_functions::SF_EQUALS, geof_sf_equals),
+    (geosparql_functions::SF_DISJOINT, geof_sf_disjoint),
+    (geosparql_functions::SF_INTERSECTS, geof_sf_intersects),
+    (geosparql_functions::SF_TOUCHES, geof_sf_touches),
+    (geosparql_functions::SF_CROSSES, geof_sf_crosses),
+    (geosparql_functions::SF_WITHIN, geof_sf_within),
+    (geosparql_functions::SF_CONTAINS, geof_sf_contains),
+    (geosparql_functions::SF_OVERLAPS, geof_sf_overlaps),
 ];
 
 fn geof_sf_equals(args: &[Term]) -> Option<Term> {
@@ -133,7 +99,7 @@ fn parse_geo_json_literal(value: &str) -> Option<Geometry> {
 
 mod geosparql {
     //! [GeoSpatial](https://opengeospatial.github.io/ogc-geosparql/) vocabulary.
-    use oxigraph::model::NamedNodeRef;
+    use oxrdf::NamedNodeRef;
 
     pub const GEO_JSON_LITERAL: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#geoJSONLiteral");
@@ -143,7 +109,7 @@ mod geosparql {
 
 mod geosparql_functions {
     //! [GeoSpatial](https://opengeospatial.github.io/ogc-geosparql/) functions vocabulary.
-    use oxigraph::model::NamedNodeRef;
+    use oxrdf::NamedNodeRef;
 
     pub const SF_CONTAINS: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/sfContains");

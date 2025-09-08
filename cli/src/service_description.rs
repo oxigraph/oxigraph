@@ -2,6 +2,8 @@ use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::{BlankNode, NamedNodeRef, TripleRef};
 use oxigraph::sparql::results::QueryResultsFormat;
+#[cfg(feature = "geosparql")]
+use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 
 mod sd {
     use oxigraph::model::NamedNodeRef;
@@ -132,7 +134,7 @@ pub fn generate_service_description(
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/entailment/Simple"),
     ));
     #[cfg(feature = "geosparql")]
-    for function_name in spargeo::GEOSPARQL_EXTENSION_FUNCTIONS {
+    for (function_name, _) in GEOSPARQL_EXTENSION_FUNCTIONS {
         graph.push(TripleRef::new(&root, sd::EXTENSION_FUNCTION, function_name));
     }
 

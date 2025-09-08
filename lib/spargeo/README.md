@@ -9,7 +9,7 @@ spargeo
 
 spargeo is a very partial, slow and WIP [GeoSPARQL](https://docs.ogc.org/is/22-047r1/22-047r1.html) implementation for Oxigraph.
 
-Its entry point is the [`register_geosparql_functions`] function that allows to register GeoSPARQL extension function into Oxigraph [`QueryOptions`](oxigraph::sparql::QueryOptions).
+Its entry point is the [`GEOSPARQL_EXTENSION_FUNCTIONS`] constant that lists GeoSPARQL extension functions ready to be registered in spargebra or oxigraph query evaluators
 
 ## License
 

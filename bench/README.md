@@ -48,6 +48,6 @@ The code of the benchmark is in the `bsbm-tools` submodule. You should pull it w
 To run the benchmark for Oxigraph run `bash bsbm_oxigraph.sh`. It will compile the current Oxigraph code and run the benchmark against it.
 You can tweak the number of products in the dataset and the number of concurrent requests using the environment variables at the beginning of `bsbm_oxigraph.sh`.
 
-To generate the plots run `python3 bsbsm-plot.py`.
+To generate the plots run `python3 bsbm-plot.py`.
 
 Scripts are also provided for the other systems (`bsbm_blazegraph.sh`, `bsbm_graphdb.sh`, `bsbm_jena.sh` and `bsbm_virtuoso.sh`).

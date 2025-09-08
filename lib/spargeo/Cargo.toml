@@ -14,8 +14,7 @@ rust-version.workspace = true
 [dependencies]
 geo.workspace = true
 geojson.workspace = true
-oxigraph.workspace = true
-spareval.workspace = true
+oxrdf.workspace = true
 wkt.workspace = true
 
 [lints]
