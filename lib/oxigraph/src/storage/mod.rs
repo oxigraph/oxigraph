@@ -11,6 +11,10 @@ use crate::storage::rocksdb::{
     RocksDbStorageBulkLoader, RocksDbStorageReadableTransaction, RocksDbStorageReader,
     RocksDbStorageTransaction,
 };
+#[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+use crate::storage::hdt::{
+    HdtDecodingGraphIterator, HdtDecodingQuadIterator, HdtStorage, HdtStorageReader,
+};
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
@@ -20,6 +24,8 @@ use std::{io, thread};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod binary_encoder;
 mod error;
+#[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+mod hdt;
 mod memory;
 pub mod numeric_encoder;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -40,6 +46,8 @@ pub struct Storage {
 enum StorageKind {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbStorage),
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    Hdt(HdtStorage),
     Memory(MemoryStorage),
 }
 
@@ -65,11 +73,20 @@ impl Storage {
         })
     }
 
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    pub fn open_hdt(path: &Path) -> Result<Self, StorageError> {
+        Ok(Self {
+            kind: StorageKind::Hdt(HdtStorage::open(path)?),
+        })
+    }
+
     pub fn snapshot(&self) -> StorageReader<'static> {
         StorageReader {
             kind: match &self.kind {
                 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
                 StorageKind::RocksDb(storage) => StorageReaderKind::RocksDb(storage.snapshot()),
+                #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+                StorageKind::Hdt(storage) => StorageReaderKind::Hdt(storage.snapshot()),
                 StorageKind::Memory(storage) => StorageReaderKind::Memory(storage.snapshot()),
             },
         }
@@ -85,6 +102,12 @@ impl Storage {
                 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
                 StorageKind::RocksDb(storage) => {
                     StorageTransactionKind::RocksDb(storage.start_transaction()?)
+                }
+                #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+                StorageKind::Hdt(_) => {
+                    return Err(StorageError::Other(
+                        "HDT storage is read-only and does not support transactions".into(),
+                    ));
                 }
                 StorageKind::Memory(storage) => {
                     StorageTransactionKind::Memory(storage.start_transaction())
@@ -106,6 +129,12 @@ impl Storage {
                 StorageKind::RocksDb(storage) => {
                     StorageReadableTransactionKind::RocksDb(storage.start_readable_transaction()?)
                 }
+                #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+                StorageKind::Hdt(_) => {
+                    return Err(StorageError::Other(
+                        "HDT storage is read-only and does not support transactions".into(),
+                    ));
+                }
                 StorageKind::Memory(storage) => {
                     StorageReadableTransactionKind::Memory(storage.start_transaction())
                 }
@@ -118,6 +147,8 @@ impl Storage {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageKind::RocksDb(storage) => storage.flush(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageKind::Hdt(_) => Ok(()), // HDT is read-only, no flushing needed
             StorageKind::Memory(_) => Ok(()),
         }
     }
@@ -127,6 +158,8 @@ impl Storage {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageKind::RocksDb(storage) => storage.compact(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageKind::Hdt(_) => Ok(()), // HDT is already compressed, no compacting needed
             StorageKind::Memory(_) => Ok(()),
         }
     }
@@ -136,6 +169,10 @@ impl Storage {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageKind::RocksDb(storage) => storage.backup(target_directory),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageKind::Hdt(_) => Err(StorageError::Other(
+                "HDT files are already self-contained and don't need backup through this method".into(),
+            )),
             StorageKind::Memory(_) => Err(StorageError::Other(
                 "It is not possible to backup an in-memory database".into(),
             )),
@@ -147,6 +184,13 @@ impl Storage {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageKind::RocksDb(storage) => StorageBulkLoader {
                 kind: StorageBulkLoaderKind::RocksDb(storage.bulk_loader()),
+            },
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageKind::Hdt(_) => {
+                // HDT is read-only, create a no-op bulk loader
+                StorageBulkLoader {
+                    kind: StorageBulkLoaderKind::HdtReadOnly,
+                }
             },
             StorageKind::Memory(storage) => StorageBulkLoader {
                 kind: StorageBulkLoaderKind::Memory(storage.bulk_loader()),
@@ -163,6 +207,8 @@ pub struct StorageReader<'a> {
 enum StorageReaderKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbStorageReader<'a>),
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    Hdt(HdtStorageReader<'a>),
     Memory(MemoryStorageReader<'a>),
 }
 
@@ -175,6 +221,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.len(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.len(),
             StorageReaderKind::Memory(reader) => Ok(reader.len()),
         }
     }
@@ -183,6 +231,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.is_empty(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.is_empty(),
             StorageReaderKind::Memory(reader) => Ok(reader.is_empty()),
         }
     }
@@ -191,6 +241,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains(quad),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.contains(quad),
             StorageReaderKind::Memory(reader) => Ok(reader.contains(quad)),
         }
     }
@@ -208,6 +260,10 @@ impl<'a> StorageReader<'a> {
                 StorageReaderKind::RocksDb(reader) => DecodingQuadIteratorKind::RocksDb(
                     reader.quads_for_pattern(subject, predicate, object, graph_name),
                 ),
+                #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+                StorageReaderKind::Hdt(reader) => DecodingQuadIteratorKind::Hdt(
+                    reader.quads_for_pattern(subject, predicate, object, graph_name),
+                ),
                 StorageReaderKind::Memory(reader) => DecodingQuadIteratorKind::Memory(
                     reader.quads_for_pattern(subject, predicate, object, graph_name),
                 ),
@@ -222,6 +278,10 @@ impl<'a> StorageReader<'a> {
                 StorageReaderKind::RocksDb(reader) => {
                     DecodingGraphIteratorKind::RocksDb(reader.named_graphs())
                 }
+                #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+                StorageReaderKind::Hdt(reader) => {
+                    DecodingGraphIteratorKind::Hdt(reader.named_graphs())
+                }
                 StorageReaderKind::Memory(reader) => {
                     DecodingGraphIteratorKind::Memory(reader.named_graphs())
                 }
@@ -233,6 +293,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains_named_graph(graph_name),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.contains_named_graph(graph_name),
             StorageReaderKind::Memory(reader) => Ok(reader.contains_named_graph(graph_name)),
         }
     }
@@ -241,6 +303,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains_str(key),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.contains_str(key),
             StorageReaderKind::Memory(reader) => Ok(reader.contains_str(key)),
         }
     }
@@ -250,6 +314,8 @@ impl<'a> StorageReader<'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.validate(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.validate(),
             StorageReaderKind::Memory(reader) => reader.validate(),
         }
     }
@@ -263,6 +329,8 @@ pub struct DecodingQuadIterator<'a> {
 enum DecodingQuadIteratorKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbChainedDecodingQuadIterator<'a>),
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    Hdt(HdtDecodingQuadIterator<'a>),
     Memory(QuadIterator<'a>),
 }
 
@@ -273,6 +341,8 @@ impl Iterator for DecodingQuadIterator<'_> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             DecodingQuadIteratorKind::RocksDb(iter) => iter.next(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            DecodingQuadIteratorKind::Hdt(iter) => iter.next(),
             DecodingQuadIteratorKind::Memory(iter) => iter.next().map(Ok),
         }
     }
@@ -286,6 +356,8 @@ pub struct DecodingGraphIterator<'a> {
 enum DecodingGraphIteratorKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbDecodingGraphIterator<'a>),
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    Hdt(HdtDecodingGraphIterator<'a>),
     Memory(MemoryDecodingGraphIterator<'a>),
 }
 
@@ -296,6 +368,8 @@ impl Iterator for DecodingGraphIterator<'_> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             DecodingGraphIteratorKind::RocksDb(iter) => iter.next(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            DecodingGraphIteratorKind::Hdt(iter) => iter.next(),
             DecodingGraphIteratorKind::Memory(iter) => iter.next().map(Ok),
         }
     }
@@ -306,6 +380,8 @@ impl StrLookup for StorageReader<'_> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.get_str(key),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageReaderKind::Hdt(reader) => reader.get_str(key),
             StorageReaderKind::Memory(reader) => reader.get_str(key),
         }
     }
@@ -568,6 +644,8 @@ pub struct StorageBulkLoader<'a> {
 enum StorageBulkLoaderKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbStorageBulkLoader<'a>),
+    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+    HdtReadOnly,
     Memory(MemoryStorageBulkLoader<'a>),
 }
 
@@ -578,6 +656,8 @@ impl StorageBulkLoader<'_> {
             StorageBulkLoaderKind::RocksDb(loader) => Self {
                 kind: StorageBulkLoaderKind::RocksDb(loader.on_progress(callback)),
             },
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageBulkLoaderKind::HdtReadOnly => self, // No-op for read-only HDT
             StorageBulkLoaderKind::Memory(loader) => Self {
                 kind: StorageBulkLoaderKind::Memory(loader.on_progress(callback)),
             },
@@ -596,6 +676,10 @@ impl StorageBulkLoader<'_> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.load_batch(quads, max_num_threads),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageBulkLoaderKind::HdtReadOnly => Err(StorageError::Other(
+                "Cannot load data into read-only HDT storage".into(),
+            )),
             StorageBulkLoaderKind::Memory(loader) => {
                 loader.load_batch(quads);
                 Ok(())
@@ -611,6 +695,8 @@ impl StorageBulkLoader<'_> {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.commit(),
+            #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+            StorageBulkLoaderKind::HdtReadOnly => Ok(()), // No-op for read-only HDT
             StorageBulkLoaderKind::Memory(loader) => {
                 loader.commit();
                 Ok(())
