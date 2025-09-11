@@ -337,7 +337,7 @@ jobs:
         working-directory: ./python/docs
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: uv run -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
+      - run: uv run -m mypy.stubtest pyoxigraph --allowlist=mypy_allowlist.txt
         working-directory: ./python
       - run: uv run -m mypy generate_stubs.py tests --strict
         working-directory: ./python
