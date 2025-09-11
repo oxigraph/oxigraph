@@ -1,5 +1,9 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
+#[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+use crate::storage::hdt::{
+    HdtDecodingGraphIterator, HdtDecodingQuadIterator, HdtStorage, HdtStorageReader,
+};
 use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
     MemoryStorageTransaction, QuadIterator,
@@ -10,10 +14,6 @@ use crate::storage::rocksdb::{
     RocksDbChainedDecodingQuadIterator, RocksDbDecodingGraphIterator, RocksDbStorage,
     RocksDbStorageBulkLoader, RocksDbStorageReadableTransaction, RocksDbStorageReader,
     RocksDbStorageTransaction,
-};
-#[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
-use crate::storage::hdt::{
-    HdtDecodingGraphIterator, HdtDecodingQuadIterator, HdtStorage, HdtStorageReader,
 };
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -68,15 +68,17 @@ impl Storage {
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open_read_only(path: &Path) -> Result<Self, StorageError> {
+        #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
+        if let Some(ext) = path.extension() {
+            if ext.eq_ignore_ascii_case("hdt") {
+                eprintln!("hdt file detected");
+                return Ok(Self {
+                    kind: StorageKind::Hdt(HdtStorage::open(path)?),
+                });
+            }
+        }
         Ok(Self {
             kind: StorageKind::RocksDb(RocksDbStorage::open_read_only(path)?),
-        })
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
-    pub fn open_hdt(path: &Path) -> Result<Self, StorageError> {
-        Ok(Self {
-            kind: StorageKind::Hdt(HdtStorage::open(path)?),
         })
     }
 
@@ -171,7 +173,8 @@ impl Storage {
             StorageKind::RocksDb(storage) => storage.backup(target_directory),
             #[cfg(all(not(target_family = "wasm"), feature = "hdt"))]
             StorageKind::Hdt(_) => Err(StorageError::Other(
-                "HDT files are already self-contained and don't need backup through this method".into(),
+                "HDT files are already self-contained and don't need backup through this method"
+                    .into(),
             )),
             StorageKind::Memory(_) => Err(StorageError::Other(
                 "It is not possible to backup an in-memory database".into(),
@@ -191,7 +194,7 @@ impl Storage {
                 StorageBulkLoader {
                     kind: StorageBulkLoaderKind::HdtReadOnly,
                 }
-            },
+            }
             StorageKind::Memory(storage) => StorageBulkLoader {
                 kind: StorageBulkLoaderKind::Memory(storage.bulk_loader()),
             },
