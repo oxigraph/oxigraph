@@ -22,7 +22,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-beta.5"
+version = "0.5.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
@@ -81,19 +81,19 @@ wasm-bindgen = "0.2.100"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.0-beta.5", path = "lib/oxigraph" }
-oxjsonld = { version = "=0.2.0-beta.3", path = "lib/oxjsonld" }
-oxrdf = { version = "=0.3.0-beta.3", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.2.0-beta.4", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.2.0-beta.3", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.5.0-beta.5", path = "./oxrocksdb-sys" }
+oxigraph = { version = "=0.5.0", path = "lib/oxigraph" }
+oxjsonld = { version = "=0.2.0", path = "lib/oxjsonld" }
+oxrdf = { version = "=0.3.0", path = "lib/oxrdf" }
+oxrdfio = { version = "=0.2.0", path = "lib/oxrdfio" }
+oxrdfxml = { version = "=0.2.0", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { version = "=0.5.0", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.2.0-beta.4", path = "lib/oxttl" }
-spargebra = { version = "=0.4.0-beta.4", path = "lib/spargebra" }
-spargeo = { version = "=0.5.0-beta.5", path = "lib/spargeo" }
-sparesults = { version = "=0.3.0-beta.4", path = "lib/sparesults" }
-sparopt = { version = "=0.3.0-beta.4", path = "lib/sparopt" }
-spareval = { version = "=0.2.0-beta.5", path = "lib/spareval" }
+oxttl = { version = "=0.2.0", path = "lib/oxttl" }
+spargebra = { version = "=0.4.0", path = "lib/spargebra" }
+spargeo = { version = "=0.5.0", path = "lib/spargeo" }
+sparesults = { version = "=0.3.0", path = "lib/sparesults" }
+sparopt = { version = "=0.3.0", path = "lib/sparopt" }
+spareval = { version = "=0.2.0", path = "lib/spareval" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
@@ -197,7 +197,6 @@ manual_string_new = "warn"
 many_single_char_names = "warn"
 map_unwrap_or = "warn"
 match_bool = "warn"
-match_on_vec_items = "warn"
 match_same_arms = "warn"
 match_wild_err_arm = "warn"
 match_wildcard_for_single_variants = "warn"
@@ -261,7 +260,6 @@ str_to_string = "warn"
 string_add = "warn"
 string_add_assign = "warn"
 string_lit_chars_any = "warn"
-string_to_string = "warn"
 struct_excessive_bools = "warn"
 struct_field_names = "warn"
 suspicious_xor_used_as_pow = "warn"

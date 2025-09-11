@@ -1,4 +1,14 @@
-# [0.5.2-beta.5] - 2025-09-07
+# [0.5.0] - 2025-09-13
+
+_This release is dedicated to the memory of [Gregg Kellogg](https://greggkellogg.net/foaf), author of multiple specifications implemented by Oxigraph and great inspiration._
+
+### Changed
+- SPARQL: support double negation `!!` when SPARQL 1.2 is enabled.
+- SPARQL: allow triple terms in the subject position in more places.
+- `spargeo`: change API to drop dependency on `spareval` and `oxigraph.
+
+
+# [0.5.0-beta.5] - 2025-09-07
 
 ### Added
 - `spareval`: a `CancellationToken` to easily cancel a running SPARQL query.
@@ -12,7 +22,8 @@
 - CLI and Python bindings: bulk loading data from a file and a buffer (in Python) is now done in parallel.
 - Bump `rand` to 0.9 and `getrandom` to 0.3.
 
-# [0.5.2-beta.4] - 2025-08-23
+
+# [0.5.0-beta.4] - 2025-08-23
 
 ### Added
 - `spareval`: expose `QueryEvaluator::evaluate_expression` to evaluate expressions
@@ -24,7 +35,7 @@
 - SPARQL: Makes single DELETE/INSERT and LOAD statements slightly faster by not indexing the changes.
 
 
-# [0.5.2-beta.3] - 2025-08-15
+# [0.5.0-beta.3] - 2025-08-15
 
 ### Changed
 - Rust: bump MSRV to 1.87.
@@ -36,7 +47,7 @@
 - `spareval`: `QueryableDataset` is now implemented by `&Dataset` and not by `Dataset` (allows avoiding a bunch of copies).
 
 
-# [0.5.2-beta.2] - 2025-08-07
+# [0.5.0-beta.2] - 2025-08-07
 
 ### Added
 - `oxrdfio`: `RdfParser.split_slice_for_parallel_parsing` to enable easier NTriples and NQuads parallel parsing.
