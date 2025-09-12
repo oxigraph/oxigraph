@@ -14,7 +14,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["rocksdb"]
+default = ["rocksdb", "hdt"]
 rocksdb = ["oxrocksdb-sys"]
 js = ["getrandom/wasm_js", "oxsdatatypes/js", "js-sys"]
 http-client = ["oxhttp"]
@@ -24,6 +24,7 @@ http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
+hdt = ["dep:hdt"]
 
 [dependencies]
 dashmap.workspace = true
@@ -43,6 +44,7 @@ thiserror.workspace = true
 libc.workspace = true
 oxhttp = { workspace = true, optional = true }
 oxrocksdb-sys = { workspace = true, optional = true }
+hdt = { workspace = true, optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom.workspace = true
