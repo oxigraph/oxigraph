@@ -32,8 +32,9 @@ impl HdtStorage {
     pub fn snapshot(&self) -> HdtStorageReader<'static> {
         HdtStorageReader {
             storage: self.clone(),
-            extra: RefCell::new(HashMap::default()),
-
+            extra: RefCell::new(HashMap::with_hasher(
+                BuildHasherDefault::<StrHashHasher>::default(),
+            )),
             _lifetime: std::marker::PhantomData,
         }
     }
@@ -139,9 +140,9 @@ impl<'a> HdtStorageReader<'a> {
             })
         }
 
-        let subject_str = subject_term.and_then(|t| Some(term_to_hdt_bgp_str(&t)));
-        let predicate_str = predicate_term.and_then(|t| Some(term_to_hdt_bgp_str(&t)));
-        let object_str = object_term.and_then(|t| Some(term_to_hdt_bgp_str(&t)));
+        let subject_str = subject_term.map(|t| term_to_hdt_bgp_str(&t));
+        let predicate_str = predicate_term.map(|t| term_to_hdt_bgp_str(&t));
+        let object_str = object_term.map(|t| term_to_hdt_bgp_str(&t));
 
         let triples_result = self.storage.hdt.triples_with_pattern(
             subject_str.as_deref(),
@@ -149,23 +150,28 @@ impl<'a> HdtStorageReader<'a> {
             object_str.as_deref(),
         );
 
-        let mut encoded_triples = vec![];
-        for triple in triples_result {
-            // Convert HDT triple to encoded quad
-            let (subject_t, subject_enc) = hdt_bgp_str_to_encodedterm(&triple[0]);
-            insert_term(subject_t.as_ref(), &subject_enc, &mut |key, value| {
-                self.insert_str(key, value);
-            });
-            let (predicate_t, predicate_enc) = hdt_bgp_str_to_encodedterm(&triple[1]);
-            insert_term(predicate_t.as_ref(), &predicate_enc, &mut |key, value| {
-                self.insert_str(key, value);
-            });
-            let (object_t, object_enc) = hdt_bgp_str_to_encodedterm(&triple[2]);
-            insert_term(object_t.as_ref(), &object_enc, &mut |key, value| {
-                self.insert_str(key, value);
-            });
-            encoded_triples.push([subject_enc, predicate_enc, object_enc]);
-        }
+        // Collect and process all triples at once for better performance
+        let encoded_triples: Vec<[EncodedTerm; 3]> = triples_result
+            .map(|triple| {
+                // Convert HDT triple to encoded terms and populate str_hash map
+                let (subject_t, subject_enc) = hdt_bgp_str_to_encodedterm(&triple[0]);
+                insert_term(subject_t.as_ref(), &subject_enc, &mut |key, value| {
+                    self.insert_str(key, value);
+                });
+
+                let (predicate_t, predicate_enc) = hdt_bgp_str_to_encodedterm(&triple[1]);
+                insert_term(predicate_t.as_ref(), &predicate_enc, &mut |key, value| {
+                    self.insert_str(key, value);
+                });
+
+                let (object_t, object_enc) = hdt_bgp_str_to_encodedterm(&triple[2]);
+                insert_term(object_t.as_ref(), &object_enc, &mut |key, value| {
+                    self.insert_str(key, value);
+                });
+
+                [subject_enc, predicate_enc, object_enc]
+            })
+            .collect();
 
         HdtDecodingQuadIterator::new(encoded_triples.into_iter())
     }
@@ -181,7 +187,6 @@ impl<'a> HdtStorageReader<'a> {
     }
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        eprint!("{}", self.extra.borrow().len());
         Ok(self.extra.borrow().contains_key(key))
     }
 
@@ -194,9 +199,9 @@ impl<'a> HdtStorageReader<'a> {
 /// Convert triple string formats from OxRDF to HDT.
 fn term_to_hdt_bgp_str(term: &Term) -> String {
     match term {
-        Term::NamedNode(named_node) => named_node.clone().into_string(),
+        Term::NamedNode(named_node) => named_node.as_str().to_owned(),
         Term::Literal(literal) => literal.to_string(),
-        Term::BlankNode(s) => s.to_string(),
+        Term::BlankNode(blank_node) => blank_node.to_string(),
         #[cfg(feature = "rdf-12")]
         Term::Triple(_triple) => todo!(),
     }
@@ -227,15 +232,14 @@ impl Iterator for HdtDecodingQuadIterator<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let triples_iter = self.triples_iter.as_mut()?;
 
-        match triples_iter.next() {
-            Some(triple) => Some(Ok(EncodedQuad {
+        triples_iter.next().map(|triple| {
+            Ok(EncodedQuad {
                 subject: triple[0].clone(),
                 predicate: triple[1].clone(),
                 object: triple[2].clone(),
                 graph_name: EncodedTerm::DefaultGraph,
-            })),
-            None => None,
-        }
+            })
+        })
     }
 }
 
