@@ -85,7 +85,7 @@ pub enum Command {
     },
     /// Load file(s) into the store
     ///
-    /// Feel free to enable the --lenient option if you know your input is valid to get better performances.
+    /// Feel free to enable the --lenient option if you know your input is valid to get better performances, or if you want to load slightly invalid files like Wikidata dumps.
     ///
     /// Files are loaded atomically, either the file is fully loaded into the store or not at all.
     Load {

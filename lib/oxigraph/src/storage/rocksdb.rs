@@ -20,6 +20,7 @@ use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
+use spareval::CancellationToken;
 use std::collections::{HashMap, VecDeque};
 use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
@@ -376,6 +377,7 @@ impl RocksDbStorage {
             sst_files: Vec::new(),
             done_counter: Arc::new(Mutex::new(0)),
             done_and_displayed_counter: 0,
+            cancellation_token: CancellationToken::new(),
         }
     }
 }
@@ -1336,10 +1338,20 @@ pub struct RocksDbStorageBulkLoader<'a> {
     sst_files: Vec<(ColumnFamily, PathBuf)>,
     done_counter: Arc<Mutex<u64>>,
     done_and_displayed_counter: u64,
+    cancellation_token: CancellationToken,
 }
 
 impl Drop for RocksDbStorageBulkLoader<'_> {
     fn drop(&mut self) {
+        self.cancellation_token.cancel();
+        // We wait for threads
+        while let Some(thread) = self.threads.pop_front() {
+            if thread.is_finished() {
+                if let Ok(Ok(files)) = thread.join() {
+                    self.sst_files.extend(files);
+                }
+            }
+        }
         // We clean the created files
         for (_, file) in &self.sst_files {
             #[expect(unused_must_use)] // We already have an error to report...
@@ -1370,8 +1382,24 @@ impl RocksDbStorageBulkLoader<'_> {
         // TODO: better spawn
         let storage = self.storage.clone();
         let counter = Arc::clone(&self.done_counter);
+        let cancellation_token = self.cancellation_token.clone();
         self.threads.push_back(thread::spawn(move || {
-            FileBulkLoader::new(&storage, batch.len()).load(batch, &counter)
+            let mut sst_files = Vec::new();
+            match FileBulkLoader::new(&storage, batch.len(), cancellation_token).load(
+                batch,
+                &counter,
+                &mut sst_files,
+            ) {
+                Ok(()) => Ok(sst_files),
+                Err(e) => {
+                    // We cleanup written files
+                    for (_, file) in sst_files {
+                        #[expect(unused_must_use)] // We already have an error to report...
+                        remove_file(file);
+                    }
+                    Err(e)
+                }
+            }
         }));
         Ok(())
     }
@@ -1409,10 +1437,15 @@ struct FileBulkLoader<'a> {
     quads: FxHashSet<EncodedQuad>,
     triples: FxHashSet<EncodedQuad>,
     graphs: FxHashSet<EncodedTerm>,
+    cancellation_token: CancellationToken,
 }
 
 impl<'a> FileBulkLoader<'a> {
-    fn new(storage: &'a RocksDbStorage, batch_size: usize) -> Self {
+    fn new(
+        storage: &'a RocksDbStorage,
+        batch_size: usize,
+        cancellation_token: CancellationToken,
+    ) -> Self {
         Self {
             storage,
             id2str: HashMap::with_capacity_and_hasher(
@@ -1422,6 +1455,7 @@ impl<'a> FileBulkLoader<'a> {
             quads: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
             triples: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
             graphs: FxHashSet::default(),
+            cancellation_token,
         }
     }
 
@@ -1429,15 +1463,16 @@ impl<'a> FileBulkLoader<'a> {
         &mut self,
         quads: Vec<Quad>,
         counter: &Mutex<u64>,
-    ) -> Result<Vec<(ColumnFamily, PathBuf)>, StorageError> {
+        sst_files: &mut Vec<(ColumnFamily, PathBuf)>,
+    ) -> Result<(), StorageError> {
         self.encode(quads)?;
         let size = self.triples.len() + self.quads.len();
-        let files = self.build_sst_files()?;
+        self.build_sst_files(sst_files)?;
         *counter
             .lock()
             .map_err(|_| io::Error::other("Mutex poisoned"))? +=
             size.try_into().unwrap_or(u64::MAX);
-        Ok(files)
+        Ok(())
     }
 
     fn encode(&mut self, quads: Vec<Quad>) -> Result<(), StorageError> {
@@ -1474,11 +1509,13 @@ impl<'a> FileBulkLoader<'a> {
         Ok(())
     }
 
-    fn build_sst_files(&mut self) -> Result<Vec<(ColumnFamily, PathBuf)>, StorageError> {
-        let mut sst_files = Vec::new();
-
+    fn build_sst_files(
+        &mut self,
+        sst_files: &mut Vec<(ColumnFamily, PathBuf)>,
+    ) -> Result<(), StorageError> {
         // id2str
         if !self.id2str.is_empty() {
+            self.fail_if_cancelled()?;
             let mut id2str = take(&mut self.id2str)
                 .into_iter()
                 .map(|(k, v)| (k.to_be_bytes(), v))
@@ -1492,6 +1529,7 @@ impl<'a> FileBulkLoader<'a> {
         }
 
         if !self.triples.is_empty() {
+            self.fail_if_cancelled()?;
             sst_files.push((
                 self.storage.dspo_cf.clone(),
                 self.build_sst_for_keys(
@@ -1520,6 +1558,7 @@ impl<'a> FileBulkLoader<'a> {
         }
 
         if !self.quads.is_empty() {
+            self.fail_if_cancelled()?;
             sst_files.push((
                 self.storage.graphs_cf.clone(),
                 self.build_sst_for_keys(self.graphs.iter().map(encode_term))?,
@@ -1559,6 +1598,7 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
+            self.fail_if_cancelled()?;
             sst_files.push((
                 self.storage.spog_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
@@ -1594,7 +1634,7 @@ impl<'a> FileBulkLoader<'a> {
             ));
             self.quads.clear();
         }
-        Ok(sst_files)
+        self.fail_if_cancelled()
     }
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
@@ -1614,6 +1654,14 @@ impl<'a> FileBulkLoader<'a> {
             sst.insert_empty(&value)?;
         }
         sst.finish()
+    }
+
+    fn fail_if_cancelled(&self) -> Result<(), StorageError> {
+        if self.cancellation_token.is_cancelled() {
+            Err(StorageError::Other("Cancelled".into()))
+        } else {
+            Ok(())
+        }
     }
 }
 

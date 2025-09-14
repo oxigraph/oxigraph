@@ -7,9 +7,9 @@ use oxigraph::model::*;
 use oxigraph::store::Store;
 use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use std::fs::{File, create_dir_all, remove_dir, remove_dir_all};
+use std::fs::{File, create_dir_all, read_dir, remove_dir};
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
-use std::fs::{read, read_dir, write};
+use std::fs::{read, remove_dir_all, write};
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::io;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -17,7 +17,7 @@ use std::io::Write;
 use std::iter::empty;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::iter::once;
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::path::PathBuf;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use tempfile::TempDir;
@@ -188,6 +188,28 @@ fn test_bulk_load_empty() -> Result<(), Box<dyn Error>> {
     loader.commit()?;
     assert!(store.is_empty()?);
     store.validate()?;
+    Ok(())
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[test]
+fn test_bulk_load_rollback() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    let before_files = read_dir(&dir)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut loader = store.bulk_loader();
+    loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
+    drop(loader);
+    store.validate()?;
+    let after_files = read_dir(&dir)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        before_files, after_files,
+        "Files created even if bulk loader got rolled back"
+    );
     Ok(())
 }
 
