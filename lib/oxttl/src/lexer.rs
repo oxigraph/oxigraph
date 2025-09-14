@@ -582,8 +582,11 @@ impl N3Lexer {
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         // [39] 	LANG_DIR 	::= 	'@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)* ('--' [a-zA-Z]+)?
         let mut is_last_block_empty = true;
+        let mut are_digits_allowed = false;
         for (i, c) in data[1..].iter().enumerate() {
-            if c.is_ascii_alphabetic() {
+            if (are_digits_allowed && c.is_ascii_alphanumeric())
+                || (!are_digits_allowed && c.is_ascii_alphabetic())
+            {
                 is_last_block_empty = false;
             } else if i == 0 {
                 return Some((
@@ -610,6 +613,7 @@ impl N3Lexer {
                 ));
             } else if *c == b'-' {
                 is_last_block_empty = true;
+                are_digits_allowed = true
             } else {
                 return Some((i + 1, self.parse_lang_tag(&data[1..=i], None, 1..i)));
             }
