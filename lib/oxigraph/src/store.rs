@@ -1017,6 +1017,7 @@ impl Store {
             num_threads: None,
             max_memory_size: None,
             on_parse_error: None,
+            partial_commits: false,
         }
     }
 
@@ -1662,6 +1663,7 @@ pub struct BulkLoader<'a> {
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
     on_parse_error: Option<Arc<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
+    partial_commits: bool,
 }
 
 impl BulkLoader<'_> {
@@ -1708,6 +1710,14 @@ impl BulkLoader<'_> {
         } else {
             DEFAULT_BULK_LOAD_BATCH_SIZE
         }
+    }
+
+    /// Sets whether to commit DB transactions during loading, instead of only doing it at the end
+    ///
+    /// The default value is `false`.
+    pub fn with_partial_commits(mut self, partial_commits: bool) -> Self {
+        self.partial_commits = partial_commits;
+        self
     }
 
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
@@ -1973,6 +1983,9 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
+                if self.partial_commits {
+                    self.storage.partial_commit()?;
+                }
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -2083,6 +2096,9 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
+                if self.partial_commits {
+                    self.storage.partial_commit()?;
+                }
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -2117,10 +2133,16 @@ impl BulkLoader<'_> {
                 let mut batch_to_save = Vec::with_capacity(target_batch_size);
                 swap(&mut batch, &mut batch_to_save);
                 self.storage.load_batch(batch_to_save, target_num_threads)?;
+                if self.partial_commits {
+                    self.storage.partial_commit()?;
+                }
             }
         }
         if !batch.is_empty() {
             self.storage.load_batch(batch, target_num_threads)?;
+            if self.partial_commits {
+                self.storage.partial_commit()?;
+            }
         }
         Ok(())
     }

@@ -102,6 +102,7 @@ pub fn main() -> anyhow::Result<()> {
             file,
             lenient,
             format,
+            partial_commits,
             base,
             graph,
         } => {
@@ -123,14 +124,17 @@ pub fn main() -> anyhow::Result<()> {
             if file.is_empty() {
                 // We read from stdin
                 let start = Instant::now();
-                let mut loader = store.bulk_loader().on_progress(move |size| {
-                    let elapsed = start.elapsed();
-                    eprintln!(
-                        "{size} triples loaded in {}s ({} t/s)",
-                        elapsed.as_secs(),
-                        ((size as f64) / elapsed.as_secs_f64()).round()
-                    )
-                });
+                let mut loader = store
+                    .bulk_loader()
+                    .with_partial_commits(partial_commits)
+                    .on_progress(move |size| {
+                        let elapsed = start.elapsed();
+                        eprintln!(
+                            "{size} triples loaded in {}s ({} t/s)",
+                            elapsed.as_secs(),
+                            ((size as f64) / elapsed.as_secs_f64()).round()
+                        )
+                    });
                 if lenient {
                     loader = loader.on_parse_error(move |e| {
                         eprintln!("Parsing error: {e}");

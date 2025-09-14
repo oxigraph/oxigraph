@@ -602,6 +602,19 @@ impl StorageBulkLoader<'_> {
             }
         }
     }
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(clippy::unnecessary_wraps)
+    )]
+    pub fn partial_commit(&mut self) -> Result<(), StorageError> {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageBulkLoaderKind::RocksDb(loader) => loader.partial_commit(),
+            StorageBulkLoaderKind::Memory(_loader) => {
+                todo!("MemoryStorageBulkLoader::partial_commit");
+            }
+        }
+    }
 
     #[cfg_attr(
         any(target_family = "wasm", not(feature = "rocksdb")),
