@@ -586,7 +586,7 @@ impl Db {
                 "SST creation is only possible on read-write instances".into(),
             ));
         };
-        let path = db.path.join(random::<u128>().to_string());
+        let path = db.path.join(format!("bulk-{}.sst", random::<u128>()));
         unsafe {
             let writer = rocksdb_sstfilewriter_create(db.env_options, db.options);
             ffi_result!(rocksdb_sstfilewriter_open(
