@@ -1393,7 +1393,7 @@ impl RocksDbStorageBulkLoader<'_> {
 
     pub fn partial_commit(&mut self) -> Result<(), StorageError> {
         self.storage.db.insert_stt_files(&self.sst_files)?;
-         // We clear the Vec to not remove them on Drop nor write them again later
+        // We clear the Vec to not remove them on Drop nor write them again later
         self.sst_files.clear();
         Ok(())
     }
