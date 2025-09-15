@@ -14,8 +14,9 @@ use crate::storage::rocksdb::{
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
+use std::io;
 #[cfg(not(target_family = "wasm"))]
-use std::{io, thread};
+use std::thread;
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod binary_encoder;
