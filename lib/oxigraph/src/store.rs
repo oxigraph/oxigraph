@@ -1712,7 +1712,7 @@ impl BulkLoader<'_> {
         }
     }
 
-    /// Sets whether to commit DB transactions during loading, instead of only doing it at the end
+    /// Allow the bulk loader to save regularly in the database the loaded data, instead of only doing it at the end
     ///
     /// The default value is `false`.
     pub fn with_partial_commits(mut self, partial_commits: bool) -> Self {
