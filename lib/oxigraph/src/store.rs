@@ -1017,7 +1017,7 @@ impl Store {
             num_threads: None,
             max_memory_size: None,
             on_parse_error: None,
-            partial_commits: false,
+            atomic: true,
         }
     }
 
@@ -1663,7 +1663,7 @@ pub struct BulkLoader<'a> {
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
     on_parse_error: Option<Arc<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
-    partial_commits: bool,
+    atomic: bool,
 }
 
 impl BulkLoader<'_> {
@@ -1712,11 +1712,12 @@ impl BulkLoader<'_> {
         }
     }
 
-    /// Allow the bulk loader to save regularly in the database the loaded data, instead of only doing it at the end
+    /// If `true` (the default), save to database only at the end instead of doing
+    /// it regularly while loading.
     ///
-    /// The default value is `false`.
-    pub fn with_partial_commits(mut self, partial_commits: bool) -> Self {
-        self.partial_commits = partial_commits;
+    /// The default value is `true`.
+    pub fn with_atomicity(mut self, atomicity: bool) -> Self {
+        self.atomic = atomicity;
         self
     }
 
@@ -1983,7 +1984,7 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
-                if self.partial_commits {
+                if !self.atomic {
                     self.storage.partial_commit()?;
                 }
             }
@@ -2096,7 +2097,7 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
-                if self.partial_commits {
+                if !self.atomic {
                     self.storage.partial_commit()?;
                 }
             }
@@ -2133,14 +2134,14 @@ impl BulkLoader<'_> {
                 let mut batch_to_save = Vec::with_capacity(target_batch_size);
                 swap(&mut batch, &mut batch_to_save);
                 self.storage.load_batch(batch_to_save, target_num_threads)?;
-                if self.partial_commits {
+                if !self.atomic {
                     self.storage.partial_commit()?;
                 }
             }
         }
         if !batch.is_empty() {
             self.storage.load_batch(batch, target_num_threads)?;
-            if self.partial_commits {
+            if !self.atomic {
                 self.storage.partial_commit()?;
             }
         }
