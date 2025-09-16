@@ -1716,8 +1716,8 @@ impl BulkLoader<'_> {
     /// it regularly while loading.
     ///
     /// The default value is `true`.
-    pub fn with_atomicity(mut self, atomicity: bool) -> Self {
-        self.atomic = atomicity;
+    pub fn without_atomicity(mut self, non_atomicity: bool) -> Self {
+        self.atomic = !non_atomicity;
         self
     }
 

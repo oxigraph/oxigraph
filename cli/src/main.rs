@@ -126,7 +126,7 @@ pub fn main() -> anyhow::Result<()> {
                 let start = Instant::now();
                 let mut loader = store
                     .bulk_loader()
-                    .with_atomicity(!partial_commits)
+                    .without_atomicity(partial_commits)
                     .on_progress(move |size| {
                         let elapsed = start.elapsed();
                         eprintln!(
