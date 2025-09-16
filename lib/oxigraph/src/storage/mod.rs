@@ -608,7 +608,7 @@ impl StorageBulkLoader<'_> {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.partial_commit(),
             StorageBulkLoaderKind::Memory(_loader) => {
-                Err(io::Error::from(io::ErrorKind::Unsupported).into())
+                Err(StorageError::Unsupported("partial_commit on a memory storage"))
             }
         }
     }
