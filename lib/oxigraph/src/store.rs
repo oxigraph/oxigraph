@@ -1017,6 +1017,7 @@ impl Store {
             num_threads: None,
             max_memory_size: None,
             on_parse_error: None,
+            atomic: true,
         }
     }
 
@@ -1662,6 +1663,7 @@ pub struct BulkLoader<'a> {
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
     on_parse_error: Option<Arc<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
+    atomic: bool,
 }
 
 impl BulkLoader<'_> {
@@ -1708,6 +1710,15 @@ impl BulkLoader<'_> {
         } else {
             DEFAULT_BULK_LOAD_BATCH_SIZE
         }
+    }
+
+    /// If `true` (the default), save to database only at the end instead of doing
+    /// it regularly while loading.
+    ///
+    /// The default value is `true`.
+    pub fn without_atomicity(mut self, non_atomicity: bool) -> Self {
+        self.atomic = !non_atomicity;
+        self
     }
 
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
@@ -1973,6 +1984,9 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
+                if !self.atomic {
+                    self.storage.partial_commit()?;
+                }
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -2083,6 +2097,9 @@ impl BulkLoader<'_> {
             drop(sender);
             while let Ok(batch) = receiver.recv() {
                 self.storage.load_batch(batch, target_num_threads)?;
+                if !self.atomic {
+                    self.storage.partial_commit()?;
+                }
             }
             for thread in threads {
                 map_thread_result(thread.join()).map_err(StorageError::from)??;
@@ -2117,10 +2134,16 @@ impl BulkLoader<'_> {
                 let mut batch_to_save = Vec::with_capacity(target_batch_size);
                 swap(&mut batch, &mut batch_to_save);
                 self.storage.load_batch(batch_to_save, target_num_threads)?;
+                if !self.atomic {
+                    self.storage.partial_commit()?;
+                }
             }
         }
         if !batch.is_empty() {
             self.storage.load_batch(batch, target_num_threads)?;
+            if !self.atomic {
+                self.storage.partial_commit()?;
+            }
         }
         Ok(())
     }

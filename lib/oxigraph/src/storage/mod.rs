@@ -602,6 +602,15 @@ impl StorageBulkLoader<'_> {
             }
         }
     }
+    pub fn partial_commit(&mut self) -> Result<(), StorageError> {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageBulkLoaderKind::RocksDb(loader) => loader.partial_commit(),
+            StorageBulkLoaderKind::Memory(_loader) => Err(StorageError::Unsupported(
+                "partial_commit on a memory storage",
+            )),
+        }
+    }
 
     #[cfg_attr(
         any(target_family = "wasm", not(feature = "rocksdb")),
