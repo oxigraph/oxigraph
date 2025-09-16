@@ -13,8 +13,6 @@ pub enum StorageError {
     /// Error related to data corruption.
     #[error(transparent)]
     Corruption(#[from] CorruptionError),
-    #[error("Unsupported: {0}")]
-    Unsupported(&'static str),
     #[doc(hidden)]
     #[error("{0}")]
     Other(#[source] Box<dyn Error + Send + Sync + 'static>),
@@ -26,7 +24,6 @@ impl From<StorageError> for io::Error {
         match error {
             StorageError::Io(error) => error,
             StorageError::Corruption(error) => error.into(),
-            StorageError::Unsupported(_error) => Self::from(io::ErrorKind::Unsupported),
             StorageError::Other(error) => Self::other(error),
         }
     }

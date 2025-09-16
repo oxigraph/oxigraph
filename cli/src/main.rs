@@ -100,9 +100,9 @@ pub fn main() -> anyhow::Result<()> {
         Command::Load {
             location,
             file,
+            non_atomic,
             lenient,
             format,
-            partial_commits,
             base,
             graph,
         } => {
@@ -124,17 +124,17 @@ pub fn main() -> anyhow::Result<()> {
             if file.is_empty() {
                 // We read from stdin
                 let start = Instant::now();
-                let mut loader = store
-                    .bulk_loader()
-                    .without_atomicity(partial_commits)
-                    .on_progress(move |size| {
-                        let elapsed = start.elapsed();
-                        eprintln!(
-                            "{size} triples loaded in {}s ({} t/s)",
-                            elapsed.as_secs(),
-                            ((size as f64) / elapsed.as_secs_f64()).round()
-                        )
-                    });
+                let mut loader = store.bulk_loader().on_progress(move |size| {
+                    let elapsed = start.elapsed();
+                    eprintln!(
+                        "{size} triples loaded in {}s ({} t/s)",
+                        elapsed.as_secs(),
+                        ((size as f64) / elapsed.as_secs_f64()).round()
+                    )
+                });
+                if non_atomic {
+                    loader = loader.without_atomicity();
+                }
                 if lenient {
                     loader = loader.on_parse_error(move |e| {
                         eprintln!("Parsing error: {e}");

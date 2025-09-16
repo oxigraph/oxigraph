@@ -378,6 +378,7 @@ impl RocksDbStorage {
             done_counter: Arc::new(Mutex::new(0)),
             done_and_displayed_counter: 0,
             cancellation_token: CancellationToken::new(),
+            atomic: true,
         }
     }
 }
@@ -1339,6 +1340,7 @@ pub struct RocksDbStorageBulkLoader<'a> {
     done_counter: Arc<Mutex<u64>>,
     done_and_displayed_counter: u64,
     cancellation_token: CancellationToken,
+    atomic: bool,
 }
 
 impl Drop for RocksDbStorageBulkLoader<'_> {
@@ -1366,6 +1368,11 @@ impl RocksDbStorageBulkLoader<'_> {
         self
     }
 
+    pub fn without_atomicity(mut self) -> Self {
+        self.atomic = false;
+        self
+    }
+
     pub fn load_batch(
         &mut self,
         batch: Vec<Quad>,
@@ -1378,6 +1385,9 @@ impl RocksDbStorageBulkLoader<'_> {
                     .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
                 self.on_possible_progress()?;
             }
+        }
+        if !self.atomic {
+            self.do_commit()?;
         }
         // TODO: better spawn
         let storage = self.storage.clone();
@@ -1419,7 +1429,10 @@ impl RocksDbStorageBulkLoader<'_> {
         Ok(())
     }
 
-    pub fn partial_commit(&mut self) -> Result<(), StorageError> {
+    fn do_commit(&mut self) -> Result<(), StorageError> {
+        if self.sst_files.is_empty() {
+            return Ok(());
+        }
         self.storage.db.insert_stt_files(&self.sst_files)?;
         // We clear the Vec to not remove them on Drop nor write them again later
         self.sst_files.clear();
@@ -1432,9 +1445,7 @@ impl RocksDbStorageBulkLoader<'_> {
                 .extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
             self.on_possible_progress()?;
         }
-        self.storage.db.insert_stt_files(&self.sst_files)?;
-        self.sst_files.clear(); // We clear the Vec to not remove them on Drop
-        Ok(())
+        self.do_commit()
     }
 }
 
