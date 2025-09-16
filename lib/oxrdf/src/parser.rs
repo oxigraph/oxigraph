@@ -351,7 +351,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                     let remain = chars.as_str().trim();
                     return if let Some(remain) = remain.strip_prefix('@') {
                         let end = remain
-                            .find(|v| !matches!(v, 'a'..='z' | 'A'..='Z' | '-'))
+                            .find(|v: char| !v.is_ascii_alphanumeric() && v != '-')
                             .unwrap_or(remain.len());
                         let (language, remain) = remain.split_at(end);
                         #[cfg(feature = "rdf-12")]
