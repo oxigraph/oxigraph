@@ -107,12 +107,12 @@ pub enum Command {
         /// By default, the format is guessed from the loaded file extension.
         #[arg(long, required_unless_present = "file")]
         format: Option<String>,
-        /// Commit DB transactions during loading, instead of only doing it at the end.
+        /// Saves data to the database during loading, instead of only doing it at the end.
         ///
-        /// This lower disk space usage by allowing rocksdb to compact and compress,
+        /// This lowers disk space usage by allowing rocksdb to compact and compress,
         /// at the expense of CPU usage, and write amplification.
         #[arg(long)]
-        partial_commits: bool,
+        non_atomic: bool,
         /// Base IRI of the file(s) to load
         #[arg(long, value_hint = ValueHint::Url)]
         base: Option<String>,

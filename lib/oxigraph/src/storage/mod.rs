@@ -584,6 +584,18 @@ impl StorageBulkLoader<'_> {
         }
     }
 
+    pub fn without_atomicity(self) -> Self {
+        match self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageBulkLoaderKind::RocksDb(loader) => Self {
+                kind: StorageBulkLoaderKind::RocksDb(loader.without_atomicity()),
+            },
+            StorageBulkLoaderKind::Memory(loader) => Self {
+                kind: StorageBulkLoaderKind::Memory(loader),
+            },
+        }
+    }
+
     #[cfg_attr(
         any(target_family = "wasm", not(feature = "rocksdb")),
         expect(clippy::unnecessary_wraps, unused_variables)
@@ -600,15 +612,6 @@ impl StorageBulkLoader<'_> {
                 loader.load_batch(quads);
                 Ok(())
             }
-        }
-    }
-    pub fn partial_commit(&mut self) -> Result<(), StorageError> {
-        match &mut self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageBulkLoaderKind::RocksDb(loader) => loader.partial_commit(),
-            StorageBulkLoaderKind::Memory(_loader) => Err(StorageError::Unsupported(
-                "partial_commit on a memory storage",
-            )),
         }
     }
 
