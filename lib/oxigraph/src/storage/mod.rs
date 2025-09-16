@@ -12,11 +12,10 @@ use crate::storage::rocksdb::{
     RocksDbStorageTransaction,
 };
 use oxrdf::Quad;
-use std::io;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 #[cfg(not(target_family = "wasm"))]
-use std::thread;
+use std::{io, thread};
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod binary_encoder;
@@ -607,9 +606,9 @@ impl StorageBulkLoader<'_> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => loader.partial_commit(),
-            StorageBulkLoaderKind::Memory(_loader) => {
-                Err(StorageError::Unsupported("partial_commit on a memory storage"))
-            }
+            StorageBulkLoaderKind::Memory(_loader) => Err(StorageError::Unsupported(
+                "partial_commit on a memory storage",
+            )),
         }
     }
 
