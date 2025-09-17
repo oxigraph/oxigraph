@@ -1434,7 +1434,9 @@ impl RocksDbStorageBulkLoader<'_> {
             return Ok(());
         }
         self.storage.db.insert_stt_files(&self.sst_files)?;
-        // We clear the Vec to not remove them on Drop nor write them again later
+        for (_, file) in &self.sst_files {
+            remove_file(file)?;
+        }
         self.sst_files.clear();
         Ok(())
     }
