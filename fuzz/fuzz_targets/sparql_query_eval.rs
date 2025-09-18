@@ -49,19 +49,31 @@ fuzz_target!(|data: sparql_smith::Query| {
                 dataset: dataset.clone(),
             })
             .execute(dataset, &query);
-        assert_eq!(
-            query_results_key(with_opt, query_str.contains(" REDUCED ")),
-            query_results_key(without_opt, query_str.contains(" REDUCED "))
-        )
+        match (with_opt, without_opt) {
+            (Ok(with_opt), Ok(without_opt)) => {
+                assert_eq!(
+                    query_results_key(with_opt, query_str.contains(" REDUCED ")),
+                    query_results_key(without_opt, query_str.contains(" REDUCED "))
+                )
+            }
+            (Err(_), Err(_)) => (),
+            (Ok(r), Err(e)) => {
+                if !matches!(r, QueryResults::Boolean(false)) {
+                    panic!("with optimizations passed whereas without optimizations failed: {e}")
+                }
+            }
+            (Err(e), Ok(r)) => {
+                if !matches!(r, QueryResults::Boolean(false)) {
+                    panic!("without optimizations passed whereas with optimizations failed: {e}")
+                }
+            }
+        }
     }
 });
 
-fn query_results_key(
-    results: Result<QueryResults, QueryEvaluationError>,
-    is_reduced: bool,
-) -> String {
+fn query_results_key(results: QueryResults, is_reduced: bool) -> String {
     match results {
-        Ok(QueryResults::Solutions(iter)) => {
+        QueryResults::Solutions(iter) => {
             // TODO: ordering
             let mut b = iter
                 .into_iter()
@@ -81,7 +93,7 @@ fn query_results_key(
             }
             b.join("\n")
         }
-        Ok(QueryResults::Graph(iter)) => {
+        QueryResults::Graph(iter) => {
             let mut graph = iter.filter_map(Result::ok).collect::<Graph>();
             if graph.iter().map(count_triple_blank_nodes).sum::<usize>() > 4 {
                 return String::new(); // canonicalization might be too slow
@@ -91,8 +103,7 @@ fn query_results_key(
             triples.sort_unstable();
             triples.join("\n")
         }
-        Ok(QueryResults::Boolean(bool)) => if bool { "true" } else { "" }.into(),
-        Err(_) => String::new(),
+        QueryResults::Boolean(bool) => if bool { "true" } else { "false" }.into(),
     }
 }
 
