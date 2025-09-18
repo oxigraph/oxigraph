@@ -1,0 +1,56 @@
+# Cover as many grammar rules/situations as possible in a small document
+
+@base <> .
+@prefix eg: <http://example.org> .
+<example:s> <example:p> "ob\t\b\n\r\f\\\"\'\u0025\U00015678ject" .
+ <example:s> <example:p> """long
+	""string""\t\b\n\r\f\'\u0025\U00015678""" .
+eg:s eg:p "߿ࠀ࿿က쿿퀀퟿�𐀀𿿽񀀀󿿽􀀀􏿽" .
+ eg:sub%25ject eg:pr\~d "o"^^eg:T .
+eg:s\@object eg:pr\~d "o"@en .
+_:e.u.s eg:p "o"@en-gb . 
+_:e.u.s eg:p _:o.
+_:e.u.s eg:p‿r⁀d 2.
+_:e.u.s eg:prèd 3 .
+_:e.u.s eg:pͯ 4.5.
+eg:Σ eg:p 0 , .1 , 2.3 , 4E5, 6e07 .
+eg:s eg:p .7e8 , .9E0 , 1.e2 , 3.E4 .
+eg:s eg:p .2E3 , .4e5 , 6.7E8 , 9.
+ [ ] eg:p 0.e1, 2.E3.
+[] eg:p (1 -2.3 4e5 +6.E-7 8.e+9 .1 -.2 +.3) .
+eg:s eg:p [] .
+[
+	eg:p1 eg:o1 ;
+	eg:p2 _:o2 ;
+	eg:p3 "o3" ;
+
+ ] a eg:S .
+
+GRAPH eg:g1 {
+	[
+		eg:p1 eg:o1 ;
+		eg:p2 _:o2 ;
+		eg:p3 "o3"
+	] a eg:S .
+}
+
+GRAPH [ 	] {
+	[
+		eg:p1 eg:o1 ;
+	] a eg:Anonymous , eg:Subject .
+}
+
+_:g2 {
+	eg:s2
+		eg:p4 [
+			eg:op1 "oo1"
+		] ,           
+			"o4" ,
+			eg:o5 ,
+			_:o.6. 
+}
+
+eg:g3 {
+	_:s3 eg:p5 ( _:o7 "o8" eg:o9 ) .
+	_:s4 eg:p6 () , [] .
+}	

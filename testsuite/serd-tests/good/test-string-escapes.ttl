@@ -1,0 +1,11 @@
+@prefix eg: <http://example.org/eg#> .
+
+eg:a
+	eg:b """\nthis \ris a \U00015678long\t
+literal\uABCD
+""" .
+
+eg:d
+	eg:e """\tThis \uABCDis\r \U00015678another\n
+one
+""" .

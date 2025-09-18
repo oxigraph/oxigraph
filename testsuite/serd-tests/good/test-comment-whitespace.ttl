@@ -1,0 +1,5 @@
+@prefix eg: <http://example.org/eg#> .
+
+# Ends in line feed
+eg:s eg:p eg:o .
+# Ends at EOF

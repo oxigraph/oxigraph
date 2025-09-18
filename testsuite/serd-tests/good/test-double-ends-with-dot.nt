@@ -1,0 +1,1 @@
+<http://example.org/eg#s> <http://example.org/eg#p> "12.3e4"^^<http://www.w3.org/2001/XMLSchema#double> .

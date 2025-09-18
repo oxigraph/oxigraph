@@ -1,0 +1,1 @@
+<http://example.org/s> <http://example.org/p> "1" .# line comment<http://example.org/s> <http://example.org/p> "2" . # trailing comment<http://example.org/s> <http://example.org/p> "3" .<http://example.org/s> <http://example.org/p> "4" .

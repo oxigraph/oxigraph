@@ -1,0 +1,4 @@
+@prefix eg: <http://example.org/eg#> .
+
+eg:s
+	eg:p 12.3.

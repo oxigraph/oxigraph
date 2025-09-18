@@ -1,0 +1,65 @@
+<http://example.org/s> <http://example.org/p> "\"" .
+<http://example.org/s> <http://example.org/p> "\"\"" .
+<http://example.org/s> <http://example.org/p> "\"\"\"" .
+<http://example.org/s> <http://example.org/p> "\"\"\"\"" .
+
+<http://example.org/s> <http://example.org/p> """\"""" .
+
+<http://example.org/s> <http://example.org/p> """"\"""" .
+<http://example.org/s> <http://example.org/p> """\"\"""" .
+
+<http://example.org/s> <http://example.org/p> """""\"""" .
+<http://example.org/s> <http://example.org/p> """\""\"""" .
+<http://example.org/s> <http://example.org/p> """\""\"""" .
+<http://example.org/s> <http://example.org/p> """\"\"\"""" .
+<http://example.org/s> <http://example.org/p> """"\"\"""" .
+
+<http://example.org/s> <http://example.org/p> """""\"\"""" .
+<http://example.org/s> <http://example.org/p> """"\""\"""" .
+<http://example.org/s> <http://example.org/p> """"\"\"\"""" .
+<http://example.org/s> <http://example.org/p> """\"""\"""" .
+<http://example.org/s> <http://example.org/p> """\""\"\"""" .
+<http://example.org/s> <http://example.org/p> """\"\""\"""" .
+<http://example.org/s> <http://example.org/p> """\"\"\"\"""" .
+
+<http://example.org/s> <http://example.org/p> """single " within""" .
+<http://example.org/s> <http://example.org/p> """single \" within""" .
+
+<http://example.org/s> <http://example.org/p> """double "" within""" .
+<http://example.org/s> <http://example.org/p> """double "\" within""" .
+<http://example.org/s> <http://example.org/p> """double \"" within""" .
+<http://example.org/s> <http://example.org/p> """double \"\" within""" .
+
+<http://example.org/s> <http://example.org/p> """triple ""\" within""" .
+<http://example.org/s> <http://example.org/p> """triple "\"" within""" .
+<http://example.org/s> <http://example.org/p> """triple "\"\" within""" .
+<http://example.org/s> <http://example.org/p> """triple \""" within""" .
+<http://example.org/s> <http://example.org/p> """triple \""\" within""" .
+<http://example.org/s> <http://example.org/p> """triple \"\"" within""" .
+<http://example.org/s> <http://example.org/p> """triple \"\"\" within""" .
+
+<http://example.org/s> <http://example.org/p> """" start single""" .
+<http://example.org/s> <http://example.org/p> """\" start single""" .
+
+<http://example.org/s> <http://example.org/p> """"" start double""" .
+<http://example.org/s> <http://example.org/p> """"\" start double""" .
+<http://example.org/s> <http://example.org/p> """\"" start double""" .
+<http://example.org/s> <http://example.org/p> """\"\" start double""" .
+
+<http://example.org/s> <http://example.org/p> """""\" start triple""" .
+<http://example.org/s> <http://example.org/p> """"\"" start triple""" .
+<http://example.org/s> <http://example.org/p> """"\"\" start triple""" .
+<http://example.org/s> <http://example.org/p> """\""" start triple""" .
+<http://example.org/s> <http://example.org/p> """\""\" start triple""" .
+<http://example.org/s> <http://example.org/p> """\"\"" start triple""" .
+<http://example.org/s> <http://example.org/p> """\"\"\" start triple""" .
+
+<http://example.org/s> <http://example.org/p> """end single \"""" .
+
+<http://example.org/s> <http://example.org/p> """end double "\"""" .
+<http://example.org/s> <http://example.org/p> """end double \"\"""" .
+
+<http://example.org/s> <http://example.org/p> """end triple ""\"""" .
+<http://example.org/s> <http://example.org/p> """end triple "\"\"""" .
+<http://example.org/s> <http://example.org/p> """end triple \""\"""" .
+<http://example.org/s> <http://example.org/p> """end triple \"\"\"""" .

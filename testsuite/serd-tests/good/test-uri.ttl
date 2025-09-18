@@ -49,10 +49,10 @@
 <g?y/../x>      owl:sameAs <http://a/b/c/g?y/../x> .
 <g#s/./x>       owl:sameAs <http://a/b/c/g#s/./x> .
 <g#s/../x>      owl:sameAs <http://a/b/c/g#s/../x> .
-      
+
 # Additional tests for Serd
-</.g>                owl:sameAs <http://a/.g> . 
-</..g>               owl:sameAs <http://a/..g> . 
+</.g>                owl:sameAs <http://a/.g> .
+</..g>               owl:sameAs <http://a/..g> .
 <http://A?aquery>    owl:sameAs <http://A?aquery> .
 <http://A#afragment> owl:sameAs <http://A#afragment> .
 <?aquery>            owl:sameAs <http://a/b/c/d;p?aquery> .

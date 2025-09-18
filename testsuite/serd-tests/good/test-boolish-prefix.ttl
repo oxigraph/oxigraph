@@ -1,0 +1,5 @@
+@prefix false.ish: <http://example.org/falseish#> .
+@prefix true.ish: <http://example.org/trueish#> .
+
+<http://example.org/s> <http://example.org/p> false.ish:o .
+<http://example.org/s> <http://example.org/p> true.ish:o .
