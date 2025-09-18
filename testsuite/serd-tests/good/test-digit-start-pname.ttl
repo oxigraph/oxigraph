@@ -1,3 +1,4 @@
-@prefix eg: <http://example.org/> .
+@prefix eg: <http://example.org/eg#> .
 
-eg:1thing a eg:Thing .
+eg:1thing
+	a eg:Thing .

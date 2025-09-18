@@ -1,4 +1,8 @@
-@prefix : <http://example.org/base#> .
+@prefix eg: <http://example.org/eg#> .
 
-:subj :pred [ a :FirstThing ] ;
-      :pred [ a :SecondThing ] .
+eg:s
+	eg:p [
+		a eg:FirstThing
+	] , [
+		a eg:SecondThing
+	] .

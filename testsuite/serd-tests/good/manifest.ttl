@@ -1,20 +1,14 @@
 @prefix mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdft: <http://www.w3.org/ns/rdftest#> .
 
 <>
-	rdf:type mf:Manifest ;
-	rdfs:comment "Serd good syntax test cases" ;
+	a mf:Manifest ;
+	rdfs:comment "Serd good (additional) test suite" ;
 	mf:entries (
-		<#base>
-		<#test-14>
-		<#test-15>
-		<#test-16>
-		<#test-18>
-		<#test-30>
 		<#test-a-without-whitespace>
 		<#test-backspace>
+		<#test-base>
 		<#test-base-nopath>
 		<#test-base-query>
 		<#test-blank-cont>
@@ -22,298 +16,389 @@
 		<#test-blank-node-statement>
 		<#test-blankdot>
 		# We do not support BOM <#test-bom>
+		<#test-boolish-prefix>
+		<#test-changing-base>
+		<#test-comment-whitespace>
 		<#test-cr>
-		<#test-delete>
 		<#test-digit-start-pname>
+		<#test-decimal-ends-with-dot>
+		<#test-double>
+		<#test-double-ends-with-dot>
 		<#test-empty-path-base>
-		<#test-empty>
 		<#test-eof-at-page-end>
-		# We prefer to decode before IRI validation <#test-escapes>
 		# this is an extension <#test-ext-namedblank-iri>
         # this is an extension <#test-ext-namedblank-prefix>
-		<#test-form-feed>
+		<#test-false-ends-with-dot>
 		<#test-id>
-		<#test-lang>
+		<#test-integer-ends-with-dot>
 		<#test-list-in-blank>
 		<#test-list-subject>
-		<#test-list>
-		<#test-long-string>
-		<#test-several-eaten-dots>
+		<#test-local-name-ends-with-dot>
+		# this generates an invalid IRI <#test-local-name-escapes>
+		<#test-local-name-percent>
+		<#test-long-utf8>
 		<#test-no-spaces>
 		<#test-non-curie-uri>
-		<#test-num>
-		# We prefer to raise an error on invalid unicode code points <#test-out-of-range-unicode>
+		<#test-nq-syntax-all-rules>
+		<#test-nq-syntax-dot-end>
+		<#test-nt-syntax-all-rules>
+		<#test-nq-syntax-eol-cr>
+		<#test-nq-syntax-eol-crlf>
+		<#test-nq-syntax-eol-lf>
+		<#test-nq-syntax-eol-lfcr>
+		<#test-nt-syntax-all-rules>
+		<#test-nt-syntax-blank-dot>
+		<#test-nt-syntax-dot-end>
+		<#test-nt-syntax-eof-after-blank-dot>
+		<#test-nt-syntax-eol-cr>
+		<#test-nt-syntax-eol-crlf>
+		<#test-nt-syntax-eol-lf>
+		<#test-nt-syntax-eol-lfcr>
 		<#test-prefix>
-		<#test-pretty>
+		<#test-quote-escapes>
 		<#test-rel>
 		<#test-semi-dot>
-		# We validate URI escaping <#test-uri-escape>
+		<#test-several-eaten-dots>
+		<#test-string-escapes>
+		<#test-trig-syntax-all-rules>
+		<#test-true-ends-with-dot>
+		<#test-ttl-syntax-all-rules>
 		<#test-uri>
-		<#test-utf8-uri>
-		<#UTF-8>
 	) .
 
-<#base>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "base" ;
-	mf:action <base.ttl> ;
-	mf:result <base.nt> .
-
-<#test-14>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-14" ;
-	mf:action <test-14.ttl> ;
-	mf:result <test-14.nt> .
-
-<#test-15>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-15" ;
-	mf:action <test-15.ttl> ;
-	mf:result <test-15.nt> .
-
-<#test-16>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-16" ;
-	mf:action <test-16.ttl> ;
-	mf:result <test-16.nt> .
-
-<#test-18>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-18" ;
-	mf:action <test-18.ttl> ;
-	mf:result <test-18.nt> .
-
-<#test-30>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-30" ;
-	mf:action <test-30.ttl> ;
-	mf:result <test-30.nt> .
-
 <#test-a-without-whitespace>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-a-without-whitespace" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-a-without-whitespace.ttl> ;
+	mf:name "test-a-without-whitespace" ;
 	mf:result <test-a-without-whitespace.nt> .
 
 <#test-backspace>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-backspace" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-backspace.ttl> ;
+	mf:name "test-backspace" ;
 	mf:result <test-backspace.nt> .
 
+<#test-base>
+	a rdft:TestTurtleEval ;
+	mf:action <test-base.ttl> ;
+	mf:name "test-base" ;
+	mf:result <test-base.nt> .
+
 <#test-base-nopath>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-base-nopath" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-base-nopath.ttl> ;
+	mf:name "test-base-nopath" ;
 	mf:result <test-base-nopath.nt> .
 
 <#test-base-query>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-base-query" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-base-query.ttl> ;
+	mf:name "test-base-query" ;
 	mf:result <test-base-query.nt> .
 
 <#test-blank-cont>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-blank-cont" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-blank-cont.ttl> ;
+	mf:name "test-blank-cont" ;
 	mf:result <test-blank-cont.nt> .
 
-<#test-blankdot>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-blankdot" ;
-	mf:action <test-blankdot.ttl> ;
-	mf:result <test-blankdot.nt> .
-
 <#test-blank-in-list>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-blank-in-list" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-blank-in-list.ttl> ;
+	mf:name "test-blank-in-list" ;
 	mf:result <test-blank-in-list.nt> .
 
 <#test-blank-node-statement>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-blank-node-statement" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-blank-node-statement.ttl> ;
+	mf:name "test-blank-node-statement" ;
 	mf:result <test-blank-node-statement.nt> .
 
+<#test-blankdot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-blankdot.ttl> ;
+	mf:name "test-blankdot" ;
+	mf:result <test-blankdot.nt> .
+
 <#test-bom>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-bom" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-bom.ttl> ;
+	mf:name "test-bom" ;
 	mf:result <test-bom.nt> .
 
+<#test-bom-only>
+	a rdft:TestTurtleEval ;
+	mf:action <test-bom-only.ttl> ;
+	mf:name "test-bom-only" ;
+	mf:result <test-bom-only.nt> .
+
+<#test-boolish-prefix>
+	a rdft:TestTurtleEval ;
+	mf:action <test-boolish-prefix.ttl> ;
+	mf:name "test-boolish-prefix" ;
+	mf:result <test-boolish-prefix.nt> .
+
+<#test-changing-base>
+	a rdft:TestTurtleEval ;
+	mf:action <test-changing-base.ttl> ;
+	mf:name "test-changing-base" ;
+	mf:result <test-changing-base.nt> .
+
+<#test-comment-whitespace>
+	a rdft:TestTurtleEval ;
+	mf:action <test-comment-whitespace.ttl> ;
+	mf:name "test-comment-whitespace" ;
+	mf:result <test-comment-whitespace.nt> .
+
 <#test-cr>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-cr" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-cr.ttl> ;
+	mf:name "test-cr" ;
 	mf:result <test-cr.nt> .
 
-<#test-delete>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-delete" ;
-	mf:action <test-delete.ttl> ;
-	mf:result <test-delete.nt> .
-
 <#test-digit-start-pname>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-digit-start-pname" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-digit-start-pname.ttl> ;
+	mf:name "test-digit-start-pname" ;
 	mf:result <test-digit-start-pname.nt> .
 
+<#test-decimal-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-decimal-ends-with-dot.ttl> ;
+	mf:name "test-decimal-ends-with-dot" ;
+	mf:result <test-decimal-ends-with-dot.nt> .
+
+<#test-double>
+	a rdft:TestTurtleEval ;
+	mf:action <test-double.ttl> ;
+	mf:name "test-double" ;
+	mf:result <test-double.nt> .
+
+<#test-double-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-double-ends-with-dot.ttl> ;
+	mf:name "test-double-ends-with-dot" ;
+	mf:result <test-double-ends-with-dot.nt> .
+
 <#test-empty-path-base>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-empty-path-base" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-empty-path-base.ttl> ;
+	mf:name "test-empty-path-base" ;
 	mf:result <test-empty-path-base.nt> .
 
-<#test-empty>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-empty" ;
-	mf:action <test-empty.ttl> ;
-	mf:result <test-empty.nt> .
-
 <#test-eof-at-page-end>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-eof-at-page-end" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-eof-at-page-end.ttl> ;
+	mf:name "test-eof-at-page-end" ;
 	mf:result <test-eof-at-page-end.nt> .
 
-<#test-escapes>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-escapes" ;
-	mf:action <test-escapes.ttl> ;
-	mf:result <test-escapes.nt> .
-
 <#test-ext-namedblank-iri>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-ext-namedblank-iri" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-ext-namedblank-iri.ttl> ;
+	mf:name "test-ext-namedblank-iri" ;
 	mf:result <test-ext-namedblank-iri.nt> .
 
 <#test-ext-namedblank-prefix>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-ext-namedblank-prefix" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-ext-namedblank-prefix.ttl> ;
+	mf:name "test-ext-namedblank-prefix" ;
 	mf:result <test-ext-namedblank-prefix.nt> .
 
-<#test-form-feed>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-form-feed" ;
-	mf:action <test-form-feed.ttl> ;
-	mf:result <test-form-feed.nt> .
+<#test-false-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-false-ends-with-dot.ttl> ;
+	mf:name "test-false-ends-with-dot" ;
+	mf:result <test-false-ends-with-dot.nt> .
 
 <#test-id>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-id" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-id.ttl> ;
+	mf:name "test-id" ;
 	mf:result <test-id.nt> .
 
-<#test-lang>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-lang" ;
-	mf:action <test-lang.ttl> ;
-	mf:result <test-lang.nt> .
+<#test-integer-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-integer-ends-with-dot.ttl> ;
+	mf:name "test-integer-ends-with-dot" ;
+	mf:result <test-integer-ends-with-dot.nt> .
 
 <#test-list-in-blank>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-list-in-blank" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-list-in-blank.ttl> ;
+	mf:name "test-list-in-blank" ;
 	mf:result <test-list-in-blank.nt> .
 
 <#test-list-subject>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-list-subject" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-list-subject.ttl> ;
+	mf:name "test-list-subject" ;
 	mf:result <test-list-subject.nt> .
 
-<#test-list>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-list" ;
-	mf:action <test-list.ttl> ;
-	mf:result <test-list.nt> .
+<#test-local-name-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-local-name-ends-with-dot.ttl> ;
+	mf:name "test-local-name-ends-with-dot" ;
+	mf:result <test-local-name-ends-with-dot.nt> .
 
-<#test-long-string>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-long-string" ;
-	mf:action <test-long-string.ttl> ;
-	mf:result <test-long-string.nt> .
+<#test-local-name-escapes>
+	a rdft:TestTurtleEval ;
+	mf:action <test-local-name-escapes.ttl> ;
+	mf:name "test-local-name-escapes" ;
+	mf:result <test-local-name-escapes.nt> .
 
-<#test-several-eaten-dots>
-	rdf:type rdft:TestTrigEval ;
-	mf:name "test-several-eaten-dots" ;
-	mf:action <test-several-eaten-dots.trig> ;
-	mf:result <test-several-eaten-dots.nq> .
+<#test-local-name-percent>
+	a rdft:TestTurtleEval ;
+	mf:action <test-local-name-percent.ttl> ;
+	mf:name "test-local-name-percent" ;
+	mf:result <test-local-name-percent.nt> .
+
+<#test-long-utf8>
+	a rdft:TestTurtleEval ;
+	mf:action <test-long-utf8.ttl> ;
+	mf:name "test-long-utf8" ;
+	mf:result <test-long-utf8.nt> .
 
 <#test-no-spaces>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-no-spaces" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-no-spaces.ttl> ;
+	mf:name "test-no-spaces" ;
 	mf:result <test-no-spaces.nt> .
 
 <#test-non-curie-uri>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-non-curie-uri" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-non-curie-uri.ttl> ;
+	mf:name "test-non-curie-uri" ;
 	mf:result <test-non-curie-uri.nt> .
 
-<#test-num>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-num" ;
-	mf:action <test-num.ttl> ;
-	mf:result <test-num.nt> .
+<#test-nq-syntax-all-rules>
+	a rdft:TestNQuadsPositiveSyntax ;
+	mf:action <test-nq-syntax-all-rules.nq> ;
+	mf:name "test-nq-syntax-all-rules" .
 
-<#test-out-of-range-unicode>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-out-of-range-unicode" ;
-	mf:action <test-out-of-range-unicode.ttl> ;
-	mf:result <test-out-of-range-unicode.nt> .
+<#test-nq-syntax-dot-end>
+	a rdft:TestNQuadsPositiveSyntax ;
+	mf:action <test-nq-syntax-dot-end.nq> ;
+	mf:name "test-nq-syntax-dot-end" .
+
+<#test-nq-syntax-eof-after-blank-dot>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nq-syntax-eof-after-blank-dot.nq> ;
+	mf:name "test-nq-syntax-eof-after-blank-dot" .
+
+<#test-nq-syntax-eol-cr>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nq-syntax-eol-cr.nq> ;
+	mf:name "test-nq-syntax-eol-cr" .
+
+<#test-nq-syntax-eol-crlf>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nq-syntax-eol-crlf.nq> ;
+	mf:name "test-nq-syntax-eol-crlf" .
+
+<#test-nq-syntax-eol-lf>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nq-syntax-eol-lf.nq> ;
+	mf:name "test-nq-syntax-eol-lf" .
+
+<#test-nq-syntax-eol-lfcr>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nq-syntax-eol-lfcr.nq> ;
+	mf:name "test-nq-syntax-eol-lfcr" .
+
+<#test-nt-syntax-all-rules>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-all-rules.nt> ;
+	mf:name "test-nt-syntax-all-rules" .
+
+<#test-nt-syntax-blank-dot>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-blank-dot.nt> ;
+	mf:name "test-nt-syntax-blank-dot" .
+
+<#test-nt-syntax-dot-end>
+	a rdft:TestNQuadsPositiveSyntax ;
+	mf:action <test-nt-syntax-dot-end.nt> ;
+	mf:name "test-nt-syntax-dot-end" .
+
+<#test-nt-syntax-eof-after-blank-dot>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-eof-after-blank-dot.nt> ;
+	mf:name "test-nt-syntax-eof-after-blank-dot" .
+
+<#test-nt-syntax-eol-cr>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-eol-cr.nt> ;
+	mf:name "test-nt-syntax-eol-cr" .
+
+<#test-nt-syntax-eol-crlf>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-eol-crlf.nt> ;
+	mf:name "test-nt-syntax-eol-crlf" .
+
+<#test-nt-syntax-eol-lf>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-eol-lf.nt> ;
+	mf:name "test-nt-syntax-eol-lf" .
+
+<#test-nt-syntax-eol-lfcr>
+	a rdft:TestNTriplesPositiveSyntax ;
+	mf:action <test-nt-syntax-eol-lfcr.nt> ;
+	mf:name "test-nt-syntax-eol-lfcr" .
 
 <#test-prefix>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-prefix" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-prefix.ttl> ;
+	mf:name "test-prefix" ;
 	mf:result <test-prefix.nt> .
 
-<#test-pretty>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-pretty" ;
-	mf:action <test-pretty.ttl> ;
-	mf:result <test-pretty.nt> .
+<#test-quote-escapes>
+	a rdft:TestTurtleEval ;
+	mf:action <test-quote-escapes.ttl> ;
+	mf:name "test-quote-escapes" ;
+	mf:result <test-quote-escapes.nt> .
 
 <#test-rel>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-rel" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-rel.ttl> ;
+	mf:name "test-rel" ;
 	mf:result <test-rel.nt> .
 
 <#test-semi-dot>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-semi-dot" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-semi-dot.ttl> ;
+	mf:name "test-semi-dot" ;
 	mf:result <test-semi-dot.nt> .
 
-<#test-uri-escape>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-uri-escape" ;
-	mf:action <test-uri-escape.ttl> ;
-	mf:result <test-uri-escape.nt> .
+<#test-several-eaten-dots>
+	a rdft:TestTrigEval ;
+	mf:action <test-several-eaten-dots.trig> ;
+	mf:name "test-several-eaten-dots" ;
+	mf:result <test-several-eaten-dots.nq> .
+
+<#test-string-escapes>
+	a rdft:TestTurtleEval ;
+	mf:action <test-string-escapes.ttl> ;
+	mf:name "test-string-escapes" ;
+	mf:result <test-string-escapes.nt> .
+
+<#test-trig-syntax-all-rules>
+	a rdft:TestTrigPositiveSyntax ;
+	mf:action <test-trig-syntax-all-rules.trig> ;
+	mf:name "test-trig-syntax-all-rules" .
+
+<#test-true-ends-with-dot>
+	a rdft:TestTurtleEval ;
+	mf:action <test-true-ends-with-dot.ttl> ;
+	mf:name "test-true-ends-with-dot" ;
+	mf:result <test-true-ends-with-dot.nt> .
+
+<#test-ttl-syntax-all-rules>
+	a rdft:TestTurtlePositiveSyntax ;
+	mf:action <test-ttl-syntax-all-rules.ttl> ;
+	mf:name "test-ttl-syntax-all-rules" .
 
 <#test-uri>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-uri" ;
+	a rdft:TestTurtleEval ;
 	mf:action <test-uri.ttl> ;
+	mf:name "test-uri" ;
 	mf:result <test-uri.nt> .
-
-<#test-utf8-uri>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "test-utf8-uri" ;
-	mf:action <test-utf8-uri.ttl> ;
-	mf:result <test-utf8-uri.nt> .
-
-<#UTF-8>
-	rdf:type rdft:TestTurtleEval ;
-	mf:name "UTF-8" ;
-	mf:action <UTF-8.ttl> ;
-	mf:result <UTF-8.nt> .
-

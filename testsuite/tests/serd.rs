@@ -13,3 +13,8 @@ fn serd_good_testsuite() -> Result<()> {
 fn serd_bad_testsuite() -> Result<()> {
     check_testsuite("http://drobilla.net/sw/serd/test/bad/manifest.ttl", &[])
 }
+
+#[test]
+fn serd_eof_testsuite() -> Result<()> {
+    check_testsuite("http://drobilla.net/sw/serd/test/eof/manifest.ttl", &[])
+}

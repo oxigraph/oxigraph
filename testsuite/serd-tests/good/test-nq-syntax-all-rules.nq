@@ -1,0 +1,7 @@
+# Cover as many grammar rules/situations as possible in a small document
+_:e.u.s <http://example.org/p> _:o.
+_:e.u.s <http://example.org/p> "o"@en-gb _:g.
+ _:s <http://example.org/p> "ob\t\b\n\r\f\\\"\'\u0025\U00015678ject" <http://example.org/g> .
+_:Σ <http://example.org/p> "߿ࠀ࿿က쿿퀀퟿�𐀀𿿽񀀀󿿽􀀀􏿽" <http://example.org/g> .	
+_:s <http://example.org/p> "o"^^<http://example.org/T> <http://example.org/g> .	
+_:s <http://example.org/p> "o"@en _:g . 

@@ -1,0 +1,2 @@
+# Bad IRI : bar.
+<http://example/|oops|> <http://example/p> <http://example/o> .

@@ -1,0 +1,1 @@
+@prefix dotted.: <http://example.org/> .

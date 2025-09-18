@@ -1,0 +1,2 @@
+# Bad IRI : opening brace.
+<http://example/{oops> <http://example/p> <http://example/o> .

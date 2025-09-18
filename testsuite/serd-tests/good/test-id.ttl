@@ -1,4 +1,7 @@
-@prefix : <http://example.org/base#> .
+@prefix eg: <http://example.org/eg#> .
 
-:c :d [] .
-_:b1 :a :b .
+eg:a
+	eg:b [] .
+
+_:b1
+	eg:c eg:d .

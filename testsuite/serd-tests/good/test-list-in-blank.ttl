@@ -1,2 +1,9 @@
-@prefix : <http://example.org/stuff/1.0/> .
-:a :b [ :c ( "apple" "banana" ) ] .
+@prefix eg: <http://example.org/eg#> .
+
+eg:a
+	eg:b [
+		eg:c (
+			"apple"
+			"banana"
+		)
+	] .

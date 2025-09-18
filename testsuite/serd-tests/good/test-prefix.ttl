@@ -1,4 +1,4 @@
-@prefix eg: <http://example.org/a/> .
+@prefix aslash: <http://example.org/a/> .
 
 <http://example.org/a/b> a <http://example.org/Thing> .
 <http://example.org/a/b/c> a <http://example.org/Thing> .

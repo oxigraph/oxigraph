@@ -1,6 +1,8 @@
-prefix : <https://example.com/>
+prefix eg: <https://example.com/eg#>
 
-:g {
-  :s :p1 :o1.
-  :s :p1 :o2; :p2 :o3.
+eg:g {
+	eg:s
+		eg:p1 eg:o1 ,
+			eg:o2 ;
+		eg:p2 eg:o3 .
 }

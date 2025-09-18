@@ -1,2 +1,2 @@
-<http://example.org/base#c> <http://example.org/base#d> _:b1 .
-_:B1 <http://example.org/base#a> <http://example.org/base#b> .
+<http://example.org/eg#a> <http://example.org/eg#b> _:b1 .
+_:B1 <http://example.org/eg#c> <http://example.org/eg#d> .

@@ -1,0 +1,225 @@
+@prefix mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+
+<>
+	a mf:Manifest ;
+	rdfs:comment "Serd EOF (truncated input) test suite" ;
+	mf:entries (
+		<#bad-nt-eof-after-blank>
+		<#bad-nt-eof-after-lang>
+		<#bad-nt-eof-after-lang-hyphen>
+		<#bad-nt-eof-after-lang-subtag>
+		<#bad-nt-eof-after-object>
+		<#bad-nt-eof-after-predicate>
+		<#bad-nt-eof-after-string>
+		<#bad-nt-eof-after-string-escape>
+		<#bad-nt-eof-after-subject>
+		<#bad-nt-eof-after-underscore>
+		<#bad-nt-eof-before-blank>
+		<#bad-nt-eof-before-iri>
+		<#bad-nt-eof-before-lang>
+		<#bad-nt-eof-before-string>
+		<#bad-nt-eof-before-string-escape>
+		<#bad-nt-eof-in-iri-path>
+		<#bad-nt-eof-in-iri-scheme>
+		<#bad-nt-eof-in-string>
+		<#bad-ttl-eof-after-quotes>
+		<#bad-ttl-eof-at-string-start>
+		<#bad-ttl-eof-in-blank>
+		<#bad-ttl-eof-in-escape>
+		<#bad-ttl-eof-in-lang>
+		<#bad-ttl-eof-in-lang-suffix>
+		<#bad-ttl-eof-in-list>
+		<#bad-ttl-eof-in-long-string>
+		<#bad-ttl-eof-in-object-list>
+		<#bad-ttl-eof-in-object-list2>
+		<#bad-ttl-eof-in-predicate-list>
+		<#bad-ttl-eof-in-string>
+		<#bad-ttl-eof-in-text-character>
+		<#bad-ttl-eof-in-triple-quote>
+		<#bad-ttl-eof-in-uri>
+		<#bad-ttl-eof-in-uri-character>
+		<#bad-ttl-eof-in-uri-scheme>
+		<#bad-ttl-eof-in-utf8-character>
+	) .
+
+<#bad-nt-eof-after-blank>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-blank.nt> ;
+	mf:name "bad-nt-eof-after-blank" .
+
+<#bad-nt-eof-after-lang>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-lang.nt> ;
+	mf:name "bad-nt-eof-after-lang" .
+
+<#bad-nt-eof-after-lang-hyphen>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-lang-hyphen.nt> ;
+	mf:name "bad-nt-eof-after-lang-hyphen" .
+
+<#bad-nt-eof-after-lang-subtag>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-lang-subtag.nt> ;
+	mf:name "bad-nt-eof-after-lang-subtag" .
+
+<#bad-nt-eof-after-object>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-object.nt> ;
+	mf:name "bad-nt-eof-after-object" .
+
+<#bad-nt-eof-after-predicate>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-predicate.nt> ;
+	mf:name "bad-nt-eof-after-predicate" .
+
+<#bad-nt-eof-after-string>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-string.nt> ;
+	mf:name "bad-nt-eof-after-string" .
+
+<#bad-nt-eof-after-string-escape>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-string-escape.nt> ;
+	mf:name "bad-nt-eof-after-string-escape" .
+
+<#bad-nt-eof-after-subject>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-subject.nt> ;
+	mf:name "bad-nt-eof-after-subject" .
+
+<#bad-nt-eof-after-underscore>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-after-underscore.nt> ;
+	mf:name "bad-nt-eof-after-underscore" .
+
+<#bad-nt-eof-before-blank>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-before-blank.nt> ;
+	mf:name "bad-nt-eof-before-blank" .
+
+<#bad-nt-eof-before-iri>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-before-iri.nt> ;
+	mf:name "bad-nt-eof-before-iri" .
+
+<#bad-nt-eof-before-lang>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-before-lang.nt> ;
+	mf:name "bad-nt-eof-before-lang" .
+
+<#bad-nt-eof-before-string>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-before-string.nt> ;
+	mf:name "bad-nt-eof-before-string" .
+
+<#bad-nt-eof-before-string-escape>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-before-string-escape.nt> ;
+	mf:name "bad-nt-eof-before-string-escape" .
+
+<#bad-nt-eof-in-iri-path>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-in-iri-path.nt> ;
+	mf:name "bad-nt-eof-in-iri-path" .
+
+<#bad-nt-eof-in-iri-scheme>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-in-iri-scheme.nt> ;
+	mf:name "bad-nt-eof-in-iri-scheme" .
+
+<#bad-nt-eof-in-string>
+	a rdft:TestNTriplesNegativeSyntax ;
+	mf:action <bad-nt-eof-in-string.nt> ;
+	mf:name "bad-nt-eof-in-string" .
+
+<#bad-ttl-eof-after-quotes>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-after-quotes.ttl> ;
+	mf:name "bad-ttl-eof-after-quotes" .
+
+<#bad-ttl-eof-at-string-start>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-at-string-start.ttl> ;
+	mf:name "bad-ttl-eof-at-string-start" .
+
+<#bad-ttl-eof-in-blank>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-blank.ttl> ;
+	mf:name "bad-ttl-eof-in-blank" .
+
+<#bad-ttl-eof-in-escape>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-escape.ttl> ;
+	mf:name "bad-ttl-eof-in-escape" .
+
+<#bad-ttl-eof-in-lang>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-lang.ttl> ;
+	mf:name "bad-ttl-eof-in-lang" .
+
+<#bad-ttl-eof-in-lang-suffix>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-lang-suffix.ttl> ;
+	mf:name "bad-ttl-eof-in-lang-suffix" .
+
+<#bad-ttl-eof-in-list>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-list.ttl> ;
+	mf:name "bad-ttl-eof-in-list" .
+
+<#bad-ttl-eof-in-long-string>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-long-string.ttl> ;
+	mf:name "bad-ttl-eof-in-long-string" .
+
+<#bad-ttl-eof-in-object-list>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-object-list.ttl> ;
+	mf:name "bad-ttl-eof-in-object-list" .
+
+<#bad-ttl-eof-in-object-list2>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-object-list2.ttl> ;
+	mf:name "bad-ttl-eof-in-object-list2" .
+
+<#bad-ttl-eof-in-predicate-list>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-predicate-list.ttl> ;
+	mf:name "bad-ttl-eof-in-predicate-list" .
+
+<#bad-ttl-eof-in-string>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-string.ttl> ;
+	mf:name "bad-ttl-eof-in-string" .
+
+<#bad-ttl-eof-in-text-character>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-text-character.ttl> ;
+	mf:name "bad-ttl-eof-in-text-character" .
+
+<#bad-ttl-eof-in-triple-quote>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-triple-quote.ttl> ;
+	mf:name "bad-ttl-eof-in-triple-quote" .
+
+<#bad-ttl-eof-in-uri>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-uri.ttl> ;
+	mf:name "bad-ttl-eof-in-uri" .
+
+<#bad-ttl-eof-in-uri-character>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-uri-character.ttl> ;
+	mf:name "bad-ttl-eof-in-uri-character" .
+
+<#bad-ttl-eof-in-uri-scheme>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-uri-scheme.ttl> ;
+	mf:name "bad-ttl-eof-in-uri-scheme" .
+
+<#bad-ttl-eof-in-utf8-character>
+	a rdft:TestTurtleNegativeSyntax ;
+	mf:action <bad-ttl-eof-in-utf8-character.ttl> ;
+	mf:name "bad-ttl-eof-in-utf8-character" .

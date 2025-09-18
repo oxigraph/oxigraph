@@ -11,6 +11,8 @@
 		<#bad_lang>
 		<#language_normalization_ttl>
 		<#language_normalization_xml>
+		<#langtag_with_numbers_nt>
+		<#langtag_with_numbers_ttl>
 		<#xml_entities>
 		<#xml_nested_entities>
 		<#literal_value_space>
@@ -51,6 +53,17 @@
 	mf:name "language case normalization" ;
 	mf:action <language_normalization.rdf> ;
 	mf:result <language_normalization.nt> .
+
+<#langtag_with_numbers_nt>
+	rdf:type rdft:TestNTriplesPositiveSyntax ;
+	mf:name "language tag with numbers" ;
+	mf:action <langtag_with_numbers.nt> .
+
+<#langtag_with_numbers_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "language tag with numbers" ;
+	mf:action <langtag_with_numbers.nt> ;
+	mf:result <langtag_with_numbers.nt> .
 
 <#bad_lang>
 	rdf:type rdft:TestTurtleNegativeSyntax ;
