@@ -6842,8 +6842,23 @@ fn eval_node_label(node: &GraphPattern) -> String {
             }
         }
         GraphPattern::Union { .. } => "Union".to_owned(),
-        GraphPattern::Values { variables, .. } => {
-            format!("StaticBindings({})", format_list(variables))
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => {
+            format!(
+                "StaticBindings(({}), ({}))",
+                format_list(variables),
+                format_list(bindings.iter().map(|b| {
+                    format!(
+                        "({})",
+                        format_list(b.iter().map(|t| {
+                            t.as_ref()
+                                .map_or_else(|| "UNDEF".into(), GroundTerm::to_string)
+                        }))
+                    )
+                }))
+            )
         }
     }
 }
