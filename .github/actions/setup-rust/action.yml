@@ -35,6 +35,7 @@ runs:
         cache-all-crates: true
         cache-on-failure: true
         key: ${{ inputs.cache-key }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}
         workspaces: |
           . -> target
           fuzz -> target
