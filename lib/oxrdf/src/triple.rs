@@ -1188,10 +1188,10 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
         );
 
-        let jsn = serde_json::to_string(&triple).unwrap();
+        let jsn = serde_json::to_string(&triple)?;
         assert_eq!(
             jsn,
             r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"bnode","value":"foo"}}"#
@@ -1227,10 +1227,10 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
         );
 
-        let jsn = serde_json::to_string(&triple).unwrap();
+        let jsn = serde_json::to_string(&triple)?;
         let deserialized: Triple = serde_json::from_reader(jsn.as_bytes())?;
         assert_eq!(deserialized, triple);
 
@@ -1297,11 +1297,11 @@ mod tests {
         let quad = Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         );
 
-        let jsn = serde_json::to_string(&quad).unwrap();
+        let jsn = serde_json::to_string(&quad)?;
         assert_eq!(
             jsn,
             r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"bnode","value":"foo"},"graph":{"type":"uri","value":"http://example.com/g"}}"#
@@ -1314,7 +1314,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
             NamedNode::new_unchecked("http://example.com/o"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
         );
         let jsn = serde_json::to_string(&quad)?;
         assert_eq!(
@@ -1369,11 +1369,11 @@ mod tests {
         let quad = Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         );
 
-        let jsn = serde_json::to_string(&quad).unwrap();
+        let jsn = serde_json::to_string(&quad)?;
         let deserialized: Quad = serde_json::from_reader(jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
@@ -1382,7 +1382,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
             NamedNode::new_unchecked("http://example.com/o"),
-            BlankNode::new("foo").unwrap(),
+            BlankNode::new_unchecked("foo"),
         );
         let jsn = serde_json::to_string(&quad)?;
         let deserialized: Quad = serde_json::from_reader(jsn.as_bytes())?;

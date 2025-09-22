@@ -271,6 +271,7 @@ pub struct TooLargeForIntegerError;
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn from_str() -> Result<(), ParseIntError> {
@@ -283,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn from_float() -> Result<(), ParseIntError> {
+    fn from_float() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             Integer::try_from(Float::from(0.)).ok(),
             Some(Integer::from_str("0")?)
@@ -302,8 +303,7 @@ mod tests {
         Integer::try_from(Float::from(f32::MIN)).unwrap_err();
         Integer::try_from(Float::from(f32::MAX)).unwrap_err();
         assert!(
-            Integer::try_from(Float::from(1_672_507_300_000.))
-                .unwrap()
+            Integer::try_from(Float::from(1_672_507_300_000.))?
                 .checked_sub(Integer::from_str("1672507300000")?)
                 .unwrap()
                 .checked_abs()
@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn from_double() -> Result<(), ParseIntError> {
+    fn from_double() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             Integer::try_from(Double::from(0.0)).ok(),
             Some(Integer::from_str("0")?)
@@ -328,9 +328,8 @@ mod tests {
             Some(Integer::from_str("-123")?)
         );
         assert!(
-            Integer::try_from(Double::from(1_672_507_300_000.))
-                .unwrap()
-                .checked_sub(Integer::from_str("1672507300000").unwrap())
+            Integer::try_from(Double::from(1_672_507_300_000.))?
+                .checked_sub(Integer::from_str("1672507300000")?)
                 .unwrap()
                 .checked_abs()
                 .unwrap()
@@ -345,13 +344,13 @@ mod tests {
     }
 
     #[test]
-    fn from_decimal() -> Result<(), ParseIntError> {
+    fn from_decimal() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             Integer::try_from(Decimal::from(0)).ok(),
             Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Decimal::from_str("-123.1").unwrap()).ok(),
+            Integer::try_from(Decimal::from_str("-123.1")?).ok(),
             Some(Integer::from_str("-123")?)
         );
         Integer::try_from(Decimal::MIN).unwrap_err();

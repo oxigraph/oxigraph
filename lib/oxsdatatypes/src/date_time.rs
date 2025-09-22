@@ -2195,7 +2195,8 @@ fn year_frag(input: &str) -> Result<(i64, &str), ParseDateTimeError> {
             "The years value must not start with 0 if it can be encoded in at least 4 digits",
         ));
     }
-    let number = i64::from_str(number_str).expect("valid integer");
+    let number =
+        i64::from_str(number_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
     Ok((sign * number, input))
 }
 
@@ -2207,7 +2208,8 @@ fn month_frag(input: &str) -> Result<(u8, &str), ParseDateTimeError> {
             "Month must be encoded with two digits",
         ));
     }
-    let number = u8::from_str(number_str).expect("valid integer");
+    let number =
+        u8::from_str(number_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
     if !(1..=12).contains(&number) {
         return Err(ParseDateTimeError::msg("Month must be between 01 and 12"));
     }
@@ -2222,7 +2224,8 @@ fn day_frag(input: &str) -> Result<(u8, &str), ParseDateTimeError> {
             "Day must be encoded with two digits",
         ));
     }
-    let number = u8::from_str(number_str).expect("valid integer");
+    let number =
+        u8::from_str(number_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
     if !(1..=31).contains(&number) {
         return Err(ParseDateTimeError::msg("Day must be between 01 and 31"));
     }
@@ -2238,7 +2241,8 @@ fn hour_frag(input: &str) -> Result<(u8, &str), ParseDateTimeError> {
             "Hours must be encoded with two digits",
         ));
     }
-    let number = u8::from_str(number_str).expect("valid integer");
+    let number =
+        u8::from_str(number_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
     if !(0..=24).contains(&number) {
         return Err(ParseDateTimeError::msg("Hours must be between 00 and 24"));
     }
@@ -2253,7 +2257,8 @@ fn minute_frag(input: &str) -> Result<(u8, &str), ParseDateTimeError> {
             "Minutes must be encoded with two digits",
         ));
     }
-    let number = u8::from_str(number_str).expect("valid integer");
+    let number =
+        u8::from_str(number_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
     if !(0..=59).contains(&number) {
         return Err(ParseDateTimeError::msg("Minutes must be between 00 and 59"));
     }
@@ -2301,7 +2306,7 @@ fn timezone_frag(input: &str) -> Result<(TimezoneOffset, &str), ParseDateTimeErr
             "The timezone hours must be encoded with two digits",
         ));
     }
-    let hours = i16::from_str(hour_str).expect("valid integer");
+    let hours = i16::from_str(hour_str).map_err(|_| ParseDateTimeError::msg("Integer overflow"))?;
 
     let input = expect_char(
         input,

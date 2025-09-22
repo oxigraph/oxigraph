@@ -1436,9 +1436,9 @@ mod tests {
     fn test_write() -> io::Result<()> {
         let mut serializer = TriGSerializer::new()
             .with_prefix("ex", "http://example.com/")
-            .unwrap()
+            .map_err(io::Error::other)?
             .with_prefix("exl", "http://example.com/p/")
-            .unwrap()
+            .map_err(io::Error::other)?
             .for_writer(Vec::new());
         serializer.serialize_quad(QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
@@ -1489,7 +1489,7 @@ mod tests {
             NamedNodeRef::new_unchecked("http://example.com/g2"),
         ))?;
         assert_eq!(
-            String::from_utf8(serializer.finish()?).unwrap(),
+            String::from_utf8(serializer.finish()?).map_err(io::Error::other)?,
             "@prefix exl: <http://example.com/p/> .\n@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p exl:o\\. , <http://example.com/o{o}> , ex: , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
         );
         Ok(())

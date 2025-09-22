@@ -822,48 +822,48 @@ fn handle_request(
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
     match (request.uri().path(), request.method().as_ref()) {
-        ("/", "HEAD") => Ok(Response::builder()
+        ("/", "HEAD") => Response::builder()
             .header(CONTENT_TYPE, "text/html")
             .body(Body::empty())
-            .unwrap()),
-        ("/", "GET") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/", "GET") => Response::builder()
             .header(CONTENT_TYPE, "text/html")
             .body(HTML_ROOT_PAGE.into())
-            .unwrap()),
-        ("/yasgui.min.css", "HEAD") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/yasgui.min.css", "HEAD") => Response::builder()
             .header(CONTENT_TYPE, "text/css")
             .body(Body::empty())
-            .unwrap()),
-        ("/yasgui.min.css", "GET") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/yasgui.min.css", "GET") => Response::builder()
             .header(CONTENT_TYPE, "text/css")
             .body(YASGUI_CSS.into())
-            .unwrap()),
-        ("/yasgui.min.js", "HEAD") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/yasgui.min.js", "HEAD") => Response::builder()
             .header(CONTENT_TYPE, "application/javascript")
             .body(Body::empty())
-            .unwrap()),
-        ("/yasgui.min.js", "GET") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/yasgui.min.js", "GET") => Response::builder()
             .header(CONTENT_TYPE, "application/javascript")
             .body(YASGUI_JS.into())
-            .unwrap()),
-        ("/logo.svg", "HEAD") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/logo.svg", "HEAD") => Response::builder()
             .header(CONTENT_TYPE, "image/svg+xml")
             .body(Body::empty())
-            .unwrap()),
-        ("/logo.svg", "GET") => Ok(Response::builder()
+            .map_err(internal_server_error),
+        ("/logo.svg", "GET") => Response::builder()
             .header(CONTENT_TYPE, "image/svg+xml")
             .body(LOGO.into())
-            .unwrap()),
+            .map_err(internal_server_error),
         ("/query", "GET") => {
             let query = url_query(request);
             if query.is_empty() {
                 let format = rdf_content_negotiation(request)?;
                 let description =
                     generate_service_description(format, EndpointKind::Query, union_default_graph);
-                Ok(Response::builder()
+                Response::builder()
                     .header(CONTENT_TYPE, format.media_type())
                     .body(description.into())
-                    .unwrap())
+                    .map_err(internal_server_error)
             } else {
                 configure_and_evaluate_sparql_query(
                     &store,
@@ -909,10 +909,10 @@ fn handle_request(
             let format = rdf_content_negotiation(request)?;
             let description =
                 generate_service_description(format, EndpointKind::Update, union_default_graph);
-            Ok(Response::builder()
+            Response::builder()
                 .header(CONTENT_TYPE, format.media_type())
                 .body(description.into())
-                .unwrap())
+                .map_err(internal_server_error)
         }
         ("/update", "POST") => {
             if read_only {
@@ -1025,23 +1025,23 @@ fn handle_request(
                     }
                 };
                 web_load_graph(&store, request, format, &GraphName::from(target))?;
-                Ok(Response::builder()
+                Response::builder()
                     .status(if new {
                         StatusCode::CREATED
                     } else {
                         StatusCode::NO_CONTENT
                     })
                     .body(Body::empty())
-                    .unwrap())
+                    .map_err(internal_server_error)
             } else {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 store.clear().map_err(internal_server_error)?;
                 web_load_dataset(&store, request, format)?;
-                Ok(Response::builder()
+                Response::builder()
                     .status(StatusCode::NO_CONTENT)
                     .body(Body::empty())
-                    .unwrap())
+                    .map_err(internal_server_error)
             }
         }
         (path, "DELETE") if path.starts_with("/store") => {
@@ -1072,10 +1072,10 @@ fn handle_request(
             } else {
                 store.clear().map_err(internal_server_error)?;
             }
-            Ok(Response::builder()
+            Response::builder()
                 .status(StatusCode::NO_CONTENT)
                 .body(Body::empty())
-                .unwrap())
+                .map_err(internal_server_error)
         }
         (path, "POST") if path.starts_with("/store") => {
             if read_only {
@@ -1088,40 +1088,39 @@ fn handle_request(
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 let new = assert_that_graph_exists(&store, &target).is_ok();
                 web_load_graph(&store, request, format, &GraphName::from(target))?;
-                Ok(Response::builder()
+                Response::builder()
                     .status(if new {
                         StatusCode::CREATED
                     } else {
                         StatusCode::NO_CONTENT
                     })
                     .body(Body::empty())
-                    .unwrap())
+                    .map_err(internal_server_error)
             } else {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 if format.supports_datasets() {
                     web_load_dataset(&store, request, format)?;
-                    Ok(Response::builder()
-                        .status(StatusCode::NO_CONTENT)
-                        .body(Body::empty())
-                        .unwrap())
+                    Response::builder().status(StatusCode::NO_CONTENT)
                 } else {
                     let graph =
                         resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
                     web_load_graph(&store, request, format, &graph.clone().into())?;
-                    Ok(Response::builder()
+                    Response::builder()
                         .status(StatusCode::CREATED)
                         .header(LOCATION, graph.into_string())
-                        .body(Body::empty())
-                        .unwrap())
                 }
+                .body(Body::empty())
+                .map_err(internal_server_error)
             }
         }
         (path, "HEAD") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
                 assert_that_graph_exists(&store, &target)?;
             }
-            Ok(Response::builder().body(Body::empty()).unwrap())
+            Response::builder()
+                .body(Body::empty())
+                .map_err(internal_server_error)
         }
         _ => Err((
             StatusCode::NOT_FOUND,
@@ -1195,7 +1194,11 @@ fn limited_body(request: &mut Request<Body>) -> Result<Vec<u8>, HttpError> {
         body.take(MAX_SPARQL_BODY_SIZE + 1)
             .read_to_end(&mut payload)
             .map_err(internal_server_error)?;
-        if payload.len() > MAX_SPARQL_BODY_SIZE.try_into().unwrap() {
+        if payload.len()
+            > MAX_SPARQL_BODY_SIZE
+                .try_into()
+                .map_err(internal_server_error)?
+        {
             return Err(bad_request(format!(
                 "SPARQL body payloads are limited to {MAX_SPARQL_BODY_SIZE} bytes"
             )));
@@ -1330,10 +1333,10 @@ fn evaluate_sparql_query(
             QueryResultsSerializer::from_format(format)
                 .serialize_boolean_to_writer(&mut body, result)
                 .map_err(internal_server_error)?;
-            Ok(Response::builder()
+            Response::builder()
                 .header(CONTENT_TYPE, format.media_type())
                 .body(body.into())
-                .unwrap())
+                .map_err(internal_server_error)
         }
         QueryResults::Graph(triples) => {
             let format = rdf_content_negotiation(request)?;
@@ -1456,10 +1459,10 @@ fn evaluate_sparql_update(
         .on_store(store)
         .execute()
         .map_err(internal_server_error)?;
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::NO_CONTENT)
         .body(Body::empty())
-        .unwrap())
+        .map_err(internal_server_error)
 }
 
 fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpError> {
@@ -1838,7 +1841,7 @@ fn systemd_notify_ready() -> io::Result<()> {
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    use anyhow::Result;
+    use anyhow::{Result, anyhow};
     use assert_cmd::Command;
     use assert_fs::prelude::*;
     use assert_fs::{NamedTempFile, TempDir};
@@ -2339,7 +2342,8 @@ mod tests {
             .arg("nt")
             .write_stdin(format!(
                 "{{\"@context\":\"{}\",\"@id\":\"http://example.com\",\"name\":\"example\"}}",
-                Url::from_file_path(context_file.path()).unwrap()
+                Url::from_file_path(context_file.path())
+                    .map_err(|()| anyhow!("Invalid context file path"))?
             ))
             .assert()
             .stdout("<http://example.com> <http://schema.org/name> \"example\" .\n");

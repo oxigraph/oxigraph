@@ -312,14 +312,8 @@ mod tests {
         assert_eq!(Double::from_str("-1")?.to_string(), "-1");
         assert_eq!(Double::from_str("1.")?.to_string(), "1");
         assert_eq!(Double::from_str("-1.")?.to_string(), "-1");
-        assert_eq!(
-            Double::from_str(&f64::MIN.to_string()).unwrap(),
-            Double::MIN
-        );
-        assert_eq!(
-            Double::from_str(&f64::MAX.to_string()).unwrap(),
-            Double::MAX
-        );
+        assert_eq!(Double::from_str(&f64::MIN.to_string())?, Double::MIN);
+        assert_eq!(Double::from_str(&f64::MAX.to_string())?, Double::MAX);
         Ok(())
     }
 }
