@@ -1123,7 +1123,7 @@ mod tests {
             BlankNodeRef::new_unchecked("b2"),
         ))?;
         assert_eq!(
-            String::from_utf8(serializer.finish()?).unwrap(),
+            String::from_utf8(serializer.finish()?).map_err(io::Error::other)?,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t<http://example.com/p2> \"foo\"@en .\n_:b <http://example.com/p2> _:b2 .\n"
         );
         Ok(())

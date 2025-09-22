@@ -2155,7 +2155,7 @@ mod tests {
         use crate::model::*;
 
         let main_s = NamedOrBlankNode::from(BlankNode::default());
-        let main_p = NamedNode::new("http://example.com").unwrap();
+        let main_p = NamedNode::new_unchecked("http://example.com");
         let main_o = Term::from(Literal::from(1));
         let main_g = GraphName::from(BlankNode::default());
 

@@ -71,7 +71,7 @@ pub fn get_ntriples_file_chunks(
     n_chunks: usize,
 ) -> io::Result<Vec<(u64, u64)>> {
     let mut last_pos = 0;
-    let chunk_size = file_size / u64::try_from(n_chunks).unwrap();
+    let chunk_size = file_size / u64::try_from(n_chunks).map_err(io::Error::other)?;
     let mut offsets = Vec::with_capacity(n_chunks);
     let mut buffer = [0; 4096];
     for _ in 0..n_chunks {
@@ -90,10 +90,10 @@ pub fn get_ntriples_file_chunks(
                     break None;
                 }
                 if let Some(extra) = next_newline_position(&buffer[..extra]) {
-                    pos += u64::try_from(extra).unwrap();
+                    pos += u64::try_from(extra).map_err(io::Error::other)?;
                     break Some(pos);
                 }
-                pos += u64::try_from(extra).unwrap();
+                pos += u64::try_from(extra).map_err(io::Error::other)?;
             }
         }) else {
             // We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
