@@ -689,8 +689,8 @@ mod tests {
         Decimal::from_str("0.0000000000000000001").unwrap_err();
         Decimal::from_str("1000000000000000000000").unwrap_err();
         assert_eq!(
-            Decimal::from_str("0.100000000000000000000000000").unwrap(),
-            Decimal::from_str("0.1").unwrap()
+            Decimal::from_str("0.100000000000000000000000000")?,
+            Decimal::from_str("0.1")?
         );
         Ok(())
     }
@@ -1001,8 +1001,7 @@ mod tests {
         Decimal::try_from(Float::from(f32::MIN)).unwrap_err();
         Decimal::try_from(Float::from(f32::MAX)).unwrap_err();
         assert!(
-            Decimal::try_from(Float::from(1_672_507_300_000.))
-                .unwrap()
+            Decimal::try_from(Float::from(1_672_507_300_000.))?
                 .checked_sub(Decimal::from(1_672_507_293_696_i64))
                 .unwrap()
                 .checked_abs()
@@ -1027,8 +1026,7 @@ mod tests {
             Some(Decimal::from_str("-123.1")?)
         );
         assert!(
-            Decimal::try_from(Double::from(1_672_507_302_466.))
-                .unwrap()
+            Decimal::try_from(Double::from(1_672_507_302_466.))?
                 .checked_sub(Decimal::from(1_672_507_302_466_i64))
                 .unwrap()
                 .checked_abs()
