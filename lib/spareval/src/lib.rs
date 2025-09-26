@@ -9,6 +9,8 @@ mod error;
 mod eval;
 mod model;
 mod service;
+mod update;
+
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
@@ -18,10 +20,13 @@ use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
+pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
+use oxiri::Iri;
 use oxrdf::{Dataset, NamedNode, Term, Variable};
 use oxsdatatypes::{DayTimeDuration, Float};
 use spargebra::Query;
+use spargebra::term::{GroundQuadPattern, QuadPattern};
 use sparopt::Optimizer;
 use sparopt::algebra::GraphPattern;
 use std::collections::HashMap;
@@ -495,6 +500,81 @@ impl QueryEvaluator {
     ) -> Option<bool> {
         self.eval_expression_term_with_substitutions(expression, substitutions)?
             .effective_boolean_value()
+    }
+
+    /// Evaluates a SPARQL UPDATE DELETE/INSERT operation.
+    ///
+    /// Returns the list of quads to delete or insert.
+    ///
+    /// ```
+    /// use oxrdf::{Dataset, GraphName, Literal, NamedNode, Quad};
+    /// use spareval::{DeleteInsertQuad, QueryEvaluator};
+    /// use spargebra::{GraphUpdateOperation, SparqlParser};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let dataset = Dataset::from_iter([Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     Literal::from(0),
+    ///     GraphName::DefaultGraph,
+    /// )]);
+    /// let update = SparqlParser::new().parse_update(
+    ///     "DELETE { ?s ?p ?o } INSERT { ?s ?p ?o2 } WHERE { ?s ?p ?o BIND(?o +1 AS ?o2) }",
+    /// )?;
+    /// let GraphUpdateOperation::DeleteInsert {
+    ///     delete,
+    ///     insert,
+    ///     using: _,
+    ///     pattern,
+    /// } = &update.operations[0]
+    /// else {
+    ///     unreachable!()
+    /// };
+    /// let results = QueryEvaluator::new()
+    ///     .execute_delete_insert(&dataset, delete.clone(), insert.clone(), None, pattern)?
+    ///     .collect::<Result<Vec<_>, _>>()?;
+    /// assert_eq!(
+    ///     results,
+    ///     vec![
+    ///         DeleteInsertQuad::Delete(Quad::new(
+    ///             ex.clone(),
+    ///             ex.clone(),
+    ///             Literal::from(0),
+    ///             GraphName::DefaultGraph,
+    ///         )),
+    ///         DeleteInsertQuad::Insert(Quad::new(
+    ///             ex.clone(),
+    ///             ex.clone(),
+    ///             Literal::from(1),
+    ///             GraphName::DefaultGraph,
+    ///         ))
+    ///     ]
+    /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn execute_delete_insert<'a>(
+        &self,
+        dataset: impl QueryableDataset<'a>,
+        delete: Vec<GroundQuadPattern>,
+        insert: Vec<QuadPattern>,
+        base_iri: Option<Iri<String>>,
+        pattern: &spargebra::algebra::GraphPattern,
+    ) -> Result<DeleteInsertIter<'a>, QueryEvaluationError> {
+        let mut pattern = GraphPattern::from(pattern);
+        if !self.without_optimizations {
+            pattern = Optimizer::optimize_graph_pattern(pattern);
+        }
+        let (solutions, _) = SimpleEvaluator::new(
+            dataset,
+            base_iri.map(Rc::new),
+            Rc::new(self.service_handler.clone()),
+            Rc::new(self.custom_functions.clone()),
+            Rc::new(self.custom_aggregate_functions.clone()),
+            self.cancellation_token.clone().unwrap_or_default(),
+            self.run_stats,
+        )
+        .evaluate_select(&pattern, Vec::new());
+        Ok(DeleteInsertIter::new(solutions?, delete, insert))
     }
 }
 
