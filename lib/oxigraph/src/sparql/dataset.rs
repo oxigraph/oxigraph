@@ -4,6 +4,7 @@ use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
+use crate::storage::updatable_dataset::Reader;
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxrdf::Term;
 use oxsdatatypes::Boolean;
@@ -15,17 +16,19 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
+use std::marker::PhantomData;
 #[cfg(feature = "rdf-12")]
 use std::sync::Arc;
 
-pub struct DatasetView<'a> {
-    reader: StorageReader<'a>,
+pub struct DatasetView<'a, R: Reader<'a> = StorageReader<'a>> {
+    reader: R,
     extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
     dataset: EncodedDatasetSpec,
+    marker: PhantomData<&'a ()>,
 }
 
-impl<'a> DatasetView<'a> {
-    pub fn new(reader: StorageReader<'a>, dataset: &QueryDataset) -> Self {
+impl<'a, R: Reader<'a>> DatasetView<'a, R> {
+    pub fn new(reader: R, dataset: &QueryDataset) -> Self {
         let dataset = EncodedDatasetSpec {
             default: dataset
                 .default_graph_graphs()
@@ -38,6 +41,7 @@ impl<'a> DatasetView<'a> {
             reader,
             extra: RefCell::new(HashMap::default()),
             dataset,
+            marker: PhantomData,
         }
     }
 

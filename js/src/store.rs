@@ -411,7 +411,7 @@ impl JsStore {
             parser = parser.lenient();
         }
         if no_transaction {
-            let mut loader = self.store.bulk_loader();
+            let mut loader = self.store.bulk_loader().map_err(JsError::from)?;
             loader
                 .load_from_slice(parser, data.as_bytes())
                 .map_err(JsError::from)?;
