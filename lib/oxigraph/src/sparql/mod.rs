@@ -19,6 +19,7 @@ pub use crate::sparql::error::UpdateEvaluationError;
 use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::update::{BoundPreparedSparqlUpdate, PreparedSparqlUpdate};
 use crate::storage::StorageReader;
+use crate::storage::updatable_dataset::{ReadWriteTransaction, UpdatableDataset};
 use crate::store::{Store, Transaction};
 use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};

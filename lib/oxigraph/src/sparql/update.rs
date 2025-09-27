@@ -8,6 +8,9 @@ use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
+use crate::storage::updatable_dataset::{
+    ReadWriteTransaction, Reader, UpdatableDataset, WriteOnlyTransaction,
+};
 use crate::storage::{Storage, StorageError, StorageReadableTransaction, StorageTransaction};
 use crate::store::{Store, Transaction};
 use oxiri::Iri;
@@ -619,15 +622,15 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
                 "Not possible to clear a named graph using a write-only transaction".into(),
             )),
             GraphTarget::DefaultGraph => {
-                self.transaction.clear_default_graph();
+                self.transaction.clear_default_graph()?;
                 Ok(())
             }
             GraphTarget::NamedGraphs => {
-                self.transaction.clear_all_named_graphs();
+                self.transaction.clear_all_named_graphs()?;
                 Ok(())
             }
             GraphTarget::AllGraphs => {
-                self.transaction.clear_all_graphs();
+                self.transaction.clear_all_graphs()?;
                 Ok(())
             }
         }
@@ -643,15 +646,15 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
                 "Not possible to drop a named graph using a write-only transaction".into(),
             )),
             GraphTarget::DefaultGraph => {
-                self.transaction.clear_default_graph();
+                self.transaction.clear_default_graph()?;
                 Ok(())
             }
             GraphTarget::NamedGraphs => {
-                self.transaction.remove_all_named_graphs();
+                self.transaction.remove_all_named_graphs()?;
                 Ok(())
             }
             GraphTarget::AllGraphs => {
-                self.transaction.clear();
+                self.transaction.clear()?;
                 Ok(())
             }
         }

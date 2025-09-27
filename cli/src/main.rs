@@ -124,7 +124,7 @@ pub fn main() -> anyhow::Result<()> {
             if file.is_empty() {
                 // We read from stdin
                 let start = Instant::now();
-                let mut loader = store.bulk_loader().on_progress(move |size| {
+                let mut loader = store.bulk_loader()?.on_progress(move |size| {
                     let elapsed = start.elapsed();
                     eprintln!(
                         "{size} triples loaded in {}s ({} t/s)",
@@ -163,7 +163,14 @@ pub fn main() -> anyhow::Result<()> {
                             s.spawn(move |_| {
                                 let f = file.clone();
                                 let start = Instant::now();
-                                let mut loader = store.bulk_loader().on_progress(move |size| {
+                                let mut loader = match store.bulk_loader() {
+                                    Ok(loader) => loader,
+                                    Err(e) => {
+                                        eprintln!("Error while loading file {}: {e}", f.display());
+                                        return;
+                                    }
+                                };
+                                loader = loader.on_progress(move |size| {
                                     let elapsed = start.elapsed();
                                     eprintln!(
                                         "{} triples loaded in {}s ({} t/s) from {}",
@@ -218,9 +225,8 @@ pub fn main() -> anyhow::Result<()> {
                                     }
                                 } {
                                     eprintln!(
-                                        "Error while loading file {}: {}",
+                                        "Error while loading file {}: {error}",
                                         file.display(),
-                                        error
                                     )
                                     // TODO: hard fail
                                 } else if let Err(e) = loader.commit() {
@@ -1653,7 +1659,7 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        let mut loader = web_bulk_loader(store, request);
+        let mut loader = web_bulk_loader(store, request)?;
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
@@ -1675,7 +1681,7 @@ fn web_load_dataset(
         parser = parser.lenient();
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        let mut loader = web_bulk_loader(store, request);
+        let mut loader = web_bulk_loader(store, request)?;
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
@@ -1687,24 +1693,30 @@ fn web_load_dataset(
     }
 }
 
-fn web_bulk_loader<'a>(store: &'a Store, request: &Request<Body>) -> BulkLoader<'a> {
+fn web_bulk_loader<'a>(
+    store: &'a Store,
+    request: &Request<Body>,
+) -> Result<BulkLoader<'a>, HttpError> {
     let start = Instant::now();
-    let mut loader = store.bulk_loader().on_progress(move |size| {
-        let elapsed = start.elapsed();
-        eprintln!(
-            "{} triples loaded in {}s ({} t/s)",
-            size,
-            elapsed.as_secs(),
-            ((size as f64) / elapsed.as_secs_f64()).round()
-        )
-    });
+    let mut loader = store
+        .bulk_loader()
+        .map_err(internal_server_error)?
+        .on_progress(move |size| {
+            let elapsed = start.elapsed();
+            eprintln!(
+                "{} triples loaded in {}s ({} t/s)",
+                size,
+                elapsed.as_secs(),
+                ((size as f64) / elapsed.as_secs_f64()).round()
+            )
+        });
     if url_query_parameter(request, "lenient").is_some() {
         loader = loader.on_parse_error(move |e| {
             eprintln!("Parsing error: {e}");
             Ok(())
         })
     }
-    loader
+    Ok(loader)
 }
 
 fn error(status: StatusCode, message: impl fmt::Display) -> Response<Body> {

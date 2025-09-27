@@ -148,7 +148,7 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[cfg(not(target_family = "wasm"))]
     fn bulk_extend(&self, quads: &Bound<'_, PyAny>) -> PyResult<()> {
-        let mut loader = self.inner.bulk_loader();
+        let mut loader = self.inner.bulk_loader().map_err(map_storage_error)?;
         loader.load_ok_quads::<PyErr, PythonOrStorageError>(
             quads.try_iter()?.map(|q| q?.extract::<PyQuad>()),
         )?;
@@ -507,7 +507,7 @@ impl PyStore {
         match (path, input) {
             #[cfg(not(target_family = "wasm"))]
             (Some(path), None) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
+                let mut loader = self.inner.bulk_loader().map_err(map_storage_error)?;
                 loader
                     .parallel_load_from_file(parser, &path)
                     .map_err(|e| map_loader_error(e, Some(path)))?;
@@ -516,7 +516,7 @@ impl PyStore {
             }),
             #[cfg(not(target_family = "wasm"))]
             (None, Some(PyReadableInput::Bytes(input))) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
+                let mut loader = self.inner.bulk_loader().map_err(map_storage_error)?;
                 loader
                     .parallel_load_from_slice(parser, &input)
                     .map_err(|e| map_loader_error(e, None))?;
@@ -525,7 +525,7 @@ impl PyStore {
             }),
             #[cfg(not(target_family = "wasm"))]
             (None, Some(PyReadableInput::String(input))) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
+                let mut loader = self.inner.bulk_loader().map_err(map_storage_error)?;
                 loader
                     .parallel_load_from_slice(parser, &input)
                     .map_err(|e| map_loader_error(e, None))?;
@@ -535,7 +535,7 @@ impl PyStore {
             (path, input) => {
                 let input = PyReadable::from_args(&path, input, py)?;
                 py.detach(|| {
-                    let mut loader = self.inner.bulk_loader();
+                    let mut loader = self.inner.bulk_loader().map_err(map_storage_error)?;
                     loader
                         .load_from_reader(parser, input)
                         .map_err(|e| map_loader_error(e, path))?;
