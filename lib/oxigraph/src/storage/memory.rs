@@ -625,7 +625,7 @@ impl WriteOnlyTransaction<'_> for MemoryStorageTransaction<'_> {
         Ok(())
     }
 
-        #[expect(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
         self.storage.content.quad_set.iter().for_each(|node| {
             if node.range.lock().unwrap().remove(self.transaction_id) {

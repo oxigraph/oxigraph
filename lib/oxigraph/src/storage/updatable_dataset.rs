@@ -23,11 +23,20 @@ pub trait UpdatableDataset<'a> {
     fn snapshot(&self) -> Self::Reader<'static>;
     fn start_transaction(&self) -> Result<Self::WriteOnlyTransaction<'_>, Self::Error>;
     fn start_readable_transaction(&self) -> Result<Self::ReadWriteTransaction<'_>, Self::Error>;
-    #[cfg_attr(any(target_family = "wasm", not(feature = "rocksdb")), expect(dead_code))]
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(dead_code)
+    )]
     fn flush(&self) -> Result<(), Self::Error>;
-    #[cfg_attr(any(target_family = "wasm", not(feature = "rocksdb")), expect(dead_code))]
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(dead_code)
+    )]
     fn compact(&self) -> Result<(), Self::Error>;
-    #[cfg_attr(any(target_family = "wasm", not(feature = "rocksdb")), expect(dead_code))]
+    #[cfg_attr(
+        any(target_family = "wasm", not(feature = "rocksdb")),
+        expect(dead_code)
+    )]
     fn backup(&self, target_directory: &Path) -> Result<(), Self::Error>;
     fn bulk_loader(&self) -> Result<Self::BulkLoader<'_>, Self::Error>;
 }
