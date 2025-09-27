@@ -303,3 +303,11 @@ panic = "abort"
 
 [profile.release.package.oxigraph-js]
 opt-level = "z"
+
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
