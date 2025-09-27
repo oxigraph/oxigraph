@@ -1475,10 +1475,12 @@ parser! {
         rule InlineDataOneVar_value() -> Vec<Option<GroundTerm>> = t:DataBlockValue() _ { vec![t] }
 
         rule InlineDataFull() -> (Vec<Variable>, Vec<Vec<Option<GroundTerm>>>) = "(" _ vars:InlineDataFull_var()* _ ")" _ "{" _ vals:InlineDataFull_values()* "}" {?
-            if vals.iter().all(|vs| vs.len() == vars.len()) {
-                Ok((vars, vals))
-            } else {
+            if vars.iter().enumerate().any(|(i, vl)| vars[i+1..].contains(vl)) {
+                Err("Repeated variables are not allowed in VALUES clauses.")
+            } else if vals.iter().any(|vs| vs.len() != vars.len()) {
                 Err("The VALUES clause rows should have exactly the same number of values as there are variables. To set a value to undefined use UNDEF.")
+            } else {
+                Ok((vars, vals))
             }
         }
         rule InlineDataFull_var() -> Variable = v:Var() _ { v }

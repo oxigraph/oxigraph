@@ -1,0 +1,1 @@
+SELECT * WHERE { VALUES (?a ?a) { (1 1) } }

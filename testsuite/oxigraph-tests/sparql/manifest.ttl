@@ -39,6 +39,7 @@
     :ask_union_error_right
     :ask_join_error_left
     :ask_join_error_right
+    :duplicated_values_var
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -191,3 +192,7 @@
     mf:name "ASK query with a join where left arg is empty and right arg is an error" ;
     mf:action [ qt:query <ask_join_error_right.rq> ] ;
     mf:result  <false.srx> .
+
+:duplicated_values_var rdf:type mf:NegativeSyntaxTest ;
+    mf:name "Duplicated variable in a VALUES clause" ;
+    mf:action <duplicated_values_var.rq> .
