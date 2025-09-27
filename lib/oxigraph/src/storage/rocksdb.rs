@@ -1089,7 +1089,7 @@ impl WriteOnlyTransaction<'_> for RocksDbStorageTransaction<'_> {
     }
 
     fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
-        if graph_name == GraphName::DefaultGraph.as_ref() {
+        if graph_name == GraphNameRef::DefaultGraph {
             self.clear_default_graph()
         } else {
             let prefix = encode_term(&graph_name.into());
