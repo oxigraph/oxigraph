@@ -62,13 +62,16 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
         graph_name: Option<Option<&EncodedTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + use<'a> {
         let iter: Box<dyn Iterator<Item = Result<_, _>>> = if let Some(graph_name) = graph_name {
+            // A graph (named or default), has been specified, we only query it
             if let Some(graph_name) = graph_name {
+                // We query a specific named graph of data
                 if self
                     .dataset
                     .named
                     .as_ref()
                     .is_none_or(|d| d.contains(graph_name))
                 {
+                    // It is in the set of allowed named graphs (if this set exists), we query it
                     Box::new(
                         self.reader
                             .quads_for_pattern(subject, predicate, object, Some(graph_name))
@@ -90,8 +93,9 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                     Box::new(empty())
                 }
             } else if let Some(default_graph_graphs) = &self.dataset.default {
+                // The default graph is queried, and it is set to something and not the union of all graphs
                 if default_graph_graphs.len() == 1 {
-                    // Single graph optimization
+                    // There is a single graph in the default graph, we return it directly
                     Box::new(
                         self.reader
                             .quads_for_pattern(
@@ -133,6 +137,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                     }))
                 }
             } else {
+                // The default graph has not been set, it is the union of all graphs, we query all graphs
                 Box::new(
                     self.reader
                         .quads_for_pattern(subject, predicate, object, None)
@@ -148,6 +153,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                 )
             }
         } else if let Some(named_graphs) = &self.dataset.named {
+            // The list of possible named graphs has been set, we only query these named graphs
             let iters = named_graphs
                 .iter()
                 .map(|graph_name| {
@@ -169,6 +175,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                 })
             }))
         } else {
+            // We query all named graphs because the list of named graphs has not been set
             Box::new(
                 self.reader
                     .quads_for_pattern(subject, predicate, object, None)
