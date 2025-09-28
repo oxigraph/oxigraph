@@ -594,6 +594,8 @@ impl PreparedSparqlQuery {
     }
 
     /// Bind the prepared query to the [`QueryableDataset`] it should be evaluated on.
+    ///
+    ///  <div class="warning">The query dataset specification accessible using [`Self::dataset`] is ignored by this method. You must take care of it before calling this method.</div>
     pub fn on_queryable_dataset<'a, D: QueryableDataset<'a>>(
         self,
         queryable_dataset: D,
