@@ -64,7 +64,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
         let iter: Box<dyn Iterator<Item = Result<_, _>>> = if let Some(graph_name) = graph_name {
             // A graph (named or default), has been specified, we only query it
             if let Some(graph_name) = graph_name {
-                // We query a specific named graph of data
+                // We query a specific named graph of data (possibly including the global default graph)
                 if self
                     .dataset
                     .named
