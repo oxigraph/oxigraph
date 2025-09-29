@@ -4,7 +4,7 @@
     "private": true,
     "devDependencies": {
         "@biomejs/biome": "^2.0.0",
-        "@codspeed/vitest-plugin": "^4.0.0",
+        "@codspeed/vitest-plugin": "^5.0.0",
         "@rdfjs/data-model": "^2.1.0",
         "@tsconfig/node18": "^18.2.4",
         "@tsconfig/strictest": "^2.0.5",
