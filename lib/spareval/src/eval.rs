@@ -6,6 +6,7 @@ use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 use crate::{
     AggregateFunctionAccumulator, CustomAggregateFunctionRegistry, CustomFunctionRegistry,
+    QueryDatasetSpecification,
 };
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
@@ -13,7 +14,7 @@ use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "sparql-12")]
 use oxrdf::{BaseDirection, NamedOrBlankNode};
-use oxrdf::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Term, Triple, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, Duration, Time, TimezoneOffset, YearMonthDuration};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
@@ -49,12 +50,58 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 /// Wrapper on top of [`QueryableDataset`]
 struct EvalDataset<'a, D: QueryableDataset<'a>> {
     dataset: Rc<D>,
+    specification: EncodedDatasetSpec<D::InternalTerm>,
     cancellation_token: CancellationToken,
     _lifetime: PhantomData<&'a ()>,
 }
 
 impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
-    fn internal_quads_for_pattern(
+    fn new(
+        dataset: D,
+        specification: QueryDatasetSpecification,
+        cancellation_token: CancellationToken,
+    ) -> Result<Self, QueryEvaluationError> {
+        let specification = EncodedDatasetSpec {
+            default: specification
+                .default
+                .map(|graph_names| {
+                    graph_names
+                        .into_iter()
+                        .map(|graph_name| {
+                            Ok(match graph_name {
+                                GraphName::NamedNode(n) => {
+                                    Some(dataset.internalize_term(n.into())?)
+                                }
+                                GraphName::BlankNode(n) => {
+                                    Some(dataset.internalize_term(n.into())?)
+                                }
+                                GraphName::DefaultGraph => None,
+                            })
+                        })
+                        .collect()
+                })
+                .transpose()
+                .map_err(|e: D::Error| QueryEvaluationError::Dataset(Box::new(e)))?,
+            named: specification
+                .named
+                .map(|graph_names| {
+                    graph_names
+                        .into_iter()
+                        .map(|graph_name| dataset.internalize_term(graph_name.into()))
+                        .collect()
+                })
+                .transpose()
+                .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))?,
+        };
+        Ok(Self {
+            dataset: Rc::new(dataset),
+            specification,
+            cancellation_token,
+            _lifetime: PhantomData,
+        })
+    }
+
+    fn underlying_internal_quads_for_pattern(
         &self,
         subject: Option<&D::InternalTerm>,
         predicate: Option<&D::InternalTerm>,
@@ -69,6 +116,103 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                 cancellation_token.ensure_alive()?;
                 r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
             })
+    }
+
+    fn internal_quads_for_pattern(
+        &self,
+        subject: Option<&D::InternalTerm>,
+        predicate: Option<&D::InternalTerm>,
+        object: Option<&D::InternalTerm>,
+        graph_name: Option<Option<&D::InternalTerm>>,
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a>
+    {
+        if let Some(graph_name) = graph_name {
+            // A graph (named or default), has been specified, we only query it
+            if let Some(graph_name) = graph_name {
+                // We query a specific named graph of data (possibly including the global default graph)
+                if self
+                    .specification
+                    .named
+                    .as_ref()
+                    .is_none_or(|d| d.contains(graph_name))
+                {
+                    // It is in the set of allowed named graphs (if this set exists), we query it
+                    Box::new(self.underlying_internal_quads_for_pattern(
+                        subject,
+                        predicate,
+                        object,
+                        Some(Some(graph_name)),
+                    ))
+                } else {
+                    Box::new(empty())
+                }
+            } else if let Some(default_graph_graphs) = &self.specification.default {
+                // The default graph is queried, and it is set to something and not the union of all graphs
+                if default_graph_graphs.len() == 1 {
+                    // There is a single graph in the default graph, we return it directly
+                    Box::new(
+                        self.underlying_internal_quads_for_pattern(
+                            subject,
+                            predicate,
+                            object,
+                            Some(default_graph_graphs[0].as_ref()),
+                        )
+                        .map(|quad| {
+                            let mut quad = quad?;
+                            quad.graph_name = None;
+                            Ok(quad)
+                        }),
+                    )
+                } else {
+                    let iters = default_graph_graphs
+                        .iter()
+                        .map(|graph_name| {
+                            self.underlying_internal_quads_for_pattern(
+                                subject,
+                                predicate,
+                                object,
+                                Some(graph_name.as_ref()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Box::new(iters.into_iter().flatten().map(|quad| {
+                        let mut quad = quad?;
+                        quad.graph_name = None;
+                        Ok(quad)
+                    }))
+                }
+            } else {
+                // The default graph has not been set, it is the union of all graphs, we query all graphs
+                Box::new(
+                    self.underlying_internal_quads_for_pattern(subject, predicate, object, None)
+                        .map(|quad| {
+                            let mut quad = quad?;
+                            quad.graph_name = None;
+                            Ok(quad)
+                        }),
+                )
+            }
+        } else if let Some(named_graphs) = &self.specification.named {
+            // The list of possible named graphs has been set, we only query these named graphs
+            let iters = named_graphs
+                .iter()
+                .map(|graph_name| {
+                    self.underlying_internal_quads_for_pattern(
+                        subject,
+                        predicate,
+                        object,
+                        Some(Some(graph_name)),
+                    )
+                })
+                .collect::<Vec<_>>();
+            Box::new(iters.into_iter().flatten())
+        } else {
+            // We query all named graphs because the list of named graphs has not been set
+            Box::new(
+                self.underlying_internal_quads_for_pattern(subject, predicate, object, None)
+                    .filter(|q| !q.as_ref().is_ok_and(|q| q.graph_name.is_none())),
+            )
+        }
     }
 
     fn internal_named_graphs(
@@ -136,10 +280,17 @@ impl<'a, D: QueryableDataset<'a>> Clone for EvalDataset<'a, D> {
     fn clone(&self) -> Self {
         Self {
             dataset: Rc::clone(&self.dataset),
+            specification: self.specification.clone(),
             cancellation_token: self.cancellation_token.clone(),
             _lifetime: self._lifetime,
         }
     }
+}
+
+#[derive(Clone)]
+struct EncodedDatasetSpec<T> {
+    default: Option<Vec<Option<T>>>,
+    named: Option<Vec<T>>,
 }
 
 pub struct InternalTuple<T> {
@@ -268,21 +419,18 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         custom_functions: Rc<CustomFunctionRegistry>,
         custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
         cancellation_token: CancellationToken,
+        dataset_spec: QueryDatasetSpecification,
         run_stats: bool,
-    ) -> Self {
-        Self {
-            dataset: EvalDataset {
-                dataset: Rc::new(dataset),
-                cancellation_token,
-                _lifetime: PhantomData,
-            },
+    ) -> Result<Self, QueryEvaluationError> {
+        Ok(Self {
+            dataset: EvalDataset::new(dataset, dataset_spec, cancellation_token)?,
             base_iri,
             now: DateTime::now(),
             service_handler,
             custom_functions,
             custom_aggregate_functions,
             run_stats,
-        }
+        })
     }
 
     pub fn evaluate_select(
@@ -6352,12 +6500,12 @@ impl<'a, D: QueryableDataset<'a>> Iterator for DescribeIterator<'a, D> {
             }
             if let Some(node_to_describe) = self.nodes_to_describe.pop() {
                 // We have a new node to describe
-                self.quads = Box::new(self.eval.dataset.internal_quads_for_pattern(
+                self.quads = self.eval.dataset.internal_quads_for_pattern(
                     Some(&node_to_describe),
                     None,
                     None,
                     Some(None),
-                ));
+                );
             } else {
                 let tuple = match self.tuples_to_describe.next()? {
                     Ok(tuple) => tuple,
@@ -6671,6 +6819,15 @@ pub struct EvalNodeWithStats {
 }
 
 impl EvalNodeWithStats {
+    pub(crate) fn empty() -> Self {
+        Self {
+            label: String::new(),
+            children: Vec::new(),
+            exec_count: Cell::new(0),
+            exec_duration: Cell::new(None),
+        }
+    }
+
     pub fn json_node(
         &self,
         serializer: &mut WriterJsonSerializer<impl io::Write>,

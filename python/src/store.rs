@@ -293,8 +293,8 @@ impl PyStore {
         )?
         .on_store(&self.inner);
         if let Some(substitutions) = substitutions {
-            for (k, v) in substitutions {
-                evaluator = evaluator.substitute_variable(k, v);
+            for (variable, term) in substitutions {
+                evaluator = evaluator.substitute_variable(variable, term);
             }
         }
         let results = py

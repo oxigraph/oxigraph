@@ -12,7 +12,7 @@ mod update;
 
 use crate::model::{NamedNode, Term};
 #[expect(deprecated)]
-pub use crate::sparql::algebra::{Query, QueryDataset, Update};
+pub use crate::sparql::algebra::{Query, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -22,9 +22,9 @@ use crate::store::{Store, Transaction};
 use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};
 pub use spareval::{
-    AggregateFunctionAccumulator, CancellationToken, DefaultServiceHandler, QueryEvaluationError,
-    QueryExplanation, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
-    ServiceHandler,
+    AggregateFunctionAccumulator, CancellationToken, DefaultServiceHandler,
+    QueryDatasetSpecification, QueryEvaluationError, QueryExplanation, QueryResults, QuerySolution,
+    QuerySolutionIter, QueryTripleIter, ServiceHandler,
 };
 use spareval::{QueryEvaluator, QueryableDataset};
 use spargebra::SparqlParser;
@@ -41,6 +41,8 @@ pub type QueryOptions = SparqlEvaluator;
 pub type UpdateOptions = SparqlEvaluator;
 #[deprecated(note = "Use QueryEvaluationError instead", since = "0.5.0")]
 pub type EvaluationError = QueryEvaluationError;
+
+pub type QueryDataset = QueryDatasetSpecification;
 
 /// SPARQL evaluator.
 ///
@@ -527,7 +529,7 @@ impl Default for SparqlEvaluator {
 pub struct PreparedSparqlQuery {
     evaluator: QueryEvaluator,
     query: spargebra::Query,
-    dataset: QueryDataset,
+    dataset: QueryDatasetSpecification,
     substitutions: HashMap<Variable, Term>,
 }
 
@@ -579,7 +581,7 @@ impl PreparedSparqlQuery {
     /// Bind the prepared query to the [`Store`] it should be evaluated on.
     pub fn on_store(self, store: &Store) -> BoundPreparedSparqlQuery<'static> {
         let reader = store.storage().snapshot();
-        let queryable_dataset = DatasetView::new(reader, &self.dataset);
+        let queryable_dataset = DatasetView::new(reader);
         self.on_queryable_dataset(queryable_dataset)
     }
 
@@ -589,13 +591,11 @@ impl PreparedSparqlQuery {
         transaction: &'b Transaction<'_>,
     ) -> BoundPreparedSparqlQuery<'b> {
         let reader = transaction.inner().reader();
-        let dataset = DatasetView::new(reader, &self.dataset);
+        let dataset = DatasetView::new(reader);
         self.on_queryable_dataset(dataset)
     }
 
     /// Bind the prepared query to the [`QueryableDataset`] it should be evaluated on.
-    ///
-    ///  <div class="warning">The query dataset specification accessible using [`Self::dataset`] is ignored by this method. You must take care of it before calling this method.</div>
     pub fn on_queryable_dataset<'a, D: QueryableDataset<'a>>(
         self,
         queryable_dataset: D,
@@ -605,6 +605,7 @@ impl PreparedSparqlQuery {
             query: self.query,
             queryable_dataset,
             substitutions: self.substitutions,
+            dataset: self.dataset,
             marker: PhantomData,
         }
     }
@@ -638,6 +639,7 @@ pub struct BoundPreparedSparqlQuery<'a, D: QueryableDataset<'a> = DatasetView<'a
     query: spargebra::Query,
     queryable_dataset: D,
     substitutions: HashMap<Variable, Term>,
+    dataset: QueryDatasetSpecification,
     marker: PhantomData<&'a ()>,
 }
 
@@ -675,11 +677,12 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
 
     /// Evaluate the query against the given store.
     pub fn execute(self) -> Result<QueryResults<'a>, QueryEvaluationError> {
-        self.evaluator.execute_with_substituted_variables(
-            self.queryable_dataset,
-            &self.query,
-            self.substitutions,
-        )
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.execute(self.queryable_dataset)
     }
 
     /// Compute statistics during evaluation and fills them in the explanation tree.
@@ -716,11 +719,11 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
         Result<QueryResults<'a>, QueryEvaluationError>,
         QueryExplanation,
     ) {
-        let (results, explanation) = self.evaluator.explain_with_substituted_variables(
-            self.queryable_dataset,
-            &self.query,
-            self.substitutions,
-        );
-        (results, explanation)
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.explain(self.queryable_dataset)
     }
 }
