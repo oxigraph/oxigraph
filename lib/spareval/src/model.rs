@@ -67,8 +67,8 @@ impl<'a> From<SliceQueryResultsParserOutput<'a>> for QueryResults<'a> {
 /// use spargebra::SparqlParser;
 ///
 /// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
-/// if let QueryResults::Solutions(solutions) =
-///     QueryEvaluator::new().execute(&Dataset::new(), &query)?
+/// let evaluator = QueryEvaluator::new();
+/// if let QueryResults::Solutions(solutions) = evaluator.prepare(&query).execute(&Dataset::new())?
 /// {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
@@ -114,8 +114,8 @@ impl<'a> QuerySolutionIter<'a> {
     /// use spargebra::SparqlParser;
     ///
     /// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
-    /// if let QueryResults::Solutions(solutions) =
-    ///     QueryEvaluator::new().execute(&Dataset::new(), &query)?
+    /// let evaluator = QueryEvaluator::new();
+    /// if let QueryResults::Solutions(solutions) = evaluator.prepare(&query).execute(&Dataset::new())?
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
@@ -176,7 +176,8 @@ impl<'a> From<SliceSolutionsParser<'a>> for QuerySolutionIter<'a> {
 /// use spargebra::SparqlParser;
 ///
 /// let query = SparqlParser::new().parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?;
-/// if let QueryResults::Graph(triples) = QueryEvaluator::new().execute(&Dataset::new(), &query)? {
+/// let evaluator = QueryEvaluator::new();
+/// if let QueryResults::Graph(triples) = evaluator.prepare(&query).execute(&Dataset::new())? {
 ///     for triple in triples {
 ///         println!("{}", triple?);
 ///     }

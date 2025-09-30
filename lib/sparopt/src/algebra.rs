@@ -630,14 +630,14 @@ pub enum GraphPattern {
         subject: GroundTermPattern,
         predicate: NamedNodePattern,
         object: GroundTermPattern,
-        graph_name: Option<NamedNodePattern>,
+        graph_name: Option<NamedNodePattern>, // None for the default graph
     },
     /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate).
     Path {
         subject: GroundTermPattern,
         path: PropertyPathExpression,
         object: GroundTermPattern,
-        graph_name: Option<NamedNodePattern>,
+        graph_name: Option<NamedNodePattern>, // None for the default graph
     },
     /// Graph check
     ///
