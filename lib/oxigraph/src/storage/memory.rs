@@ -817,7 +817,7 @@ impl MemoryStorageBulkLoader<'_> {
         for quad in new_quads {
             self.transaction.insert(quad.as_ref());
             self.done += 1;
-            if self.done.is_multiple_of(1_000_000) {
+            if self.done % 1_000_000 == 0 {
                 for hook in &self.hooks {
                     hook(self.done);
                 }

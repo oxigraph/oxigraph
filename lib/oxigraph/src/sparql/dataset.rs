@@ -60,7 +60,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<Option<&EncodedTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + use<'a> {
+    ) -> impl Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + 'a {
         let iter: Box<dyn Iterator<Item = Result<_, _>>> = if let Some(graph_name) = graph_name {
             if let Some(graph_name) = graph_name {
                 if self
@@ -195,7 +195,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
 
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<EncodedTerm, StorageError>> + use<'a> {
+    ) -> impl Iterator<Item = Result<EncodedTerm, StorageError>> + 'a {
         self.reader.named_graphs()
     }
 

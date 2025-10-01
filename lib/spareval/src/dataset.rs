@@ -39,12 +39,12 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         predicate: Option<&Self::InternalTerm>,
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>;
+    ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + 'a;
 
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<Self::InternalTerm, Self::Error>> + use<'a, Self> {
+    ) -> impl Iterator<Item = Result<Self::InternalTerm, Self::Error>> + 'a {
         let mut error = None;
         let graph_names = self
             .internal_quads_for_pattern(None, None, None, None)
@@ -122,7 +122,7 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
         predicate: Option<&TermCow<'a>>,
         object: Option<&TermCow<'a>>,
         graph_name: Option<Option<&TermCow<'a>>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>, Infallible>> + use<'a> {
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>, Infallible>> + 'a {
         #[expect(clippy::unnecessary_wraps)]
         fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<TermCow<'_>>, Infallible> {
             Ok(InternalQuad {

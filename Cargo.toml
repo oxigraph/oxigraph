@@ -26,7 +26,7 @@ version = "0.5.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.86"
 
 [workspace.dependencies]
 anyhow = "1.0.72"
@@ -299,7 +299,6 @@ zero_sized_map_values = "warn"
 [profile.release]
 lto = true
 codegen-units = 1
-panic = "abort"
 
 [profile.release.package.oxigraph-js]
 opt-level = "z"

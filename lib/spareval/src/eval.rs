@@ -60,7 +60,7 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
         predicate: Option<&D::InternalTerm>,
         object: Option<&D::InternalTerm>,
         graph_name: Option<Option<&D::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + use<'a, D>
+    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a
     {
         let cancellation_token = self.cancellation_token.clone();
         self.dataset
@@ -73,7 +73,7 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
 
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<'a, D> {
+    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + 'a {
         let cancellation_token = self.cancellation_token.clone();
         self.dataset.internal_named_graphs().map(move |r| {
             cancellation_token.ensure_alive()?;
