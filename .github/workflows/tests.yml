@@ -399,6 +399,36 @@ jobs:
       - run: uv run -m unittest
         working-directory: ./python/tests
 
+  python_pyodide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: '**/requirements.dev.txt'
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: nightly
+          target: wasm32-unknown-emscripten
+      - run: |
+          pip install pyodide-build
+          echo EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version) >> $GITHUB_ENV
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+      - run: pyodide build
+        working-directory: ./python
+      - run: |
+          pyodide venv venv
+          source venv/bin/activate
+          pip install --no-index --find-links=../dist/ pyoxigraph
+          python -m unittest
+        working-directory: ./python/tests
+
   typos:
     runs-on: ubuntu-latest
     steps:
