@@ -188,7 +188,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     // FROM and FROM NAMED support. We make sure the data is in the store
     if let Some(query_dataset) = query.dataset() {
         for graph_name in &query_dataset.default {
-            load_to_dataset(graph_name.as_str(), &mut dataset, GraphName::DefaultGraph)?;
+            load_to_dataset(graph_name.as_str(), &mut dataset, graph_name.clone())?;
         }
         if let Some(named_graphs) = &query_dataset.named {
             for graph_name in named_graphs {
@@ -210,7 +210,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         if !with_query_optimizer {
             evaluator = evaluator.without_optimizations();
         }
-        let actual_results = evaluator.execute(&dataset, &query)?;
+        let actual_results = evaluator.prepare(&query).execute(&dataset)?;
         let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)
             .with_context(|| format!("Error when executing {query}"))?;
 
@@ -348,14 +348,13 @@ impl DefaultServiceHandler for StaticServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
-        let QueryResults::Solutions(iter) = evaluator.execute(
-            dataset,
-            &Query::Select {
+        let QueryResults::Solutions(iter) = evaluator
+            .prepare(&Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
                 base_iri: base_iri.cloned(),
-            },
-        )?
+            })
+            .execute(dataset)?
         else {
             return Err(QueryEvaluationError::Service(Box::new(io::Error::new(
                 io::ErrorKind::InvalidInput,

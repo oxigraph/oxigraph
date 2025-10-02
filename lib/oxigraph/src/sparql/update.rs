@@ -1,7 +1,6 @@
 #[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
-use crate::sparql::algebra::QueryDataset;
 #[expect(deprecated)]
 use crate::sparql::algebra::Update;
 use crate::sparql::dataset::DatasetView;
@@ -14,7 +13,7 @@ use oxiri::Iri;
 #[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
 use rustc_hash::FxHashMap;
-use spareval::{DeleteInsertQuad, QueryEvaluator};
+use spareval::{DeleteInsertQuad, QueryDatasetSpecification, QueryEvaluator};
 use spargebra::GraphUpdateOperation;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
@@ -46,7 +45,7 @@ use std::time::Duration;
 pub struct PreparedSparqlUpdate {
     evaluator: QueryEvaluator,
     update: spargebra::Update,
-    using_datasets: Vec<Option<QueryDataset>>,
+    using_datasets: Vec<Option<QueryDatasetSpecification>>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
     #[cfg(feature = "http-client")]
@@ -74,13 +73,13 @@ impl PreparedSparqlUpdate {
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     #[inline]
-    pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDataset> {
+    pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDatasetSpecification> {
         self.using_datasets.iter().filter_map(Option::as_ref)
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     #[inline]
-    pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDataset> {
+    pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDatasetSpecification> {
         self.using_datasets.iter_mut().filter_map(Option::as_mut)
     }
 
@@ -174,7 +173,7 @@ impl PreparedSparqlUpdate {
 pub struct BoundPreparedSparqlUpdate<'a, 'b> {
     evaluator: QueryEvaluator,
     update: spargebra::Update,
-    using_datasets: Vec<Option<QueryDataset>>,
+    using_datasets: Vec<Option<QueryDatasetSpecification>>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
     #[cfg(feature = "http-client")]
@@ -241,7 +240,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
-        using_datasets: &[Option<QueryDataset>],
+        using_datasets: &[Option<QueryDatasetSpecification>],
     ) -> Result<(), UpdateEvaluationError> {
         for (update, using_dataset) in updates.iter().zip(using_datasets) {
             self.eval(update, using_dataset)?;
@@ -252,7 +251,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     fn eval(
         &mut self,
         update: &GraphUpdateOperation,
-        using_dataset: &Option<QueryDataset>,
+        using_dataset: &Option<QueryDatasetSpecification>,
     ) -> Result<(), UpdateEvaluationError> {
         match update {
             GraphUpdateOperation::InsertData { data } => {
@@ -271,7 +270,9 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             } => self.eval_delete_insert(
                 delete,
                 insert,
-                using_dataset.as_ref().unwrap_or(&QueryDataset::new()),
+                using_dataset
+                    .as_ref()
+                    .unwrap_or(&QueryDatasetSpecification::new()),
                 pattern,
             ),
             GraphUpdateOperation::Load {
@@ -310,18 +311,19 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         &mut self,
         delete: &[GroundQuadPattern],
         insert: &[QuadPattern],
-        using: &QueryDataset,
+        using: &QueryDatasetSpecification,
         algebra: &GraphPattern,
     ) -> Result<(), UpdateEvaluationError> {
-        let mutations = self
-            .query_evaluator
-            .execute_delete_insert(
-                DatasetView::new(self.transaction.reader(), using),
-                delete.to_vec(),
-                insert.to_vec(),
-                self.base_iri.clone(),
-                algebra,
-            )?
+        let mut prepared = self.query_evaluator.prepare_delete_insert(
+            delete.to_vec(),
+            insert.to_vec(),
+            self.base_iri.clone(),
+            None,
+            algebra,
+        );
+        *prepared.dataset_mut() = using.clone();
+        let mutations = prepared
+            .execute(DatasetView::new(self.transaction.reader()))?
             .collect::<Result<Vec<_>, _>>()?;
         for mutation in mutations {
             match mutation {
@@ -456,7 +458,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
-        using_datasets: &[Option<QueryDataset>],
+        using_datasets: &[Option<QueryDatasetSpecification>],
     ) -> Result<(), UpdateEvaluationError> {
         for (update, using_dataset) in updates.iter().zip(using_datasets) {
             self.eval(update, using_dataset)?;
@@ -468,7 +470,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
     fn eval(
         &mut self,
         update: &GraphUpdateOperation,
-        using_dataset: &Option<QueryDataset>,
+        using_dataset: &Option<QueryDatasetSpecification>,
     ) -> Result<(), UpdateEvaluationError> {
         match update {
             GraphUpdateOperation::InsertData { data } => {
@@ -487,7 +489,9 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             } => self.eval_delete_insert(
                 delete,
                 insert,
-                using_dataset.as_ref().unwrap_or(&QueryDataset::new()),
+                using_dataset
+                    .as_ref()
+                    .unwrap_or(&QueryDatasetSpecification::new()),
                 pattern,
             ),
             GraphUpdateOperation::Load {
@@ -526,7 +530,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         &mut self,
         delete: &[GroundQuadPattern],
         insert: &[QuadPattern],
-        using: &QueryDataset,
+        using: &QueryDatasetSpecification,
         algebra: &GraphPattern,
     ) -> Result<(), UpdateEvaluationError> {
         let Some(storage) = self.storage_for_initial_read.take() else {
@@ -534,15 +538,19 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
                 "It is not possible to evaluate delete/insert operations on a write-only transaction after other update operations".into(),
             ));
         };
-        let mutations = self.query_evaluator.execute_delete_insert(
-            DatasetView::new(storage.snapshot(), using),
+        let mut prepared = self.query_evaluator.prepare_delete_insert(
             delete.to_vec(),
             insert.to_vec(),
             self.base_iri.clone(),
+            None,
             algebra,
-        )?;
+        );
+        *prepared.dataset_mut() = using.clone();
+        let mutations = prepared
+            .execute(DatasetView::new(storage.snapshot()))?
+            .collect::<Result<Vec<_>, _>>()?;
         for mutation in mutations {
-            match mutation? {
+            match mutation {
                 DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
                 DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
             }

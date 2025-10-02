@@ -32,7 +32,7 @@ pub trait QueryableDataset<'a>: Sized + 'a {
 
     /// Fetches quads according to a pattern
     ///
-    /// For `graph_name`, `Some(None)` encodes the default graph and `Some(Some(_))` a named graph
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph (but not the default one!)
     fn internal_quads_for_pattern(
         &self,
         subject: Option<&Self::InternalTerm>,

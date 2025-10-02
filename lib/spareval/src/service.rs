@@ -52,7 +52,9 @@ use std::sync::Arc;
 /// );
 /// let query = SparqlParser::new()
 ///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
-/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
+/// if let QueryResults::Solutions(mut solutions) =
+///     evaluator.prepare(&query).execute(&Dataset::new())?
+/// {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),
 ///         Some(&Literal::from(1).into())
@@ -116,7 +118,9 @@ pub trait ServiceHandler: Send + Sync {
 /// let evaluator = QueryEvaluator::default().with_default_service_handler(TestServiceHandler {});
 /// let query = SparqlParser::new()
 ///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
-/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
+/// if let QueryResults::Solutions(mut solutions) =
+///     evaluator.prepare(&query).execute(&Dataset::new())?
+/// {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),
 ///         Some(&NamedNode::new("http://example.com/service")?.into())

@@ -19,7 +19,7 @@ pub enum DeleteInsertQuad {
     Insert(Quad),
 }
 
-/// Output of [`QueryEvaluator::execute_delete_insert`](super::QueryEvaluator::execute_delete_insert).
+/// Output of [`PreparedDeleteInsertUpdate::execute`](super::PreparedDeleteInsertUpdate::execute).
 pub struct DeleteInsertIter<'a> {
     solutions: QuerySolutionIter<'a>,
     delete: Vec<GroundQuadPattern>,
