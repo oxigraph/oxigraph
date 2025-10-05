@@ -19,6 +19,9 @@ Support for [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) is also availabl
 
 This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
 
+Note that, opposite to the SPARQL specification, the parser does not allow `\uXXXX` escape sequences anywhere in the SPARQL syntax but only in IRIs and string literals, just like in Turtle.
+To use the standard SPARQL behavior (i.e. allow `\uXXXX` escape sequences in all strings), enable the `standard-unicode-escaping` feature.
+
 Usage example:
 
 ```rust

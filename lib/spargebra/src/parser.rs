@@ -1,4 +1,5 @@
 #![allow(clippy::ignored_unit_patterns)]
+
 use crate::algebra::*;
 use crate::query::*;
 use crate::term::*;
@@ -9,9 +10,13 @@ use oxrdf::vocab::{rdf, xsd};
 use peg::parser;
 use peg::str::LineCol;
 use rand::random;
+#[cfg(feature = "standard-unicode-escaping")]
+use std::borrow::Cow;
 use std::char;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
+#[cfg(feature = "standard-unicode-escaping")]
+use std::str::Chars;
 use std::str::FromStr;
 
 /// A SPARQL parser
@@ -109,13 +114,19 @@ impl SparqlParser {
     /// assert_eq!(query.to_string(), query_str);
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
+    #[cfg_attr(
+        not(feature = "standard-unicode-escaping"),
+        expect(clippy::needless_borrow)
+    )]
     pub fn parse_query(self, query: &str) -> Result<Query, SparqlSyntaxError> {
         let mut state = ParserState::new(
             self.base_iri,
             self.prefixes,
             self.custom_aggregate_functions,
         );
-        Ok(parser::QueryUnit(query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
+        #[cfg(feature = "standard-unicode-escaping")]
+        let query = unescape_unicode_codepoints(query);
+        Ok(parser::QueryUnit(&query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
     }
 
     /// Parse the given update string using the already set options.
@@ -128,14 +139,20 @@ impl SparqlParser {
     /// assert_eq!(update.to_string().trim(), update_str);
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
+    #[cfg_attr(
+        not(feature = "standard-unicode-escaping"),
+        expect(clippy::needless_borrow)
+    )]
     pub fn parse_update(self, update: &str) -> Result<Update, SparqlSyntaxError> {
         let mut state = ParserState::new(
             self.base_iri,
             self.prefixes,
             self.custom_aggregate_functions,
         );
+        #[cfg(feature = "standard-unicode-escaping")]
+        let update = unescape_unicode_codepoints(update);
         let operations =
-            parser::UpdateInit(update, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?;
+            parser::UpdateInit(&update, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?;
         check_if_insert_data_are_sharing_blank_nodes(&operations)?;
         Ok(Update {
             operations,
@@ -166,6 +183,103 @@ enum SparqlSyntaxErrorKind {
     Syntax(#[from] peg::error::ParseError<LineCol>),
     #[error("The blank node {0} cannot be shared by multiple blocks")]
     SharedBlankNode(BlankNode),
+}
+
+#[cfg(feature = "standard-unicode-escaping")]
+fn unescape_unicode_codepoints(input: &str) -> Cow<'_, str> {
+    if needs_unescape_unicode_codepoints(input) {
+        UnescapeUnicodeCharIterator::new(input).collect()
+    } else {
+        input.into()
+    }
+}
+
+#[cfg(feature = "standard-unicode-escaping")]
+fn needs_unescape_unicode_codepoints(input: &str) -> bool {
+    let bytes = input.as_bytes();
+    for i in 1..bytes.len() {
+        if (bytes[i] == b'u' || bytes[i] == b'U') && bytes[i - 1] == b'\\' {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(feature = "standard-unicode-escaping")]
+struct UnescapeUnicodeCharIterator<'a> {
+    iter: Chars<'a>,
+    buffer: String,
+}
+
+#[cfg(feature = "standard-unicode-escaping")]
+impl<'a> UnescapeUnicodeCharIterator<'a> {
+    fn new(string: &'a str) -> Self {
+        Self {
+            iter: string.chars(),
+            buffer: String::with_capacity(9),
+        }
+    }
+}
+
+#[cfg(feature = "standard-unicode-escaping")]
+impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        let c = if self.buffer.is_empty() {
+            self.iter.next()?
+        } else {
+            self.buffer.remove(0)
+        };
+        match c {
+            '\\' => match self.iter.next() {
+                Some('u') => {
+                    self.buffer.push('u');
+                    for _ in 0..4 {
+                        if let Some(c) = self.iter.next() {
+                            self.buffer.push(c);
+                        } else {
+                            return Some('\\');
+                        }
+                    }
+                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        self.buffer.clear();
+                        Some(c)
+                    } else {
+                        Some('\\')
+                    }
+                }
+                Some('U') => {
+                    self.buffer.push('U');
+                    for _ in 0..8 {
+                        if let Some(c) = self.iter.next() {
+                            self.buffer.push(c);
+                        } else {
+                            return Some('\\');
+                        }
+                    }
+                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        self.buffer.clear();
+                        Some(c)
+                    } else {
+                        Some('\\')
+                    }
+                }
+                Some(c) => {
+                    self.buffer.push(c);
+                    Some('\\')
+                }
+                None => Some('\\'),
+            },
+            _ => Some(c),
+        }
+    }
 }
 
 struct ReifiedTerm {
@@ -2454,7 +2568,7 @@ parser! {
 
         rule HEX() = ['0' ..= '9' | 'A' ..= 'F' | 'a' ..= 'f']
 
-        rule PN_LOCAL_ESC() = ['\\'] ['_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%'] //TODO: added '/' to make tests pass but is it valid?
+        rule PN_LOCAL_ESC() = ['\\'] ['_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%']
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }

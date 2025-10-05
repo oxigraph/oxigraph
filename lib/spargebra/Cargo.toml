@@ -16,6 +16,7 @@ default = []
 sparql-12 = ["oxrdf/rdf-12"]
 sep-0002 = []
 sep-0006 = []
+standard-unicode-escaping = [] # Allow \uXXXX anywhere in the query/update and not only in IRIs and literals, following the SPARQL specification
 
 [dependencies]
 oxilangtag.workspace = true

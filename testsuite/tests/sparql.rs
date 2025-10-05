@@ -98,13 +98,6 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         &[
             // TODO: https://github.com/w3c/sparql-query/issues/282
             "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-positive/manifest#basic-tripleterm-subject",
-            // TODO: escaping
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-01",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-02",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-bad-03",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-06",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-07",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-08",
         ],
     )
 }
