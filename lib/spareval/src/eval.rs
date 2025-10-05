@@ -217,21 +217,36 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
 
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<'a, D> {
-        let cancellation_token = self.cancellation_token.clone();
-        self.dataset.internal_named_graphs().map(move |r| {
-            cancellation_token.ensure_alive()?;
-            r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
-        })
+    ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + 'a> {
+        if let Some(named_graphs) = &self.specification.named {
+            Box::new(
+                named_graphs
+                    .iter()
+                    .cloned()
+                    .map(Ok)
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+            )
+        } else {
+            let cancellation_token = self.cancellation_token.clone();
+            Box::new(self.dataset.internal_named_graphs().map(move |r| {
+                cancellation_token.ensure_alive()?;
+                r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+            }))
+        }
     }
 
     fn contains_internal_graph_name(
         &self,
         graph_name: &D::InternalTerm,
     ) -> Result<bool, QueryEvaluationError> {
-        self.dataset
-            .contains_internal_graph_name(graph_name)
-            .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+        if let Some(named_graphs) = &self.specification.named {
+            Ok(named_graphs.contains(graph_name))
+        } else {
+            self.dataset
+                .contains_internal_graph_name(graph_name)
+                .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+        }
     }
 
     fn internalize_term(&self, term: Term) -> Result<D::InternalTerm, QueryEvaluationError> {
