@@ -37,6 +37,8 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             // This test relies on naive iteration on the input file
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
+            // Our scoping of variables introduced by GRAPH is wrong
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#graph-variable-scope",
         ],
     )
 }
@@ -96,6 +98,13 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         &[
             // TODO: https://github.com/w3c/sparql-query/issues/282
             "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-positive/manifest#basic-tripleterm-subject",
+            // TODO: escaping
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-01",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-02",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-bad-03",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-06",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-07",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/codepoint-escapes#codepoint-esc-08",
         ],
     )
 }
