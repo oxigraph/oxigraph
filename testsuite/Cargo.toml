@@ -17,7 +17,7 @@ oxigraph = { workspace = true, features = ["rdf-12"] }
 oxiri.workspace = true
 oxjsonld.workspace = true
 oxttl.workspace = true
-spargebra.workspace = true
+spargebra = { workspace = true, features = ["standard-unicode-escaping"] }
 spargeo.workspace = true
 sparopt.workspace = true
 spareval.workspace = true
