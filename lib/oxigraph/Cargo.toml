@@ -13,10 +13,14 @@ description = "SPARQL database and RDF toolkit"
 edition.workspace = true
 rust-version.workspace = true
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [features]
 default = ["rocksdb"]
 rocksdb = ["oxrocksdb-sys"]
-js = ["getrandom/wasm_js", "oxsdatatypes/js", "js-sys"]
+js = ["dep:getrandom", "getrandom/wasm_js", "oxsdatatypes/js", "js-sys"]
+oxigraph-wasm = ["dep:getrandom", "oxsdatatypes/custom-now"]
 http-client = ["oxhttp"]
 http-client-native-tls = ["http-client", "oxhttp/native-tls"]
 http-client-rustls-webpki = ["http-client", "oxhttp/rustls-ring-webpki"]
@@ -45,7 +49,7 @@ oxhttp = { workspace = true, optional = true }
 oxrocksdb-sys = { workspace = true, optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-getrandom.workspace = true
+getrandom = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
