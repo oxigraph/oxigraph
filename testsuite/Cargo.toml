@@ -27,6 +27,9 @@ time = { workspace = true, features = ["formatting"] }
 [dev-dependencies]
 codspeed-criterion-compat.workspace = true
 
+[features]
+datafusion = ["oxigraph/datafusion"]
+
 [lints]
 workspace = true
 

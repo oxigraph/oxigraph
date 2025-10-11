@@ -3,6 +3,8 @@
 //! The entry point for SPARQL execution is the [`SparqlEvaluator`] type.
 
 mod algebra;
+#[cfg(feature = "datafusion")]
+mod datafusion;
 mod dataset;
 mod error;
 #[cfg(feature = "http-client")]
@@ -13,6 +15,8 @@ mod update;
 use crate::model::{NamedNode, Term};
 #[expect(deprecated)]
 pub use crate::sparql::algebra::{Query, Update};
+#[cfg(feature = "datafusion")]
+use crate::sparql::datafusion::DatafusionEvaluator;
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -583,6 +587,22 @@ impl PreparedSparqlQuery {
         let reader = store.storage().snapshot();
         let queryable_dataset = DatasetView::new(reader);
         self.on_queryable_dataset(queryable_dataset)
+    }
+
+    #[cfg(feature = "datafusion")]
+    #[expect(deprecated)]
+    pub fn datafusion(self, store: &Store) -> Result<QueryResults<'static>, QueryEvaluationError> {
+        let query = Query::from(self.query);
+        let dataset = DatasetView::new(store.storage().snapshot());
+        DatafusionEvaluator::new()?.execute(dataset, &query.inner)
+    }
+
+    #[cfg(feature = "datafusion")]
+    #[expect(deprecated)]
+    pub fn datafusion_explain(self, store: &Store) -> Result<String, QueryEvaluationError> {
+        let query = Query::from(self.query);
+        let dataset = DatasetView::new(store.storage().snapshot());
+        DatafusionEvaluator::new()?.explain(dataset, &query.inner)
     }
 
     /// Bind the prepared query to the [`Transaction`] it should be evaluated on.

@@ -215,6 +215,11 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         group.bench_function(format!("BSBM explore {data_size} query on disk"), |b| {
             b.iter(|| run_operation(&disk_store, &explore_query_operations, true))
         });
+        #[cfg(feature = "datafusion")]
+        group.bench_function(
+            format!("BSBM explore {data_size} query on disk with DataFusion"),
+            |b| b.iter(|| run_datafusion_operation(&disk_store, &explore_query_operations)),
+        );
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} query on disk without optimizations"),
@@ -250,6 +255,34 @@ fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
                 .for_query(q.clone())
                 .on_store(store)
                 .execute()
+                .unwrap()
+            {
+                QueryResults::Boolean(_) => (),
+                QueryResults::Solutions(s) => {
+                    for s in s {
+                        s.unwrap();
+                    }
+                }
+                QueryResults::Graph(g) => {
+                    for t in g {
+                        t.unwrap();
+                    }
+                }
+            },
+            Operation::Update(u) => store.update_opt(u.clone(), evaluator.clone()).unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "datafusion")]
+fn run_datafusion_operation(store: &Store, operations: &[Operation]) {
+    let evaluator = SparqlEvaluator::new();
+    for operation in operations {
+        match operation {
+            Operation::Query(q) => match evaluator
+                .clone()
+                .for_query(q.clone())
+                .datafusion(store)
                 .unwrap()
             {
                 QueryResults::Boolean(_) => (),

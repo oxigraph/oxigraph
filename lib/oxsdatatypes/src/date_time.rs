@@ -247,6 +247,15 @@ impl DateTime {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -506,6 +515,15 @@ impl Time {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -752,6 +770,15 @@ impl Date {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -885,6 +912,15 @@ impl GYearMonth {
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
     }
 }
 
@@ -1021,6 +1057,15 @@ impl GYear {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -1156,6 +1201,15 @@ impl GMonthDay {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
+    }
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -1272,6 +1326,15 @@ impl GMonth {
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
     }
 }
 
@@ -1401,6 +1464,15 @@ impl GDay {
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        self.timestamp.bytes_collation()
     }
 }
 
@@ -1844,10 +1916,11 @@ impl Timestamp {
     fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
-        bytes[16..18].copy_from_slice(&match &self.timezone_offset {
-            Some(timezone_offset) => timezone_offset.to_be_bytes(),
-            None => [u8::MAX; 2],
-        });
+        bytes[16..18].copy_from_slice(
+            &self
+                .timezone_offset
+                .map_or([u8::MAX; 2], TimezoneOffset::to_be_bytes),
+        );
         bytes
     }
 
@@ -1856,6 +1929,20 @@ impl Timestamp {
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value == other.value && self.timezone_offset == other.timezone_offset
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 18] {
+        let mut bytes = [0; 18];
+        bytes[0..16].copy_from_slice(&self.value.bytes_collation());
+        bytes[16..18].copy_from_slice(&match &self.timezone_offset {
+            Some(timezone_offset) => timezone_offset.to_be_bytes(),
+            None => [u8::MAX; 2],
+        });
+        bytes
     }
 }
 
@@ -3191,6 +3278,41 @@ mod tests {
         assert_eq!(
             DateTime::from_str("2000-01-01T00:00:00.678Z")?.to_string(),
             "2000-01-01T00:00:00.678Z"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bytes_collation() -> Result<(), ParseDateTimeError> {
+        assert!(
+            Date::from_str("2004-12-25Z")?.bytes_collation()
+                < Date::from_str("2004-12-25-05:00")?.bytes_collation()
+        );
+        assert!(
+            Date::from_str("-2004-12-25Z")?.bytes_collation()
+                < Date::from_str("2004-12-25Z")?.bytes_collation()
+        );
+
+        assert!(
+            Date::from_str("2004-12-25Z")?.bytes_collation()
+                > Date::from_str("2004-12-25+07:00")?.bytes_collation()
+        );
+
+        assert!(
+            Time::from_str("11:00:00-05:00")?.bytes_collation()
+                < Time::from_str("17:00:00Z")?.bytes_collation()
+        );
+
+        assert!(
+            GMonthDay::from_str("--12-12+13:00")?.bytes_collation()
+                < GMonthDay::from_str("--12-12+11:00")?.bytes_collation()
+        );
+        assert!(
+            GDay::from_str("---15")?.bytes_collation() < GDay::from_str("---16")?.bytes_collation()
+        );
+        assert!(
+            GDay::from_str("---15-13:00")?.bytes_collation()
+                > GDay::from_str("---16+13:00")?.bytes_collation()
         );
         Ok(())
     }
