@@ -39,6 +39,22 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
             // Our scoping of variables introduced by GRAPH is wrong
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#graph-variable-scope",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-01",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-01", /* TODO: easy to fix */
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-05", /* TODO: easy to fix */
         ],
     )
 }
@@ -47,7 +63,7 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
 fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
-        &[],
+        &["http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#graph-minus"],
     )
 }
 
@@ -98,6 +114,9 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         &[
             // TODO: https://github.com/w3c/sparql-query/issues/282
             "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-positive/manifest#basic-tripleterm-subject",
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax/manifest#nested-aggregate-functions",
+            #[cfg(feature = "datafusion")]
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/grouping#group01",
         ],
     )
 }

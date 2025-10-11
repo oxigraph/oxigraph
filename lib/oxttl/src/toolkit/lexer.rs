@@ -192,7 +192,6 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
 }
 
 impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
-    #[expect(clippy::unwrap_in_result)]
     pub fn parse_next(
         &mut self,
         options: &R::Options,
@@ -321,7 +320,6 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         self.is_ending && self.data.len() == self.position.buffer_offset
     }
 
-    #[expect(clippy::unwrap_in_result)]
     fn skip_whitespaces_and_comments(&mut self) -> Option<bool> {
         if self.skip_whitespaces()? {
             return Some(true);
