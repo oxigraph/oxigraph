@@ -384,6 +384,77 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
       - run: cargo publish
+        working-directory: ./oxrocksdb-sys
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxsdatatypes
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxrdf
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxrdfxml
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxjsonld
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxttl
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxrdfio
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/sparesults
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/spargebra
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/sparopt
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/spareval
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/sparql-smith
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/oxigraph
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./lib/spargeo
+        continue-on-error: true
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish
+        working-directory: ./cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
