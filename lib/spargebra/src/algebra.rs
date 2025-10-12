@@ -212,6 +212,59 @@ impl Expression {
             }
         }
     }
+
+    fn walk<'a>(&'a self, callback: &mut impl FnMut(&'a Self)) {
+        callback(self);
+        match self {
+            Self::Variable(_)
+            | Self::Bound(_)
+            | Self::NamedNode(_)
+            | Self::Literal(_)
+            | Self::Exists(_) => (),
+            Self::UnaryPlus(i) | Self::UnaryMinus(i) | Self::Not(i) => i.walk(callback),
+            Self::Or(l, r)
+            | Self::And(l, r)
+            | Self::Equal(l, r)
+            | Self::SameTerm(l, r)
+            | Self::Greater(l, r)
+            | Self::GreaterOrEqual(l, r)
+            | Self::Less(l, r)
+            | Self::LessOrEqual(l, r)
+            | Self::Add(l, r)
+            | Self::Subtract(l, r)
+            | Self::Multiply(l, r)
+            | Self::Divide(l, r) => {
+                l.walk(callback);
+                r.walk(callback);
+            }
+            Self::If(c, l, r) => {
+                c.walk(callback);
+                l.walk(callback);
+                r.walk(callback);
+            }
+            Self::Coalesce(l) | Self::FunctionCall(_, l) => {
+                for e in l {
+                    e.walk(callback);
+                }
+            }
+            Self::In(l, r) => {
+                l.walk(callback);
+                for e in r {
+                    e.walk(callback);
+                }
+            }
+        }
+    }
+
+    fn lookup_used_variable<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        self.walk(&mut |e| {
+            if let Self::Variable(v) | Self::Bound(v) = e {
+                callback(v)
+            } else if let Self::Exists(p) = e {
+                p.lookup_used_variables(callback)
+            }
+        })
+    }
 }
 
 impl fmt::Display for Expression {
@@ -741,7 +794,7 @@ impl fmt::Display for GraphPattern {
 impl Default for GraphPattern {
     fn default() -> Self {
         Self::Bgp {
-            patterns: Vec::default(),
+            patterns: Vec::new(),
         }
     }
 }
@@ -1028,6 +1081,109 @@ impl GraphPattern {
             | Self::Slice { inner, .. } => inner.lookup_in_scope_variables(callback),
         }
     }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        match self {
+            Self::Bgp { patterns } => {
+                for pattern in patterns {
+                    lookup_triple_pattern_variables(pattern, callback)
+                }
+            }
+            Self::Path {
+                subject, object, ..
+            } => {
+                if let TermPattern::Variable(s) = subject {
+                    callback(s);
+                }
+                #[cfg(feature = "sparql-12")]
+                if let TermPattern::Triple(s) = subject {
+                    lookup_triple_pattern_variables(s, callback)
+                }
+                if let TermPattern::Variable(o) = object {
+                    callback(o);
+                }
+                #[cfg(feature = "sparql-12")]
+                if let TermPattern::Triple(o) = object {
+                    lookup_triple_pattern_variables(o, callback)
+                }
+            }
+            Self::Join { left, right }
+            | Self::Minus { left, right }
+            | Self::Union { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+                if let Some(expr) = expression {
+                    expr.lookup_used_variable(callback);
+                }
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            Self::Graph { name, inner } => {
+                if let NamedNodePattern::Variable(g) = &name {
+                    callback(g);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
+                callback(variable);
+                expression.lookup_used_variable(callback);
+                inner.lookup_used_variables(callback);
+            }
+            Self::Group {
+                inner,
+                variables,
+                aggregates,
+            } => {
+                inner.lookup_used_variables(callback);
+                for v in variables {
+                    callback(v);
+                }
+                for (v, expr) in aggregates {
+                    callback(v);
+                    expr.lookup_used_variables(callback);
+                }
+            }
+            Self::Values { variables, .. } | Self::Project { variables, .. } => {
+                for v in variables {
+                    callback(v);
+                }
+            }
+            Self::Filter { inner, expr } => {
+                expr.lookup_used_variable(callback);
+                inner.lookup_used_variables(callback);
+            }
+            Self::Service { inner, name, .. } => {
+                if let NamedNodePattern::Variable(s) = &name {
+                    callback(s);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::OrderBy { inner, expression } => {
+                for e in expression {
+                    e.lookup_used_variables(callback);
+                }
+                inner.lookup_used_variables(callback);
+            }
+            Self::Distinct { inner } | Self::Reduced { inner } | Self::Slice { inner, .. } => {
+                inner.lookup_used_variables(callback)
+            }
+        }
+    }
 }
 
 fn lookup_triple_pattern_variables<'a>(
@@ -1071,7 +1227,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
         let mut order = None;
         let mut start = 0;
         let mut length = None;
-        let mut project: &[Variable] = &[];
+        let mut project = Vec::new();
 
         let mut child = self.pattern;
         loop {
@@ -1081,7 +1237,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     child = inner;
                 }
                 GraphPattern::Project { inner, variables } if project.is_empty() => {
-                    project = variables;
+                    project.extend(variables.iter().map(|v| (v, None)));
                     child = inner;
                 }
                 GraphPattern::Distinct { inner } => {
@@ -1101,6 +1257,27 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     length = *l;
                     child = inner;
                 }
+                GraphPattern::Extend {
+                    inner,
+                    expression,
+                    variable,
+                } if project.iter().any(|(v, _)| *v == variable)
+                    && !project.iter().any(|(_, expr)| {
+                        expr.is_some_and(|expr: &Expression| {
+                            let mut found = false;
+                            expr.lookup_used_variable(&mut |v| found |= v == variable);
+                            found
+                        })
+                    }) =>
+                {
+                    // This simplification only works if the extended variable is in the projection and not used in another expression of the projection.
+                    project
+                        .iter_mut()
+                        .find(|(v, _)| *v == variable)
+                        .ok_or(fmt::Error)?
+                        .1 = Some(expression);
+                    child = inner
+                }
                 p => {
                     f.write_str("SELECT")?;
                     if distinct {
@@ -1112,8 +1289,12 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     if project.is_empty() {
                         f.write_str(" *")?;
                     } else {
-                        for v in project {
-                            write!(f, " {v}")?;
+                        for (variable, expr) in project {
+                            if let Some(expr) = expr {
+                                write!(f, " ({expr} AS {variable})")
+                            } else {
+                                write!(f, " {variable}")
+                            }?;
                         }
                     }
                     if let Some(dataset) = self.dataset {
@@ -1191,6 +1372,12 @@ impl AggregateExpression {
                 expr.fmt_sse(f)?;
                 f.write_str(")")
             }
+        }
+    }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        if let Self::FunctionCall { expr, .. } = self {
+            expr.lookup_used_variable(callback);
         }
     }
 }
@@ -1321,6 +1508,11 @@ impl OrderExpression {
                 f.write_str(")")
             }
         }
+    }
+
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        let (Self::Asc(e) | Self::Desc(e)) = self;
+        e.lookup_used_variable(callback);
     }
 }
 
