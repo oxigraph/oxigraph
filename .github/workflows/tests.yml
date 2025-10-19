@@ -378,7 +378,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "pypy3.10"
+          python-version: "pypy3.11"
       - run: uv sync --locked
         working-directory: ./python
       - run: uv run -m unittest
