@@ -193,7 +193,7 @@ jobs:
       - run: uv run maturin build --release --features abi3
         working-directory: ./python
       - run: |
-          $versions = "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t", "pypy-3.9", "pypy-3.10", "pypy-3.11"
+          $versions = "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t", "pypy-3.11"
           foreach ($version in $versions) {
             uvx --python $version maturin build --release
           }

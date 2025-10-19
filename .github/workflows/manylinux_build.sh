@@ -15,9 +15,7 @@ if [ %for_each_version% ]; then
   for VERSION in 8 9 10 11 12 13 13t 14 14t; do
     uv run maturin build --release --interpreter "python3.$VERSION" --compatibility manylinux2014
   done
-  for VERSION in 9 10 11; do
-    uv run maturin build --release --interpreter "pypy3.$VERSION" --compatibility manylinux2014
-  done
+  uv run maturin build --release --interpreter "pypy3.11" --compatibility manylinux2014
 fi
 cd ../cli
 uvx maturin build --release --no-default-features --features rustls-native,geosparql,rdf-12 --compatibility manylinux2014
