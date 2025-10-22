@@ -47,9 +47,9 @@ fn build_rocksdb_api(includes: &[PathBuf]) {
         config.include(include);
     }
     if target.contains("msvc") {
-        config.flag("-EHsc").flag("-std:c++17");
+        config.flag("-EHsc").flag("-std:c++20");
     } else {
-        config.flag("-std=c++17");
+        config.flag("-std=c++20");
     }
     if target.contains("armv5te") || target.contains("riscv64gc") {
         println!("cargo:rustc-link-lib=atomic");
@@ -192,9 +192,9 @@ fn build_rocksdb() {
     config.define("ROCKSDB_SUPPORT_THREAD_LOCAL", None);
 
     if target.contains("msvc") {
-        config.flag("-EHsc").flag("-std:c++17");
+        config.flag("-EHsc").flag("-std:c++20");
     } else {
-        config.flag("-std=c++17").flag("-Wno-invalid-offsetof");
+        config.flag("-std=c++20").flag("-Wno-invalid-offsetof");
         if target.contains("x86_64") || target.contains("aarch64") {
             config.define("HAVE_UINT128_EXTENSION", Some("1"));
         }
