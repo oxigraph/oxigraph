@@ -438,7 +438,7 @@ fn add_triple_to_triple_or_path_patterns(
             TriplePattern {
                 subject: reifier.clone(),
                 predicate: rdf::REIFIES.into_owned().into(),
-                object: triple.clone().object,
+                object: triple.clone().into(),
             }
             .into(),
         );
