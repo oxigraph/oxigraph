@@ -26,12 +26,10 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv sync --locked
-        working-directory: ./python
-      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run --locked python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: rm -r target/wheels
-      - run: uv run maturin sdist
+      - run: uv run --locked maturin sdist
         working-directory: ./python
       - run: uvx maturin sdist
         working-directory: ./cli
@@ -64,7 +62,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux_2_28_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_${{ matrix.arch }}_linux_gnu
@@ -137,12 +135,12 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv run maturin develop --release --features abi3
+      - run: uv run --locked --only-dev maturin develop --release --features abi3
         working-directory: ./python
-      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: rm -rf target/wheels
-      - run: uv run maturin build --release --features abi3 --target ${{ matrix.target }}
+      - run: uv run --locked --only-dev maturin build --release --features abi3 --target ${{ matrix.target }}
         working-directory: ./python
       - run: uvx maturin build --release --target ${{ matrix.target }}
         working-directory: ./cli
@@ -186,11 +184,11 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv run maturin develop --release --features abi3
+      - run: uv run --locked --only-dev maturin develop --release --features abi3
         working-directory: ./python
-      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: uv run maturin build --release --features abi3
+      - run: uv run --locked --only-dev maturin build --release --features abi3
         working-directory: ./python
       - run: |
           $versions = "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t", "pypy-3.11"
