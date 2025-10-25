@@ -1,3 +1,11 @@
+# [0.5.2] - 2025-10-25
+
+### Changed
+- SPARQL: fixes evaluation of RDF 1.2 annotation syntax (e.g. `SELECT * WHERE { ?s ?p ?o {| ?p2 ?o |}`).
+- Bump RocksDB to 10.7.5 (requires a C++ 20 compiler).
+- Built Linux Python wheels now require Glibc 2.28.
+
+
 # [0.5.1] - 2025-10-11
 
 ## Added
