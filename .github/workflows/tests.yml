@@ -329,23 +329,21 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv sync --locked
-        working-directory: ./python
-      - run: uv run -m unittest
+      - run: uv run --locked -m unittest
         working-directory: ./python/tests
-      - run: uv run sphinx-build -M html . build
+      - run: uv run --locked sphinx-build -M html . build
         working-directory: ./python/docs
-      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run --locked python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: uv run -m mypy.stubtest pyoxigraph --allowlist=mypy_allowlist.txt
+      - run: uv run --locked -m mypy.stubtest pyoxigraph --allowlist=mypy_allowlist.txt
         working-directory: ./python
-      - run: uv run -m mypy generate_stubs.py tests --strict
+      - run: uv run --locked -m mypy generate_stubs.py tests --strict
         working-directory: ./python
-      - run: uv run ruff format --check .
+      - run: uv run --locked ruff format --check .
         working-directory: ./python
-      - run: uv run ruff check --output-format=github .
+      - run: uv run --locked ruff check --output-format=github .
         working-directory: ./python
-      - run: uv run sphinx-lint docs
+      - run: uv run --locked sphinx-lint docs
         working-directory: ./python
 
   python_msv:
@@ -364,9 +362,7 @@ jobs:
         with:
           python-version: "3.8"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
-      - run: uv sync --locked
-        working-directory: ./python
-      - run: uv run -m unittest
+      - run: uv run --locked -m unittest
         working-directory: ./python/tests
 
   python_pypy:
@@ -379,9 +375,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "pypy3.11"
-      - run: uv sync --locked
-        working-directory: ./python
-      - run: uv run -m unittest
+      - run: uv run --locked -m unittest
         working-directory: ./python/tests
 
   python_windows:
@@ -394,9 +388,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv sync --locked
-        working-directory: ./python
-      - run: uv run -m unittest
+      - run: uv run --locked -m unittest
         working-directory: ./python/tests
 
   typos:
@@ -521,10 +513,9 @@ jobs:
           cargo llvm-cov clean --workspace
           cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
           cd python
-          uv sync --locked --only-group dev
-          uv run maturin develop
+          uv run --locked --only-dev maturin develop
           cd tests
-          uv run -m unittest
+          uv run --locked --only-dev -m unittest
           cd ../..
           cargo llvm-cov report --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v5

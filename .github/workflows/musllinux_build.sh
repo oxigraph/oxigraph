@@ -5,12 +5,12 @@ chmod +x rustup-init
 ./rustup-init -y --profile minimal
 source "$HOME/.cargo/env"
 cd python
-uv run maturin develop --release --features abi3
-uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+uv run --locked --only-dev maturin develop --release --features abi3
+uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 rm -rf ../target/wheels
-uv run maturin build --release --features abi3 --compatibility musllinux_1_2
+uv run --locked --only-dev maturin build --release --features abi3 --compatibility musllinux_1_2
 if [ %for_each_version% ]; then
   for VERSION in 8 9 10 11 12 13 13t 14 14t; do
-    uv run maturin build --release --interpreter "python3.$VERSION" --compatibility musllinux_1_2
+    uv run --locked --only-dev maturin build --release --interpreter "python3.$VERSION" --compatibility musllinux_1_2
   done
 fi
