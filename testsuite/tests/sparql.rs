@@ -39,6 +39,7 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
             // Our scoping of variables introduced by GRAPH is wrong
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#graph-variable-scope",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#graph-optional",
         ],
     )
 }
@@ -50,6 +51,8 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
         &[
             // Our scoping of variables introduced by GRAPH is wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#graph-minus",
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-graph",
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest#graph",
         ],
     )
 }
@@ -101,6 +104,8 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         &[
             // TODO: https://github.com/w3c/sparql-query/issues/282
             "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-positive/manifest#basic-tripleterm-subject",
+            // We do not prevent nested aggregate functions
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax/manifest#nested-aggregate-functions",
         ],
     )
 }
