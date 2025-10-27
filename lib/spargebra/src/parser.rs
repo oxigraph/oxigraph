@@ -1063,7 +1063,7 @@ parser! {
 
         pub rule UpdateInit() -> Vec<GraphUpdateOperation> = Update()
 
-        rule Prologue() = (BaseDecl() _ / PrefixDecl() _)* {}
+        rule Prologue() = (BaseDecl() _ / PrefixDecl() _ / VersionDecl() _)* {}
 
         rule BaseDecl() = i("BASE") _ i:IRIREF() {
             state.base_iri = Some(i)
@@ -1072,6 +1072,16 @@ parser! {
         rule PrefixDecl() = i("PREFIX") _ ns:PNAME_NS() _ i:IRIREF() {
             state.prefixes.insert(ns.into(), i.into_inner());
         }
+
+        rule VersionDecl() = i("VERSION") _ VersionSpecifier() {?
+            if cfg!(feature = "sparql-12") {
+                Ok(())
+            } else {
+                Err("The VERSION declaration is only supported in SPARQL 1.2")
+            }
+        }
+
+        rule VersionSpecifier() = STRING_LITERAL1() / STRING_LITERAL2() {}
 
         rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Select {
