@@ -33,11 +33,11 @@ jobs:
         working-directory: ./python
       - run: uvx maturin sdist
         working-directory: ./cli
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pyoxigraph_sdist
           path: target/wheels/pyoxigraph-*.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_pypi_sdist
           path: target/wheels/oxigraph-*.tar.gz
@@ -63,16 +63,16 @@ jobs:
           python-version: "3.13"
       - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux_2_28_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pyoxigraph_${{ matrix.arch }}_linux_gnu
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_pypi_${{ matrix.arch }}_linux_gnu
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_${{ matrix.arch }}_linux_gnu
           path: oxigraph-*.data/scripts/oxigraph
@@ -105,7 +105,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.arch }} quay.io/pypa/musllinux_1_2_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pyoxigraph_${{ matrix.arch }}_linux_musl
           path: target/wheels/pyoxigraph-*.whl
@@ -144,16 +144,16 @@ jobs:
         working-directory: ./python
       - run: uvx maturin build --release --target ${{ matrix.target }}
         working-directory: ./cli
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pyoxigraph_apple_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_pypi_apple_${{ matrix.arch }}
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_${{ matrix.arch }}_apple
           path: oxigraph-*.data/scripts/oxigraph
@@ -207,16 +207,16 @@ jobs:
         if: matrix.arch == 'aarch64' && github.event_name == 'release'
       - run: uvx maturin build --release
         working-directory: ./cli
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pyoxigraph_windows_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_pypi_windows_${{ matrix.arch }}
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_${{ matrix.arch }}_windows
           path: oxigraph-*.data/scripts/oxigraph.exe
@@ -300,7 +300,7 @@ jobs:
         working-directory: ./js
       - run: npm run pack
         working-directory: ./js
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: oxigraph_wasm_npm
           path: js/*.tgz
