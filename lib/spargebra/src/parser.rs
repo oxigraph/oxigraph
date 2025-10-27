@@ -1718,25 +1718,15 @@ parser! {
         }
         rule ObjectList_item() -> FocusedTriplePattern<ReifiedTerm> = o:Object() _ { o }
 
-        rule Object() -> FocusedTriplePattern<ReifiedTerm> = g:GraphNode() _ a:Annotation()? {
-            if let Some(a) = a {
-                let mut patterns = g.patterns;
-                patterns.extend(a.patterns);
-                FocusedTriplePattern {
-                    focus: ReifiedTerm {
-                        term: g.focus,
-                        reifiers: a.focus
-                    },
-                    patterns
-                }
-            } else {
-                FocusedTriplePattern {
-                    focus: ReifiedTerm {
-                        term: g.focus,
-                        reifiers: Vec::new()
-                    },
-                    patterns: g.patterns
-                }
+        rule Object() -> FocusedTriplePattern<ReifiedTerm> = g:GraphNode() _ a:Annotation() {
+            let mut patterns = g.patterns;
+            patterns.extend(a.patterns);
+            FocusedTriplePattern {
+                focus: ReifiedTerm {
+                    term: g.focus,
+                    reifiers: a.focus
+                },
+                patterns
             }
         }
 
@@ -1803,25 +1793,15 @@ parser! {
         }
         rule ObjectListPath_item() -> FocusedTripleOrPathPattern<ReifiedTerm> = o:ObjectPath() _ { o }
 
-        rule ObjectPath() -> FocusedTripleOrPathPattern<ReifiedTerm> = g:GraphNodePath() _ a:AnnotationPath()? {
-             if let Some(a) = a {
-                let mut patterns = g.patterns;
-                patterns.extend(a.patterns);
-                FocusedTripleOrPathPattern {
-                    focus: ReifiedTerm {
-                        term: g.focus,
-                        reifiers: a.focus
-                    },
-                    patterns
-                }
-            } else {
-                FocusedTripleOrPathPattern {
-                    focus: ReifiedTerm {
-                        term: g.focus,
-                        reifiers: Vec::new()
-                    },
-                    patterns: g.patterns
-                }
+        rule ObjectPath() -> FocusedTripleOrPathPattern<ReifiedTerm> = g:GraphNodePath() _ a:AnnotationPath() {
+            let mut patterns = g.patterns;
+            patterns.extend(a.patterns);
+            FocusedTripleOrPathPattern {
+                focus: ReifiedTerm {
+                    term: g.focus,
+                    reifiers: a.focus
+                },
+                patterns
             }
         }
 
