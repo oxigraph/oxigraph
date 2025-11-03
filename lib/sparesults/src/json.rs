@@ -895,7 +895,6 @@ enum TermType {
 }
 
 impl JsonInnerTermReader {
-    #[cfg_attr(not(feature = "sparql-12"), expect(clippy::collapsible_else_if))]
     fn read_event(
         &mut self,
         event: JsonEvent<'_>,
