@@ -657,8 +657,6 @@ impl Store {
 
     /// Adds a quad to this store.
     ///
-    /// Returns `true` if the quad was not already in the store.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
@@ -698,8 +696,6 @@ impl Store {
     }
 
     /// Removes a quad from this store.
-    ///
-    /// Returns `true` if the quad was in the store and has been removed.
     ///
     /// Usage example:
     /// ```
@@ -834,8 +830,6 @@ impl Store {
 
     /// Inserts a graph into this store.
     ///
-    /// Returns `true` if the graph was not already in the store.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::NamedNodeRef;
@@ -896,8 +890,6 @@ impl Store {
     }
 
     /// Removes a graph from this store.
-    ///
-    /// Returns `true` if the graph was in the store and has been removed.
     ///
     /// Usage example:
     /// ```
@@ -1367,8 +1359,6 @@ impl<'a> Transaction<'a> {
 
     /// Adds a quad to this store.
     ///
-    /// Returns `true` if the quad was not already in the store.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
@@ -1413,8 +1403,6 @@ impl<'a> Transaction<'a> {
 
     /// Removes a quad from this store.
     ///
-    /// Returns `true` if the quad was in the store and has been removed.
-    ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
@@ -1454,8 +1442,6 @@ impl<'a> Transaction<'a> {
     }
 
     /// Inserts a graph into this store.
-    ///
-    /// Returns `true` if the graph was not already in the store.
     ///
     /// Usage example:
     /// ```
@@ -1503,8 +1489,6 @@ impl<'a> Transaction<'a> {
     }
 
     /// Removes a graph from this store.
-    ///
-    /// Returns `true` if the graph was in the store and has been removed.
     ///
     /// Usage example:
     /// ```
