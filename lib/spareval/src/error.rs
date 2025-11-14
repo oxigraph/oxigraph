@@ -1,7 +1,9 @@
+use crate::expression::ExpressionEvaluationError;
 use oxrdf::{NamedNode, Term, Variable};
 use spargebra::SparqlSyntaxError;
 use std::convert::Infallible;
 use std::error::Error;
+use std::ops::RangeInclusive;
 
 /// A SPARQL evaluation error
 #[derive(Debug, thiserror::Error)]
@@ -19,6 +21,16 @@ pub enum QueryEvaluationError {
     /// Error if the dataset returns the default graph even if a named graph is expected
     #[error("The SPARQL dataset returned the default graph even if a named graph is expected")]
     UnexpectedDefaultGraph,
+    /// The given custom function is not supported
+    #[error("The custom function {0} is not supported")]
+    UnsupportedCustomFunction(NamedNode),
+    /// The given custom function arity is not supported
+    #[error("The custom function {name} requires between {} and {} arguments, but {actual} were given", .expected.start(), .expected.end())]
+    UnsupportedCustomFunctionArity {
+        name: NamedNode,
+        expected: RangeInclusive<usize>,
+        actual: usize,
+    },
     /// The variable storing the `SERVICE` name is unbound
     #[error("The variable encoding the service name is unbound")]
     UnboundService,
@@ -51,5 +63,26 @@ impl From<SparqlSyntaxError> for QueryEvaluationError {
     #[inline]
     fn from(error: SparqlSyntaxError) -> Self {
         Self::Unexpected(Box::new(error))
+    }
+}
+
+impl From<ExpressionEvaluationError<Self>> for QueryEvaluationError {
+    #[inline]
+    fn from(error: ExpressionEvaluationError<Self>) -> Self {
+        match error {
+            ExpressionEvaluationError::Context(e) => e,
+            ExpressionEvaluationError::UnsupportedCustomFunction(name) => {
+                Self::UnsupportedCustomFunction(name)
+            }
+            ExpressionEvaluationError::UnsupportedCustomFunctionArity {
+                name,
+                expected,
+                actual,
+            } => Self::UnsupportedCustomFunctionArity {
+                name,
+                expected,
+                actual,
+            },
+        }
     }
 }
