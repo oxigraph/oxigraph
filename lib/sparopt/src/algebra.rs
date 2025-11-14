@@ -572,7 +572,7 @@ impl Not for Expression {
             if v.returns_boolean() {
                 *v
             } else {
-                Self::And(vec![*v])
+                Self::Not(Box::new(Self::Not(v)))
             }
         } else {
             Self::Not(Box::new(self))
