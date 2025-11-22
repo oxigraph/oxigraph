@@ -7,6 +7,7 @@
 mod dataset;
 mod error;
 mod eval;
+mod expression;
 mod model;
 mod service;
 mod update;
@@ -17,14 +18,17 @@ pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::CancellationToken;
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
+use crate::expression::{
+    CustomFunctionRegistry, ExpressionEvaluatorContext, build_expression_evaluator,
+};
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
 pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
-use oxrdf::{Dataset, GraphName, NamedNode, NamedOrBlankNode, Term, Variable};
-use oxsdatatypes::{DayTimeDuration, Float};
+use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, Term, Variable};
+use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
 use spargebra::algebra::QueryDataset;
 use spargebra::term::{GroundQuadPattern, QuadPattern};
@@ -375,27 +379,91 @@ impl QueryEvaluator {
         expression: &sparopt::algebra::Expression,
         substitutions: impl IntoIterator<Item = (&'a Variable, Term)>,
     ) -> Option<ExpressionTerm> {
-        // Empty dataset to support EXISTS evaluation without accessing data
-        let dataset = Dataset::new();
-        let evaluator = self
-            .simple_evaluator(&dataset, QueryDatasetSpecification::new(), &None)
-            .ok()?;
+        struct Context<'a> {
+            now: Option<DateTime>,
+            custom_functions: &'a CustomFunctionRegistry,
+        }
 
-        let mut encoded_variables = Vec::new();
-        let mut stat_children = Vec::new();
-        let eval =
-            evaluator.expression_evaluator(expression, &mut encoded_variables, &mut stat_children);
+        impl<'a> ExpressionEvaluatorContext<'a> for Context<'a> {
+            type Term = Term;
+            type Tuple = HashMap<&'a Variable, Term>;
+            type Error = QueryEvaluationError;
 
-        // Build the input tuple with provided substitutions (ignore unknown variables)
-        let mut tuple = eval::InternalTuple::with_capacity(encoded_variables.len());
-        for (var, term) in substitutions {
-            if let Some(pos) = encoded_variables.iter().position(|v| v == var) {
-                let internal = (&dataset).internalize_term(term).ok()?;
-                tuple.set(pos, internal);
+            fn build_variable_lookup(
+                &mut self,
+                variable: &Variable,
+            ) -> impl Fn(&HashMap<&'a Variable, Term>) -> Option<Term> + 'a {
+                let variable = variable.clone();
+                move |tuple| tuple.get(&variable).cloned()
+            }
+
+            fn build_is_variable_bound(
+                &mut self,
+                variable: &Variable,
+            ) -> impl Fn(&HashMap<&'a Variable, Term>) -> bool + 'a {
+                let variable = variable.clone();
+                move |tuple| tuple.contains_key(&variable)
+            }
+
+            fn build_exists(
+                &mut self,
+                _: &spargebra::algebra::GraphPattern,
+            ) -> Result<impl Fn(&HashMap<&'a Variable, Term>) -> bool + 'a, QueryEvaluationError>
+            {
+                Err::<fn(&HashMap<&'a Variable, Term>) -> bool, _>(
+                    QueryEvaluationError::Unexpected(
+                        "EXISTS is not supported by the SPARQL expression evaluator".into(),
+                    ),
+                )
+            }
+
+            fn internalize_named_node(
+                &mut self,
+                term: &NamedNode,
+            ) -> Result<Term, QueryEvaluationError> {
+                Ok(term.clone().into())
+            }
+
+            fn internalize_literal(
+                &mut self,
+                term: &Literal,
+            ) -> Result<Term, QueryEvaluationError> {
+                Ok(term.clone().into())
+            }
+
+            fn build_internalize_expression_term(
+                &mut self,
+            ) -> impl Fn(ExpressionTerm) -> Option<Term> + 'a {
+                |t| Some(t.into())
+            }
+
+            fn build_externalize_expression_term(
+                &mut self,
+            ) -> impl Fn(Term) -> Option<ExpressionTerm> + 'a {
+                |t| Some(t.into())
+            }
+
+            fn now(&mut self) -> DateTime {
+                *self.now.get_or_insert_with(DateTime::now)
+            }
+
+            fn base_iri(&mut self) -> Option<Arc<Iri<String>>> {
+                None
+            }
+
+            fn custom_functions(&mut self) -> &CustomFunctionRegistry {
+                self.custom_functions
             }
         }
 
-        eval(&tuple)
+        build_expression_evaluator(
+            &expression.into(),
+            &mut Context {
+                now: None,
+                custom_functions: &self.custom_functions,
+            },
+        )
+        .ok()?(&substitutions.into_iter().collect::<HashMap<_, _>>())
     }
 
     /// Evaluates a SPARQL expression against an empty dataset with optional variable substitutions.
@@ -500,7 +568,7 @@ impl QueryEvaluator {
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
         SimpleEvaluator::new(
             dataset,
-            base_iri.clone().map(Rc::new),
+            base_iri.clone().map(Arc::new),
             Rc::new(self.service_handler.clone()),
             Rc::new(self.custom_functions.clone()),
             Rc::new(self.custom_aggregate_functions.clone()),
@@ -800,8 +868,6 @@ impl PreparedDeleteInsertUpdate<'_> {
     }
 }
 
-pub(crate) type CustomFunctionRegistry =
-    HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
 pub(crate) type CustomAggregateFunctionRegistry = HashMap<
     NamedNode,
     Arc<dyn (Fn() -> Box<dyn AggregateFunctionAccumulator + Send + Sync>) + Send + Sync>,

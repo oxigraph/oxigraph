@@ -1273,13 +1273,14 @@ impl fmt::Display for Constraint {
 #[derive(Arbitrary)]
 struct FunctionCall {
     // [70]   FunctionCall   ::=   iri ArgList
+    // We use a single argument to build valid queries for casting
     iri: FunctionCallName,
-    args: ArgList,
+    arg: Box<Expression>,
 }
 
 impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.iri, self.args)
+        write!(f, "{}({})", self.iri, self.arg)
     }
 }
 
@@ -1307,51 +1308,23 @@ enum FunctionCallName {
 impl fmt::Display for FunctionCallName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            FunctionCallName::XsdString => "<http://www.w3.org/2001/XMLSchema#string>",
-            FunctionCallName::XsdInteger => "<http://www.w3.org/2001/XMLSchema#integer>",
-            FunctionCallName::XsdDecimal => "<http://www.w3.org/2001/XMLSchema#decimal>",
-            FunctionCallName::XsdDouble => "<http://www.w3.org/2001/XMLSchema#double>",
-            FunctionCallName::XsdBoolean => "<http://www.w3.org/2001/XMLSchema#boolean>",
-            FunctionCallName::XsdDateTime => "<http://www.w3.org/2001/XMLSchema#dateTime>",
-            FunctionCallName::XsdDate => "<http://www.w3.org/2001/XMLSchema#date>",
-            FunctionCallName::XsdTime => "<http://www.w3.org/2001/XMLSchema#time>",
-            FunctionCallName::XsdDuration => "<http://www.w3.org/2001/XMLSchema#duration>",
-            FunctionCallName::XsdYearMonthDuration => {
-                "<http://www.w3.org/2001/XMLSchema#yearMonthDuration>"
-            }
-            FunctionCallName::XsdDayTimeDuration => {
-                "<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
-            }
-            FunctionCallName::XsdGYear => "<http://www.w3.org/2001/XMLSchema#gYear>",
-            FunctionCallName::XsdGMonth => "<http://www.w3.org/2001/XMLSchema#gMonth>",
-            FunctionCallName::XsdGDay => "<http://www.w3.org/2001/XMLSchema#gDay>",
-            FunctionCallName::XsdGYearMonth => "<http://www.w3.org/2001/XMLSchema#gYearMonth>",
-            FunctionCallName::XsdGMonthDay => "<http://www.w3.org/2001/XMLSchema#gMonthDay>",
+            Self::XsdString => "<http://www.w3.org/2001/XMLSchema#string>",
+            Self::XsdInteger => "<http://www.w3.org/2001/XMLSchema#integer>",
+            Self::XsdDecimal => "<http://www.w3.org/2001/XMLSchema#decimal>",
+            Self::XsdDouble => "<http://www.w3.org/2001/XMLSchema#double>",
+            Self::XsdBoolean => "<http://www.w3.org/2001/XMLSchema#boolean>",
+            Self::XsdDateTime => "<http://www.w3.org/2001/XMLSchema#dateTime>",
+            Self::XsdDate => "<http://www.w3.org/2001/XMLSchema#date>",
+            Self::XsdTime => "<http://www.w3.org/2001/XMLSchema#time>",
+            Self::XsdDuration => "<http://www.w3.org/2001/XMLSchema#duration>",
+            Self::XsdYearMonthDuration => "<http://www.w3.org/2001/XMLSchema#yearMonthDuration>",
+            Self::XsdDayTimeDuration => "<http://www.w3.org/2001/XMLSchema#dayTimeDuration>",
+            Self::XsdGYear => "<http://www.w3.org/2001/XMLSchema#gYear>",
+            Self::XsdGMonth => "<http://www.w3.org/2001/XMLSchema#gMonth>",
+            Self::XsdGDay => "<http://www.w3.org/2001/XMLSchema#gDay>",
+            Self::XsdGYearMonth => "<http://www.w3.org/2001/XMLSchema#gYearMonth>",
+            Self::XsdGMonthDay => "<http://www.w3.org/2001/XMLSchema#gMonthDay>",
         })
-    }
-}
-
-#[derive(Arbitrary)]
-enum ArgList {
-    // [71]   ArgList   ::=   NIL | '(' 'DISTINCT'? Expression ( ',' Expression )* ')'
-    Nil,
-    NotNil {
-        // TODO: DISTINCT
-        start: Box<Expression>,
-        others: Vec<Expression>,
-    },
-}
-
-impl fmt::Display for ArgList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("(")?;
-        if let Self::NotNil { start, others } = self {
-            write!(f, "{start}")?;
-            for e in others {
-                write!(f, ", {e}")?;
-            }
-        }
-        f.write_str(")")
     }
 }
 
