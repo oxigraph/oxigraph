@@ -493,7 +493,7 @@ jobs:
       - uses: CodSpeedHQ/action@v4
         with:
           run: cargo codspeed run
-          mode: instrumentation
+          mode: simulation
 
   codecov:
     runs-on: ubuntu-latest
