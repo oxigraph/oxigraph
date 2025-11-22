@@ -171,7 +171,7 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         .into_iter()
         .map(|op| match op {
             RawOperation::Query(q) => {
-                Operation::Query(Query::from_str(&q.replace('#', "")).unwrap())
+                Operation::Query(Query::from_str(&q.replace("# ", "")).unwrap())
             }
             RawOperation::Update(_) => unreachable!(),
         })
