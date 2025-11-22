@@ -474,6 +474,9 @@ jobs:
 
   codspeed:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         build_args:
@@ -490,11 +493,13 @@ jobs:
       - uses: CodSpeedHQ/action@v4
         with:
           run: cargo codspeed run
-          token: ${{ secrets.CODSPEED_TOKEN }}
           mode: instrumentation
 
   codecov:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -523,4 +528,4 @@ jobs:
           files: codecov.json
           flags: rust
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
