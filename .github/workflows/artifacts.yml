@@ -306,8 +306,6 @@ jobs:
           path: js/*.tgz
       - run: npm run release
         working-directory: ./js
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         if: github.event_name == 'release'
 
   docker:
