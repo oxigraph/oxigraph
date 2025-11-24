@@ -17,7 +17,7 @@ jobs:
   python_sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - run: bash trim_rocksdb.sh
@@ -54,7 +54,7 @@ jobs:
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
@@ -96,7 +96,7 @@ jobs:
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: astral-sh/setup-uv@v7
@@ -126,7 +126,7 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
@@ -177,7 +177,7 @@ jobs:
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
@@ -286,7 +286,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
@@ -319,7 +319,7 @@ jobs:
       contents: read
       attestations: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - uses: docker/setup-buildx-action@v3
@@ -374,7 +374,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - run: bash trim_rocksdb.sh
@@ -460,7 +460,7 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - run: bash trim_rocksdb.sh
