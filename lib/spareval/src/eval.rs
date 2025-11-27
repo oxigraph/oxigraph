@@ -1427,7 +1427,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                 left_iter: left(from),
                                 right: right_values,
                                 buffered_results: errors,
-                                expression: Arc::clone(&expression),
+                                expression: Rc::clone(&expression),
                             })
                         })
                     }
@@ -1443,7 +1443,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     stat_children,
                 )?;
                 Rc::new(move |from| {
-                    let expression = Arc::clone(&expression);
+                    let expression = Rc::clone(&expression);
                     Box::new(child(from).filter(move |tuple| match tuple {
                         Ok(tuple) => expression(tuple).unwrap_or(false),
                         Err(_) => true,
@@ -1486,7 +1486,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     stat_children,
                 )? {
                     return Ok(Rc::new(move |from| {
-                        let expression = Arc::clone(&expression);
+                        let expression = Rc::clone(&expression);
                         Box::new(child(from).map(move |tuple| {
                             let mut tuple = tuple?;
                             if let Some(value) = expression(&tuple) {
@@ -1501,7 +1501,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     self.expression_evaluator(expression, encoded_variables, stat_children)?;
                 let dataset = self.dataset.clone();
                 Rc::new(move |from| {
-                    let expression = Arc::clone(&expression);
+                    let expression = Rc::clone(&expression);
                     let dataset = dataset.clone();
                     Box::new(child(from).map(move |tuple| {
                         let mut tuple = tuple?;
@@ -1835,13 +1835,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     {
                         return Ok(if *distinct {
                             Box::new(move || AccumulatorWrapper::CountDistinctInternal {
-                                evaluator: Arc::clone(&evaluator),
+                                evaluator: Rc::clone(&evaluator),
                                 seen: FxHashSet::default(),
                                 count: 0,
                             })
                         } else {
                             Box::new(move || AccumulatorWrapper::CountInternal {
-                                evaluator: Arc::clone(&evaluator),
+                                evaluator: Rc::clone(&evaluator),
                                 count: 0,
                             })
                         });
@@ -1850,13 +1850,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(CountAccumulator::default())),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(CountAccumulator::default())),
                         })
                     }
@@ -1866,13 +1866,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(SumAccumulator::default())),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(SumAccumulator::default())),
                         })
                     }
@@ -1882,13 +1882,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(MinAccumulator::default())),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(MinAccumulator::default())),
                         })
                     }
@@ -1898,13 +1898,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(MaxAccumulator::default())),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(MaxAccumulator::default())),
                         })
                     }
@@ -1914,13 +1914,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(AvgAccumulator::default())),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(AvgAccumulator::default())),
                         })
                     }
@@ -1929,7 +1929,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     Box::new(move || AccumulatorWrapper::Sample {
-                        evaluator: Arc::clone(&evaluator),
+                        evaluator: Rc::clone(&evaluator),
                         value: None,
                     })
                 }
@@ -1939,7 +1939,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
                                 &separator,
@@ -1947,7 +1947,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
                                 &separator,
                             )))),
@@ -1965,13 +1965,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     let function = Arc::clone(function);
                     if *distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
                             accumulator: Some(Box::new(CustomAccumulator(function()))),
                         })
                     } else {
                         Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Arc::clone(&evaluator),
+                            evaluator: Rc::clone(&evaluator),
                             accumulator: Some(Box::new(CustomAccumulator(function()))),
                         })
                     }
@@ -1990,11 +1990,11 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Result<
-        Option<Arc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<D::InternalTerm> + 'a>>,
+        Option<Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<D::InternalTerm> + 'a>>,
         QueryEvaluationError,
     > {
         Ok(try_build_internal_expression_evaluator(
-            &expression.into(),
+            expression,
             &mut ExpressionContext {
                 evaluator: self,
                 encoded_variables,
@@ -2016,16 +2016,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             self.internal_expression_evaluator(expression, encoded_variables, stat_children)?
         {
             let dataset = self.dataset.clone();
-            return Ok(Arc::new(move |tuple| {
+            return Ok(Rc::new(move |tuple| {
                 dataset
                     .internal_term_effective_boolean_value(eval(tuple)?)
                     .ok()?
             }));
         }
         let eval = self.expression_evaluator(expression, encoded_variables, stat_children)?;
-        Ok(Arc::new(move |tuple| {
-            eval(tuple)?.effective_boolean_value()
-        }))
+        Ok(Rc::new(move |tuple| eval(tuple)?.effective_boolean_value()))
     }
 
     /// Evaluate an expression and return an explicit ExpressionTerm
@@ -2039,7 +2037,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         QueryEvaluationError,
     > {
         Ok(build_expression_evaluator(
-            &expression.into(),
+            expression,
             &mut ExpressionContext {
                 evaluator: self,
                 encoded_variables,
@@ -2143,11 +2141,11 @@ impl<'a, 'b, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
 
     fn build_exists(
         &mut self,
-        plan: &spargebra::algebra::GraphPattern,
+        plan: &GraphPattern,
     ) -> Result<impl Fn(&InternalTuple<D::InternalTerm>) -> bool + 'a, QueryEvaluationError> {
         let (eval, stats) = self
             .evaluator
-            .graph_pattern_evaluator(&plan.into(), self.encoded_variables);
+            .graph_pattern_evaluator(plan, self.encoded_variables);
         self.stat_children.push(stats);
         let eval = eval?;
         Ok(move |tuple: &InternalTuple<D::InternalTerm>| eval(tuple.clone()).next().is_some())
@@ -2342,26 +2340,26 @@ enum AccumulatorWrapper<'a, T> {
         count: u64,
     },
     CountInternal {
-        evaluator: Arc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
         count: u64,
     },
     CountDistinctInternal {
         seen: FxHashSet<T>,
-        evaluator: Arc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
         count: u64,
     },
     Sample {
         // TODO: add internal variant
-        evaluator: Arc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         value: Option<ExpressionTerm>,
     },
     Expression {
-        evaluator: Arc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
     DistinctExpression {
         seen: FxHashSet<ExpressionTerm>,
-        evaluator: Arc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
 }
@@ -3817,7 +3815,7 @@ struct HashLeftJoinIterator<'a, T> {
     left_iter: InternalTuplesIterator<'a, T>,
     right: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
-    expression: Arc<dyn Fn(&InternalTuple<T>) -> Option<bool> + 'a>,
+    expression: Rc<dyn Fn(&InternalTuple<T>) -> Option<bool> + 'a>,
 }
 
 impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<'_, T> {
@@ -4341,8 +4339,8 @@ impl<
 }
 
 enum ComparatorFunction<'a, T> {
-    Asc(Arc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
-    Desc(Arc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
+    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
+    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
 }
 
 struct InternalTupleSet<T> {

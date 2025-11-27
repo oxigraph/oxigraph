@@ -407,7 +407,7 @@ impl QueryEvaluator {
 
             fn build_exists(
                 &mut self,
-                _: &spargebra::algebra::GraphPattern,
+                _: &GraphPattern,
             ) -> Result<impl Fn(&HashMap<&'a Variable, Term>) -> bool + 'a, QueryEvaluationError>
             {
                 Err::<fn(&HashMap<&'a Variable, Term>) -> bool, _>(
@@ -457,7 +457,7 @@ impl QueryEvaluator {
         }
 
         build_expression_evaluator(
-            &expression.into(),
+            expression,
             &mut Context {
                 now: None,
                 custom_functions: &self.custom_functions,

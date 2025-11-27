@@ -14,11 +14,13 @@ use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
-use spargebra::algebra::{Expression, Function, GraphPattern};
+use spargebra::algebra::Function;
+use sparopt::algebra::{Expression, GraphPattern};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
+use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -57,7 +59,7 @@ pub trait ExpressionEvaluatorContext<'a> {
     fn custom_functions(&mut self) -> &CustomFunctionRegistry;
 }
 
-pub type ExpressionEvaluator<'a, I, O> = Arc<dyn (Fn(&I) -> Option<O>) + 'a>;
+pub type ExpressionEvaluator<'a, I, O> = Rc<dyn (Fn(&I) -> Option<O>) + 'a>;
 
 #[derive(Debug, Error)]
 pub enum ExpressionEvaluationError<C> {
@@ -84,116 +86,100 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
     Ok(match expression {
         Expression::NamedNode(t) => {
             let t = ExpressionTerm::from(Term::from(t.clone()));
-            Arc::new(move |_| Some(t.clone()))
+            Rc::new(move |_| Some(t.clone()))
         }
         Expression::Literal(t) => {
             let t = ExpressionTerm::from(Term::from(t.clone()));
-            Arc::new(move |_| Some(t.clone()))
+            Rc::new(move |_| Some(t.clone()))
         }
         Expression::Variable(v) => {
             let lookup = context.build_variable_lookup(v);
             let externalize = context.build_externalize_expression_term();
-            Arc::new(move |t| externalize(lookup(t)?))
+            Rc::new(move |t| externalize(lookup(t)?))
         }
         Expression::Bound(v) => {
             let lookup = context.build_is_variable_bound(v);
-            Arc::new(move |tuple| Some(lookup(tuple).into()))
+            Rc::new(move |tuple| Some(lookup(tuple).into()))
         }
         Expression::Exists(plan) => {
             let exists = context
                 .build_exists(plan)
                 .map_err(ExpressionEvaluationError::Context)?;
-            Arc::new(move |tuple| Some(exists(tuple).into()))
+            Rc::new(move |tuple| Some(exists(tuple).into()))
         }
-        Expression::Or(left, right) => {
-            let left = build_expression_evaluator(left, context)?;
-            let right = build_expression_evaluator(right, context)?;
-            Arc::new(
-                move |tuple| match left(tuple).and_then(|e| e.effective_boolean_value()) {
-                    Some(true) => Some(true.into()),
-                    Some(false) => Some(right(tuple)?.effective_boolean_value()?.into()),
-                    None => right(tuple)?
-                        .effective_boolean_value()?
-                        .then(|| true.into()),
-                },
-            )
-        }
-        Expression::And(left, right) => {
-            let left = build_expression_evaluator(left, context)?;
-            let right = build_expression_evaluator(right, context)?;
-            Arc::new(
-                move |tuple| match left(tuple).and_then(|e| e.effective_boolean_value()) {
-                    Some(true) => Some(right(tuple)?.effective_boolean_value()?.into()),
-                    Some(false) => Some(false.into()),
-                    None => {
-                        if right(tuple)?.effective_boolean_value()? {
-                            None
-                        } else {
-                            Some(false.into())
-                        }
+        Expression::Or(children) => {
+            let children = children
+                .iter()
+                .map(|i| build_expression_evaluator(i, context))
+                .collect::<Result<Vec<_>, _>>()?;
+            Rc::new(move |tuple| {
+                let mut error = false;
+                for child in &children {
+                    match child(tuple).and_then(|e| e.effective_boolean_value()) {
+                        Some(true) => return Some(true.into()),
+                        Some(false) => (),
+                        None => error = true,
                     }
-                },
-            )
+                }
+                if error { None } else { Some(false.into()) }
+            })
+        }
+        Expression::And(children) => {
+            let children = children
+                .iter()
+                .map(|i| build_expression_evaluator(i, context))
+                .collect::<Result<Vec<_>, _>>()?;
+            Rc::new(move |tuple| {
+                let mut error = false;
+                for child in &children {
+                    match child(tuple).and_then(|e| e.effective_boolean_value()) {
+                        Some(true) => (),
+                        Some(false) => return Some(false.into()),
+                        None => error = true,
+                    }
+                }
+                if error { None } else { Some(true.into()) }
+            })
         }
         Expression::Equal(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(Into::into))
-        }
-        Expression::In(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = b
-                .iter()
-                .map(|e| build_expression_evaluator(e, context))
-                .collect::<Result<Vec<_>, _>>()?;
-            Arc::new(move |tuple| {
-                let a = a(tuple)?;
-                #[expect(clippy::manual_try_fold)] // false positive
-                Some(
-                    b.iter()
-                        .fold(Some(false), |acc, b| match acc {
-                            Some(true) => Some(true),
-                            Some(false) => equals(&a, &b(tuple)?),
-                            None => equals(&a, &b(tuple)?)?.then_some(true),
-                        })?
-                        .into(),
-                )
-            })
+            Rc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(Into::into))
         }
         Expression::SameTerm(a, b) => {
             match (
                 try_build_internal_expression_evaluator(a, context)?,
                 try_build_internal_expression_evaluator(b, context)?,
             ) {
-                (Some(a), Some(b)) => Arc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into())),
+                (Some(a), Some(b)) => Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into())),
                 (Some(a), None) => {
                     let b = build_expression_evaluator(b, context)?;
                     let internalize = context.build_internalize_expression_term();
-                    Arc::new(move |tuple| Some((a(tuple)? == internalize(b(tuple)?)?).into()))
+                    Rc::new(move |tuple| Some((a(tuple)? == internalize(b(tuple)?)?).into()))
                 }
                 (None, Some(b)) => {
                     let a = build_expression_evaluator(a, context)?;
                     let internalize = context.build_internalize_expression_term();
-                    Arc::new(move |tuple| Some((internalize(a(tuple)?)? == b(tuple)?).into()))
+                    Rc::new(move |tuple| Some((internalize(a(tuple)?)? == b(tuple)?).into()))
                 }
                 (None, None) => {
                     let a = build_expression_evaluator(a, context)?;
                     let b = build_expression_evaluator(b, context)?;
-                    Arc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
+                    Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
                 }
             }
         }
         Expression::Greater(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some((partial_cmp(&a(tuple)?, &b(tuple)?)? == Ordering::Greater).into())
             })
         }
         Expression::GreaterOrEqual(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(
                     match partial_cmp(&a(tuple)?, &b(tuple)?)? {
                         Ordering::Greater | Ordering::Equal => true,
@@ -206,14 +192,14 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::Less(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some((partial_cmp(&a(tuple)?, &b(tuple)?)? == Ordering::Less).into())
             })
         }
         Expression::LessOrEqual(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(
                     match partial_cmp(&a(tuple)?, &b(tuple)?)? {
                         Ordering::Less | Ordering::Equal => true,
@@ -226,7 +212,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::Add(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                     NumericBinaryOperands::Float(v1, v2) => ExpressionTerm::FloatLiteral(v1 + v2),
                     NumericBinaryOperands::Double(v1, v2) => ExpressionTerm::DoubleLiteral(v1 + v2),
@@ -290,7 +276,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::Subtract(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                     NumericBinaryOperands::Float(v1, v2) => ExpressionTerm::FloatLiteral(v1 - v2),
                     NumericBinaryOperands::Double(v1, v2) => ExpressionTerm::DoubleLiteral(v1 - v2),
@@ -362,7 +348,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::Multiply(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                     NumericBinaryOperands::Float(v1, v2) => ExpressionTerm::FloatLiteral(v1 * v2),
                     NumericBinaryOperands::Double(v1, v2) => ExpressionTerm::DoubleLiteral(v1 * v2),
@@ -380,7 +366,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::Divide(a, b) => {
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                     NumericBinaryOperands::Float(v1, v2) => ExpressionTerm::FloatLiteral(v1 / v2),
                     NumericBinaryOperands::Double(v1, v2) => ExpressionTerm::DoubleLiteral(v1 / v2),
@@ -397,7 +383,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         }
         Expression::UnaryPlus(e) => {
             let e = build_expression_evaluator(e, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match e(tuple)? {
                     ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),
                     ExpressionTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(value),
@@ -421,7 +407,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         }
         Expression::UnaryMinus(e) => {
             let e = build_expression_evaluator(e, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 Some(match e(tuple)? {
                     ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(-value),
                     ExpressionTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(-value),
@@ -449,14 +435,14 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         }
         Expression::Not(e) => {
             let e = build_expression_evaluator(e, context)?;
-            Arc::new(move |tuple| Some((!e(tuple)?.effective_boolean_value()?).into()))
+            Rc::new(move |tuple| Some((!e(tuple)?.effective_boolean_value()?).into()))
         }
         Expression::Coalesce(l) => {
             let l = l
                 .iter()
                 .map(|e| build_expression_evaluator(e, context))
                 .collect::<Result<Vec<_>, _>>()?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 for e in &l {
                     if let Some(result) = e(tuple) {
                         return Some(result);
@@ -469,7 +455,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             let a = build_expression_evaluator(a, context)?;
             let b = build_expression_evaluator(b, context)?;
             let c = build_expression_evaluator(c, context)?;
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 if a(tuple)?.effective_boolean_value()? {
                     b(tuple)
                 } else {
@@ -480,7 +466,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         Expression::FunctionCall(function, parameters) => match function {
             Function::Str => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::StringLiteral(match e(tuple)?.into() {
                         Term::NamedNode(term) => term.into_string(),
                         Term::BlankNode(_) => return None,
@@ -492,7 +478,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Lang => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::StringLiteral(match e(tuple)? {
                         ExpressionTerm::LangStringLiteral { language, .. } => language,
                         #[cfg(feature = "sparql-12")]
@@ -509,7 +495,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::LangMatches => {
                 let language_tag = build_expression_evaluator(&parameters[0], context)?;
                 let language_range = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(mut language_tag) = language_tag(tuple)?
                     else {
                         return None;
@@ -540,7 +526,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::LangDir => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::StringLiteral(match e(tuple)? {
                         ExpressionTerm::DirLangStringLiteral { direction, .. } => match direction {
                             BaseDirection::Ltr => "ltr".into(),
@@ -557,7 +543,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Datatype => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::NamedNode(match e(tuple)? {
                         ExpressionTerm::StringLiteral(_) => xsd::STRING.into(),
                         ExpressionTerm::LangStringLiteral { .. } => rdf::LANG_STRING.into(),
@@ -603,7 +589,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::Iri => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 let base_iri = context.base_iri();
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::NamedNode(match e(tuple)? {
                         ExpressionTerm::NamedNode(iri) => iri,
                         ExpressionTerm::StringLiteral(iri) => if let Some(base_iri) = &base_iri {
@@ -620,21 +606,21 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::BNode => match parameters.first() {
                 Some(id) => {
                     let id = build_expression_evaluator(id, context)?;
-                    Arc::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         let ExpressionTerm::StringLiteral(id) = id(tuple)? else {
                             return None;
                         };
                         Some(ExpressionTerm::BlankNode(BlankNode::new(id).ok()?))
                     })
                 }
-                None => Arc::new(|_| Some(ExpressionTerm::BlankNode(BlankNode::default()))),
+                None => Rc::new(|_| Some(ExpressionTerm::BlankNode(BlankNode::default()))),
             },
             Function::Rand => {
-                Arc::new(|_| Some(ExpressionTerm::DoubleLiteral(random::<f64>().into())))
+                Rc::new(|_| Some(ExpressionTerm::DoubleLiteral(random::<f64>().into())))
             }
             Function::Abs => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     ExpressionTerm::IntegerLiteral(value) => {
                         Some(ExpressionTerm::IntegerLiteral(value.checked_abs()?))
                     }
@@ -652,7 +638,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Ceil => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     ExpressionTerm::IntegerLiteral(value) => {
                         Some(ExpressionTerm::IntegerLiteral(value))
                     }
@@ -670,7 +656,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Floor => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     ExpressionTerm::IntegerLiteral(value) => {
                         Some(ExpressionTerm::IntegerLiteral(value))
                     }
@@ -688,7 +674,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Round => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| match e(tuple)? {
+                Rc::new(move |tuple| match e(tuple)? {
                     ExpressionTerm::IntegerLiteral(value) => {
                         Some(ExpressionTerm::IntegerLiteral(value))
                     }
@@ -709,7 +695,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     .iter()
                     .map(|e| build_expression_evaluator(e, context))
                     .collect::<Result<Vec<_>, _>>()?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let mut result = String::default();
                     let mut language = None;
                     for e in &l {
@@ -733,7 +719,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     .get(2)
                     .map(|l| build_expression_evaluator(l, context))
                     .transpose()?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (source, language) = to_string_and_language(source(tuple)?)?;
 
                     let starting_location: usize =
@@ -776,7 +762,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::StrLen => {
                 let arg = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (string, _) = to_string_and_language(arg(tuple)?)?;
                     Some(ExpressionTerm::IntegerLiteral(
                         i64::try_from(string.chars().count()).ok()?.into(),
@@ -789,7 +775,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 if let Some(regex) =
                     compile_static_pattern_if_exists(&parameters[1], parameters.get(3))
                 {
-                    Arc::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         let (text, language) = to_string_and_language(arg(tuple)?)?;
                         let ExpressionTerm::StringLiteral(replacement) = replacement(tuple)? else {
                             return None;
@@ -808,7 +794,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         .get(3)
                         .map(|flags| build_expression_evaluator(flags, context))
                         .transpose()?;
-                    Arc::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         let ExpressionTerm::StringLiteral(pattern) = pattern(tuple)? else {
                             return None;
                         };
@@ -837,14 +823,14 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::UCase => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(e(tuple)?)?;
                     Some(build_plain_literal(value.to_uppercase(), language))
                 })
             }
             Function::LCase => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(e(tuple)?)?;
                     Some(build_plain_literal(value.to_lowercase(), language))
                 })
@@ -852,7 +838,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrStarts => {
                 let arg1 = build_expression_evaluator(&parameters[0], context)?;
                 let arg2 = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(arg1.starts_with(arg2.as_str()).into())
@@ -860,7 +846,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::EncodeForUri => {
                 let ltrl = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (ltlr, _) = to_string_and_language(ltrl(tuple)?)?;
                     let mut result = Vec::with_capacity(ltlr.len());
                     for c in ltlr.bytes() {
@@ -893,7 +879,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrEnds => {
                 let arg1 = build_expression_evaluator(&parameters[0], context)?;
                 let arg2 = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(arg1.ends_with(arg2.as_str()).into())
@@ -902,7 +888,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::Contains => {
                 let arg1 = build_expression_evaluator(&parameters[0], context)?;
                 let arg2 = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(arg1.contains(arg2.as_str()).into())
@@ -911,7 +897,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrBefore => {
                 let arg1 = build_expression_evaluator(&parameters[0], context)?;
                 let arg2 = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(if let Some(position) = arg1.find(arg2.as_str()) {
@@ -924,7 +910,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrAfter => {
                 let arg1 = build_expression_evaluator(&parameters[0], context)?;
                 let arg2 = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(if let Some(position) = arg1.find(arg2.as_str()) {
@@ -936,7 +922,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Year => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::IntegerLiteral(
                         match e(tuple)? {
                             ExpressionTerm::DateTimeLiteral(date_time) => date_time.year(),
@@ -954,7 +940,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Month => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::IntegerLiteral(
                         match e(tuple)? {
                             ExpressionTerm::DateTimeLiteral(date_time) => date_time.month(),
@@ -974,7 +960,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Day => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::IntegerLiteral(
                         match e(tuple)? {
                             ExpressionTerm::DateTimeLiteral(date_time) => date_time.day(),
@@ -992,7 +978,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Hours => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::IntegerLiteral(
                         match e(tuple)? {
                             ExpressionTerm::DateTimeLiteral(date_time) => date_time.hour(),
@@ -1006,7 +992,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Minutes => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::IntegerLiteral(
                         match e(tuple)? {
                             ExpressionTerm::DateTimeLiteral(date_time) => date_time.minute(),
@@ -1020,7 +1006,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Seconds => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTerm::DecimalLiteral(match e(tuple)? {
                         ExpressionTerm::DateTimeLiteral(date_time) => date_time.second(),
                         #[cfg(feature = "sep-0002")]
@@ -1031,7 +1017,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Timezone => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let result = match e(tuple)? {
                         ExpressionTerm::DateTimeLiteral(date_time) => date_time.timezone(),
                         #[cfg(feature = "sep-0002")]
@@ -1065,7 +1051,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Tz => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let timezone_offset = match e(tuple)? {
                         ExpressionTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
                         #[cfg(feature = "sep-0002")]
@@ -1095,7 +1081,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::Adjust => {
                 let dt = build_expression_evaluator(&parameters[0], context)?;
                 let tz = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let timezone_offset = Some(
                         match tz(tuple)? {
                             ExpressionTerm::DayTimeDurationLiteral(tz) => {
@@ -1142,15 +1128,15 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::Now => {
                 let now = context.now();
-                Arc::new(move |_| Some(ExpressionTerm::DateTimeLiteral(now)))
+                Rc::new(move |_| Some(ExpressionTerm::DateTimeLiteral(now)))
             }
-            Function::Uuid => Arc::new(move |_| {
+            Function::Uuid => Rc::new(move |_| {
                 let mut buffer = String::with_capacity(44);
                 buffer.push_str("urn:uuid:");
                 generate_uuid(&mut buffer);
                 Some(ExpressionTerm::NamedNode(NamedNode::new_unchecked(buffer)))
             }),
-            Function::StrUuid => Arc::new(move |_| {
+            Function::StrUuid => Rc::new(move |_| {
                 let mut buffer = String::with_capacity(36);
                 generate_uuid(&mut buffer);
                 Some(ExpressionTerm::StringLiteral(buffer))
@@ -1163,7 +1149,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrLang => {
                 let lexical_form = build_expression_evaluator(&parameters[0], context)?;
                 let lang_tag = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = lexical_form(tuple)? else {
                         return None;
                     };
@@ -1181,7 +1167,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 let lexical_form = build_expression_evaluator(&parameters[0], context)?;
                 let lang_tag = build_expression_evaluator(&parameters[1], context)?;
                 let direction = build_expression_evaluator(&parameters[2], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = lexical_form(tuple)? else {
                         return None;
                     };
@@ -1210,7 +1196,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::StrDt => {
                 let lexical_form = build_expression_evaluator(&parameters[0], context)?;
                 let datatype = build_expression_evaluator(&parameters[1], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = lexical_form(tuple)? else {
                         return None;
                     };
@@ -1223,19 +1209,15 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
 
             Function::IsIri => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
-                    Some(matches!(e(tuple)?, ExpressionTerm::NamedNode(_)).into())
-                })
+                Rc::new(move |tuple| Some(matches!(e(tuple)?, ExpressionTerm::NamedNode(_)).into()))
             }
             Function::IsBlank => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
-                    Some(matches!(e(tuple)?, ExpressionTerm::BlankNode(_)).into())
-                })
+                Rc::new(move |tuple| Some(matches!(e(tuple)?, ExpressionTerm::BlankNode(_)).into()))
             }
             Function::IsLiteral => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         match e(tuple)? {
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => false,
@@ -1249,7 +1231,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             }
             Function::IsNumeric => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         matches!(
                             e(tuple)?,
@@ -1265,7 +1247,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::HasLang => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(
                         matches!(
                             e(tuple)?,
@@ -1279,7 +1261,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::HasLangDir => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(matches!(e(tuple)?, ExpressionTerm::DirLangStringLiteral { .. }).into())
                 })
             }
@@ -1288,7 +1270,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 if let Some(regex) =
                     compile_static_pattern_if_exists(&parameters[1], parameters.get(2))
                 {
-                    Arc::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         let (text, _) = to_string_and_language(text(tuple)?)?;
                         Some(regex.is_match(&text).into())
                     })
@@ -1298,7 +1280,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         .get(2)
                         .map(|flags| build_expression_evaluator(flags, context))
                         .transpose()?;
-                    Arc::new(move |tuple| {
+                    Rc::new(move |tuple| {
                         let ExpressionTerm::StringLiteral(pattern) = pattern(tuple)? else {
                             return None;
                         };
@@ -1321,14 +1303,14 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 let s = build_expression_evaluator(&parameters[0], context)?;
                 let p = build_expression_evaluator(&parameters[1], context)?;
                 let o = build_expression_evaluator(&parameters[2], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     Some(ExpressionTriple::new(s(tuple)?, p(tuple)?, o(tuple)?)?.into())
                 })
             }
             #[cfg(feature = "sparql-12")]
             Function::Subject => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let ExpressionTerm::Triple(t) = e(tuple)? {
                         Some(t.subject.into())
                     } else {
@@ -1339,7 +1321,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::Predicate => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let ExpressionTerm::Triple(t) = e(tuple)? {
                         Some(t.predicate.into())
                     } else {
@@ -1350,7 +1332,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::Object => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| {
+                Rc::new(move |tuple| {
                     if let ExpressionTerm::Triple(t) = e(tuple)? {
                         Some(t.object)
                     } else {
@@ -1361,7 +1343,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             #[cfg(feature = "sparql-12")]
             Function::IsTriple => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
-                Arc::new(move |tuple| Some(matches!(e(tuple)?, ExpressionTerm::Triple(_)).into()))
+                Rc::new(move |tuple| Some(matches!(e(tuple)?, ExpressionTerm::Triple(_)).into()))
             }
             Function::Custom(function_name) => {
                 if let Some(function) = context.custom_functions().get(function_name).cloned() {
@@ -1369,7 +1351,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         .iter()
                         .map(|e| build_expression_evaluator(e, context))
                         .collect::<Result<Vec<_>, _>>()?;
-                    return Ok(Arc::new(move |tuple| {
+                    return Ok(Rc::new(move |tuple| {
                         let args = args
                             .iter()
                             .map(|f| Some(f(tuple)?.into()))
@@ -1390,7 +1372,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                             );
                         }
                         let e = build_expression_evaluator(&parameters[0], context)?;
-                        Arc::new(move |tuple| ($eval)(e(tuple)?))
+                        Rc::new(move |tuple| ($eval)(e(tuple)?))
                     }};
                 }
 
@@ -1631,15 +1613,15 @@ pub fn try_build_internal_expression_evaluator<'a, C: ExpressionEvaluatorContext
             let t = context
                 .internalize_named_node(t)
                 .map_err(ExpressionEvaluationError::Context)?;
-            Arc::new(move |_| Some(t.clone()))
+            Rc::new(move |_| Some(t.clone()))
         }
         Expression::Literal(t) => {
             let t = context
                 .internalize_literal(t)
                 .map_err(ExpressionEvaluationError::Context)?;
-            Arc::new(move |_| Some(t.clone()))
+            Rc::new(move |_| Some(t.clone()))
         }
-        Expression::Variable(v) => Arc::new(context.build_variable_lookup(v)),
+        Expression::Variable(v) => Rc::new(context.build_variable_lookup(v)),
         Expression::Coalesce(l) => {
             let Some(l) = l
                 .iter()
@@ -1648,7 +1630,7 @@ pub fn try_build_internal_expression_evaluator<'a, C: ExpressionEvaluatorContext
             else {
                 return Ok(None);
             };
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 for e in &l {
                     if let Some(result) = e(tuple) {
                         return Some(result);
@@ -1665,7 +1647,7 @@ pub fn try_build_internal_expression_evaluator<'a, C: ExpressionEvaluatorContext
             let Some(c) = try_build_internal_expression_evaluator(c, context)? else {
                 return Ok(None);
             };
-            Arc::new(move |tuple| {
+            Rc::new(move |tuple| {
                 if a(tuple)?.effective_boolean_value()? {
                     b(tuple)
                 } else {
@@ -1683,7 +1665,7 @@ fn build_hash_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>, H: Dig
 ) -> Result<ExpressionEvaluator<'a, C::Tuple, ExpressionTerm>, ExpressionEvaluationError<C::Error>>
 {
     let arg = build_expression_evaluator(&parameters[0], context)?;
-    Ok(Arc::new(move |tuple| {
+    Ok(Rc::new(move |tuple| {
         let ExpressionTerm::StringLiteral(input) = arg(tuple)? else {
             return None;
         };
