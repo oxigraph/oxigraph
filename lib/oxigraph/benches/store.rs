@@ -186,6 +186,11 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         group.bench_function(format!("BSBM explore {data_size} query in memory"), |b| {
             b.iter(|| run_operation(&memory_store, &explore_query_operations, true))
         });
+        #[cfg(feature = "datafusion")]
+        group.bench_function(
+            format!("BSBM explore {data_size} query in memory with DataFusion"),
+            |b| b.iter(|| run_datafusion_operation(&memory_store, &explore_query_operations)),
+        );
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} query in memory without optimizations"),
