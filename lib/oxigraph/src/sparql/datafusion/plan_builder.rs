@@ -193,7 +193,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                 }
             }
             GraphPattern::Bgp { patterns } => {
-                let plans = patterns
+                let mut plans = patterns
                     .iter()
                     .map(|p| {
                         let subject = self.term_or_variable(p.subject.clone())?;
@@ -207,20 +207,46 @@ impl<'a> SparqlPlanBuilder<'a> {
                             external_schema,
                         )
                     })
-                    .collect::<Vec<_>>();
-                plans
+                    .collect::<Result<Vec<_>>>()?;
+                // Join ordering: we join the first pair of plans with the largest number of shared variables
+                // until there is a single plan left
+                while plans.len() > 1 {
+                    let mut best_number_of_shared_variables = 0;
+                    let mut best_pair = (0, 1);
+                    for i in 0..plans.len() {
+                        for j in (i + 1)..plans.len() {
+                            let current_number_of_shared_variables = plans[i]
+                                .schema()
+                                .fields()
+                                .iter()
+                                .filter(|l| {
+                                    plans[j].schema().has_column_with_unqualified_name(l.name())
+                                })
+                                .count();
+                            if current_number_of_shared_variables > best_number_of_shared_variables
+                            {
+                                best_number_of_shared_variables =
+                                    current_number_of_shared_variables;
+                                best_pair = (i, j);
+                            }
+                        }
+                    }
+                    // We merge the best pair
+                    let right = plans.remove(best_pair.1); // first to avoid being shifted
+                    let left = plans.remove(best_pair.0);
+                    plans.push(self.join(
+                        left,
+                        JoinType::Inner,
+                        right,
+                        None,
+                        in_default_graph,
+                        external_schema,
+                    )?);
+                }
+                Ok(plans
                     .into_iter()
-                    .reduce(|left, right| {
-                        self.join(
-                            left?,
-                            JoinType::Inner,
-                            right?,
-                            None,
-                            in_default_graph,
-                            external_schema,
-                        )
-                    })
-                    .unwrap_or_else(|| Ok(LogicalPlanBuilder::empty(true)))
+                    .next() // We only have at most one plan left
+                    .unwrap_or_else(|| LogicalPlanBuilder::empty(true)))
             }
             GraphPattern::Path {
                 subject,
