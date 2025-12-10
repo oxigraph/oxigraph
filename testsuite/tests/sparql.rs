@@ -60,6 +60,10 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-eq",
             #[cfg(feature = "datafusion")]
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest#construct-3", /* blank node scoping */
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest#construct-4", /* blank node scoping */
         ],
     )
 }
@@ -84,6 +88,8 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/exists/manifest#exists05",
             #[cfg(feature = "datafusion")]
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#temporal-proximity-by-exclusion-nex-1",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/construct/manifest#constructlist", /* blank node scoping */
         ],
     )
 }

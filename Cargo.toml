@@ -11,6 +11,7 @@ members = [
     "lib/oxttl",
     "lib/sparesults",
     "lib/spareval",
+    "lib/spareval-fusion",
     "lib/spargebra",
     "lib/spargeo",
     "lib/sparopt",
@@ -97,6 +98,7 @@ spargeo = { version = "=0.5.2", path = "lib/spargeo" }
 sparesults = { version = "=0.3.1", path = "lib/sparesults" }
 sparopt = { version = "=0.3.3", path = "lib/sparopt" }
 spareval = { version = "=0.2.3", path = "lib/spareval" }
+spareval-fusion = { version = "=0.0.1-dev", path = "lib/spareval-fusion" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"

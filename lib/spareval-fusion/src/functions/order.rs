@@ -1,15 +1,15 @@
-use crate::sparql::dataset::DatasetView;
-use crate::storage::binary_encoder::decode_term;
+use crate::dataset::ExpressionTermEncoder;
+use crate::functions::utils::signature;
 use datafusion::arrow::array::{ArrayRef, BinaryArray};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::downcast_value;
+use datafusion::common::{Result, ScalarValue, internal_err};
 use datafusion::logical_expr::{
     ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-#[cfg(feature = "rdf-12")]
+#[cfg(feature = "sparql-12")]
 use oxrdf::{BaseDirection, NamedOrBlankNode};
 use oxsdatatypes::Double;
-use spareval::{ExpressionTerm, QueryableDataset};
+use spareval::ExpressionTerm;
 use std::any::Any;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -18,41 +18,38 @@ use std::sync::Arc;
 /// Return a byte string which lexicographic ordering is the order expected by SPARQL ORDER BY and that is injective.
 ///
 /// We take binary values and prefix them with a byte to sort bnode < iri < literal
-pub fn order_by_collation(dataset: Arc<DatasetView<'static>>, expr: Expr) -> Expr {
-    ScalarUDF::new_from_impl(OrderByCollation {
-        dataset,
-        signature: Signature::uniform(1, vec![DataType::Binary], Volatility::Immutable),
-    })
-    .call(vec![expr])
+pub fn order_by_collation(encoder: impl ExpressionTermEncoder, expr: Expr) -> Expr {
+    let signature = signature(&encoder, 1, Volatility::Immutable);
+    ScalarUDF::new_from_impl(OrderByCollation { encoder, signature }).call(vec![expr])
 }
 
-struct OrderByCollation {
-    dataset: Arc<DatasetView<'static>>,
+struct OrderByCollation<E> {
+    encoder: E,
     signature: Signature,
 }
 
-impl fmt::Debug for OrderByCollation {
+impl<E> fmt::Debug for OrderByCollation<E> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ToOrderByValue").finish()
     }
 }
 
-impl PartialEq for OrderByCollation {
+impl<E> PartialEq for OrderByCollation<E> {
     #[inline]
     fn eq(&self, _other: &Self) -> bool {
         true
     }
 }
 
-impl Eq for OrderByCollation {}
+impl<E> Eq for OrderByCollation<E> {}
 
-impl Hash for OrderByCollation {
+impl<E> Hash for OrderByCollation<E> {
     #[inline]
     fn hash<H: Hasher>(&self, _state: &mut H) {}
 }
 
-impl ScalarUDFImpl for OrderByCollation {
+impl<E: ExpressionTermEncoder> ScalarUDFImpl for OrderByCollation<E> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -65,32 +62,41 @@ impl ScalarUDFImpl for OrderByCollation {
         &self.signature
     }
 
-    fn return_type(&self, _args: &[DataType]) -> datafusion::common::Result<DataType> {
+    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
         Ok(DataType::Binary)
     }
 
-    fn invoke_with_args(
-        &self,
-        args: ScalarFunctionArgs,
-    ) -> datafusion::common::Result<ColumnarValue> {
-        let args = ColumnarValue::values_to_arrays(&args.args)?;
-        let result: ArrayRef = Arc::new(
-            downcast_value!(args[0], BinaryArray)
-                .iter()
-                .map(|value| {
-                    let Some(value) = value else { return Ok(None) };
-                    let mut buffer = Vec::new();
-                    write_term_collation(
-                        &self
-                            .dataset
-                            .externalize_expression_term(decode_term(value)?)?,
-                        &mut buffer,
-                    );
-                    Ok(Some(buffer))
-                })
-                .collect::<datafusion::common::Result<BinaryArray>>()?,
-        );
-        Ok(result.into())
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let Some(arg) = args.args.into_iter().next() else {
+            return internal_err!("toRdfLiteral requires an argument");
+        };
+        Ok(match arg {
+            ColumnarValue::Scalar(scalar) => {
+                let Some(term) = self.encoder.externalize_expression_term(scalar)? else {
+                    return Ok(ScalarValue::Binary(None).into());
+                };
+                let mut buffer = Vec::new();
+                write_term_collation(&term, &mut buffer);
+                ScalarValue::Binary(Some(buffer)).into()
+            }
+            ColumnarValue::Array(arg) => {
+                let result: ArrayRef = Arc::new(
+                    self.encoder
+                        .externalize_expression_terms(arg)?
+                        .into_iter()
+                        .map(|term| {
+                            let Some(term) = term? else {
+                                return Ok(None);
+                            };
+                            let mut buffer = Vec::new();
+                            write_term_collation(&term, &mut buffer);
+                            Ok(Some(buffer))
+                        })
+                        .collect::<Result<BinaryArray>>()?,
+                );
+                result.into()
+            }
+        })
     }
 }
 
@@ -116,7 +122,7 @@ fn write_term_collation(term: &ExpressionTerm, buffer: &mut Vec<u8>) {
             buffer.push(0);
             buffer.extend_from_slice(language.as_str().as_bytes());
         }
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::DirLangStringLiteral {
             value,
             language,
@@ -168,57 +174,67 @@ fn write_term_collation(term: &ExpressionTerm, buffer: &mut Vec<u8>) {
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(0); // Hack to keep datatype
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::TimeLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(1); // Hack to keep datatype
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DateLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(2); // Hack to keep datatype
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GDayLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(3); // Hack to keep datatype
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthDayLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(4); // Hack to keep datatype
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(5); // Hack to keep datatype
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearMonthLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(6); // Hack to keep datatype
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearLiteral(v) => {
             buffer.push(5);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(7); // Hack to keep datatype
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DurationLiteral(v) => {
             buffer.push(6);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(0); // Hack to keep datatype
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::YearMonthDurationLiteral(v) => {
             buffer.push(6);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(1); // Hack to keep datatype
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DayTimeDurationLiteral(v) => {
             buffer.push(6);
             buffer.extend_from_slice(&v.bytes_collation());
             buffer.push(2); // Hack to keep datatype
         }
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::Triple(t) => {
             buffer.push(u8::MAX);
             match &t.subject {

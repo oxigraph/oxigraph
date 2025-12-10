@@ -1,33 +1,36 @@
 use crate::sparql::Variable;
-use crate::sparql::datafusion::plan_builder::SparqlPlanBuilder;
+use crate::sparql::datafusion::table::QuadTableProvider;
 use crate::sparql::dataset::DatasetView;
-use crate::storage::binary_encoder::decode_term;
+use crate::storage::binary_encoder::{decode_term, encode_term, write_term};
 use crate::storage::numeric_encoder::Decoder;
 use crate::store::StorageError;
-use datafusion::arrow::array::{Array, BinaryArray, NullArray};
+use datafusion::arrow::array::{Array, ArrayRef, BinaryArray, BinaryBuilder, NullArray};
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::{Result, ScalarValue, downcast_value, internal_err};
+use datafusion::datasource::DefaultTableSource;
 use datafusion::error::DataFusionError;
 use datafusion::execution::context::SessionConfig;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::execution::{
     SendableRecordBatchStream, SessionState, SessionStateBuilder, TaskContext,
 };
-use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
+use datafusion::logical_expr::{Literal, LogicalPlan, LogicalPlanBuilder};
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use datafusion::physical_plan::execute_stream;
 use futures::StreamExt;
-use oxrdf::{BlankNode, NamedOrBlankNode, Term, Triple};
-use rustc_hash::{FxHashMap, FxHashSet};
+use oxrdf::{Term, Triple};
 use sparesults::QuerySolution;
-use spareval::{QueryEvaluationError, QueryResults, QuerySolutionIter, QueryTripleIter};
+use spareval::{
+    ExpressionTerm, QueryEvaluationError, QueryResults, QuerySolutionIter, QueryTripleIter,
+    QueryableDataset,
+};
+use spareval_fusion::dataset::{ExpressionTermEncoder, QueryableDatasetAccess};
+use spareval_fusion::plan_builder::SparqlPlanBuilder;
 use spargebra::Query;
-use spargebra::algebra::{GraphPattern, QueryDataset};
-use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use std::sync::Arc;
 use std::vec::IntoIter;
 use tokio::runtime::{Builder, Runtime};
 
-mod function;
-mod plan_builder;
 mod table;
 
 pub struct DatafusionEvaluator {
@@ -60,116 +63,48 @@ impl DatafusionEvaluator {
         // TODO: implement as much as possible in DataFusion
         self.runtime.block_on(async {
             let dataset = Arc::new(dataset);
-            match query {
-                Query::Select {
-                    pattern,
-                    dataset: dataset_spec,
-                    ..
-                } => {
-                    let plan = Self::select_graph_pattern_plan(
-                        pattern,
-                        Arc::clone(&dataset),
-                        dataset_spec,
-                    )?;
-                    let (variables, stream) = self.execute_plan(plan).await?;
-                    Ok(QueryResults::Solutions(QuerySolutionIter::new(
-                        Arc::clone(&variables),
-                        QuerySolutionStreamWrapper {
-                            runtime: Arc::clone(&self.runtime),
-                            stream,
-                            variables,
-                            dataset,
-                            buffer: Vec::new().into_iter(),
-                        },
-                    )))
+            let plan = Self::query_plan(query, Arc::clone(&dataset))?;
+            let (variables, mut stream) = self.execute_plan(plan).await?;
+            Ok(match query {
+                Query::Select { .. } => QueryResults::Solutions(QuerySolutionIter::new(
+                    Arc::clone(&variables),
+                    QuerySolutionStreamWrapper {
+                        runtime: Arc::clone(&self.runtime),
+                        stream,
+                        variables,
+                        dataset,
+                        buffer: Vec::new().into_iter(),
+                    },
+                )),
+                Query::Construct { .. } | Query::Describe { .. } => {
+                    QueryResults::Graph(QueryTripleIter::new(QueryTripleStreamWrapper {
+                        runtime: Arc::clone(&self.runtime),
+                        stream,
+                        dataset,
+                        buffer: Vec::new().into_iter(),
+                    }))
                 }
-                Query::Construct {
-                    template,
-                    dataset: dataset_spec,
-                    pattern,
-                    ..
-                } => {
-                    let plan = Self::select_graph_pattern_plan(
-                        pattern,
-                        Arc::clone(&dataset),
-                        dataset_spec,
-                    )?;
-                    let (variables, stream) = self.execute_plan(plan).await?;
-                    Ok(QueryResults::Graph(QueryTripleIter::new(
-                        ConstructIterator {
-                            solutions: QuerySolutionStreamWrapper {
-                                runtime: Arc::clone(&self.runtime),
-                                stream,
-                                variables,
-                                dataset,
-                                buffer: Vec::new().into_iter(),
-                            },
-                            template: template.clone(),
-                            buffered_results: Vec::new(),
-                            already_emitted_results: FxHashSet::default(),
-                            bnodes: FxHashMap::default(),
-                        },
-                    )))
-                }
-                Query::Describe {
-                    pattern,
-                    dataset: dataset_spec,
-                    ..
-                } => {
-                    let plan = Self::describe_graph_pattern_plan(
-                        pattern,
-                        Arc::clone(&dataset),
-                        dataset_spec,
-                    )?;
-                    let (variables, stream) = self.execute_plan(plan).await?;
-                    Ok(QueryResults::Graph(QueryTripleIter::new(
-                        ConstructIterator {
-                            solutions: QuerySolutionStreamWrapper {
-                                runtime: Arc::clone(&self.runtime),
-                                stream,
-                                variables,
-                                dataset,
-                                buffer: Vec::new().into_iter(),
-                            },
-                            template: vec![TriplePattern {
-                                subject: TermPattern::Variable(Variable::new_unchecked("subject")),
-                                predicate: NamedNodePattern::Variable(Variable::new_unchecked(
-                                    "predicate",
-                                )),
-                                object: TermPattern::Variable(Variable::new_unchecked("object")),
-                            }],
-                            buffered_results: Vec::new(),
-                            already_emitted_results: FxHashSet::default(),
-                            bnodes: FxHashMap::default(),
-                        },
-                    )))
-                }
-                Query::Ask {
-                    pattern,
-                    dataset: dataset_spec,
-                    ..
-                } => {
-                    let plan = Self::select_graph_pattern_plan(
-                        pattern,
-                        Arc::clone(&dataset),
-                        dataset_spec,
-                    )?;
-                    // No need to load more than a row
-                    let plan = LogicalPlanBuilder::new(plan)
-                        .limit(0, Some(1))
-                        .map_err(map_df_error)?
-                        .build()
-                        .map_err(map_df_error)?;
-                    let (_, mut stream) = self.execute_plan(plan).await?;
+                Query::Ask { .. } => {
                     while let Some(batch) = stream.next().await {
                         if batch.map_err(map_df_error)?.num_rows() > 0 {
                             return Ok(QueryResults::Boolean(true));
                         }
                     }
-                    Ok(QueryResults::Boolean(false))
+                    QueryResults::Boolean(false)
                 }
-            }
+            })
         })
+    }
+
+    fn query_plan(
+        query: &Query,
+        dataset: Arc<DatasetView<'static>>,
+    ) -> Result<LogicalPlan, QueryEvaluationError> {
+        SparqlPlanBuilder::new(OxigraphQueryableDataset::new(dataset))
+            .query_plan(query)
+            .map_err(map_df_error)?
+            .build()
+            .map_err(map_df_error)
     }
 
     async fn execute_plan(
@@ -194,58 +129,12 @@ impl DatafusionEvaluator {
         ))
     }
 
-    fn select_graph_pattern_plan(
-        pattern: &GraphPattern,
-        dataset: Arc<DatasetView<'static>>,
-        dataset_spec: &Option<QueryDataset>,
-    ) -> Result<LogicalPlan, QueryEvaluationError> {
-        SparqlPlanBuilder::new(dataset, dataset_spec.as_ref())
-            .select_plan(pattern)
-            .map_err(map_df_error)?
-            .build()
-            .map_err(map_df_error)
-    }
-
-    fn describe_graph_pattern_plan(
-        pattern: &GraphPattern,
-        dataset: Arc<DatasetView<'static>>,
-        dataset_spec: &Option<QueryDataset>,
-    ) -> Result<LogicalPlan, QueryEvaluationError> {
-        SparqlPlanBuilder::new(dataset, dataset_spec.as_ref())
-            .describe_plan(pattern)
-            .map_err(map_df_error)?
-            .build()
-            .map_err(map_df_error)
-    }
-
     pub fn explain(
         self,
         dataset: DatasetView<'static>,
         query: &Query,
     ) -> Result<String, QueryEvaluationError> {
-        let dataset = Arc::new(dataset);
-        let logical_plan = match query {
-            Query::Select {
-                pattern,
-                dataset: dataset_spec,
-                ..
-            }
-            | Query::Ask {
-                pattern,
-                dataset: dataset_spec,
-                ..
-            }
-            | Query::Construct {
-                pattern,
-                dataset: dataset_spec,
-                ..
-            } => Self::select_graph_pattern_plan(pattern, dataset, dataset_spec),
-            Query::Describe {
-                pattern,
-                dataset: dataset_spec,
-                ..
-            } => Self::describe_graph_pattern_plan(pattern, dataset, dataset_spec),
-        }?;
+        let logical_plan = Self::query_plan(query, Arc::new(dataset))?;
         let logical_plan = self.state.optimize(&logical_plan).map_err(map_df_error)?;
         let physical_plan = self
             .runtime
@@ -335,97 +224,183 @@ impl Iterator for QuerySolutionStreamWrapper {
     }
 }
 
-struct ConstructIterator {
-    solutions: QuerySolutionStreamWrapper,
-    template: Vec<TriplePattern>,
-    buffered_results: Vec<Triple>,
-    already_emitted_results: FxHashSet<Triple>,
-    bnodes: FxHashMap<BlankNode, BlankNode>,
+struct QueryTripleStreamWrapper {
+    runtime: Arc<Runtime>,
+    stream: SendableRecordBatchStream,
+    dataset: Arc<DatasetView<'static>>,
+    buffer: IntoIter<Result<Triple, QueryEvaluationError>>,
 }
 
-impl Iterator for ConstructIterator {
+impl Iterator for QueryTripleStreamWrapper {
     type Item = Result<Triple, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Result<Triple, QueryEvaluationError>> {
         loop {
-            if let Some(r) = self.buffered_results.pop() {
-                return Some(Ok(r));
+            if let Some(r) = self.buffer.next() {
+                return Some(r);
             }
-            let solution = match self.solutions.next()? {
-                Ok(solution) => solution,
-                Err(e) => return Some(Err(e)),
-            };
-            for template in &self.template {
-                let Some(triple) = substitute_triple_pattern(template, &solution, &mut self.bnodes)
-                else {
-                    continue;
-                };
-                // We allocate new blank nodes for each solution,
-                // triples with blank nodes are likely to be new.
-                #[cfg(feature = "rdf-12")]
-                let new_triple = triple.subject.is_blank_node()
-                    || triple.object.is_blank_node()
-                    || triple.object.is_triple()
-                    || self.already_emitted_results.insert(triple.clone());
-                #[cfg(not(feature = "rdf-12"))]
-                let new_triple = triple.subject.is_blank_node()
-                    || triple.object.is_blank_node()
-                    || self.already_emitted_results.insert(triple.clone());
-                if new_triple {
-                    self.buffered_results.push(triple);
-                    if self.already_emitted_results.len() > 1024 * 1024 {
-                        // We don't want to have a too big memory impact
-                        self.already_emitted_results.clear();
+            let mut buffer = Vec::new();
+            match self.runtime.block_on(self.stream.next())? {
+                Ok(batch) => {
+                    let mut results = (0..batch.num_rows())
+                        .map(|_| [const { None }; 3])
+                        .collect::<Vec<_>>();
+                    for (i, column) in batch.columns().iter().enumerate() {
+                        if column.as_any().is::<NullArray>() {
+                            continue;
+                        }
+                        let Some(array) = column.as_any().downcast_ref::<BinaryArray>() else {
+                            buffer.push(Err(QueryEvaluationError::Unexpected(
+                                format!("Column {i} is not a binary column").into(),
+                            )));
+                            continue;
+                        };
+                        for (j, row) in array.iter().enumerate() {
+                            if let Some(value) = row {
+                                let term = match decode_term(value)
+                                    .and_then(|t| self.dataset.decode_term(&t))
+                                {
+                                    Ok(term) => term,
+                                    Err(e) => {
+                                        buffer.push(Err(QueryEvaluationError::Unexpected(
+                                            Box::new(e),
+                                        )));
+                                        continue;
+                                    }
+                                };
+                                results[j][i] = Some(term);
+                            }
+                        }
                     }
+                    buffer.extend(results.into_iter().filter_map(|[s, p, o]| {
+                        Some(Ok(Triple {
+                            subject: match s? {
+                                Term::NamedNode(s) => s.into(),
+                                Term::BlankNode(s) => s.into(),
+                                Term::Literal(_) => return None,
+                                #[cfg(feature = "rdf-12")]
+                                Term::Triple(_) => return None,
+                            },
+                            predicate: match p? {
+                                Term::NamedNode(p) => p,
+                                Term::BlankNode(_) | Term::Literal(_) => return None,
+                                #[cfg(feature = "rdf-12")]
+                                Term::Triple(_) => return None,
+                            },
+                            object: o?,
+                        }))
+                    }))
+                }
+                Err(e) => {
+                    buffer.push(Err(map_df_error(e)));
                 }
             }
-            self.bnodes.clear();
+            self.buffer = buffer.into_iter();
         }
     }
 }
 
-fn substitute_triple_pattern(
-    pattern: &TriplePattern,
-    solution: &QuerySolution,
-    bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-) -> Option<Triple> {
-    Some(Triple::new(
-        match substitute_term_pattern(&pattern.subject, solution, bnodes)? {
-            Term::NamedNode(node) => NamedOrBlankNode::from(node),
-            Term::BlankNode(node) => node.into(),
-            Term::Literal(_) => return None,
-            #[cfg(feature = "rdf-12")]
-            Term::Triple(_) => return None,
-        },
-        match &pattern.predicate {
-            NamedNodePattern::NamedNode(node) => node.clone(),
-            NamedNodePattern::Variable(v) => {
-                if let Term::NamedNode(node) = solution.get(v)? {
-                    node.clone()
-                } else {
-                    return None;
-                }
-            }
-        },
-        substitute_term_pattern(&pattern.object, solution, bnodes)?,
-    ))
-}
-
-fn substitute_term_pattern(
-    pattern: &TermPattern,
-    solution: &QuerySolution,
-    bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-) -> Option<Term> {
-    Some(match pattern {
-        TermPattern::NamedNode(node) => node.clone().into(),
-        TermPattern::BlankNode(node) => bnodes.entry(node.clone()).or_default().clone().into(),
-        TermPattern::Literal(node) => node.clone().into(),
-        #[cfg(feature = "rdf-12")]
-        TermPattern::Triple(triple) => substitute_triple_pattern(triple, solution, bnodes)?.into(),
-        TermPattern::Variable(v) => solution.get(v)?.clone(),
-    })
-}
-
 fn map_df_error(e: DataFusionError) -> QueryEvaluationError {
     QueryEvaluationError::Unexpected(Box::new(e))
+}
+
+struct OxigraphQueryableDataset {
+    quads_table_plan: LogicalPlanBuilder,
+    term_encoder: OxigraphTermEncoder,
+}
+
+impl OxigraphQueryableDataset {
+    fn new(dataset: Arc<DatasetView<'static>>) -> Self {
+        Self {
+            quads_table_plan: LogicalPlanBuilder::scan(
+                "quads",
+                Arc::new(DefaultTableSource::new(Arc::new(QuadTableProvider::new(
+                    Arc::clone(&dataset),
+                )))),
+                None,
+            )
+            .unwrap(),
+            term_encoder: OxigraphTermEncoder { dataset },
+        }
+    }
+}
+
+impl QueryableDatasetAccess for OxigraphQueryableDataset {
+    fn quads_table_plan(&mut self) -> Result<LogicalPlanBuilder> {
+        Ok(self.quads_table_plan.clone())
+    }
+
+    fn expression_term_encoder(&mut self) -> impl ExpressionTermEncoder {
+        self.term_encoder.clone()
+    }
+
+    fn internalize_term(&mut self, term: Term) -> Result<impl Literal> {
+        Ok(encode_term(
+            &self.term_encoder.dataset.internalize_term(term)?,
+        ))
+    }
+}
+
+#[derive(Clone)]
+struct OxigraphTermEncoder {
+    dataset: Arc<DatasetView<'static>>,
+}
+
+impl ExpressionTermEncoder for OxigraphTermEncoder {
+    fn internal_type(&self) -> &DataType {
+        &DataType::Binary
+    }
+
+    fn internalize_expression_term(&self, term: ExpressionTerm) -> Result<ScalarValue> {
+        Ok(ScalarValue::Binary(Some(encode_term(
+            &self.dataset.internalize_expression_term(term)?,
+        ))))
+    }
+
+    fn internalize_expression_terms(
+        &self,
+        terms: impl Iterator<Item = Option<ExpressionTerm>>,
+    ) -> Result<ArrayRef> {
+        let mut output =
+            BinaryBuilder::with_capacity(terms.size_hint().0, terms.size_hint().0 * 17);
+        let mut buffer = Vec::with_capacity(17);
+        for term in terms {
+            if let Some(term) = term {
+                buffer.clear();
+                write_term(
+                    &mut buffer,
+                    &self.dataset.internalize_expression_term(term)?,
+                );
+                output.append_value(&buffer);
+            } else {
+                output.append_null();
+            }
+        }
+        Ok(Arc::new(output.finish()))
+    }
+
+    fn externalize_expression_term(&self, term: ScalarValue) -> Result<Option<ExpressionTerm>> {
+        let term = match term {
+            ScalarValue::Binary(t) | ScalarValue::BinaryView(t) => t,
+            ScalarValue::Null => None,
+            _ => return internal_err!("Unexpected term encoding in expression: {term:?}"),
+        };
+        Ok(term
+            .map(|t| self.dataset.externalize_expression_term(decode_term(&t)?))
+            .transpose()?)
+    }
+
+    fn externalize_expression_terms(
+        &self,
+        terms: ArrayRef,
+    ) -> Result<impl IntoIterator<Item = Result<Option<ExpressionTerm>>>> {
+        Ok((0..terms.len()).map(move |i| {
+            if terms.is_null(i) {
+                return Ok(None);
+            }
+            Ok(Some(self.dataset.externalize_expression_term(
+                decode_term(downcast_value!(terms, BinaryArray).value(i))?,
+            )?))
+        }))
+    }
 }

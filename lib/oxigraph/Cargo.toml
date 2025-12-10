@@ -24,7 +24,7 @@ http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
-datafusion = ["dep:datafusion", "dep:async-trait", "dep:futures", "dep:tokio", "dep:regex"]
+datafusion = ["dep:datafusion", "dep:async-trait", "dep:futures", "dep:tokio", "dep:regex", "dep:spareval-fusion", "rdf-12", "spareval-fusion/sparql-12"]
 
 [dependencies]
 async-trait = { workspace = true, optional = true }
@@ -42,6 +42,7 @@ siphasher.workspace = true
 sparesults.workspace = true
 spargebra = { workspace = true, features = ["sep-0002", "sep-0006"] }
 spareval = { workspace = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
+spareval-fusion = { workspace = true, optional = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["rt"] }
 

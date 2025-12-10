@@ -1577,6 +1577,7 @@ dependencies = [
  "siphasher",
  "sparesults",
  "spareval",
+ "spareval-fusion",
  "spargebra",
  "tempfile",
  "thiserror 2.0.18",
@@ -2483,6 +2484,19 @@ dependencies = [
  "spargebra",
  "sparopt",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "spareval-fusion"
+version = "0.0.1-dev"
+dependencies = [
+ "datafusion",
+ "oxrdf",
+ "oxsdatatypes",
+ "regex",
+ "sparesults",
+ "spareval",
+ "spargebra",
 ]
 
 [[package]]
