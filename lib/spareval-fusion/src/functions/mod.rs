@@ -1,37 +1,51 @@
-mod ebv;
 mod order;
 mod to_rdf_literal;
 mod utils;
 
-#[cfg(feature = "rdf-12")]
-use crate::model::NamedOrBlankNode;
-use crate::model::Term;
-use crate::sparql::datafusion::function::utils::{
+use crate::dataset::ExpressionTermEncoder;
+pub use crate::functions::order::order_by_collation;
+pub use crate::functions::to_rdf_literal::to_rdf_literal;
+use crate::functions::utils::{
     TermAccumulator, boolean_function, term_aggregate_function, term_function,
 };
-use crate::sparql::dataset::DatasetView;
 use datafusion::common::{Result, internal_err};
 use datafusion::logical_expr::{Expr, Volatility};
-pub use ebv::effective_boolean_value;
-pub use order::order_by_collation;
-use oxsdatatypes::{
-    Date, DateTime, DayTimeDuration, Decimal, Double, Duration, Float, Integer, Time,
-    YearMonthDuration,
-};
+#[cfg(feature = "sparql-12")]
+use oxrdf::NamedOrBlankNode;
+use oxrdf::{BlankNode, Term};
+use oxsdatatypes::{Boolean, Decimal, Double, Float, Integer};
+#[cfg(feature = "sep-0002")]
+use oxsdatatypes::{Date, DateTime, DayTimeDuration, Duration, Time, YearMonthDuration};
 use regex::{Regex, RegexBuilder};
 use spareval::ExpressionTerm;
-#[cfg(feature = "rdf-12")]
+#[cfg(feature = "sparql-12")]
 use spareval::ExpressionTriple;
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::sync::Arc;
-pub use to_rdf_literal::to_rdf_literal;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
-pub fn term_equals(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn ebv(encoder: impl ExpressionTermEncoder, arg: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
+        [arg],
+        "sparql:ebv",
+        |[arg]| match arg {
+            ExpressionTerm::BooleanLiteral(value) => Some(value.into()),
+            ExpressionTerm::StringLiteral(value) => Some(!value.is_empty()),
+            ExpressionTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
+            ExpressionTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
+            ExpressionTerm::IntegerLiteral(value) => Some(Boolean::from(value).into()),
+            ExpressionTerm::DecimalLiteral(value) => Some(Boolean::from(value).into()),
+            _ => None,
+        },
+        Volatility::Immutable,
+    )
+}
+
+pub fn term_equals(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
+    boolean_function(
+        encoder,
         [left, right],
         "sparql:equals",
         |[left, right]| equals(&left, &right),
@@ -44,7 +58,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
         ExpressionTerm::NamedNode(_)
         | ExpressionTerm::BlankNode(_)
         | ExpressionTerm::LangStringLiteral { .. } => Some(a == b),
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::DirLangStringLiteral { .. } => Some(a == b),
         ExpressionTerm::StringLiteral(a) => match b {
             ExpressionTerm::StringLiteral(b) => Some(a == b),
@@ -56,9 +70,9 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::NamedNode(_)
             | ExpressionTerm::BlankNode(_)
             | ExpressionTerm::LangStringLiteral { .. } => Some(false),
-            #[cfg(feature = "rdf-12")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::DirLangStringLiteral { .. } => Some(false),
-            #[cfg(feature = "rdf-12")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(_) => Some(false),
             _ => None,
         },
@@ -104,41 +118,49 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::TimeLiteral(a) => match b {
             ExpressionTerm::TimeLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DateLiteral(a) => match b {
             ExpressionTerm::DateLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearMonthLiteral(a) => match b {
             ExpressionTerm::GYearMonthLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearLiteral(a) => match b {
             ExpressionTerm::GYearLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthDayLiteral(a) => match b {
             ExpressionTerm::GMonthDayLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GDayLiteral(a) => match b {
             ExpressionTerm::GDayLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthLiteral(a) => match b {
             ExpressionTerm::GMonthLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => Some(a == b),
             ExpressionTerm::YearMonthDurationLiteral(b) => Some(a == b),
@@ -146,6 +168,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::YearMonthDurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => Some(a == b),
             ExpressionTerm::YearMonthDurationLiteral(b) => Some(a == b),
@@ -153,6 +176,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DayTimeDurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => Some(a == b),
             ExpressionTerm::YearMonthDurationLiteral(b) => Some(a == b),
@@ -160,7 +184,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::Triple(a) => {
             if let ExpressionTerm::Triple(b) = b {
                 triple_equals(a, b)
@@ -171,14 +195,14 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
     }
 }
 
-#[cfg(feature = "rdf-12")]
+#[cfg(feature = "sparql-12")]
 fn triple_equals(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<bool> {
     Some(a.subject == b.subject && a.predicate == b.predicate && equals(&a.object, &b.object)?)
 }
 
-pub fn greater_than(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn greater_than(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:greater-than",
         |[left, right]| Some(partial_cmp(&left, &right)?.is_gt()),
@@ -186,9 +210,9 @@ pub fn greater_than(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr)
     )
 }
 
-pub fn less_than(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn less_than(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:less-than",
         |[left, right]| Some(partial_cmp(&left, &right)?.is_lt()),
@@ -196,9 +220,9 @@ pub fn less_than(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) ->
     )
 }
 
-pub fn greater_than_or_equal(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn greater_than_or_equal(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:greater-than-or-equal",
         |[left, right]| Some(partial_cmp(&left, &right)?.is_ge()),
@@ -206,9 +230,9 @@ pub fn greater_than_or_equal(dataset: Arc<DatasetView<'static>>, left: Expr, rig
     )
 }
 
-pub fn less_than_or_equal(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn less_than_or_equal(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:greater-than-or-equal",
         |[left, right]| Some(partial_cmp(&left, &right)?.is_le()),
@@ -242,7 +266,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::DirLangStringLiteral {
             value: va,
             language: la,
@@ -298,6 +322,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::TimeLiteral(a) => {
             if let ExpressionTerm::TimeLiteral(b) = b {
                 a.partial_cmp(b)
@@ -305,6 +330,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DateLiteral(a) => {
             if let ExpressionTerm::DateLiteral(b) = b {
                 a.partial_cmp(b)
@@ -312,6 +338,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearMonthLiteral(a) => {
             if let ExpressionTerm::GYearMonthLiteral(b) = b {
                 a.partial_cmp(b)
@@ -319,6 +346,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GYearLiteral(a) => {
             if let ExpressionTerm::GYearLiteral(b) = b {
                 a.partial_cmp(b)
@@ -326,6 +354,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthDayLiteral(a) => {
             if let ExpressionTerm::GMonthDayLiteral(b) = b {
                 a.partial_cmp(b)
@@ -333,6 +362,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GDayLiteral(a) => {
             if let ExpressionTerm::GDayLiteral(b) = b {
                 a.partial_cmp(b)
@@ -340,6 +370,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "calendar-ext")]
         ExpressionTerm::GMonthLiteral(a) => {
             if let ExpressionTerm::GMonthLiteral(b) = b {
                 a.partial_cmp(b)
@@ -347,18 +378,21 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
                 None
             }
         }
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => a.partial_cmp(b),
             ExpressionTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
             ExpressionTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
             _ => None,
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::YearMonthDurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => a.partial_cmp(b),
             ExpressionTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
             ExpressionTerm::DayTimeDurationLiteral(b) => a.partial_cmp(b),
             _ => None,
         },
+        #[cfg(feature = "sep-0002")]
         ExpressionTerm::DayTimeDurationLiteral(a) => match b {
             ExpressionTerm::DurationLiteral(b) => a.partial_cmp(b),
             ExpressionTerm::YearMonthDurationLiteral(b) => a.partial_cmp(b),
@@ -381,7 +415,7 @@ fn cmp_terms(a: &ExpressionTerm, b: &ExpressionTerm) -> Ordering {
             ExpressionTerm::NamedNode(b) => a.as_str().cmp(b.as_str()),
             _ => Ordering::Less,
         },
-        #[cfg(feature = "rdf-12")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::Triple(a) => match b {
             ExpressionTerm::Triple(b) => match match &a.subject {
                 NamedOrBlankNode::BlankNode(a) => match &b.subject {
@@ -403,7 +437,7 @@ fn cmp_terms(a: &ExpressionTerm, b: &ExpressionTerm) -> Ordering {
         },
         _ => match b {
             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => Ordering::Greater,
-            #[cfg(feature = "rdf-12")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(_) => Ordering::Less,
             _ => {
                 if let Some(ord) = partial_cmp(a, b) {
@@ -424,11 +458,11 @@ fn cmp_terms(a: &ExpressionTerm, b: &ExpressionTerm) -> Ordering {
     }
 }
 
-pub fn plus(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn add(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [left, right],
-        "sparql:plus",
+        "sparql:add",
         |[left, right]| do_add(left, right),
         Volatility::Immutable,
     )
@@ -444,48 +478,60 @@ fn do_add(left: ExpressionTerm, right: ExpressionTerm) -> Option<ExpressionTerm>
         NumericBinaryOperands::Decimal(v1, v2) => {
             ExpressionTerm::DecimalLiteral(v1.checked_add(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::Duration(v1, v2) => {
             ExpressionTerm::DurationLiteral(v1.checked_add(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::YearMonthDuration(v1, v2) => {
             ExpressionTerm::YearMonthDurationLiteral(v1.checked_add(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DayTimeDuration(v1, v2) => {
             ExpressionTerm::DayTimeDurationLiteral(v1.checked_add(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_add_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_add_year_month_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_add_day_time_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_add_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_add_year_month_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_add_day_time_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::TimeDuration(v1, v2) => {
             ExpressionTerm::TimeLiteral(v1.checked_add_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
             ExpressionTerm::TimeLiteral(v1.checked_add_day_time_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTime(_, _)
         | NumericBinaryOperands::Time(_, _)
         | NumericBinaryOperands::Date(_, _) => return None,
     })
 }
 
-pub fn subtract(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn subtract(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:subtract",
         |[left, right]| do_subtract(left, right),
@@ -503,54 +549,68 @@ fn do_subtract(left: ExpressionTerm, right: ExpressionTerm) -> Option<Expression
         NumericBinaryOperands::Decimal(v1, v2) => {
             ExpressionTerm::DecimalLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTime(v1, v2) => {
             ExpressionTerm::DayTimeDurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::Date(v1, v2) => {
             ExpressionTerm::DayTimeDurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::Time(v1, v2) => {
             ExpressionTerm::DayTimeDurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::Duration(v1, v2) => {
             ExpressionTerm::DurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::YearMonthDuration(v1, v2) => {
             ExpressionTerm::YearMonthDurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DayTimeDuration(v1, v2) => {
             ExpressionTerm::DayTimeDurationLiteral(v1.checked_sub(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_sub_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_sub_year_month_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
             ExpressionTerm::DateTimeLiteral(v1.checked_sub_day_time_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_sub_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_sub_year_month_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
             ExpressionTerm::DateLiteral(v1.checked_sub_day_time_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::TimeDuration(v1, v2) => {
             ExpressionTerm::TimeLiteral(v1.checked_sub_duration(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
             ExpressionTerm::TimeLiteral(v1.checked_sub_day_time_duration(v2)?)
         }
     })
 }
 
-pub fn multiply(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn multiply(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:multiply",
         |[left, right]| do_multiply(left, right),
@@ -568,13 +628,14 @@ fn do_multiply(left: ExpressionTerm, right: ExpressionTerm) -> Option<Expression
         NumericBinaryOperands::Decimal(v1, v2) => {
             ExpressionTerm::DecimalLiteral(v1.checked_mul(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         _ => return None,
     })
 }
 
-pub fn divide(dataset: Arc<DatasetView<'static>>, left: Expr, right: Expr) -> Expr {
+pub fn divide(encoder: impl ExpressionTermEncoder, left: Expr, right: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [left, right],
         "sparql:divide",
         |[left, right]| do_divide(left, right),
@@ -592,143 +653,178 @@ fn do_divide(left: ExpressionTerm, right: ExpressionTerm) -> Option<ExpressionTe
         NumericBinaryOperands::Decimal(v1, v2) => {
             ExpressionTerm::DecimalLiteral(v1.checked_div(v2)?)
         }
+        #[cfg(feature = "sep-0002")]
         _ => return None,
     })
 }
 
-enum NumericBinaryOperands {
+pub enum NumericBinaryOperands {
     Float(Float, Float),
     Double(Double, Double),
     Integer(Integer, Integer),
     Decimal(Decimal, Decimal),
+    #[cfg(feature = "sep-0002")]
     Duration(Duration, Duration),
+    #[cfg(feature = "sep-0002")]
     YearMonthDuration(YearMonthDuration, YearMonthDuration),
+    #[cfg(feature = "sep-0002")]
     DayTimeDuration(DayTimeDuration, DayTimeDuration),
+    #[cfg(feature = "sep-0002")]
     DateTime(DateTime, DateTime),
+    #[cfg(feature = "sep-0002")]
     Time(Time, Time),
+    #[cfg(feature = "sep-0002")]
     Date(Date, Date),
+    #[cfg(feature = "sep-0002")]
     DateTimeDuration(DateTime, Duration),
+    #[cfg(feature = "sep-0002")]
     DateTimeYearMonthDuration(DateTime, YearMonthDuration),
+    #[cfg(feature = "sep-0002")]
     DateTimeDayTimeDuration(DateTime, DayTimeDuration),
+    #[cfg(feature = "sep-0002")]
     DateDuration(Date, Duration),
+    #[cfg(feature = "sep-0002")]
     DateYearMonthDuration(Date, YearMonthDuration),
+    #[cfg(feature = "sep-0002")]
     DateDayTimeDuration(Date, DayTimeDuration),
+    #[cfg(feature = "sep-0002")]
     TimeDuration(Time, Duration),
+    #[cfg(feature = "sep-0002")]
     TimeDayTimeDuration(Time, DayTimeDuration),
 }
 
 impl NumericBinaryOperands {
-    fn new(a: ExpressionTerm, b: ExpressionTerm) -> Option<Self> {
+    pub fn new(a: ExpressionTerm, b: ExpressionTerm) -> Option<Self> {
         match (a, b) {
             (ExpressionTerm::FloatLiteral(v1), ExpressionTerm::FloatLiteral(v2)) => {
                 Some(Self::Float(v1, v2))
             }
             (ExpressionTerm::FloatLiteral(v1), ExpressionTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double((v1).into(), v2))
+                Some(Self::Double(v1.into(), v2))
             }
             (ExpressionTerm::FloatLiteral(v1), ExpressionTerm::IntegerLiteral(v2)) => {
-                Some(Self::Float(v1, (v2).into()))
+                Some(Self::Float(v1, v2.into()))
             }
             (ExpressionTerm::FloatLiteral(v1), ExpressionTerm::DecimalLiteral(v2)) => {
-                Some(Self::Float(v1, (v2).into()))
+                Some(Self::Float(v1, v2.into()))
             }
             (ExpressionTerm::DoubleLiteral(v1), ExpressionTerm::FloatLiteral(v2)) => {
-                Some(Self::Double(v1, (v2).into()))
+                Some(Self::Double(v1, v2.into()))
             }
             (ExpressionTerm::DoubleLiteral(v1), ExpressionTerm::DoubleLiteral(v2)) => {
                 Some(Self::Double(v1, v2))
             }
             (ExpressionTerm::DoubleLiteral(v1), ExpressionTerm::IntegerLiteral(v2)) => {
-                Some(Self::Double(v1, (v2).into()))
+                Some(Self::Double(v1, v2.into()))
             }
             (ExpressionTerm::DoubleLiteral(v1), ExpressionTerm::DecimalLiteral(v2)) => {
-                Some(Self::Double(v1, (v2).into()))
+                Some(Self::Double(v1, v2.into()))
             }
             (ExpressionTerm::IntegerLiteral(v1), ExpressionTerm::FloatLiteral(v2)) => {
-                Some(Self::Float((v1).into(), v2))
+                Some(Self::Float(v1.into(), v2))
             }
             (ExpressionTerm::IntegerLiteral(v1), ExpressionTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double((v1).into(), v2))
+                Some(Self::Double(v1.into(), v2))
             }
             (ExpressionTerm::IntegerLiteral(v1), ExpressionTerm::IntegerLiteral(v2)) => {
                 Some(Self::Integer(v1, v2))
             }
             (ExpressionTerm::IntegerLiteral(v1), ExpressionTerm::DecimalLiteral(v2)) => {
-                Some(Self::Decimal((v1).into(), v2))
+                Some(Self::Decimal(v1.into(), v2))
             }
             (ExpressionTerm::DecimalLiteral(v1), ExpressionTerm::FloatLiteral(v2)) => {
-                Some(Self::Float((v1).into(), v2))
+                Some(Self::Float(v1.into(), v2))
             }
             (ExpressionTerm::DecimalLiteral(v1), ExpressionTerm::DoubleLiteral(v2)) => {
-                Some(Self::Double((v1).into(), v2))
+                Some(Self::Double(v1.into(), v2))
             }
             (ExpressionTerm::DecimalLiteral(v1), ExpressionTerm::IntegerLiteral(v2)) => {
-                Some(Self::Decimal(v1, (v2).into()))
+                Some(Self::Decimal(v1, v2.into()))
             }
             (ExpressionTerm::DecimalLiteral(v1), ExpressionTerm::DecimalLiteral(v2)) => {
                 Some(Self::Decimal(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DurationLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
                 Some(Self::Duration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DurationLiteral(v1), ExpressionTerm::YearMonthDurationLiteral(v2)) => {
-                Some(Self::Duration(v1, (v2).into()))
+                Some(Self::Duration(v1, v2.into()))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DurationLiteral(v1), ExpressionTerm::DayTimeDurationLiteral(v2)) => {
-                Some(Self::Duration(v1, (v2).into()))
+                Some(Self::Duration(v1, v2.into()))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::YearMonthDurationLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
-                Some(Self::Duration((v1).into(), v2))
+                Some(Self::Duration(v1.into(), v2))
             }
+            #[cfg(feature = "sep-0002")]
             (
                 ExpressionTerm::YearMonthDurationLiteral(v1),
                 ExpressionTerm::YearMonthDurationLiteral(v2),
             ) => Some(Self::YearMonthDuration(v1, v2)),
+            #[cfg(feature = "sep-0002")]
             (
                 ExpressionTerm::YearMonthDurationLiteral(v1),
                 ExpressionTerm::DayTimeDurationLiteral(v2),
-            ) => Some(Self::Duration((v1).into(), (v2).into())),
+            ) => Some(Self::Duration(v1.into(), v2.into())),
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DayTimeDurationLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
-                Some(Self::Duration((v1).into(), v2))
+                Some(Self::Duration(v1.into(), v2))
             }
+            #[cfg(feature = "sep-0002")]
             (
                 ExpressionTerm::DayTimeDurationLiteral(v1),
                 ExpressionTerm::YearMonthDurationLiteral(v2),
-            ) => Some(Self::Duration((v1).into(), (v2).into())),
+            ) => Some(Self::Duration(v1.into(), v2.into())),
+            #[cfg(feature = "sep-0002")]
             (
                 ExpressionTerm::DayTimeDurationLiteral(v1),
                 ExpressionTerm::DayTimeDurationLiteral(v2),
             ) => Some(Self::DayTimeDuration(v1, v2)),
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateTimeLiteral(v1), ExpressionTerm::DateTimeLiteral(v2)) => {
                 Some(Self::DateTime(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateLiteral(v1), ExpressionTerm::DateLiteral(v2)) => {
                 Some(Self::Date(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::TimeLiteral(v1), ExpressionTerm::TimeLiteral(v2)) => {
                 Some(Self::Time(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateTimeLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
                 Some(Self::DateTimeDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateTimeLiteral(v1), ExpressionTerm::YearMonthDurationLiteral(v2)) => {
                 Some(Self::DateTimeYearMonthDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateTimeLiteral(v1), ExpressionTerm::DayTimeDurationLiteral(v2)) => {
                 Some(Self::DateTimeDayTimeDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
                 Some(Self::DateDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateLiteral(v1), ExpressionTerm::YearMonthDurationLiteral(v2)) => {
                 Some(Self::DateYearMonthDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::DateLiteral(v1), ExpressionTerm::DayTimeDurationLiteral(v2)) => {
                 Some(Self::DateDayTimeDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::TimeLiteral(v1), ExpressionTerm::DurationLiteral(v2)) => {
                 Some(Self::TimeDuration(v1, v2))
             }
+            #[cfg(feature = "sep-0002")]
             (ExpressionTerm::TimeLiteral(v1), ExpressionTerm::DayTimeDurationLiteral(v2)) => {
                 Some(Self::TimeDayTimeDuration(v1, v2))
             }
@@ -737,9 +833,9 @@ impl NumericBinaryOperands {
     }
 }
 
-pub fn str(dataset: Arc<DatasetView<'static>>, arg: Expr) -> Expr {
+pub fn str(encoder: impl ExpressionTermEncoder, arg: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [arg],
         "sparql:str",
         |[arg]| {
@@ -747,7 +843,7 @@ pub fn str(dataset: Arc<DatasetView<'static>>, arg: Expr) -> Expr {
                 Term::NamedNode(term) => term.into_string(),
                 Term::BlankNode(_) => return None,
                 Term::Literal(term) => term.destruct().0,
-                #[cfg(feature = "rdf-12")]
+                #[cfg(feature = "sparql-12")]
                 Term::Triple(_) => return None,
             }))
         },
@@ -755,20 +851,20 @@ pub fn str(dataset: Arc<DatasetView<'static>>, arg: Expr) -> Expr {
     )
 }
 
-pub fn lang(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
+pub fn lang(encoder: impl ExpressionTermEncoder, literal: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [literal],
         "sparql:lang",
         |[literal]| {
             Some(ExpressionTerm::StringLiteral(match literal {
                 ExpressionTerm::LangStringLiteral { language, .. } => language,
-                #[cfg(feature = "rdf-12")]
+                #[cfg(feature = "sparql-12")]
                 ExpressionTerm::DirLangStringLiteral { language, .. } => language,
                 ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                     return None;
                 }
-                #[cfg(feature = "rdf-12")]
+                #[cfg(feature = "sparql-12")]
                 ExpressionTerm::Triple(_) => return None,
                 _ => String::new(),
             }))
@@ -777,9 +873,9 @@ pub fn lang(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
     )
 }
 
-pub fn is_blank(dataset: Arc<DatasetView<'static>>, term: Expr) -> Expr {
+pub fn is_blank(encoder: impl ExpressionTermEncoder, term: Expr) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [term],
         "sparql:isBlank",
         |[term]| Some(matches!(term, ExpressionTerm::BlankNode(_))),
@@ -787,13 +883,39 @@ pub fn is_blank(dataset: Arc<DatasetView<'static>>, term: Expr) -> Expr {
     )
 }
 
+pub fn bnode(encoder: impl ExpressionTermEncoder, id: Option<Expr>) -> Expr {
+    if let Some(id) = id {
+        // TODO: this is wrong we must have a different id per row
+        term_function(
+            encoder,
+            [id],
+            "sparql:bnode",
+            |[id]| {
+                let ExpressionTerm::StringLiteral(id) = id else {
+                    return None;
+                };
+                Some(ExpressionTerm::BlankNode(BlankNode::new(id).ok()?))
+            },
+            Volatility::Volatile,
+        )
+    } else {
+        term_function(
+            encoder,
+            [],
+            "sparql:bnode",
+            |[]| Some(ExpressionTerm::BlankNode(BlankNode::default())),
+            Volatility::Volatile,
+        )
+    }
+}
+
 pub fn lang_matches(
-    dataset: Arc<DatasetView<'static>>,
+    encoder: impl ExpressionTermEncoder,
     language_tag: Expr,
     language_range: Expr,
 ) -> Expr {
     boolean_function(
-        dataset,
+        encoder,
         [language_tag, language_range],
         "sparql:langMatches",
         |[language_tag, language_range]| {
@@ -848,21 +970,21 @@ pub fn lang_matches(
 }
 
 pub fn regex(
-    dataset: Arc<DatasetView<'static>>,
+    encoder: impl ExpressionTermEncoder,
     text: Expr,
     pattern: Expr,
     flags: Option<Expr>,
 ) -> Expr {
     if let Some(flags) = flags {
         boolean_function(
-            dataset,
+            encoder,
             [text, pattern, flags],
             "sparql:regex",
             |[text, pattern, flags]| {
                 let text = match text {
                     ExpressionTerm::StringLiteral(value)
                     | ExpressionTerm::LangStringLiteral { value, .. } => value,
-                    #[cfg(feature = "rdf-12")]
+                    #[cfg(feature = "sparql-12")]
                     ExpressionTerm::DirLangStringLiteral { value, .. } => value,
                     _ => return None,
                 };
@@ -879,14 +1001,14 @@ pub fn regex(
         )
     } else {
         boolean_function(
-            dataset,
+            encoder,
             [text, pattern],
             "sparql:regex",
             |[text, pattern]| {
                 let text = match text {
                     ExpressionTerm::StringLiteral(value)
                     | ExpressionTerm::LangStringLiteral { value, .. } => value,
-                    #[cfg(feature = "rdf-12")]
+                    #[cfg(feature = "sparql-12")]
                     ExpressionTerm::DirLangStringLiteral { value, .. } => value,
                     _ => return None,
                 };
@@ -930,9 +1052,9 @@ fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
     regex_builder.build().ok()
 }
 
-pub fn xsd_integer(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
+pub fn xsd_integer(encoder: impl ExpressionTermEncoder, literal: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [literal],
         "xsd:integer",
         |[literal]| {
@@ -950,9 +1072,9 @@ pub fn xsd_integer(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
     )
 }
 
-pub fn xsd_decimal(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
+pub fn xsd_decimal(encoder: impl ExpressionTermEncoder, literal: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [literal],
         "xsd:decimal",
         |[literal]| {
@@ -970,9 +1092,9 @@ pub fn xsd_decimal(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
     )
 }
 
-pub fn xsd_float(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
+pub fn xsd_float(encoder: impl ExpressionTermEncoder, literal: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [literal],
         "xsd:float",
         |[literal]| {
@@ -990,9 +1112,9 @@ pub fn xsd_float(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
     )
 }
 
-pub fn xsd_double(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
+pub fn xsd_double(encoder: impl ExpressionTermEncoder, literal: Expr) -> Expr {
     term_function(
-        dataset,
+        encoder,
         [literal],
         "xsd:double",
         |[literal]| {
@@ -1010,7 +1132,7 @@ pub fn xsd_double(dataset: Arc<DatasetView<'static>>, literal: Expr) -> Expr {
     )
 }
 
-pub fn agg_sum(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) -> Expr {
+pub fn agg_sum(encoder: impl ExpressionTermEncoder, input: Expr, distinct: bool) -> Expr {
     struct SumAccumulator {
         sum: Option<ExpressionTerm>,
     }
@@ -1044,7 +1166,7 @@ pub fn agg_sum(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     }
 
     term_aggregate_function(
-        dataset,
+        encoder,
         input,
         distinct,
         "sparql:agg-sum",
@@ -1055,7 +1177,7 @@ pub fn agg_sum(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     )
 }
 
-pub fn agg_avg(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) -> Expr {
+pub fn agg_avg(encoder: impl ExpressionTermEncoder, input: Expr, distinct: bool) -> Expr {
     struct AvgAccumulator {
         sum: Option<ExpressionTerm>,
         count: Option<Integer>,
@@ -1110,7 +1232,7 @@ pub fn agg_avg(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     }
 
     term_aggregate_function(
-        dataset,
+        encoder,
         input,
         distinct,
         "sparql:agg-avg",
@@ -1122,7 +1244,7 @@ pub fn agg_avg(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     )
 }
 
-pub fn agg_min(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) -> Expr {
+pub fn agg_min(encoder: impl ExpressionTermEncoder, input: Expr, distinct: bool) -> Expr {
     struct MinAccumulator {
         min: Option<ExpressionTerm>,
     }
@@ -1156,7 +1278,7 @@ pub fn agg_min(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     }
 
     term_aggregate_function(
-        dataset,
+        encoder,
         input,
         distinct,
         "sparql:agg-min",
@@ -1165,7 +1287,7 @@ pub fn agg_min(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     )
 }
 
-pub fn agg_max(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) -> Expr {
+pub fn agg_max(encoder: impl ExpressionTermEncoder, input: Expr, distinct: bool) -> Expr {
     struct MaxAccumulator {
         max: Option<ExpressionTerm>,
     }
@@ -1199,7 +1321,7 @@ pub fn agg_max(dataset: Arc<DatasetView<'static>>, input: Expr, distinct: bool) 
     }
 
     term_aggregate_function(
-        dataset,
+        encoder,
         input,
         distinct,
         "sparql:agg-max",
