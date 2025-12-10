@@ -1,12 +1,10 @@
-use crate::sparql::datafusion::function::{
-    agg_avg, agg_max, agg_min, agg_sum, divide, effective_boolean_value, greater_than,
+use crate::dataset::QueryableDatasetAccess;
+use crate::functions::{
+    add, agg_avg, agg_max, agg_min, agg_sum, bnode, divide, ebv, greater_than,
     greater_than_or_equal, is_blank, lang, lang_matches, less_than, less_than_or_equal, multiply,
-    order_by_collation, plus, regex, str, subtract, term_equals, to_rdf_literal, xsd_decimal,
-    xsd_double, xsd_float, xsd_integer,
+    order_by_collation, regex, str, subtract, term_equals, to_rdf_literal, xsd_decimal, xsd_double,
+    xsd_float, xsd_integer,
 };
-use crate::sparql::datafusion::table::QuadTableProvider;
-use crate::sparql::dataset::DatasetView;
-use crate::storage::binary_encoder::encode_term;
 use datafusion::arrow::datatypes::Field;
 use datafusion::common::alias::AliasGenerator;
 use datafusion::common::{
@@ -14,6 +12,7 @@ use datafusion::common::{
 };
 use datafusion::datasource::cte_worktable::CteWorkTable;
 use datafusion::datasource::{DefaultTableSource, TableProvider};
+use datafusion::functions::core::named_struct;
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::count::{count, count_all, count_distinct, count_udaf};
 use datafusion::logical_expr::expr::{AggregateFunction as DFAggregateFunction, Sort};
@@ -22,13 +21,13 @@ use datafusion::logical_expr::{
 };
 use datafusion::prelude::make_array;
 use oxrdf::vocab::xsd;
-use oxrdf::{BlankNode, Term, Variable};
-use spareval::QueryableDataset;
+use oxrdf::{Literal, Term};
+use spargebra::Query;
 use spargebra::algebra::{
     AggregateExpression, AggregateFunction, Expression, Function, GraphPattern, OrderExpression,
     PropertyPathExpression, QueryDataset,
 };
-use spargebra::term::{NamedNodePattern, TermPattern};
+use spargebra::term::{BlankNode, NamedNodePattern, TermPattern, TriplePattern, Variable};
 use std::collections::HashMap;
 use std::iter::once;
 use std::mem::swap;
@@ -40,42 +39,146 @@ const PREDICATE_MAGIC_COLUMN: &str = "#predicate#";
 const GRAPH_MAGIC_COLUMN: &str = "#graph#";
 
 /// Builds a DataFusion `LogicalPlan` from a SPARQL `GraphPattern`
-pub struct SparqlPlanBuilder<'a> {
-    dataset: Arc<DatasetView<'static>>,
-    quad_table_source: Arc<dyn TableSource>,
+pub struct SparqlPlanBuilder<D: QueryableDatasetAccess> {
+    dataset: D,
     blank_node_to_variable: HashMap<BlankNode, Variable>,
     table_name: AliasGenerator,
-    dataset_spec: Option<&'a QueryDataset>,
 }
 
-impl<'a> SparqlPlanBuilder<'a> {
-    pub fn new(dataset: Arc<DatasetView<'static>>, dataset_spec: Option<&'a QueryDataset>) -> Self {
+impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
+    pub fn new(dataset: D) -> Self {
         // TODO: add a graph name table?
         Self {
-            dataset: Arc::clone(&dataset),
-            quad_table_source: table_source(QuadTableProvider::new(dataset)),
+            dataset,
             blank_node_to_variable: HashMap::new(),
             table_name: AliasGenerator::new(),
-            dataset_spec,
+        }
+    }
+
+    /// Plan for a query
+    ///
+    /// Result layout:
+    /// - SELECT: a table with a column per variable
+    /// - ASK: a table with a single empty row (true) or no row (false)
+    /// - CONSTRUCT and DESCRIBE: a table with subject, predicate, and object columns
+    pub fn query_plan(&mut self, query: &Query) -> Result<LogicalPlanBuilder> {
+        match query {
+            Query::Select {
+                pattern, dataset, ..
+            } => self.select_plan(pattern, dataset.as_ref()),
+            Query::Construct {
+                template,
+                pattern,
+                dataset,
+                ..
+            } => self.construct_plan(pattern, template, dataset.as_ref()),
+            Query::Describe {
+                pattern, dataset, ..
+            } => self.describe_plan(pattern, dataset.as_ref()),
+            Query::Ask {
+                pattern, dataset, ..
+            } => self.ask_plan(pattern, dataset.as_ref()),
         }
     }
 
     /// Plan for a SELECT query. Returns a table with a column per variable
-    pub fn select_plan(&mut self, pattern: &GraphPattern) -> Result<LogicalPlanBuilder> {
-        self.plan_for_graph_pattern(pattern, true, &DFSchema::empty())
+    pub fn select_plan(
+        &mut self,
+        pattern: &GraphPattern,
+        dataset_spec: Option<&QueryDataset>,
+    ) -> Result<LogicalPlanBuilder> {
+        self.plan_for_graph_pattern(pattern, Context::new(dataset_spec, &DFSchema::empty()))
     }
 
-    /// Plan for a DESCRIBE query. Returns a table with subject, predicate and object columns
+    /// Plan for an ASK query. Returns a table with a single empty row (true) or no row (false)
+    pub fn ask_plan(
+        &mut self,
+        pattern: &GraphPattern,
+        dataset_spec: Option<&QueryDataset>,
+    ) -> Result<LogicalPlanBuilder> {
+        self.plan_for_graph_pattern(pattern, Context::new(dataset_spec, &DFSchema::empty()))?
+            .project(Vec::<Expr>::new())?
+            .limit(0, Some(1))
+    }
+
+    /// Plan for an CONSTRUCT query. Returns a table with subject, predicate, and object columns
+    pub fn construct_plan(
+        &mut self,
+        pattern: &GraphPattern,
+        template: &[TriplePattern],
+        dataset_spec: Option<&QueryDataset>,
+    ) -> Result<LogicalPlanBuilder> {
+        let template = make_array(
+            template
+                .iter()
+                .map(|t| {
+                    Ok(named_struct().call(vec![
+                        lit("subject"),
+                        match &t.subject {
+                            TermPattern::NamedNode(t) => self.term_to_expr(t.clone())?,
+                            TermPattern::BlankNode(t) => bnode(
+                                self.dataset.expression_term_encoder(),
+                                Some(self.term_to_expr(Literal::new_simple_literal(t.as_str()))?),
+                            ),
+                            TermPattern::Literal(t) => self.term_to_expr(t.clone())?,
+                            #[cfg(feature = "sparql-12")]
+                            TermPattern::Triple(_) => {
+                                return not_impl_err!(
+                                    "Triple patterns are not supported in CONSTRUCT"
+                                );
+                            }
+                            TermPattern::Variable(v) => Column::new_unqualified(v.as_str()).into(),
+                        },
+                        lit("predicate"),
+                        match &t.predicate {
+                            NamedNodePattern::NamedNode(t) => self.term_to_expr(t.clone())?,
+                            NamedNodePattern::Variable(v) => {
+                                Column::new_unqualified(v.as_str()).into()
+                            }
+                        },
+                        lit("object"),
+                        match &t.object {
+                            TermPattern::NamedNode(t) => self.term_to_expr(t.clone())?,
+                            TermPattern::BlankNode(t) => bnode(
+                                self.dataset.expression_term_encoder(),
+                                Some(self.term_to_expr(Literal::new_simple_literal(t.as_str()))?),
+                            ),
+                            TermPattern::Literal(t) => self.term_to_expr(t.clone())?,
+                            #[cfg(feature = "sparql-12")]
+                            TermPattern::Triple(_) => {
+                                return not_impl_err!(
+                                    "Triple patterns are not supported in CONSTRUCT"
+                                );
+                            }
+                            TermPattern::Variable(v) => Column::new_unqualified(v.as_str()).into(),
+                        },
+                    ]))
+                })
+                .collect::<Result<_>>()?,
+        );
+        self.plan_for_graph_pattern(pattern, Context::new(dataset_spec, &DFSchema::empty()))?
+            .project(vec![template.alias("triple")])?
+            .unnest_column("triple")?
+            .unnest_column("triple")?
+            .distinct()
+    }
+
+    /// Plan for a DESCRIBE query. Returns a table with subject, predicate, and object columns
     ///
     /// It implements more or less [Concise Bounded Description](https://www.w3.org/submissions/CBD/),
     /// by including the description of every blank node recursively.
-    pub fn describe_plan(&mut self, pattern: &GraphPattern) -> Result<LogicalPlanBuilder> {
-        if self.dataset_spec.is_some() {
+    pub fn describe_plan(
+        &mut self,
+        pattern: &GraphPattern,
+        dataset_spec: Option<&QueryDataset>,
+    ) -> Result<LogicalPlanBuilder> {
+        if dataset_spec.is_some() {
             return not_impl_err!(
                 "DESCRIBE queries are not supported with a dataset specification"
             );
         };
-        let input_plan = self.select_plan(pattern)?;
+        let input_plan =
+            self.plan_for_graph_pattern(pattern, Context::new(dataset_spec, &DFSchema::empty()))?;
         let input_columns = input_plan.schema().columns();
         let (to_describe_plan, to_describe_column) = if input_columns.len() == 1 {
             (input_plan, input_columns.into_iter().next().unwrap())
@@ -91,10 +194,12 @@ impl<'a> SparqlPlanBuilder<'a> {
                 all_columns_col,
             )
         };
-        let triple_scan =
-            LogicalPlanBuilder::scan("quads", Arc::clone(&self.quad_table_source), None)?
-                .filter(Expr::from(Column::new(Some("quads"), "graph_name")).is_null())?
-                .build()?;
+        let triple_scan = self
+            .dataset
+            .quads_table_plan()?
+            .alias("quads")?
+            .filter(Expr::from(Column::new(Some("quads"), "graph_name")).is_null())?
+            .build()?;
         to_describe_plan
             .join(
                 triple_scan.clone(),
@@ -121,7 +226,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     None,
                 )?
                 .filter(is_blank(
-                    Arc::clone(&self.dataset),
+                    self.dataset.expression_term_encoder(),
                     Column::new(Some("cbd"), "object").into(),
                 ))?
                 .join(
@@ -147,14 +252,13 @@ impl<'a> SparqlPlanBuilder<'a> {
     ///
     /// Most operator conversions are fairly straightforward. Some notes:
     /// - the output plan columns correspond to the SPARQL query variable plus a magic #graph# column that contains the output row graph name (it is used for the GRAPH operator).
-    /// - in_default_graph sets if we query the default graph or a named graph, in the later case the #graph# column is set to the named graph name.
-    /// - external_schema allows injecting bindings deeply in the plan. It is used for EXISTS and LATERAL.
+    /// - context.in_default_graph sets if we query the default graph or a named graph, in the later case the #graph# column is set to the named graph name.
+    /// - context.external_schema allows injecting bindings deeply in the plan. It is used for EXISTS and LATERAL.
     ///   BGPs and property paths join the bindings they generate with it.
     fn plan_for_graph_pattern(
         &mut self,
         pattern: &GraphPattern,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<LogicalPlanBuilder> {
         match pattern {
             GraphPattern::Values {
@@ -199,13 +303,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                         let subject = self.term_or_variable(p.subject.clone())?;
                         let predicate = self.term_or_variable(p.predicate.clone().into())?;
                         let object = self.term_or_variable(p.object.clone())?;
-                        self.plan_for_triple_pattern(
-                            subject,
-                            predicate,
-                            object,
-                            in_default_graph,
-                            external_schema,
-                        )
+                        self.plan_for_triple_pattern(subject, predicate, object, context)
                     })
                     .collect::<Result<Vec<_>>>()?;
                 // Join ordering: we join the first pair of plans with the largest number of shared variables
@@ -234,14 +332,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     // We merge the best pair
                     let right = plans.remove(best_pair.1); // first to avoid being shifted
                     let left = plans.remove(best_pair.0);
-                    plans.push(self.join(
-                        left,
-                        JoinType::Inner,
-                        right,
-                        None,
-                        in_default_graph,
-                        external_schema,
-                    )?);
+                    plans.push(self.join(left, JoinType::Inner, right, None, context)?);
                 }
                 Ok(plans
                     .into_iter()
@@ -255,16 +346,10 @@ impl<'a> SparqlPlanBuilder<'a> {
             } => {
                 let subject = self.term_or_variable(subject.clone())?;
                 let object = self.term_or_variable(object.clone())?;
-                self.plan_for_property_path(
-                    subject,
-                    path.clone(),
-                    object,
-                    in_default_graph,
-                    external_schema,
-                )
+                self.plan_for_property_path(subject, path.clone(), object, context)
             }
             GraphPattern::Graph { inner, name } => {
-                let mut plan = self.plan_for_graph_pattern(inner, false, external_schema)?;
+                let mut plan = self.plan_for_graph_pattern(inner, context.in_named_graph())?;
                 // We join with the existing value for the GRAPH variable/constant
                 let input_value = match name {
                     NamedNodePattern::NamedNode(name) => Some(self.term_to_expr(name.clone())?),
@@ -272,7 +357,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                         schema_column(plan.schema(), variable.as_str()).map(Into::into)
                     }
                 };
-                if self.dataset_spec.is_some_and(|s| s.named.is_some())
+                if context.dataset_spec.is_some_and(|s| s.named.is_some())
                     || plan
                         .schema()
                         .fields()
@@ -283,7 +368,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     // We need to join with the list of possible graph names
                     plan = self.ensure_qualified_names(plan)?;
                     let input_graph_column = schema_column(plan.schema(), GRAPH_MAGIC_COLUMN);
-                    let graph_names = self.plan_for_graph_names()?.build()?;
+                    let graph_names = self.plan_for_graph_names(context.dataset_spec)?.build()?;
                     let graph_name_var =
                         schema_column(graph_names.schema(), GRAPH_MAGIC_COLUMN).unwrap();
                     let projection = plan
@@ -313,9 +398,10 @@ impl<'a> SparqlPlanBuilder<'a> {
                 };
                 if let Some(graph_column) = &input_graph_column {
                     if let Some(output_column_name) = output_column_name {
-                        if let Some(outer_ref_col) =
-                            outer_reference_column_from_schema(external_schema, output_column_name)
-                        {
+                        if let Some(outer_ref_col) = outer_reference_column_from_schema(
+                            context.external_schema,
+                            output_column_name,
+                        ) {
                             // We apply external constraint
                             plan = plan.filter(eq_with_null_match_anything(
                                 graph_column.clone(),
@@ -354,79 +440,46 @@ impl<'a> SparqlPlanBuilder<'a> {
                 plan.project(projection)
             }
             GraphPattern::Join { left, right } => {
-                let left = self.plan_for_graph_pattern(left, in_default_graph, external_schema)?;
-                let right =
-                    self.plan_for_graph_pattern(right, in_default_graph, external_schema)?;
-                self.join(
-                    left,
-                    JoinType::Inner,
-                    right,
-                    None,
-                    in_default_graph,
-                    external_schema,
-                )
+                let left = self.plan_for_graph_pattern(left, context)?;
+                let right = self.plan_for_graph_pattern(right, context)?;
+                self.join(left, JoinType::Inner, right, None, context)
             }
             GraphPattern::LeftJoin {
                 left,
                 right,
                 expression,
             } => {
-                let left = self.plan_for_graph_pattern(left, in_default_graph, external_schema)?;
-                let right =
-                    self.plan_for_graph_pattern(right, in_default_graph, external_schema)?;
-                self.join(
-                    left,
-                    JoinType::Left,
-                    right,
-                    expression.as_ref(),
-                    in_default_graph,
-                    external_schema,
-                )
+                let left = self.plan_for_graph_pattern(left, context)?;
+                let right = self.plan_for_graph_pattern(right, context)?;
+                self.join(left, JoinType::Left, right, expression.as_ref(), context)
             }
             GraphPattern::Minus { left, right } => {
-                let left = self.plan_for_graph_pattern(left, in_default_graph, external_schema)?;
-                let right =
-                    self.plan_for_graph_pattern(right, in_default_graph, external_schema)?;
-                self.join(
-                    left,
-                    JoinType::LeftAnti,
-                    right,
-                    None,
-                    in_default_graph,
-                    external_schema,
-                )
+                let left = self.plan_for_graph_pattern(left, context)?;
+                let right = self.plan_for_graph_pattern(right, context)?;
+                self.join(left, JoinType::LeftAnti, right, None, context)
             }
+            #[cfg(feature = "sep-0006")]
             GraphPattern::Lateral { left, right } => {
-                let left = self.plan_for_graph_pattern(left, in_default_graph, external_schema)?;
+                let left = self.plan_for_graph_pattern(left, context)?;
                 let left = self.ensure_qualified_names(left)?;
                 let mut right_external_schema = (**left.schema()).clone();
-                right_external_schema.merge(external_schema);
-                let right =
-                    self.plan_for_graph_pattern(right, in_default_graph, &right_external_schema)?;
-                self.join(
-                    left,
-                    JoinType::Inner,
+                right_external_schema.merge(context.external_schema);
+                let right = self.plan_for_graph_pattern(
                     right,
-                    None,
-                    in_default_graph,
-                    external_schema,
-                )
+                    context.with_external_schema(&right_external_schema),
+                )?;
+                self.join(left, JoinType::Inner, right, None, context)
             }
             GraphPattern::Union { left, right } => {
-                let left = self.plan_for_graph_pattern(left, in_default_graph, external_schema)?;
-                let right =
-                    self.plan_for_graph_pattern(right, in_default_graph, external_schema)?;
+                let left = self.plan_for_graph_pattern(left, context)?;
+                let right = self.plan_for_graph_pattern(right, context)?;
                 left.union_by_name(right.build()?)
             }
             GraphPattern::Filter { inner, expr } => {
-                let plan = self.plan_for_graph_pattern(inner, in_default_graph, external_schema)?;
+                let plan = self.plan_for_graph_pattern(inner, context)?;
                 let plan = self.ensure_qualified_names(plan)?;
-                let filter = self.effective_boolean_value_expression(
-                    expr,
-                    plan.schema(),
-                    in_default_graph,
-                    external_schema,
-                )?;
+                let filter =
+                    self.effective_boolean_value_expression(expr, plan.schema(), context)?;
                 plan.filter(filter)
             }
             GraphPattern::Extend {
@@ -434,20 +487,15 @@ impl<'a> SparqlPlanBuilder<'a> {
                 variable,
                 expression,
             } => {
-                let plan = self.plan_for_graph_pattern(inner, in_default_graph, external_schema)?;
+                let plan = self.plan_for_graph_pattern(inner, context)?;
                 let plan = self.ensure_qualified_names(plan)?;
                 let projection = plan
                     .schema()
                     .iter()
                     .map(|field| Column::from(field).into())
                     .chain(once(
-                        self.expression(
-                            expression,
-                            plan.schema(),
-                            in_default_graph,
-                            external_schema,
-                        )?
-                        .alias(variable.as_str()),
+                        self.expression(expression, plan.schema(), context)?
+                            .alias(variable.as_str()),
                     ))
                     .collect::<Vec<_>>();
                 plan.project(projection)
@@ -457,14 +505,14 @@ impl<'a> SparqlPlanBuilder<'a> {
                 variables,
                 aggregates,
             } => {
-                let plan = self.plan_for_graph_pattern(inner, in_default_graph, external_schema)?;
+                let plan = self.plan_for_graph_pattern(inner, context)?;
                 let mut projection = Vec::new();
                 let group_expr = variables
                     .iter()
                     .enumerate()
                     .filter(|(i, v)| !variables[i + 1..].contains(v)) // We remove duplicates
                     .map(|(_, v)| {
-                        let column = Self::variable_expression(v, plan.schema(), external_schema);
+                        let column = Self::variable_expression(v, plan.schema(), context.external_schema);
                         projection.push(column.clone());
                         column
                     })
@@ -507,12 +555,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                                 expr,
                                 distinct,
                             } => {
-                                let expression = self.expression(
-                                    expr,
-                                    plan.schema(),
-                                    in_default_graph,
-                                    external_schema,
-                                )?;
+                                let expression = self.expression(expr, plan.schema(), context)?;
                                 match name {
                                     AggregateFunction::Count => (
                                         if *distinct {
@@ -523,19 +566,35 @@ impl<'a> SparqlPlanBuilder<'a> {
                                         true,
                                     ),
                                     AggregateFunction::Sum => (
-                                        agg_sum(Arc::clone(&self.dataset), expression, *distinct),
+                                        agg_sum(
+                                            self.dataset.expression_term_encoder(),
+                                            expression,
+                                            *distinct,
+                                        ),
                                         false,
                                     ),
                                     AggregateFunction::Avg => (
-                                        agg_avg(Arc::clone(&self.dataset), expression, *distinct),
+                                        agg_avg(
+                                            self.dataset.expression_term_encoder(),
+                                            expression,
+                                            *distinct,
+                                        ),
                                         false,
                                     ),
                                     AggregateFunction::Min => (
-                                        agg_min(Arc::clone(&self.dataset), expression, *distinct),
+                                        agg_min(
+                                            self.dataset.expression_term_encoder(),
+                                            expression,
+                                            *distinct,
+                                        ),
                                         false,
                                     ),
                                     AggregateFunction::Max => (
-                                        agg_max(Arc::clone(&self.dataset), expression, *distinct),
+                                        agg_max(
+                                            self.dataset.expression_term_encoder(),
+                                            expression,
+                                            *distinct,
+                                        ),
                                         false,
                                     ),
                                     _ => {
@@ -546,7 +605,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                         };
                         let mut proj = Column::new_unqualified(aggregate.name_for_alias()?).into();
                         if convert_back_to_term {
-                            proj = to_rdf_literal(proj);
+                            proj = to_rdf_literal(self.dataset.expression_term_encoder(), proj);
                         }
                         projection.push(proj.alias(target_var.as_str()));
                         Ok(aggregate)
@@ -556,9 +615,11 @@ impl<'a> SparqlPlanBuilder<'a> {
             }
             GraphPattern::Project { inner, variables } => {
                 // We only keep externals that are in the projection
-                let external_schema = filter_external_schema(external_schema, variables)?;
-                let plan =
-                    self.plan_for_graph_pattern(inner, in_default_graph, &external_schema)?;
+                let external_schema = filter_external_schema(context.external_schema, variables)?;
+                let plan = self.plan_for_graph_pattern(
+                    inner,
+                    context.with_external_schema(&external_schema),
+                )?;
                 let projection = variables
                     .iter()
                     .map(|v| Self::variable_expression(v, plan.schema(), &external_schema))
@@ -567,12 +628,10 @@ impl<'a> SparqlPlanBuilder<'a> {
                 plan.project(projection)
             }
             GraphPattern::OrderBy { inner, expression } => {
-                let plan = self.plan_for_graph_pattern(inner, in_default_graph, external_schema)?;
+                let plan = self.plan_for_graph_pattern(inner, context)?;
                 let sorts = expression
                     .iter()
-                    .map(|e| {
-                        self.order_expression(e, plan.schema(), in_default_graph, external_schema)
-                    })
+                    .map(|e| self.order_expression(e, plan.schema(), context))
                     .collect::<Result<Vec<_>>>()?;
                 plan.sort(sorts)
             }
@@ -586,9 +645,12 @@ impl<'a> SparqlPlanBuilder<'a> {
                             (inner, None)
                         };
                     // We only keep externals that are in the projection
-                    let external_schema = filter_external_schema(external_schema, variables)?;
-                    let plan =
-                        self.plan_for_graph_pattern(inner, in_default_graph, &external_schema)?;
+                    let external_schema =
+                        filter_external_schema(context.external_schema, variables)?;
+                    let plan = self.plan_for_graph_pattern(
+                        inner,
+                        context.with_external_schema(&external_schema),
+                    )?;
                     let projection = variables
                         .iter()
                         .map(|v| Self::variable_expression(v, plan.schema(), &external_schema))
@@ -601,8 +663,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                                     self.order_expression(
                                         e,
                                         plan.schema(),
-                                        in_default_graph,
-                                        &external_schema,
+                                        context.with_external_schema(&external_schema),
                                     )
                                 })
                                 .collect::<Result<Vec<_>>>()
@@ -625,19 +686,16 @@ impl<'a> SparqlPlanBuilder<'a> {
                     };
                     plan.distinct_on(on_expr, projection, sort)
                 } else {
-                    self.plan_for_graph_pattern(inner, in_default_graph, external_schema)?
-                        .distinct()
+                    self.plan_for_graph_pattern(inner, context)?.distinct()
                 }
             }
-            GraphPattern::Reduced { inner } => {
-                self.plan_for_graph_pattern(inner, in_default_graph, external_schema)
-            }
+            GraphPattern::Reduced { inner } => self.plan_for_graph_pattern(inner, context),
             GraphPattern::Slice {
                 inner,
                 start,
                 length,
             } => self
-                .plan_for_graph_pattern(inner, in_default_graph, external_schema)?
+                .plan_for_graph_pattern(inner, context)?
                 .limit(*start, *length),
             GraphPattern::Service { .. } => not_impl_err!("SERVICE is not implemented yet"),
         }
@@ -649,8 +707,7 @@ impl<'a> SparqlPlanBuilder<'a> {
         join_type: JoinType,
         right_plan: LogicalPlanBuilder,
         filter: Option<&Expression>,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<LogicalPlanBuilder> {
         let left_plan = self.ensure_qualified_names(left_plan)?;
         let right_plan = self.ensure_qualified_names(right_plan)?;
@@ -660,8 +717,7 @@ impl<'a> SparqlPlanBuilder<'a> {
             on_exprs.push(self.effective_boolean_value_expression(
                 filter,
                 &joint_schema,
-                in_default_graph,
-                external_schema,
+                context,
             )?);
         }
         let mut shared_variables_for_minus = (join_type == JoinType::LeftAnti).then(Vec::new);
@@ -729,45 +785,42 @@ impl<'a> SparqlPlanBuilder<'a> {
     }
 
     fn plan_for_triple_pattern(
-        &self,
+        &mut self,
         subject: TermOrVariable,
         predicate: TermOrVariable,
         object: TermOrVariable,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<LogicalPlanBuilder> {
         let mut filters = Vec::new();
         let mut new_to_original_column = Vec::new();
-        let table_name = self.table_name.next("quads");
         self.term_pattern_to_filter_or_project(
             subject,
-            Column::new(Some(table_name.clone()), "subject"),
+            Column::new_unqualified("subject"),
             &mut filters,
             &mut new_to_original_column,
-            external_schema,
+            context,
         )?;
         self.term_pattern_to_filter_or_project(
             predicate,
-            Column::new(Some(table_name.clone()), "predicate"),
+            Column::new_unqualified("predicate"),
             &mut filters,
             &mut new_to_original_column,
-            external_schema,
+            context,
         )?;
         self.term_pattern_to_filter_or_project(
             object,
-            Column::new(Some(table_name.clone()), "object"),
+            Column::new_unqualified("object"),
             &mut filters,
             &mut new_to_original_column,
-            external_schema,
+            context,
         )?;
         self.current_graph_to_filter_or_project(
-            in_default_graph,
-            Column::new(Some(table_name.clone()), "graph_name"),
+            context,
+            Column::new_unqualified("graph_name"),
             &mut filters,
             &mut new_to_original_column,
         )?;
-        let mut plan =
-            LogicalPlanBuilder::scan(&table_name, Arc::clone(&self.quad_table_source), None)?;
+        let mut plan = self.dataset.quads_table_plan()?;
         if let Some(filters) = filters.into_iter().reduce(and) {
             plan = plan.filter(filters)?;
         }
@@ -780,9 +833,12 @@ impl<'a> SparqlPlanBuilder<'a> {
         )
     }
 
-    fn plan_for_graph_names(&self) -> Result<LogicalPlanBuilder> {
+    fn plan_for_graph_names(
+        &mut self,
+        dataset_spec: Option<&QueryDataset>,
+    ) -> Result<LogicalPlanBuilder> {
         let out_table_name = self.table_name.next("g");
-        if let Some(spec) = self.dataset_spec.and_then(|spec| spec.named.as_ref()) {
+        if let Some(spec) = dataset_spec.and_then(|spec| spec.named.as_ref()) {
             if spec.is_empty() {
                 // Workaround empty values not allowed
                 LogicalPlanBuilder::empty(false)
@@ -796,9 +852,9 @@ impl<'a> SparqlPlanBuilder<'a> {
                 .project([Expr::from(Column::new_unqualified("column1")).alias(GRAPH_MAGIC_COLUMN)])
             }
         } else {
-            let scan_table_name = self.table_name.next("quads");
-            let graph_name_column = Column::new(Some(scan_table_name.clone()), "graph_name");
-            LogicalPlanBuilder::scan(&scan_table_name, Arc::clone(&self.quad_table_source), None)?
+            let graph_name_column = Column::new_unqualified("graph_name");
+            self.dataset
+                .quads_table_plan()?
                 .filter(Expr::from(graph_name_column.clone()).is_not_null())?
                 .project([Expr::from(graph_name_column.clone()).alias(GRAPH_MAGIC_COLUMN)])?
                 .distinct()
@@ -807,12 +863,12 @@ impl<'a> SparqlPlanBuilder<'a> {
     }
 
     fn term_pattern_to_filter_or_project(
-        &self,
+        &mut self,
         pattern: TermOrVariable,
         column: Column,
         filters: &mut Vec<Expr>,
         new_to_original_column: &mut Vec<(String, Column)>,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<()> {
         match pattern {
             TermOrVariable::Term(t) => {
@@ -821,7 +877,7 @@ impl<'a> SparqlPlanBuilder<'a> {
             }
             TermOrVariable::Variable(v) => {
                 if let Some(outer_ref_col) =
-                    outer_reference_column_from_schema(external_schema, v.as_str())
+                    outer_reference_column_from_schema(context.external_schema, v.as_str())
                 {
                     filters.push(
                         Expr::from(column.clone())
@@ -843,14 +899,14 @@ impl<'a> SparqlPlanBuilder<'a> {
     }
 
     fn current_graph_to_filter_or_project(
-        &self,
-        in_default_graph: bool,
+        &mut self,
+        context: Context<'_>,
         column: Column,
         filters: &mut Vec<Expr>,
         new_to_original_column: &mut Vec<(String, Column)>,
     ) -> Result<()> {
-        if in_default_graph {
-            filters.push(if let Some(spec) = self.dataset_spec {
+        if context.in_default_graph {
+            filters.push(if let Some(spec) = context.dataset_spec {
                 Expr::from(column.clone()).in_list(
                     spec.default
                         .iter()
@@ -874,19 +930,17 @@ impl<'a> SparqlPlanBuilder<'a> {
         mut subject: TermOrVariable,
         path: PropertyPathExpression,
         mut object: TermOrVariable,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<LogicalPlanBuilder> {
         match path {
             PropertyPathExpression::NamedNode(predicate) => self.plan_for_triple_pattern(
                 subject,
                 TermOrVariable::Term(predicate.into()),
                 object,
-                in_default_graph,
-                external_schema,
+                context,
             ),
             PropertyPathExpression::Reverse(p) => {
-                self.plan_for_property_path(object, *p, subject, in_default_graph, external_schema)
+                self.plan_for_property_path(object, *p, subject, context)
             }
             PropertyPathExpression::Sequence(l, r) => {
                 let middle_column_name = format!("#{}#", self.table_name.next("middle"));
@@ -894,16 +948,14 @@ impl<'a> SparqlPlanBuilder<'a> {
                     subject.clone(),
                     *l,
                     TermOrVariable::Variable(Variable::new_unchecked(&middle_column_name)),
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )?;
                 let left = self.ensure_qualified_names(left)?;
                 let right = self.plan_for_property_path(
                     TermOrVariable::Variable(Variable::new_unchecked(&middle_column_name)),
                     *r,
                     object.clone(),
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )?;
                 let right = self.ensure_qualified_names(right)?;
                 let mut projection = Vec::new();
@@ -940,22 +992,10 @@ impl<'a> SparqlPlanBuilder<'a> {
                 .project(projection)
             }
             PropertyPathExpression::Alternative(a, b) => self
-                .plan_for_property_path(
-                    subject.clone(),
-                    *a,
-                    object.clone(),
-                    in_default_graph,
-                    external_schema,
-                )?
+                .plan_for_property_path(subject.clone(), *a, object.clone(), context)?
                 .union_by_name(
-                    self.plan_for_property_path(
-                        subject,
-                        *b,
-                        object,
-                        in_default_graph,
-                        external_schema,
-                    )?
-                    .build()?,
+                    self.plan_for_property_path(subject, *b, object, context)?
+                        .build()?,
                 ),
             PropertyPathExpression::ZeroOrMore(p) => {
                 // p* = p+?
@@ -965,8 +1005,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                         p,
                     ))),
                     object,
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )
             }
             PropertyPathExpression::OneOrMore(p) => {
@@ -985,8 +1024,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     subject.clone(),
                     p.clone(),
                     TermOrVariable::Variable(Variable::new_unchecked(end_column_name.clone())),
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )?;
                 let schema = Arc::clone(input.schema().inner());
                 let recursive_left = LogicalPlanBuilder::scan(
@@ -1013,8 +1051,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     TermOrVariable::Variable(Variable::new_unchecked(middle_column_name.clone())),
                     p,
                     TermOrVariable::Variable(Variable::new_unchecked(end_column_name.clone())),
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )?;
                 let recursive_right = self.ensure_qualified_names(recursive_right)?;
                 let mut output_projection = Vec::new();
@@ -1091,8 +1128,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                                 TermOrVariable::Term(subject),
                                 *p,
                                 TermOrVariable::Term(object),
-                                in_default_graph,
-                                external_schema,
+                                context,
                             )
                         }
                     }
@@ -1101,8 +1137,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                             TermOrVariable::Term(subject.clone()),
                             *p,
                             TermOrVariable::Variable(object.clone()),
-                            in_default_graph,
-                            external_schema,
+                            context,
                         )?
                         .union_by_name_distinct(
                             LogicalPlanBuilder::values(vec![vec![self.term_to_expr(subject)?]])?
@@ -1118,13 +1153,16 @@ impl<'a> SparqlPlanBuilder<'a> {
                             TermOrVariable::Term(object),
                             PropertyPathExpression::Reverse(p.clone()),
                             TermOrVariable::Variable(subject),
-                            in_default_graph,
-                            external_schema,
+                            context,
                         )
                     }
                     (TermOrVariable::Variable(subject), TermOrVariable::Variable(object)) => {
-                        if external_schema.has_column_with_unqualified_name(subject.as_str())
-                            || external_schema.has_column_with_unqualified_name(object.as_str())
+                        if context
+                            .external_schema
+                            .has_column_with_unqualified_name(subject.as_str())
+                            || context
+                                .external_schema
+                                .has_column_with_unqualified_name(object.as_str())
                         {
                             return not_impl_err!(
                                 "Correlated queries and property path is not implemented yet"
@@ -1136,8 +1174,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                                 PREDICATE_MAGIC_COLUMN,
                             )),
                             TermOrVariable::Variable(Variable::new_unchecked(OBJECT_MAGIC_COLUMN)),
-                            in_default_graph,
-                            &DFSchema::empty(),
+                            context,
                         )?;
                         let term_column_expr = make_array(vec![
                             Expr::from(
@@ -1178,8 +1215,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                             TermOrVariable::Variable(subject.clone()),
                             *p,
                             TermOrVariable::Variable(object.clone()),
-                            in_default_graph,
-                            external_schema,
+                            context,
                         )?
                         .union_by_name_distinct(graph_terms_plan.build()?)
                     }
@@ -1190,8 +1226,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     subject.clone(),
                     TermOrVariable::Variable(Variable::new_unchecked(PREDICATE_MAGIC_COLUMN)),
                     object.clone(),
-                    in_default_graph,
-                    external_schema,
+                    context,
                 )?
                 .filter(
                     Expr::from(Column::new_unqualified(PREDICATE_MAGIC_COLUMN)).in_list(
@@ -1208,92 +1243,71 @@ impl<'a> SparqlPlanBuilder<'a> {
         &mut self,
         expression: &Expression,
         schema: &DFSchema,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<Expr> {
         Ok(match expression {
             Expression::And(left, right) => and(
-                self.effective_boolean_value_expression(
-                    left,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?,
-                self.effective_boolean_value_expression(
-                    right,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?,
+                self.effective_boolean_value_expression(left, schema, context)?,
+                self.effective_boolean_value_expression(right, schema, context)?,
             ),
             Expression::Or(left, right) => or(
-                self.effective_boolean_value_expression(
-                    left,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?,
-                self.effective_boolean_value_expression(
-                    right,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?,
+                self.effective_boolean_value_expression(left, schema, context)?,
+                self.effective_boolean_value_expression(right, schema, context)?,
             ),
-            Expression::Not(inner) => not(self.effective_boolean_value_expression(
-                inner,
-                schema,
-                in_default_graph,
-                external_schema,
-            )?),
+            Expression::Not(inner) => {
+                not(self.effective_boolean_value_expression(inner, schema, context)?)
+            }
             Expression::Bound(v) => {
-                Self::variable_expression(v, schema, external_schema).is_not_null()
+                Self::variable_expression(v, schema, context.external_schema).is_not_null()
             }
             Expression::SameTerm(l, r) => self
-                .expression(l, schema, in_default_graph, external_schema)?
-                .eq(self.expression(r, schema, in_default_graph, external_schema)?),
+                .expression(l, schema, context)?
+                .eq(self.expression(r, schema, context)?),
             Expression::Exists(p) => {
                 let mut new_external_schema = schema.clone();
-                new_external_schema.merge(external_schema);
+                new_external_schema.merge(context.external_schema);
                 exists(Arc::new(
-                    self.plan_for_graph_pattern(p, in_default_graph, &new_external_schema)?
-                        .build()?,
+                    self.plan_for_graph_pattern(
+                        p,
+                        context.with_external_schema(&new_external_schema),
+                    )?
+                    .build()?,
                 ))
             }
             Expression::Equal(left, right) => term_equals(
-                Arc::clone(&self.dataset),
-                self.expression(left, schema, in_default_graph, external_schema)?,
-                self.expression(right, schema, in_default_graph, external_schema)?,
+                self.dataset.expression_term_encoder(),
+                self.expression(left, schema, context)?,
+                self.expression(right, schema, context)?,
             ),
             Expression::Less(left, right) => {
-                let left = self.expression(left, schema, in_default_graph, external_schema)?;
-                let right = self.expression(right, schema, in_default_graph, external_schema)?;
-                less_than(Arc::clone(&self.dataset), left, right)
+                let left = self.expression(left, schema, context)?;
+                let right = self.expression(right, schema, context)?;
+                less_than(self.dataset.expression_term_encoder(), left, right)
             }
             Expression::LessOrEqual(left, right) => {
-                let left = self.expression(left, schema, in_default_graph, external_schema)?;
-                let right = self.expression(right, schema, in_default_graph, external_schema)?;
-                less_than_or_equal(Arc::clone(&self.dataset), left, right)
+                let left = self.expression(left, schema, context)?;
+                let right = self.expression(right, schema, context)?;
+                less_than_or_equal(self.dataset.expression_term_encoder(), left, right)
             }
             Expression::Greater(left, right) => {
-                let left = self.expression(left, schema, in_default_graph, external_schema)?;
-                let right = self.expression(right, schema, in_default_graph, external_schema)?;
-                greater_than(Arc::clone(&self.dataset), left, right)
+                let left = self.expression(left, schema, context)?;
+                let right = self.expression(right, schema, context)?;
+                greater_than(self.dataset.expression_term_encoder(), left, right)
             }
             Expression::GreaterOrEqual(left, right) => {
-                let left = self.expression(left, schema, in_default_graph, external_schema)?;
-                let right = self.expression(right, schema, in_default_graph, external_schema)?;
-                greater_than_or_equal(Arc::clone(&self.dataset), left, right)
+                let left = self.expression(left, schema, context)?;
+                let right = self.expression(right, schema, context)?;
+                greater_than_or_equal(self.dataset.expression_term_encoder(), left, right)
             }
             Expression::In(left, right) => {
-                let left = self.expression(left, schema, in_default_graph, external_schema)?;
+                let left = self.expression(left, schema, context)?;
                 right
                     .iter()
                     .map(|right| {
                         Ok(term_equals(
-                            Arc::clone(&self.dataset),
+                            self.dataset.expression_term_encoder(),
                             left.clone(),
-                            self.expression(right, schema, in_default_graph, external_schema)?,
+                            self.expression(right, schema, context)?,
                         ))
                     })
                     .reduce(|l: Result<_>, r| Ok(or(l?, r?)))
@@ -1301,38 +1315,29 @@ impl<'a> SparqlPlanBuilder<'a> {
             }
             Expression::FunctionCall(function, args) => match function {
                 Function::LangMatches => lang_matches(
-                    Arc::clone(&self.dataset),
-                    self.expression(&args[0], schema, in_default_graph, external_schema)?,
-                    self.expression(&args[1], schema, in_default_graph, external_schema)?,
+                    self.dataset.expression_term_encoder(),
+                    self.expression(&args[0], schema, context)?,
+                    self.expression(&args[1], schema, context)?,
                 ),
                 Function::Regex => regex(
-                    Arc::clone(&self.dataset),
-                    self.expression(&args[0], schema, in_default_graph, external_schema)?,
-                    self.expression(&args[1], schema, in_default_graph, external_schema)?,
+                    self.dataset.expression_term_encoder(),
+                    self.expression(&args[0], schema, context)?,
+                    self.expression(&args[1], schema, context)?,
                     if args.len() > 2 {
-                        Some(self.expression(
-                            &args[2],
-                            schema,
-                            in_default_graph,
-                            external_schema,
-                        )?)
+                        Some(self.expression(&args[2], schema, context)?)
                     } else {
                         None
                     },
                 ),
-                _ => effective_boolean_value(self.expression(
-                    expression,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?),
+                _ => ebv(
+                    self.dataset.expression_term_encoder(),
+                    self.expression(expression, schema, context)?,
+                ),
             },
-            _ => effective_boolean_value(self.expression(
-                expression,
-                schema,
-                in_default_graph,
-                external_schema,
-            )?),
+            _ => ebv(
+                self.dataset.expression_term_encoder(),
+                self.expression(expression, schema, context)?,
+            ),
         })
     }
 
@@ -1340,16 +1345,15 @@ impl<'a> SparqlPlanBuilder<'a> {
         &mut self,
         expression: &OrderExpression,
         schema: &DFSchema,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<Sort> {
         Ok(match expression {
             OrderExpression::Asc(e) => {
-                let e = self.expression(e, schema, in_default_graph, external_schema)?;
+                let e = self.expression(e, schema, context)?;
                 self.order_by_collation(e).sort(true, true)
             }
             OrderExpression::Desc(e) => {
-                let e = self.expression(e, schema, in_default_graph, external_schema)?;
+                let e = self.expression(e, schema, context)?;
                 self.order_by_collation(e).sort(false, true)
             }
         })
@@ -1359,17 +1363,14 @@ impl<'a> SparqlPlanBuilder<'a> {
         &mut self,
         expression: &Expression,
         schema: &DFSchema,
-        in_default_graph: bool,
-        external_schema: &DFSchema,
+        context: Context<'_>,
     ) -> Result<Expr> {
         Ok(match expression {
-            Expression::Variable(v) => Self::variable_expression(v, schema, external_schema),
-            Expression::NamedNode(l) => lit(encode_term(
-                &self.dataset.internalize_term(l.clone().into())?,
-            )),
-            Expression::Literal(l) => lit(encode_term(
-                &self.dataset.internalize_term(l.clone().into())?,
-            )),
+            Expression::Variable(v) => {
+                Self::variable_expression(v, schema, context.external_schema)
+            }
+            Expression::NamedNode(l) => self.term_to_expr(l.clone())?,
+            Expression::Literal(l) => self.term_to_expr(l.clone())?,
             Expression::And(_, _)
             | Expression::Or(_, _)
             | Expression::Not(_)
@@ -1381,39 +1382,23 @@ impl<'a> SparqlPlanBuilder<'a> {
             | Expression::LessOrEqual(_, _)
             | Expression::Greater(_, _)
             | Expression::GreaterOrEqual(_, _)
-            | Expression::In(_, _) => to_rdf_literal(self.effective_boolean_value_expression(
-                expression,
-                schema,
-                in_default_graph,
-                external_schema,
-            )?),
+            | Expression::In(_, _) => to_rdf_literal(
+                self.dataset.expression_term_encoder(),
+                self.effective_boolean_value_expression(expression, schema, context)?,
+            ),
             Expression::If(condition, t, f) => {
-                let condition = self.effective_boolean_value_expression(
-                    condition,
-                    schema,
-                    in_default_graph,
-                    external_schema,
-                )?;
+                let condition =
+                    self.effective_boolean_value_expression(condition, schema, context)?;
                 Expr::Case(Case::new(
                     None,
                     vec![
                         (
                             Box::new(condition.clone().is_true()),
-                            Box::new(self.expression(
-                                t,
-                                schema,
-                                in_default_graph,
-                                external_schema,
-                            )?),
+                            Box::new(self.expression(t, schema, context)?),
                         ),
                         (
                             Box::new(condition.is_false()),
-                            Box::new(self.expression(
-                                f,
-                                schema,
-                                in_default_graph,
-                                external_schema,
-                            )?),
+                            Box::new(self.expression(f, schema, context)?),
                         ),
                     ],
                     None,
@@ -1421,62 +1406,66 @@ impl<'a> SparqlPlanBuilder<'a> {
             }
             Expression::Coalesce(args) => coalesce(
                 args.iter()
-                    .map(|arg| self.expression(arg, schema, in_default_graph, external_schema))
+                    .map(|arg| self.expression(arg, schema, context))
                     .collect::<Result<Vec<_>>>()?,
             ),
-            Expression::Add(left, right) => plus(
-                Arc::clone(&self.dataset),
-                self.expression(left, schema, in_default_graph, external_schema)?,
-                self.expression(right, schema, in_default_graph, external_schema)?,
+            Expression::Add(left, right) => add(
+                self.dataset.expression_term_encoder(),
+                self.expression(left, schema, context)?,
+                self.expression(right, schema, context)?,
             ),
             Expression::Subtract(left, right) => subtract(
-                Arc::clone(&self.dataset),
-                self.expression(left, schema, in_default_graph, external_schema)?,
-                self.expression(right, schema, in_default_graph, external_schema)?,
+                self.dataset.expression_term_encoder(),
+                self.expression(left, schema, context)?,
+                self.expression(right, schema, context)?,
             ),
             Expression::Multiply(left, right) => multiply(
-                Arc::clone(&self.dataset),
-                self.expression(left, schema, in_default_graph, external_schema)?,
-                self.expression(right, schema, in_default_graph, external_schema)?,
+                self.dataset.expression_term_encoder(),
+                self.expression(left, schema, context)?,
+                self.expression(right, schema, context)?,
             ),
             Expression::Divide(left, right) => divide(
-                Arc::clone(&self.dataset),
-                self.expression(left, schema, in_default_graph, external_schema)?,
-                self.expression(right, schema, in_default_graph, external_schema)?,
+                self.dataset.expression_term_encoder(),
+                self.expression(left, schema, context)?,
+                self.expression(right, schema, context)?,
             ),
             Expression::FunctionCall(function, args) => match function {
                 Function::Str => str(
-                    Arc::clone(&self.dataset),
-                    self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                    self.dataset.expression_term_encoder(),
+                    self.expression(&args[0], schema, context)?,
+                ),
+                Function::BNode => bnode(
+                    self.dataset.expression_term_encoder(),
+                    if args.is_empty() {
+                        None
+                    } else {
+                        Some(self.expression(&args[0], schema, context)?)
+                    },
                 ),
                 Function::Lang => lang(
-                    Arc::clone(&self.dataset),
-                    self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                    self.dataset.expression_term_encoder(),
+                    self.expression(&args[0], schema, context)?,
                 ),
-                Function::LangMatches | Function::Regex => {
-                    to_rdf_literal(self.effective_boolean_value_expression(
-                        expression,
-                        schema,
-                        in_default_graph,
-                        external_schema,
-                    )?)
-                }
+                Function::LangMatches | Function::Regex => to_rdf_literal(
+                    self.dataset.expression_term_encoder(),
+                    self.effective_boolean_value_expression(expression, schema, context)?,
+                ),
                 Function::Custom(function) => match function.as_ref() {
                     xsd::INTEGER => xsd_integer(
-                        Arc::clone(&self.dataset),
-                        self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                        self.dataset.expression_term_encoder(),
+                        self.expression(&args[0], schema, context)?,
                     ),
                     xsd::DECIMAL => xsd_decimal(
-                        Arc::clone(&self.dataset),
-                        self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                        self.dataset.expression_term_encoder(),
+                        self.expression(&args[0], schema, context)?,
                     ),
                     xsd::FLOAT => xsd_float(
-                        Arc::clone(&self.dataset),
-                        self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                        self.dataset.expression_term_encoder(),
+                        self.expression(&args[0], schema, context)?,
                     ),
                     xsd::DOUBLE => xsd_double(
-                        Arc::clone(&self.dataset),
-                        self.expression(&args[0], schema, in_default_graph, external_schema)?,
+                        self.dataset.expression_term_encoder(),
+                        self.expression(&args[0], schema, context)?,
                     ),
                     _ => {
                         return not_impl_err!("{function} is not implemented yet");
@@ -1518,7 +1507,7 @@ impl<'a> SparqlPlanBuilder<'a> {
                     .clone(),
             ),
             TermPattern::Literal(l) => TermOrVariable::Term(l.into()),
-            #[cfg(feature = "rdf-12")]
+            #[cfg(feature = "sparql-12")]
             TermPattern::Triple(_) => {
                 return not_impl_err!("RDF 1.2 triple terms are not implemented yet");
             }
@@ -1538,14 +1527,39 @@ impl<'a> SparqlPlanBuilder<'a> {
         plan.alias(self.table_name.next("t"))
     }
 
-    fn term_to_expr(&self, term: impl Into<Term>) -> Result<Expr> {
-        Ok(lit(encode_term(
-            &self.dataset.internalize_term(term.into())?,
-        )))
+    fn term_to_expr(&mut self, term: impl Into<Term>) -> Result<Expr> {
+        Ok(lit(self.dataset.internalize_term(term.into())?))
     }
 
-    fn order_by_collation(&self, expr: Expr) -> Expr {
-        order_by_collation(Arc::clone(&self.dataset), expr)
+    fn order_by_collation(&mut self, expr: Expr) -> Expr {
+        order_by_collation(self.dataset.expression_term_encoder(), expr)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Context<'a> {
+    dataset_spec: Option<&'a QueryDataset>,
+    in_default_graph: bool,
+    external_schema: &'a DFSchema,
+}
+
+impl<'a> Context<'a> {
+    fn new(dataset_spec: Option<&'a QueryDataset>, external_schema: &'a DFSchema) -> Self {
+        Self {
+            dataset_spec,
+            in_default_graph: true,
+            external_schema,
+        }
+    }
+
+    fn in_named_graph(mut self) -> Self {
+        self.in_default_graph = false;
+        self
+    }
+
+    pub fn with_external_schema(mut self, schema: &'a DFSchema) -> Self {
+        self.external_schema = schema;
+        self
     }
 }
 
