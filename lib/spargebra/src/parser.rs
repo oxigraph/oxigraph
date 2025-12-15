@@ -1233,7 +1233,7 @@ parser! {
             not_empty_fold(e.into_iter(), |a, b| Expression::And(Box::new(a), Box::new(b)))
         }
 
-        rule HavingCondition() -> Expression = Constraint()
+        rule HavingCondition() -> Expression = c:Constraint() _ { c }
 
         rule OrderClause() -> Vec<OrderExpression> = i("ORDER") _ i("BY") _ c:OrderClause_item()+ { c }
         rule OrderClause_item() -> OrderExpression = c:OrderCondition() _ { c }
