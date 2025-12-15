@@ -11,13 +11,16 @@ use oxigraph::model::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
     NamedNode, Term, TermRef, Triple, TripleRef, Variable,
 };
-use oxigraph::sparql::QueryResults;
+#[cfg(feature = "datafusion")]
+use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::sparql::results::{
     QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
 };
 use oxigraph::store::Store;
 use oxiri::Iri;
-use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
+use spareval::{
+    DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QueryResults, QuerySolutionIter,
+};
 use spargebra::algebra::GraphPattern;
 use spargebra::{Query, SparqlParser};
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
@@ -217,6 +220,33 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         ensure!(
             are_query_results_isomorphic(&expected_results, &actual_results),
             "Not isomorphic results.\n{}\nParsed query:\n{query}\nData:\n{dataset}\n",
+            results_diff(expected_results, actual_results),
+        );
+    }
+
+    #[cfg(feature = "datafusion")]
+    {
+        let store = Store::new()?;
+        store.extend(&dataset)?;
+        let actual_results = match SparqlEvaluator::new()
+            .for_query(query.clone())
+            .datafusion(&store)
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return if e.to_string().contains("not implemented") {
+                    Ok(()) // TODO: implement everything
+                } else {
+                    Err(e.into())
+                };
+            }
+        };
+        let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)
+            .with_context(|| format!("Error when executing {query}"))?;
+
+        ensure!(
+            are_query_results_isomorphic(&expected_results, &actual_results),
+            "Not isomorphic results on DataFusion.\n{}\nParsed query:\n{query}\nData:\n{dataset}\n",
             results_diff(expected_results, actual_results),
         );
     }
