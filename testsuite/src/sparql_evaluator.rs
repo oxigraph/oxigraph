@@ -450,6 +450,10 @@ fn are_query_results_isomorphic(
                         actual_solutions.iter().any(|actual_solution| {
                             compare_solutions(expected_solution, actual_solution)
                         })
+                    }) && actual_solutions.iter().all(|expected_solution| {
+                        expected_solutions.iter().any(|actual_solution| {
+                            compare_solutions(expected_solution, actual_solution)
+                        })
                     })
                 }
         }
