@@ -4,7 +4,7 @@ import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
-from typing import Any, List, Union
+from typing import List, Union
 
 from pyoxigraph import (
     BlankNode,
@@ -115,8 +115,8 @@ class TestStore(unittest.TestCase):
     def test_construct_query(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results: Any = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
-        self.assertIsInstance(results, QueryTriples)
+        results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        assert isinstance(results, QueryTriples)
         self.assertEqual(
             set(results),
             {Triple(foo, bar, baz)},
@@ -125,8 +125,8 @@ class TestStore(unittest.TestCase):
     def test_select_query(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        solutions: Any = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")
-        self.assertIsInstance(solutions, QuerySolutions)
+        solutions = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")
+        assert isinstance(solutions, QuerySolutions)
         self.assertEqual(solutions.variables, [Variable("s"), Variable("o")])
         solution = next(solutions)
         self.assertIsInstance(solution, QuerySolution)
@@ -143,15 +143,18 @@ class TestStore(unittest.TestCase):
     def test_select_query_union_default_graph(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
-        results: Any = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 0)
         results = store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True)
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
             use_default_graph_as_union=True,
             named_graphs=[graph],
         )
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
 
     def test_select_query_with_default_graph(self) -> None:
@@ -160,14 +163,17 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz, graph))
         store.add(Quad(foo, bar, foo))
         store.add(Quad(foo, bar, bar, graph_bnode))
-        results: Any = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
         results = store.query("SELECT ?s WHERE { ?s ?p ?o }", default_graph=graph)
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
             default_graph=[DefaultGraph(), graph, graph_bnode],
         )
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 3)
 
     def test_ask_query_with_base_and_prefixes(self) -> None:
@@ -191,16 +197,17 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, foo))
         store.add(Quad(foo, bar, bar, graph_bnode))
         store.add(Quad(foo, bar, bar, foo))
-        results: Any = store.query(
+        results = store.query(
             "SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }",
             named_graphs=[graph, graph_bnode],
         )
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 2)
 
     def test_select_query_with_custom_functions(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, foo))
-        results: Any = store.query(
+        results = store.query(
             "SELECT (<http://example.com/concat>(?s, ?p) AS ?c) (<http://example.com/failing>(?t) AS ?f)"
             "WHERE { ?s ?p ?o }",
             custom_functions={
@@ -208,8 +215,8 @@ class TestStore(unittest.TestCase):
                 NamedNode("http://example.com/failing"): lambda _: None,
             },
         )
+        assert isinstance(results, QuerySolutions)
         solution = next(results)
-        self.assertIsInstance(solution, QuerySolution)
         self.assertEqual(solution["c"], Literal("http://foohttp://bar"))
         self.assertIsNone(solution["f"], None)
 
@@ -227,27 +234,27 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, foo))
         store.add(Quad(bar, bar, foo))
-        results: Any = store.query(
+        results = store.query(
             "SELECT (<http://example.com/concat>(?s) AS ?c)WHERE { ?s ?p ?o }",
             custom_aggregate_functions={
                 NamedNode("http://example.com/concat"): Aggregate,
             },
         )
+        assert isinstance(results, QuerySolutions)
         solution = next(results)
-        self.assertIsInstance(solution, QuerySolution)
         self.assertEqual(solution["c"], Literal("<http://bar> <http://foo>"))
 
     def test_select_query_with_substitution(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
         store.add(Quad(bar, bar, baz))
-        solutions: Any = store.query(
+        solutions = store.query(
             "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
             substitutions={
                 Variable("s"): foo,
             },
         )
-        self.assertIsInstance(solutions, QuerySolutions)
+        assert isinstance(solutions, QuerySolutions)
         all_solutions = list(solutions)
         self.assertEqual(len(all_solutions), 1)
         self.assertEqual(all_solutions[0]["s"], foo)
@@ -255,8 +262,8 @@ class TestStore(unittest.TestCase):
     def test_select_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results: QuerySolutions = store.query("SELECT ?s WHERE { ?s ?p ?o }")  # type: ignore[assignment]
-        self.assertIsInstance(results, QuerySolutions)
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        assert isinstance(results, QuerySolutions)
         output = BytesIO()
         results.serialize(output, QueryResultsFormat.CSV)
         self.assertEqual(
@@ -267,8 +274,8 @@ class TestStore(unittest.TestCase):
     def test_ask_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results: QueryBoolean = store.query("ASK { ?s ?p ?o }")  # type: ignore[assignment]
-        self.assertIsInstance(results, QueryBoolean)
+        results = store.query("ASK { ?s ?p ?o }")
+        assert isinstance(results, QueryBoolean)
         output = BytesIO()
         results.serialize(output, QueryResultsFormat.CSV)
         self.assertEqual(
@@ -279,8 +286,8 @@ class TestStore(unittest.TestCase):
     def test_construct_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results: QueryTriples = store.query("CONSTRUCT WHERE { ?s ?p ?o }")  # type: ignore[assignment]
-        self.assertIsInstance(results, QueryTriples)
+        results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")
+        assert isinstance(results, QueryTriples)
         output = BytesIO()
         results.serialize(output, RdfFormat.N_TRIPLES)
         self.assertEqual(
@@ -314,9 +321,8 @@ class TestStore(unittest.TestCase):
     def test_update_star(self) -> None:
         store = Store()
         store.update("PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }")
-        results: Any = store.query(
-            "PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }"
-        )
+        results = store.query("PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }")
+        assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
 
     def test_load_ntriples_to_default_graph(self) -> None:
