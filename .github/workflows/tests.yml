@@ -335,13 +335,15 @@ jobs:
         working-directory: ./python/docs
       - run: uv run --locked python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
+      - run: uv run --locked ty check --output-format=github generate_stubs.py tests
+        working-directory: ./python
+      - run: uv run --locked ruff format --output-format=github --check .
+        working-directory: ./python
+      - run: uv run --locked ruff check --output-format=github .
+        working-directory: ./python
       - run: uv run --locked -m mypy.stubtest pyoxigraph --allowlist=mypy_allowlist.txt
         working-directory: ./python
       - run: uv run --locked -m mypy generate_stubs.py tests --strict
-        working-directory: ./python
-      - run: uv run --locked ruff format --check .
-        working-directory: ./python
-      - run: uv run --locked ruff check --output-format=github .
         working-directory: ./python
       - run: uv run --locked sphinx-lint docs
         working-directory: ./python

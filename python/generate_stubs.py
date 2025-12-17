@@ -454,7 +454,7 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
                     # TODO: hack to convert Callable[[T, ...], R] into Callable[..., R]
                     new_elements.append(ast.Constant(...))
                 else:
-                    new_elements.append(ast.Expr(value=ast.List([parse_sequence(g) for g in group[0] if g])))
+                    new_elements.append(ast.List([parse_sequence(g) for g in group[0] if g]))
             else:
                 raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
         return reduce(lambda left, right: ast.BinOp(left=left, op=ast.BitOr(), right=right), new_elements)
