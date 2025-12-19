@@ -1,6 +1,6 @@
 [package]
 name = "spargebra"
-version = "0.4.2"
+version = "0.4.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"

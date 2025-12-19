@@ -1,3 +1,12 @@
+# [0.5.3] - 2025-12-19
+
+### Added
+- SPARQL 1.2: support `VERSION` declaration. 
+
+### Changed
+- SPARQL: fixes parsing of `HAVING` when there are multiple conditions.
+- SPARQL: compute ordering values for `ORDER BY` only once (allows `ORDER BY RAND()` to work properly).
+
 # [0.5.2] - 2025-10-25
 
 ### Changed
