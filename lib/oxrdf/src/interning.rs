@@ -313,7 +313,7 @@ impl InternedLiteral {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum InternedNamedOrBlankNode {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
@@ -365,7 +365,7 @@ impl InternedNamedOrBlankNode {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum InternedGraphName {
     DefaultGraph,
     NamedNode(InternedNamedNode),
@@ -530,7 +530,7 @@ impl InternedTriple {
 
     pub fn next(&self) -> Self {
         Self {
-            subject: self.subject.clone(),
+            subject: self.subject,
             predicate: self.predicate,
             object: self.object.next(),
         }

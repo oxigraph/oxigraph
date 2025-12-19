@@ -25,8 +25,8 @@
 //!
 //! See also [`Dataset`] if you want to get support of multiple RDF graphs at the same time.
 
-pub use crate::dataset::CanonicalizationAlgorithm;
 use crate::dataset::*;
+pub use crate::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
 use crate::*;
 use std::fmt;
 

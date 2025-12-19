@@ -111,3 +111,10 @@ pub mod jld {
     pub const STREAM_TEST: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("https://w3c.github.io/json-ld-api/tests/vocab#StreamTest");
 }
+
+pub mod rdfc {
+    use oxigraph::model::NamedNodeRef;
+
+    pub const HASH_ALGORITHM: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("https://w3c.github.io/rdf-canon/tests/vocab#hashAlgorithm");
+}

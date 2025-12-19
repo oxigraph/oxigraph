@@ -1620,6 +1620,7 @@ dependencies = [
  "oxigraph",
  "oxiri",
  "oxjsonld",
+ "oxrdf",
  "oxttl",
  "spareval",
  "spargebra",
@@ -1658,12 +1659,14 @@ dependencies = [
 name = "oxrdf"
 version = "0.3.1"
 dependencies = [
+ "hex",
  "oxilangtag",
  "oxiri",
  "oxsdatatypes",
  "rand",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.17",
 ]
 
