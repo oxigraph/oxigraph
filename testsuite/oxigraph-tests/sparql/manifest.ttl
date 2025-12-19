@@ -40,6 +40,7 @@
     :ask_join_error_left
     :ask_join_error_right
     :duplicated_values_var
+    :order_by_rand
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -196,3 +197,8 @@
 :duplicated_values_var rdf:type mf:NegativeSyntaxTest ;
     mf:name "Duplicated variable in a VALUES clause" ;
     mf:action <duplicated_values_var.rq> .
+
+:order_by_rand rdf:type mf:QueryEvaluationTest ;
+    mf:name "ORDER BY RAND() do not panic" ;
+    mf:action [ qt:query <order_by_rand.rq> ] ;
+    mf:result  <order_by_rand.srx> .

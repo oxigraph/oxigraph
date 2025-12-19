@@ -1,0 +1,1 @@
+SELECT ?v WHERE { VALUES ?v { 1 1 1 1 1 1 } } ORDER BY RAND()
