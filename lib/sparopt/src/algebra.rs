@@ -1207,13 +1207,32 @@ impl GraphPattern {
                 variables: variables.clone(),
                 bindings: bindings.clone(),
             },
-            AlGraphPattern::OrderBy { inner, expression } => Self::OrderBy {
-                inner: Box::new(Self::from_sparql_algebra(inner, graph_name, blank_nodes)),
-                expression: expression
-                    .iter()
-                    .map(|e| OrderExpression::from_sparql_algebra(e, graph_name))
-                    .collect(),
-            },
+            AlGraphPattern::OrderBy { inner, expression } => {
+                let mut inner = Self::from_sparql_algebra(inner, graph_name, blank_nodes);
+                let mut expressions = Vec::with_capacity(expression.len());
+                for e in expression {
+                    expressions.push(match e {
+                        AlOrderExpression::Asc(e) => {
+                            let v;
+                            (v, inner) = Self::algebra_expression_to_constant_or_variable(
+                                e, inner, graph_name,
+                            );
+                            OrderExpression::Asc(Expression::Variable(v))
+                        }
+                        AlOrderExpression::Desc(e) => {
+                            let v;
+                            (v, inner) = Self::algebra_expression_to_constant_or_variable(
+                                e, inner, graph_name,
+                            );
+                            OrderExpression::Desc(Expression::Variable(v))
+                        }
+                    });
+                }
+                Self::OrderBy {
+                    inner: Box::new(inner),
+                    expression: expressions,
+                }
+            }
             AlGraphPattern::Project { inner, variables } => {
                 let graph_name = if let Some(NamedNodePattern::Variable(graph_name)) = graph_name {
                     Some(NamedNodePattern::Variable(
@@ -1314,6 +1333,27 @@ impl GraphPattern {
                 .into()
             }
             TermPattern::Variable(variable) => variable.clone().into(),
+        }
+    }
+
+    /// Makes sure the expression is a variable, use Extend in the other cases
+    fn algebra_expression_to_constant_or_variable(
+        expression: &AlExpression,
+        graph_pattern: GraphPattern,
+        graph_name: Option<&NamedNodePattern>,
+    ) -> (Variable, GraphPattern) {
+        if let AlExpression::Variable(variable) = expression {
+            (variable.clone(), graph_pattern)
+        } else {
+            let variable = Variable::new_unchecked(format!("{:x}", random::<u128>()));
+            (
+                variable.clone(),
+                GraphPattern::Extend {
+                    inner: Box::new(graph_pattern),
+                    variable,
+                    expression: Expression::from_sparql_algebra(expression, graph_name),
+                },
+            )
         }
     }
 }
@@ -1607,20 +1647,6 @@ pub enum OrderExpression {
     Asc(Expression),
     /// Descending order
     Desc(Expression),
-}
-
-impl OrderExpression {
-    fn from_sparql_algebra(
-        expression: &AlOrderExpression,
-        graph_name: Option<&NamedNodePattern>,
-    ) -> Self {
-        match expression {
-            AlOrderExpression::Asc(e) => Self::Asc(Expression::from_sparql_algebra(e, graph_name)),
-            AlOrderExpression::Desc(e) => {
-                Self::Desc(Expression::from_sparql_algebra(e, graph_name))
-            }
-        }
-    }
 }
 
 impl From<&OrderExpression> for AlOrderExpression {
