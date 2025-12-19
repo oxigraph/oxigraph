@@ -53,6 +53,8 @@ jobs:
             runner: ubuntu-24.04-arm
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -77,6 +79,11 @@ jobs:
           name: oxigraph_${{ matrix.arch }}_linux_gnu
           path: oxigraph-*.data/scripts/oxigraph
       - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_linux_gnu
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_linux_gnu
         if: github.event_name == 'release'
       - run: uvx twine check target/wheels/*
 
@@ -118,6 +125,8 @@ jobs:
             deployment_target: '11.0'
     continue-on-error: true
     runs-on: macos-latest
+    permissions:
+      contents: write
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
@@ -154,6 +163,11 @@ jobs:
           path: oxigraph-*.data/scripts/oxigraph
       - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_apple
         if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_apple
+        if: github.event_name == 'release'
       - run: uvx twine check target/wheels/*
 
   wheel_windows:
@@ -166,6 +180,8 @@ jobs:
             runner: windows-11-arm
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -211,6 +227,11 @@ jobs:
           name: oxigraph_${{ matrix.arch }}_windows
           path: oxigraph-*.data/scripts/oxigraph.exe
       - run: mv oxigraph-*.data/scripts/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
         if: github.event_name == 'release'
       - run: uvx twine check target/wheels/*
 
@@ -438,3 +459,25 @@ jobs:
         working-directory: ./cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  full_archive:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - run: bash trim_rocksdb.sh
+        working-directory: ./oxrocksdb-sys
+      - run: |
+          rm -rf .git **/.git bench fuzz
+          zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
+          tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+          mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}.zip
+            oxigraph_${{ github.event.release.tag_name }}.tar.gz
