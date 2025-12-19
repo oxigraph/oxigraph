@@ -31,10 +31,13 @@
 
 use crate::interning::*;
 use crate::*;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeSet, HashMap, HashSet};
+#[cfg(feature = "rdfc-10")]
+use sha2::{Digest, Sha256, Sha384};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::mem::take;
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
@@ -199,7 +202,7 @@ impl Dataset {
         self.spog
             .range(
                 &(
-                    subject.clone(),
+                    *subject,
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                     InternedGraphName::first(),
@@ -321,7 +324,7 @@ impl Dataset {
         self.gspo
             .range(
                 &(
-                    graph_name.clone(),
+                    *graph_name,
                     InternedNamedOrBlankNode::first(),
                     InternedNamedNode::first(),
                     InternedTerm::first(),
@@ -371,11 +374,11 @@ impl Dataset {
         ),
     ) -> bool {
         let (s, p, o, g) = quad;
-        self.gspo.insert((g.clone(), s.clone(), p, o.clone()));
-        self.gpos.insert((g.clone(), p, o.clone(), s.clone()));
-        self.gosp.insert((g.clone(), o.clone(), s.clone(), p));
-        self.spog.insert((s.clone(), p, o.clone(), g.clone()));
-        self.posg.insert((p, o.clone(), s.clone(), g.clone()));
+        self.gspo.insert((g, s, p, o.clone()));
+        self.gpos.insert((g, p, o.clone(), s));
+        self.gosp.insert((g, o.clone(), s, p));
+        self.spog.insert((s, p, o.clone(), g));
+        self.posg.insert((p, o.clone(), s, g));
         self.ospg.insert((o, s, p, g))
     }
 
@@ -398,11 +401,11 @@ impl Dataset {
         ),
     ) -> bool {
         let (s, p, o, g) = quad;
-        self.gspo.remove(&(g.clone(), s.clone(), p, o.clone()));
-        self.gpos.remove(&(g.clone(), p, o.clone(), s.clone()));
-        self.gosp.remove(&(g.clone(), o.clone(), s.clone(), p));
-        self.spog.remove(&(s.clone(), p, o.clone(), g.clone()));
-        self.posg.remove(&(p, o.clone(), s.clone(), g.clone()));
+        self.gspo.remove(&(g, s, p, o.clone()));
+        self.gpos.remove(&(g, p, o.clone(), s));
+        self.gosp.remove(&(g, o.clone(), s, p));
+        self.spog.remove(&(s, p, o.clone(), g));
+        self.posg.remove(&(p, o.clone(), s, g));
         self.ospg.remove(&(o, s, p, g))
     }
 
@@ -531,10 +534,16 @@ impl Dataset {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
-    /// <div class="warning">Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
+    /// It supports the [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) standard algorithm.
+    /// Support requires the `rdfc-10` feature to be enabled.
+    ///
+    /// <div class="warning">Blank node ids depend on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
     /// Hence, this canonization might not be suitable for diffs.</div>
     ///
-    /// <div class="warning">This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.</div>
+    /// <div class="warning">
+    ///     This implementation's worst-case complexity is exponential with respect to the number of blank nodes in the input dataset.
+    ///     See [the RDFC specification section about it](https://www.w3.org/TR/rdf-canon/#dataset-poisoning).
+    /// </div>
     pub fn canonicalize(&mut self, algorithm: CanonicalizationAlgorithm) {
         let bnode_mapping = self.canonicalize_interned_blank_nodes(algorithm);
         let new_quads = self.map_blank_nodes(&bnode_mapping);
@@ -562,261 +571,590 @@ impl Dataset {
         &self,
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<InternedBlankNode, BlankNode> {
-        match algorithm {
-            CanonicalizationAlgorithm::Unstable => {
-                let bnodes = self.blank_nodes();
-                let quads_per_blank_node = self.quads_per_blank_nodes();
-                let (hash, partition) = self.hash_bnodes(
-                    bnodes.into_iter().map(|bnode| (bnode, 0)).collect(),
-                    &quads_per_blank_node,
-                );
-                self.distinguish(hash, &partition, &quads_per_blank_node)
-                    .into_iter()
-                    .map(|(from, to)| (from, BlankNode::new_from_unique_id(to.into())))
-                    .collect()
-            }
-        }
-    }
-
-    fn blank_nodes(&self) -> HashSet<InternedBlankNode> {
-        let mut bnodes = HashSet::new();
-        for (g, s, _, o) in &self.gspo {
-            if let InternedNamedOrBlankNode::BlankNode(bnode) = s {
-                bnodes.insert(*bnode);
-            }
-            if let InternedTerm::BlankNode(bnode) = o {
-                bnodes.insert(*bnode);
-            }
-            #[cfg(feature = "rdf-12")]
-            if let InternedTerm::Triple(triple) = o {
-                Self::triple_blank_nodes(triple, &mut bnodes);
-            }
-            if let InternedGraphName::BlankNode(bnode) = g {
-                bnodes.insert(*bnode);
-            }
-        }
-        bnodes
-    }
-
-    #[cfg(feature = "rdf-12")]
-    fn triple_blank_nodes(triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
-        if let InternedNamedOrBlankNode::BlankNode(bnode) = &triple.subject {
-            bnodes.insert(*bnode);
-        }
-        if let InternedTerm::BlankNode(bnode) = &triple.object {
-            bnodes.insert(*bnode);
-        } else if let InternedTerm::Triple(t) = &triple.object {
-            Self::triple_blank_nodes(t, bnodes);
-        }
-    }
-
-    fn quads_per_blank_nodes(&self) -> QuadsPerBlankNode {
-        let mut map: HashMap<_, Vec<_>> = HashMap::new();
+        let hash_algorithm = match algorithm {
+            CanonicalizationAlgorithm::Unstable => None,
+            #[cfg(feature = "rdfc-10")]
+            CanonicalizationAlgorithm::Rdfc10 { hash_algorithm } => Some(hash_algorithm),
+        };
+        // https://www.w3.org/TR/rdf-canon/#canon-algo-algo
+        // 1)
+        let mut canonicalization_state = CanonicalizationState {
+            blank_node_to_quads_map: QuadsPerBlankNode::new(),
+            hash_to_blank_nodes_map: BTreeMap::new(),
+            canonical_issuer: IdentifierIssuer::new("c14n"),
+        };
+        // 2)
         for quad in &self.spog {
-            if let InternedNamedOrBlankNode::BlankNode(bnode) = &quad.0 {
-                map.entry(*bnode).or_default().push(quad.clone());
+            if let InternedNamedOrBlankNode::BlankNode(bnode) = quad.0 {
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    bnode,
+                    quad,
+                    &mut canonicalization_state.blank_node_to_quads_map,
+                );
             }
             if let InternedTerm::BlankNode(bnode) = &quad.2 {
-                map.entry(*bnode).or_default().push(quad.clone());
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    *bnode,
+                    quad,
+                    &mut canonicalization_state.blank_node_to_quads_map,
+                );
             }
             #[cfg(feature = "rdf-12")]
             if let InternedTerm::Triple(t) = &quad.2 {
-                Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
+                Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
+                    t,
+                    quad,
+                    &mut canonicalization_state.blank_node_to_quads_map,
+                );
             }
             if let InternedGraphName::BlankNode(bnode) = &quad.3 {
-                map.entry(*bnode).or_default().push(quad.clone());
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    *bnode,
+                    quad,
+                    &mut canonicalization_state.blank_node_to_quads_map,
+                );
             }
         }
-        map
+        // 3)
+        for n in canonicalization_state.blank_node_to_quads_map.keys() {
+            // 3.1)
+            let hash = self.hash_first_degree_quads(&canonicalization_state, *n, hash_algorithm);
+            // 3.2)
+            canonicalization_state
+                .hash_to_blank_nodes_map
+                .entry(hash)
+                .or_default()
+                .push(*n);
+        }
+        // 4)
+        canonicalization_state.hash_to_blank_nodes_map = canonicalization_state
+            .hash_to_blank_nodes_map
+            .into_iter()
+            .filter(|(_, identifier_list)| {
+                match identifier_list.len() {
+                    0 => unreachable!(),
+                    // 4.1)
+                    2.. => true,
+                    1 => {
+                        // 4.2)
+                        Self::issue_identifier(
+                            &mut canonicalization_state.canonical_issuer,
+                            identifier_list[0],
+                        );
+                        // 4.3)
+                        false
+                    }
+                }
+            })
+            .collect::<BTreeMap<_, _>>();
+        // 5)
+        for (_, identifier_list) in take(&mut canonicalization_state.hash_to_blank_nodes_map) {
+            // 5.1)
+            let mut hash_path_list = Vec::new();
+            // 5.2)
+            for n in identifier_list {
+                // 5.2.1)
+                if canonicalization_state
+                    .canonical_issuer
+                    .issued_identifier_map
+                    .contains_key(&n)
+                {
+                    continue;
+                }
+                // 5.2.2)
+                let mut temporary_issuer = IdentifierIssuer::new("b");
+                // 5.2.3)
+                Self::issue_identifier(&mut temporary_issuer, n);
+                // 5.2.4)
+                hash_path_list.push(self.hash_n_degree_quads(
+                    &canonicalization_state,
+                    n,
+                    &temporary_issuer,
+                    hash_algorithm,
+                ))
+            }
+            // 5.3)
+            hash_path_list.sort_unstable_by(|(_, hl), (_, hr)| hl.cmp(hr));
+            for (result_identifier_issuer, _) in hash_path_list {
+                // 5.3.1)
+                for existing_identifier in result_identifier_issuer.issued_identifier_order {
+                    Self::issue_identifier(
+                        &mut canonicalization_state.canonical_issuer,
+                        existing_identifier,
+                    );
+                }
+            }
+        }
+        // 6)
+        canonicalization_state
+            .canonical_issuer
+            .issued_identifier_map
     }
 
     #[cfg(feature = "rdf-12")]
-    fn add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(
+    fn add_quad_to_blank_node_to_quads_map_based_on_triple<'a>(
+        triple: &InternedTriple,
+        quad: &'a (
+            InternedNamedOrBlankNode,
+            InternedNamedNode,
+            InternedTerm,
+            InternedGraphName,
+        ),
+        blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
+    ) {
+        if let InternedNamedOrBlankNode::BlankNode(bnode) = triple.subject {
+            Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                bnode,
+                quad,
+                blank_node_to_quads_map,
+            );
+        }
+        if let InternedTerm::BlankNode(bnode) = &triple.object {
+            Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                *bnode,
+                quad,
+                blank_node_to_quads_map,
+            );
+        } else if let InternedTerm::Triple(t) = &triple.object {
+            Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
+                t,
+                quad,
+                blank_node_to_quads_map,
+            );
+        }
+    }
+
+    fn add_quad_to_blank_node_to_quads_map_for_blank_node<'a>(
+        bnode: InternedBlankNode,
+        quad: &'a (
+            InternedNamedOrBlankNode,
+            InternedNamedNode,
+            InternedTerm,
+            InternedGraphName,
+        ),
+        blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
+    ) {
+        let entry = blank_node_to_quads_map.entry(bnode).or_default();
+        if !entry.ends_with(&[quad]) {
+            entry.push(quad);
+        }
+    }
+
+    /// RDFC [Issue Identifier Algorithm](https://www.w3.org/TR/rdf-canon/#issue-identifier)
+    fn issue_identifier(issuer: &mut IdentifierIssuer, blank_node: InternedBlankNode) -> BlankNode {
+        match issuer.issued_identifier_map.entry(blank_node) {
+            // 1)
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                // 2)
+                let issued_identifier = BlankNode::new_unchecked(format!(
+                    "{}{}",
+                    issuer.identifier_prefix, issuer.identifier_counter
+                ));
+                // 3)
+                entry.insert(issued_identifier.clone());
+                issuer.issued_identifier_order.push(blank_node);
+                // 4)
+                issuer.identifier_counter += 1;
+                // 5)
+                issued_identifier
+            }
+        }
+    }
+
+    /// RDFC [Hash First Degree Quads](https://www.w3.org/TR/rdf-canon/#hash-1d-quads)
+    fn hash_first_degree_quads(
+        &self,
+        canonicalization_state: &CanonicalizationState<'_>,
+        reference_blank_node_identifier: InternedBlankNode,
+        hash_algorithm: Option<CanonicalizationHashAlgorithm>,
+    ) -> String {
+        // 1)
+        let mut nquads = Vec::new();
+        // 2)
+        let quads =
+            &canonicalization_state.blank_node_to_quads_map[&reference_blank_node_identifier];
+        // 3)
+        for (subject, predicate, object, graph_name) in quads {
+            // 3.1)
+            let subject = self.hash_first_degree_quads_decode_named_or_blank_node(
+                subject,
+                &reference_blank_node_identifier,
+            );
+            let predicate = predicate.decode_from(&self.interner);
+            let object =
+                self.hash_first_degree_quads_decode_term(object, &reference_blank_node_identifier);
+            let graph_name = self.hash_first_degree_quads_decode_graph_name(
+                graph_name,
+                &reference_blank_node_identifier,
+            );
+            nquads.push(if graph_name.is_default_graph() {
+                format!("{subject} {predicate} {object} .\n")
+            } else {
+                format!("{subject} {predicate} {object} {graph_name} .\n")
+            });
+        }
+        // 3)
+        nquads.sort();
+        // 4)
+        Self::hash_function(&nquads.join(""), hash_algorithm)
+    }
+
+    fn hash_first_degree_quads_decode_named_or_blank_node(
+        &self,
+        term: &InternedNamedOrBlankNode,
+        reference_blank_node_identifier: &InternedBlankNode,
+    ) -> NamedOrBlankNodeRef<'_> {
+        match term {
+            InternedNamedOrBlankNode::NamedNode(t) => t.decode_from(&self.interner).into(),
+            InternedNamedOrBlankNode::BlankNode(t) => {
+                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                    "a"
+                } else {
+                    "z"
+                })
+                .into()
+            }
+        }
+    }
+
+    fn hash_first_degree_quads_decode_term(
+        &self,
+        term: &InternedTerm,
+        reference_blank_node_identifier: &InternedBlankNode,
+    ) -> Term {
+        match term {
+            InternedTerm::NamedNode(t) => t.decode_from(&self.interner).into(),
+            InternedTerm::BlankNode(t) => {
+                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                    "a"
+                } else {
+                    "z"
+                })
+                .into()
+            }
+            InternedTerm::Literal(t) => t.decode_from(&self.interner).into(),
+            #[cfg(feature = "rdf-12")]
+            InternedTerm::Triple(t) => Triple::new(
+                self.hash_first_degree_quads_decode_named_or_blank_node(
+                    &t.subject,
+                    reference_blank_node_identifier,
+                ),
+                t.predicate.decode_from(&self.interner),
+                self.hash_first_degree_quads_decode_term(
+                    &t.object,
+                    reference_blank_node_identifier,
+                ),
+            )
+            .into(),
+        }
+    }
+
+    fn hash_first_degree_quads_decode_graph_name(
+        &self,
+        term: &InternedGraphName,
+        reference_blank_node_identifier: &InternedBlankNode,
+    ) -> GraphNameRef<'_> {
+        match term {
+            InternedGraphName::NamedNode(t) => t.decode_from(&self.interner).into(),
+            InternedGraphName::BlankNode(t) => {
+                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                    "a"
+                } else {
+                    "z"
+                })
+                .into()
+            }
+            InternedGraphName::DefaultGraph => GraphNameRef::DefaultGraph,
+        }
+    }
+
+    /// RDFC [Hash Related Blank Node](https://www.w3.org/TR/rdf-canon/#hash-related-blank-node)
+    fn hash_related_blank_node(
+        &self,
+        canonicalization_state: &CanonicalizationState<'_>,
+        related: InternedBlankNode,
         quad: &(
             InternedNamedOrBlankNode,
             InternedNamedNode,
             InternedTerm,
             InternedGraphName,
         ),
-        triple: &InternedTriple,
-        map: &mut QuadsPerBlankNode,
-    ) {
-        if let InternedNamedOrBlankNode::BlankNode(bnode) = &triple.subject {
-            map.entry(*bnode).or_default().push(quad.clone());
+        issuer: &IdentifierIssuer,
+        position: &str,
+        hash_algorithm: Option<CanonicalizationHashAlgorithm>,
+    ) -> String {
+        // 1)
+        let mut input = position.to_owned();
+        // 2)
+        if position != "g" {
+            input.push('<');
+            input.push_str(quad.1.decode_from(&self.interner).as_str());
+            input.push('>');
         }
-        if let InternedTerm::BlankNode(bnode) = &triple.object {
-            map.entry(*bnode).or_default().push(quad.clone());
-        }
-        if let InternedTerm::Triple(t) = &triple.object {
-            Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, map);
-        }
-    }
-
-    fn hash_bnodes(
-        &self,
-        mut hashes: HashMap<InternedBlankNode, u64>,
-        quads_per_blank_node: &QuadsPerBlankNode,
-    ) -> (
-        HashMap<InternedBlankNode, u64>,
-        Vec<(u64, Vec<InternedBlankNode>)>,
-    ) {
-        let mut to_hash = Vec::new();
-        let mut to_do = hashes
-            .keys()
-            .map(|bnode| (*bnode, true))
-            .collect::<HashMap<_, _>>();
-        let mut partition = HashMap::<_, Vec<_>>::with_capacity(hashes.len());
-        let mut old_partition_count = usize::MAX;
-        while old_partition_count != partition.len() {
-            old_partition_count = partition.len();
-            partition.clear();
-            let mut new_hashes = hashes.clone();
-            for bnode in hashes.keys() {
-                let hash = if to_do.contains_key(bnode) {
-                    for (s, p, o, g) in &quads_per_blank_node[bnode] {
-                        to_hash.push((
-                            self.hash_named_or_blank_node(s, *bnode, &hashes),
-                            self.hash_named_node(*p),
-                            self.hash_term(o, *bnode, &hashes),
-                            self.hash_graph_name(g, *bnode, &hashes),
-                        ));
-                    }
-                    to_hash.sort_unstable();
-                    let hash = Self::hash_tuple((&to_hash, hashes[bnode]));
-                    to_hash.clear();
-                    if hash == hashes[bnode] {
-                        to_do.insert(*bnode, false);
-                    } else {
-                        new_hashes.insert(*bnode, hash);
-                    }
-                    hash
-                } else {
-                    hashes[bnode]
-                };
-                partition.entry(hash).or_default().push(*bnode);
-            }
-            hashes = new_hashes;
-        }
-        let mut partition: Vec<_> = partition.into_iter().collect();
-        partition.sort_unstable_by(|(h1, b1), (h2, b2)| (b1.len(), h1).cmp(&(b2.len(), h2)));
-        (hashes, partition)
-    }
-
-    fn hash_named_node(&self, node: InternedNamedNode) -> u64 {
-        Self::hash_tuple(node.decode_from(&self.interner))
-    }
-
-    fn hash_blank_node(
-        node: InternedBlankNode,
-        current_blank_node: InternedBlankNode,
-        bnodes_hash: &HashMap<InternedBlankNode, u64>,
-    ) -> u64 {
-        if node == current_blank_node {
-            u64::MAX
+        // 3)
+        if let Some(id) = canonicalization_state
+            .canonical_issuer
+            .issued_identifier_map
+            .get(&related)
+            .or_else(|| issuer.issued_identifier_map.get(&related))
+        {
+            input.push_str("_:");
+            input.push_str(id.as_str());
         } else {
-            bnodes_hash[&node]
+            // 4)
+            input.push_str(&self.hash_first_degree_quads(
+                canonicalization_state,
+                related,
+                hash_algorithm,
+            ));
         }
+        // 5)
+        Self::hash_function(&input, hash_algorithm)
     }
 
-    fn hash_named_or_blank_node(
+    /// RDFC [Hash N Degree Quads](https://www.w3.org/TR/rdf-canon/#hash-nd-quads)
+    fn hash_n_degree_quads(
         &self,
-        node: &InternedNamedOrBlankNode,
-        current_blank_node: InternedBlankNode,
-        bnodes_hash: &HashMap<InternedBlankNode, u64>,
-    ) -> u64 {
-        match node {
-            InternedNamedOrBlankNode::NamedNode(node) => {
-                Self::hash_tuple(node.decode_from(&self.interner))
+        canonicalization_state: &CanonicalizationState<'_>,
+        identifier: InternedBlankNode,
+        issuer: &IdentifierIssuer,
+        hash_algorithm: Option<CanonicalizationHashAlgorithm>,
+    ) -> (IdentifierIssuer, String) {
+        let mut issuer = issuer.clone();
+        // 1)
+        let mut h_n = BTreeMap::<_, HashSet<_>>::new();
+        // 2)
+        let quads = &canonicalization_state.blank_node_to_quads_map[&identifier];
+        // 3)
+        for quad in quads {
+            // 3.1)
+            if let InternedNamedOrBlankNode::BlankNode(component) = quad.0 {
+                self.hash_related_blank_node_on_possible_component(
+                    canonicalization_state,
+                    component,
+                    identifier,
+                    quad,
+                    &issuer,
+                    "s",
+                    &mut h_n,
+                    hash_algorithm,
+                );
             }
-            InternedNamedOrBlankNode::BlankNode(bnode) => {
-                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
+            if let InternedTerm::BlankNode(component) = quad.2 {
+                self.hash_related_blank_node_on_possible_component(
+                    canonicalization_state,
+                    component,
+                    identifier,
+                    quad,
+                    &issuer,
+                    "o",
+                    &mut h_n,
+                    hash_algorithm,
+                );
             }
-        }
-    }
-
-    fn hash_term(
-        &self,
-        term: &InternedTerm,
-        current_blank_node: InternedBlankNode,
-        bnodes_hash: &HashMap<InternedBlankNode, u64>,
-    ) -> u64 {
-        match term {
-            InternedTerm::NamedNode(node) => Self::hash_tuple(node.decode_from(&self.interner)),
-            InternedTerm::BlankNode(bnode) => {
-                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
-            }
-            InternedTerm::Literal(literal) => Self::hash_tuple(literal.decode_from(&self.interner)),
             #[cfg(feature = "rdf-12")]
-            InternedTerm::Triple(triple) => {
-                self.hash_triple(triple, current_blank_node, bnodes_hash)
+            if let InternedTerm::Triple(t) = &quad.2 {
+                self.hash_related_blank_node_on_possible_triple(
+                    canonicalization_state,
+                    t,
+                    identifier,
+                    quad,
+                    &issuer,
+                    &mut h_n,
+                    hash_algorithm,
+                );
+            }
+            if let InternedGraphName::BlankNode(component) = quad.3 {
+                self.hash_related_blank_node_on_possible_component(
+                    canonicalization_state,
+                    component,
+                    identifier,
+                    quad,
+                    &issuer,
+                    "g",
+                    &mut h_n,
+                    hash_algorithm,
+                );
             }
         }
-    }
-
-    fn hash_graph_name(
-        &self,
-        graph_name: &InternedGraphName,
-        current_blank_node: InternedBlankNode,
-        bnodes_hash: &HashMap<InternedBlankNode, u64>,
-    ) -> u64 {
-        match graph_name {
-            InternedGraphName::NamedNode(node) => {
-                Self::hash_tuple(node.decode_from(&self.interner))
+        // 4)
+        let mut data_to_hash = String::new();
+        // 5)
+        for (related_hash, blank_node_list) in h_n {
+            // 5.1)
+            data_to_hash.push_str(&related_hash);
+            // 5.2)
+            let mut chosen_path = String::new();
+            // 5.3)
+            let mut chosen_issuer = IdentifierIssuer::new("");
+            // 5.4)
+            'perm: for p in generate_permutations(blank_node_list) {
+                // 5.4.1)
+                let mut issuer_copy = issuer.clone();
+                // 5.4.2)
+                let mut path = String::new();
+                // 5.4.3)
+                let mut recursion_list = Vec::new();
+                // 5.4.4)
+                for related in p {
+                    // 5.4.4.1)
+                    if let Some(id) = canonicalization_state
+                        .canonical_issuer
+                        .issued_identifier_map
+                        .get(&related)
+                    {
+                        path.push_str("_:");
+                        path.push_str(id.as_str());
+                    } else {
+                        // 5.4.4.2)
+                        // 5.4.4.2.1)
+                        if !issuer_copy.issued_identifier_map.contains_key(&related) {
+                            recursion_list.push(related);
+                        }
+                        // 5.4.4.2.2)
+                        let id = Self::issue_identifier(&mut issuer_copy, related);
+                        path.push_str("_:");
+                        path.push_str(id.as_str());
+                    }
+                    // 5.4.4.3)
+                    if !chosen_path.is_empty()
+                        && path.len() >= chosen_path.len()
+                        && path > chosen_path
+                    {
+                        continue 'perm;
+                    }
+                }
+                // 5.4.5)
+                for related in recursion_list {
+                    // 5.4.5.1)
+                    let (result_identifier_issuer, result_hash) = self.hash_n_degree_quads(
+                        canonicalization_state,
+                        related,
+                        &issuer_copy,
+                        hash_algorithm,
+                    );
+                    // 5.4.5.2)
+                    let id = Self::issue_identifier(&mut issuer_copy, related);
+                    path.push_str("_:");
+                    path.push_str(id.as_str());
+                    // 5.4.5.3)
+                    path.push('<');
+                    path.push_str(&result_hash);
+                    path.push('>');
+                    // 5.4.5.4)
+                    issuer_copy = result_identifier_issuer;
+                    // 5.4.5.5)
+                    if !chosen_path.is_empty()
+                        && path.len() >= chosen_path.len()
+                        && path > chosen_path
+                    {
+                        continue 'perm;
+                    }
+                }
+                // 5.4.6)
+                if chosen_path.is_empty() || path < chosen_path {
+                    chosen_path = path;
+                    chosen_issuer = issuer_copy;
+                }
             }
-            InternedGraphName::BlankNode(bnode) => {
-                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
-            }
-            InternedGraphName::DefaultGraph => 0,
+            // 5.5)
+            data_to_hash.push_str(&chosen_path);
+            // 5.6)
+            issuer = chosen_issuer;
         }
+        // 6)
+        (issuer, Self::hash_function(&data_to_hash, hash_algorithm))
     }
 
     #[cfg(feature = "rdf-12")]
-    fn hash_triple(
+    fn hash_related_blank_node_on_possible_triple(
         &self,
+        canonicalization_state: &CanonicalizationState<'_>,
         triple: &InternedTriple,
-        current_blank_node: InternedBlankNode,
-        bnodes_hash: &HashMap<InternedBlankNode, u64>,
-    ) -> u64 {
-        Self::hash_tuple((
-            self.hash_named_or_blank_node(&triple.subject, current_blank_node, bnodes_hash),
-            self.hash_named_node(triple.predicate),
-            self.hash_term(&triple.object, current_blank_node, bnodes_hash),
-        ))
+        identifier: InternedBlankNode,
+        quad: &(
+            InternedNamedOrBlankNode,
+            InternedNamedNode,
+            InternedTerm,
+            InternedGraphName,
+        ),
+        issuer: &IdentifierIssuer,
+        h_n: &mut BTreeMap<String, HashSet<InternedBlankNode>>,
+        hash_algorithm: Option<CanonicalizationHashAlgorithm>,
+    ) {
+        if let InternedNamedOrBlankNode::BlankNode(component) = triple.subject {
+            self.hash_related_blank_node_on_possible_component(
+                canonicalization_state,
+                component,
+                identifier,
+                quad,
+                issuer,
+                "os",
+                h_n,
+                hash_algorithm,
+            );
+        }
+        if let InternedTerm::BlankNode(component) = &triple.object {
+            self.hash_related_blank_node_on_possible_component(
+                canonicalization_state,
+                *component,
+                identifier,
+                quad,
+                issuer,
+                "oo",
+                h_n,
+                hash_algorithm,
+            );
+        }
     }
 
-    fn hash_tuple(v: impl Hash) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        v.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn distinguish(
+    fn hash_related_blank_node_on_possible_component(
         &self,
-        hash: HashMap<InternedBlankNode, u64>,
-        partition: &[(u64, Vec<InternedBlankNode>)],
-        quads_per_blank_node: &QuadsPerBlankNode,
-    ) -> HashMap<InternedBlankNode, u64> {
-        let b_prime = partition.iter().map(|(_, b)| b).find(|b| b.len() > 1);
-        if let Some(b_prime) = b_prime {
-            b_prime
-                .iter()
-                .map(|b| {
-                    let mut hash_prime = hash.clone();
-                    hash_prime.insert(*b, Self::hash_tuple((hash_prime[b], 22)));
-                    let (hash_prime_prime, partition_prime) =
-                        self.hash_bnodes(hash_prime, quads_per_blank_node);
-                    self.distinguish(hash_prime_prime, &partition_prime, quads_per_blank_node)
-                })
-                .reduce(|a, b| {
-                    let mut a_hashes = a.values().collect::<Vec<_>>();
-                    a_hashes.sort();
-                    let mut b_hashes = a.values().collect::<Vec<_>>();
-                    b_hashes.sort();
-                    if a_hashes <= b_hashes { a } else { b }
-                })
-                .unwrap_or_default()
-        } else {
-            hash
+        canonicalization_state: &CanonicalizationState<'_>,
+        component: InternedBlankNode,
+        identifier: InternedBlankNode,
+        quad: &(
+            InternedNamedOrBlankNode,
+            InternedNamedNode,
+            InternedTerm,
+            InternedGraphName,
+        ),
+        issuer: &IdentifierIssuer,
+        position: &str,
+        h_n: &mut BTreeMap<String, HashSet<InternedBlankNode>>,
+        hash_algorithm: Option<CanonicalizationHashAlgorithm>,
+    ) {
+        if component != identifier {
+            // 3.1.1)
+            let hash = self.hash_related_blank_node(
+                canonicalization_state,
+                component,
+                quad,
+                issuer,
+                position,
+                hash_algorithm,
+            );
+            // 3.1.2)
+            h_n.entry(hash).or_default().insert(component);
+        }
+    }
+
+    fn hash_function(input: &str, hash_algorithm: Option<CanonicalizationHashAlgorithm>) -> String {
+        match hash_algorithm {
+            #[cfg(feature = "rdfc-10")]
+            Some(CanonicalizationHashAlgorithm::Sha256) => {
+                hex::encode(Sha256::new().chain_update(input).finalize())
+            }
+            #[cfg(feature = "rdfc-10")]
+            Some(CanonicalizationHashAlgorithm::Sha384) => {
+                hex::encode(Sha384::new().chain_update(input).finalize())
+            }
+            None => {
+                let mut hasher = DefaultHasher::new();
+                input.hash(&mut hasher);
+                hasher.finish().to_string()
+            }
         }
     }
 
@@ -992,7 +1330,7 @@ impl<'a> GraphView<'a> {
     pub fn iter(&self) -> GraphViewIter<'a> {
         let iter = self.dataset.gspo.range(
             &(
-                self.graph_name.clone(),
+                self.graph_name,
                 InternedNamedOrBlankNode::first(),
                 InternedNamedNode::first(),
                 InternedTerm::first(),
@@ -1027,13 +1365,13 @@ impl<'a> GraphView<'a> {
             .gspo
             .range(
                 &(
-                    self.graph_name.clone(),
-                    subject.clone(),
+                    self.graph_name,
+                    subject,
                     InternedNamedNode::first(),
                     InternedTerm::first(),
                 )
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         subject.next(),
                         InternedNamedNode::first(),
                         InternedTerm::first(),
@@ -1067,14 +1405,9 @@ impl<'a> GraphView<'a> {
         self.dataset
             .gspo
             .range(
-                &(
-                    self.graph_name.clone(),
-                    subject.clone(),
-                    predicate,
-                    InternedTerm::first(),
-                )
+                &(self.graph_name, subject, predicate, InternedTerm::first())
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         subject,
                         predicate.next(),
                         InternedTerm::first(),
@@ -1115,13 +1448,13 @@ impl<'a> GraphView<'a> {
             .gosp
             .range(
                 &(
-                    self.graph_name.clone(),
+                    self.graph_name,
                     object.clone(),
-                    subject.clone(),
+                    subject,
                     InternedNamedNode::first(),
                 )
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         object,
                         subject.next(),
                         InternedNamedNode::first(),
@@ -1147,13 +1480,13 @@ impl<'a> GraphView<'a> {
             .gpos
             .range(
                 &(
-                    self.graph_name.clone(),
+                    self.graph_name,
                     predicate,
                     InternedTerm::first(),
                     InternedNamedOrBlankNode::first(),
                 )
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         predicate.next(),
                         InternedTerm::first(),
                         InternedNamedOrBlankNode::first(),
@@ -1185,13 +1518,13 @@ impl<'a> GraphView<'a> {
             .gpos
             .range(
                 &(
-                    self.graph_name.clone(),
+                    self.graph_name,
                     predicate,
                     object.clone(),
                     InternedNamedOrBlankNode::first(),
                 )
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         predicate,
                         object.next(),
                         InternedNamedOrBlankNode::first(),
@@ -1225,13 +1558,13 @@ impl<'a> GraphView<'a> {
             .gosp
             .range(
                 &(
-                    self.graph_name.clone(),
+                    self.graph_name,
                     object.clone(),
                     InternedNamedOrBlankNode::first(),
                     InternedNamedNode::first(),
                 )
                     ..&(
-                        self.graph_name.clone(),
+                        self.graph_name,
                         object.next(),
                         InternedNamedOrBlankNode::first(),
                         InternedNamedNode::first(),
@@ -1244,7 +1577,7 @@ impl<'a> GraphView<'a> {
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
         if let Some(triple) = self.encoded_triple(triple.into()) {
             self.dataset.gspo.contains(&(
-                self.graph_name.clone(),
+                self.graph_name,
                 triple.subject,
                 triple.predicate,
                 triple.object,
@@ -1334,7 +1667,7 @@ impl<'a> GraphViewMut<'a> {
     fn read(&self) -> GraphView<'_> {
         GraphView {
             dataset: self.dataset,
-            graph_name: self.graph_name.clone(),
+            graph_name: self.graph_name,
         }
     }
 
@@ -1345,7 +1678,7 @@ impl<'a> GraphViewMut<'a> {
             triple.subject,
             triple.predicate,
             triple.object,
-            self.graph_name.clone(),
+            self.graph_name,
         ))
     }
 
@@ -1356,7 +1689,7 @@ impl<'a> GraphViewMut<'a> {
                 triple.subject,
                 triple.predicate,
                 triple.object,
-                self.graph_name.clone(),
+                self.graph_name,
             ))
         } else {
             false
@@ -1553,9 +1886,9 @@ impl<'a> Iterator for GraphViewIter<'a> {
     }
 }
 
-type QuadsPerBlankNode = HashMap<
+type QuadsPerBlankNode<'a> = HashMap<
     InternedBlankNode,
-    Vec<(
+    Vec<&'a (
         InternedNamedOrBlankNode,
         InternedNamedNode,
         InternedTerm,
@@ -1571,45 +1904,109 @@ type QuadsPerBlankNode = HashMap<
 pub enum CanonicalizationAlgorithm {
     /// The algorithm preferred by OxRDF.
     ///
-    /// <div class="warning">The canonicalization algorithm is not stable and canonical blank node ids might change between Oxigraph version.</div>
+    /// <div class="warning">The canonicalization algorithm is not stable and canonical blank node ids might change between versions.</div>
     #[default]
     Unstable,
+    /// The [RDF Canonicalization algorithm version 1.0](https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0) parametrized with its used [`CanonicalizationHashAlgorithm`](hash algorithm).
+    ///
+    /// <div class="warning">Note that the algorithm does not support RDF 1.2, this implementation behavior on triple terms is not part of the standard and might change.</div>
+    #[cfg(feature = "rdfc-10")]
+    Rdfc10 {
+        hash_algorithm: CanonicalizationHashAlgorithm,
+    },
 }
 
+/// The hash function to use to canonicalize graph and datasets.
+///
+/// See [`Graph::canonicalize`] and [`Dataset::canonicalize`].
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[non_exhaustive]
+pub enum CanonicalizationHashAlgorithm {
+    #[cfg(feature = "rdfc-10")]
+    Sha256,
+    #[cfg(feature = "rdfc-10")]
+    Sha384,
+}
+
+/// A RDFC [canonicalization state](https://www.w3.org/TR/rdf-canon/#canon-state)
+struct CanonicalizationState<'a> {
+    blank_node_to_quads_map: QuadsPerBlankNode<'a>,
+    hash_to_blank_nodes_map: BTreeMap<String, Vec<InternedBlankNode>>,
+    canonical_issuer: IdentifierIssuer,
+}
+
+/// A RDFC [identifier issuer](https://www.w3.org/TR/rdf-canon/#dfn-identifier-issuer)
+#[derive(Clone)]
+struct IdentifierIssuer {
+    identifier_prefix: &'static str,
+    identifier_counter: u32,
+    issued_identifier_map: HashMap<InternedBlankNode, BlankNode>,
+    issued_identifier_order: Vec<InternedBlankNode>, /* hack to know the insertion order in the hash map */
+}
+
+impl IdentifierIssuer {
+    fn new(identifier_prefix: &'static str) -> Self {
+        Self {
+            identifier_prefix,
+            identifier_counter: 0,
+            issued_identifier_map: HashMap::new(),
+            issued_identifier_order: Vec::new(),
+        }
+    }
+}
+
+fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec<T>> {
+    let mut current_output = vec![Vec::new()];
+    for (i, next) in items.into_iter().enumerate() {
+        let mut new_output = Vec::with_capacity(current_output.len() * (i + 1));
+        for mut permutation in current_output {
+            permutation.push(next);
+            for j in 0..=i {
+                let mut new_permutation = permutation.clone();
+                new_permutation.swap(i, j);
+                new_output.push(new_permutation);
+            }
+        }
+        current_output = new_output;
+    }
+    current_output
+}
+
+#[cfg(feature = "rdfc-10")]
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_canon() {
+        let p = NamedNode::new_unchecked("http://example.com/#p");
+        let q = NamedNode::new_unchecked("http://example.com/#q");
+        let r = NamedNode::new_unchecked("http://example.com/#r");
+
         let mut dataset = Dataset::new();
-        dataset.insert(QuadRef::new(
-            BlankNode::default().as_ref(),
-            NamedNodeRef::new_unchecked("http://ex"),
-            BlankNode::default().as_ref(),
-            GraphNameRef::DefaultGraph,
-        ));
-        dataset.insert(QuadRef::new(
-            BlankNode::default().as_ref(),
-            NamedNodeRef::new_unchecked("http://ex"),
-            BlankNode::default().as_ref(),
-            GraphNameRef::DefaultGraph,
-        ));
-        dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
-        let mut dataset2 = Dataset::new();
-        dataset2.insert(QuadRef::new(
-            BlankNode::default().as_ref(),
-            NamedNodeRef::new_unchecked("http://ex"),
-            BlankNode::default().as_ref(),
-            GraphNameRef::DefaultGraph,
-        ));
-        dataset2.insert(QuadRef::new(
-            BlankNode::default().as_ref(),
-            NamedNodeRef::new_unchecked("http://ex"),
-            BlankNode::default().as_ref(),
-            GraphNameRef::DefaultGraph,
-        ));
-        dataset2.canonicalize(CanonicalizationAlgorithm::Unstable);
-        assert_eq!(dataset, dataset2);
+        let e0 = BlankNode::new_unchecked("e0");
+        let e1 = BlankNode::new_unchecked("e1");
+        let e2 = BlankNode::new_unchecked("e2");
+        let e3 = BlankNode::new_unchecked("e3");
+        dataset.insert(QuadRef::new(&p, &q, &e0, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&p, &q, &e1, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e0, &p, &e2, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e1, &p, &e3, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e2, &r, &e3, GraphNameRef::DefaultGraph));
+        dataset.canonicalize(CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+        });
+
+        let mut expected = Dataset::new();
+        let c14n0 = BlankNode::new_unchecked("c14n0");
+        let c14n1 = BlankNode::new_unchecked("c14n1");
+        let c14n2 = BlankNode::new_unchecked("c14n2");
+        let c14n3 = BlankNode::new_unchecked("c14n3");
+        expected.insert(QuadRef::new(&p, &q, &c14n2, GraphNameRef::DefaultGraph));
+        expected.insert(QuadRef::new(&p, &q, &c14n3, GraphNameRef::DefaultGraph));
+        expected.insert(QuadRef::new(&c14n0, &r, &c14n1, GraphNameRef::DefaultGraph));
+        expected.insert(QuadRef::new(&c14n2, &p, &c14n1, GraphNameRef::DefaultGraph));
+        expected.insert(QuadRef::new(&c14n3, &p, &c14n0, GraphNameRef::DefaultGraph));
+        assert_eq!(dataset, expected);
     }
 }

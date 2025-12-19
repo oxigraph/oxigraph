@@ -14,6 +14,7 @@ clap = { workspace = true, features = ["derive"] }
 dissimilar.workspace = true
 json-event-parser.workspace = true
 oxigraph = { workspace = true, features = ["rdf-12"] }
+oxrdf = { workspace = true, features = ["rdfc-10"] }
 oxiri.workspace = true
 oxjsonld.workspace = true
 oxttl.workspace = true

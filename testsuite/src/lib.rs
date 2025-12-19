@@ -1,5 +1,6 @@
 //! Implementation of [W3C RDF tests](https://w3c.github.io/rdf-tests/) to tests Oxigraph conformance.
 
+pub mod canonicalization_evaluator;
 pub mod evaluator;
 pub mod files;
 pub mod manifest;
@@ -8,6 +9,7 @@ pub mod report;
 pub mod sparql_evaluator;
 mod vocab;
 
+use crate::canonicalization_evaluator::register_canonicalization_tests;
 use crate::evaluator::TestEvaluator;
 use crate::manifest::TestManifest;
 use crate::parser_evaluator::register_parser_tests;
@@ -18,6 +20,7 @@ use anyhow::Result;
 pub fn check_testsuite(manifest_url: &str, ignored_tests: &[&str]) -> Result<()> {
     let mut evaluator = TestEvaluator::default();
     register_parser_tests(&mut evaluator);
+    register_canonicalization_tests(&mut evaluator);
     register_sparql_tests(&mut evaluator);
 
     let manifest = TestManifest::new([manifest_url]);

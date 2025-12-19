@@ -277,7 +277,7 @@ impl TestManifest {
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
-            let option = match self
+            let mut option = match self
                 .graph
                 .object_for_subject_predicate(&test_node, jld::OPTION)
             {
@@ -289,6 +289,15 @@ impl TestManifest {
                 Some(_) => bail!("invalid option"),
                 None => HashMap::new(),
             };
+            if let Some(hash_algorithm) = self
+                .graph
+                .object_for_subject_predicate(&test_node, rdfc::HASH_ALGORITHM)
+            {
+                option.insert(
+                    rdfc::HASH_ALGORITHM.into_owned(),
+                    hash_algorithm.into_owned(),
+                );
+            }
             return Ok(Some(Test {
                 id: test_node,
                 kinds,

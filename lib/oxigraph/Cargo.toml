@@ -28,7 +28,7 @@ rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
 [dependencies]
 dashmap.workspace = true
 oxiri.workspace = true
-oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true
 oxsdatatypes.workspace = true
 rand.workspace = true

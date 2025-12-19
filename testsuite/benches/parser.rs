@@ -1,11 +1,11 @@
 #![allow(clippy::print_stderr)]
 
-use codspeed_criterion_compat::{
-    BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
-};
+use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser};
 use oxigraph_testsuite::files::read_file;
 use oxigraph_testsuite::manifest::TestManifest;
+use oxrdf::Dataset;
+use oxrdf::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
 use std::io::Read;
 
 fn test_data_from_testsuite(manifest_uri: String, include_tests_types: &[&str]) -> Vec<u8> {
@@ -97,7 +97,7 @@ fn parse_bench(
 ) {
     let mut group = c.benchmark_group(parser_name);
     group.throughput(Throughput::Bytes(data.len() as u64));
-    group.bench_with_input(BenchmarkId::from_parameter(data_name), &data, |b, data| {
+    group.bench_with_input(data_name, &data, |b, data| {
         b.iter(|| {
             for result in RdfParser::from_format(format).for_slice(data) {
                 result.unwrap();
@@ -173,6 +173,46 @@ fn bench_parse_streaming_jsonld_with_streaming_jsonld(c: &mut Criterion) {
     )
 }
 
+fn canonicalization_test_data_from_testsuite() -> Dataset {
+    let manifest = TestManifest::new(["https://w3c.github.io/rdf-canon/tests/manifest.ttl"]);
+    let mut dataset = Dataset::new();
+    for test in manifest {
+        let test = test.unwrap();
+        if test.kinds.iter().any(|kind| {
+            kind.as_str() == "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10EvalTest"
+        }) {
+            for q in RdfParser::from_format(RdfFormat::NQuads)
+                .rename_blank_nodes()
+                .for_reader(read_file(&test.action.unwrap()).unwrap())
+            {
+                dataset.insert(&q.unwrap());
+            }
+        }
+    }
+    dataset
+}
+
+fn canonicalization_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("canonicalization");
+    let dataset = canonicalization_test_data_from_testsuite();
+    for (alg, alg_name) in [
+        (CanonicalizationAlgorithm::Unstable, "unstable"),
+        (
+            CanonicalizationAlgorithm::Rdfc10 {
+                hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+            },
+            "RDFC-1.0 (SHA256)",
+        ),
+    ] {
+        group.bench_function(alg_name, |b| {
+            b.iter(|| {
+                dataset.clone().canonicalize(alg);
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     w3c_testsuite,
     bench_parse_ntriples_with_ntriples,
@@ -180,7 +220,8 @@ criterion_group!(
     bench_parse_turtle_with_turtle,
     bench_parse_jsonld_with_jsonld,
     bench_parse_streaming_jsonld_with_jsonld,
-    bench_parse_streaming_jsonld_with_streaming_jsonld
+    bench_parse_streaming_jsonld_with_streaming_jsonld,
+    canonicalization_bench
 );
 
 criterion_main!(w3c_testsuite);

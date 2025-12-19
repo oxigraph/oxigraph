@@ -13,6 +13,8 @@ This crate is intended to be a basic building block of other crates like [Oxigra
 
 Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind the `rdf-12` feature.
 
+Support for [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) is available behind the `rdfc-10` feature.
+
 OxRDF is inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
 
 Use [`oxrdfio`](https://crates.io/crates/oxrdfio) if you need to read or write RDF files.

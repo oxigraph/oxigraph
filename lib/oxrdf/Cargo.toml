@@ -14,12 +14,15 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-12 = []
+rdfc-10 = ["dep:hex", "dep:sha2"]
 serde = ["dep:serde"]
 
 [dependencies]
+hex = { workspace = true, optional = true }
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"], optional = true }
