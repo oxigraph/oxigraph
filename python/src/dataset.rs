@@ -1,5 +1,5 @@
 use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef};
-use oxigraph::model::dataset::{CanonicalizationAlgorithm, Dataset};
+use oxigraph::model::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm, Dataset};
 use oxigraph::model::{Quad, QuadRef};
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
@@ -196,10 +196,10 @@ impl PyDataset {
 
     /// Canonicalizes the dataset by renaming blank nodes.
     ///
-    /// Warning: Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
+    /// Warning: Blank node ids depend on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
     /// Hence, this canonization might not be suitable for diffs.
     ///
-    /// Warning: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.
+    /// Warning: This implementation's worst-case complexity is exponential with respect to the number of blank nodes in the input dataset.
     ///
     /// :param algorithm: the canonicalization algorithm to use.
     /// :type algorithm: CanonicalizationAlgorithm
@@ -267,8 +267,16 @@ impl QuadIter {
 /// The following algorithms are supported:
 ///
 /// * :py:attr:`CanonicalizationAlgorithm.UNSTABLE`: an unstable algorithm preferred by PyOxigraph.
-#[pyclass(frozen, name = "CanonicalizationAlgorithm", module = "pyoxigraph")]
-#[derive(Clone)]
+/// * :py:attr:`CanonicalizationAlgorithm.RDFC_1_0`: the `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_.
+/// * :py:attr:`CanonicalizationAlgorithm.RDFC_1_0_SHA_384`: the same algorithm with SHA-384 hash function.
+#[pyclass(
+    frozen,
+    name = "CanonicalizationAlgorithm",
+    module = "pyoxigraph",
+    eq,
+    hash
+)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct PyCanonicalizationAlgorithm {
     inner: CanonicalizationAlgorithm,
 }
@@ -283,11 +291,38 @@ impl PyCanonicalizationAlgorithm {
         inner: CanonicalizationAlgorithm::Unstable,
     };
 
+    /// The `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_hash .
+    #[classattr]
+    const RDFC_1_0: Self = Self::RDFC_1_0_SHA_256;
+
+    /// The `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_ with the SHA-256 hash function (this is the default version of the algorithm).
+    #[classattr]
+    const RDFC_1_0_SHA_256: Self = Self {
+        inner: CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+        },
+    };
+
+    /// The `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_ with the SHA-384 hash function.
+    #[classattr]
+    const RDFC_1_0_SHA_384: Self = Self {
+        inner: CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha384,
+        },
+    };
+
     fn __repr__(&self) -> String {
         format!(
             "<CanonicalizationAlgorithm {}>",
             match self.inner {
                 CanonicalizationAlgorithm::Unstable => "unstable",
+                CanonicalizationAlgorithm::Rdfc10 {
+                    hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+                } => "RDFC-1.0 (SHA-256)",
+                CanonicalizationAlgorithm::Rdfc10 {
+                    hash_algorithm: CanonicalizationHashAlgorithm::Sha384,
+                } => "RDFC-1.0 (SHA-384)",
+                CanonicalizationAlgorithm::Rdfc10 { .. } => "RDFC-1.0",
                 _ => "unknown",
             }
         )
