@@ -4,6 +4,7 @@ members = [
     "js",
     "lib/oxigraph",
     "lib/oxjsonld",
+    "lib/oxowl",
     "lib/oxrdf",
     "lib/oxrdfio",
     "lib/oxrdfxml",

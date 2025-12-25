@@ -664,3 +664,218 @@ pub mod shacl {
     pub const TARGET: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#target");
 }
+
+pub mod owl {
+    //! [OWL 2](https://www.w3.org/TR/owl2-syntax/) vocabulary.
+    //!
+    //! The Web Ontology Language (OWL) is a W3C specification for expressing rich and complex
+    //! knowledge about things, groups of things, and relations between things.
+    use crate::named_node::NamedNodeRef;
+
+    // === NAMESPACE ===
+    /// The OWL namespace: `http://www.w3.org/2002/07/owl#`
+    pub const NAMESPACE: &str = "http://www.w3.org/2002/07/owl#";
+
+    // === CORE CLASSES ===
+    /// [The class of all classes](https://www.w3.org/TR/owl2-syntax/#Classes)
+    pub const CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Class");
+    /// [The class containing every individual](https://www.w3.org/TR/owl2-syntax/#Class_Expressions)
+    pub const THING: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Thing");
+    /// [The empty class](https://www.w3.org/TR/owl2-syntax/#Class_Expressions)
+    pub const NOTHING: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Nothing");
+    /// [The class of named individuals](https://www.w3.org/TR/owl2-syntax/#Individuals)
+    pub const NAMED_INDIVIDUAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#NamedIndividual");
+    /// [The class of ontologies](https://www.w3.org/TR/owl2-syntax/#Ontologies)
+    pub const ONTOLOGY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Ontology");
+    /// [The class of object properties](https://www.w3.org/TR/owl2-syntax/#Object_Properties)
+    pub const OBJECT_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#ObjectProperty");
+    /// [The class of datatype properties](https://www.w3.org/TR/owl2-syntax/#Data_Properties)
+    pub const DATATYPE_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#DatatypeProperty");
+    /// [The class of annotation properties](https://www.w3.org/TR/owl2-syntax/#Annotation_Properties)
+    pub const ANNOTATION_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AnnotationProperty");
+    /// [The class of functional properties](https://www.w3.org/TR/owl2-syntax/#Functional_Object_Properties)
+    pub const FUNCTIONAL_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#FunctionalProperty");
+    /// [The class of inverse-functional properties](https://www.w3.org/TR/owl2-syntax/#Inverse-Functional_Object_Properties)
+    pub const INVERSE_FUNCTIONAL_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#InverseFunctionalProperty");
+    /// [The class of transitive properties](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
+    pub const TRANSITIVE_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#TransitiveProperty");
+    /// [The class of symmetric properties](https://www.w3.org/TR/owl2-syntax/#Symmetric_Object_Properties)
+    pub const SYMMETRIC_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#SymmetricProperty");
+    /// [The class of asymmetric properties](https://www.w3.org/TR/owl2-syntax/#Asymmetric_Object_Properties)
+    pub const ASYMMETRIC_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AsymmetricProperty");
+    /// [The class of reflexive properties](https://www.w3.org/TR/owl2-syntax/#Reflexive_Object_Properties)
+    pub const REFLEXIVE_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#ReflexiveProperty");
+    /// [The class of irreflexive properties](https://www.w3.org/TR/owl2-syntax/#Irreflexive_Object_Properties)
+    pub const IRREFLEXIVE_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#IrreflexiveProperty");
+    /// [The class of property restrictions](https://www.w3.org/TR/owl2-syntax/#Property_Restrictions)
+    pub const RESTRICTION: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Restriction");
+    /// [The class representing sets of pairwise different individuals](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
+    pub const ALL_DIFFERENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AllDifferent");
+    /// [The class of all disjoint class declarations](https://www.w3.org/TR/owl2-syntax/#Disjoint_Classes)
+    pub const ALL_DISJOINT_CLASSES: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AllDisjointClasses");
+    /// [The class of all disjoint property declarations](https://www.w3.org/TR/owl2-syntax/#Disjoint_Object_Properties)
+    pub const ALL_DISJOINT_PROPERTIES: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AllDisjointProperties");
+    /// [Deprecated class marker](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const DEPRECATED_CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#DeprecatedClass");
+    /// [Deprecated property marker](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const DEPRECATED_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#DeprecatedProperty");
+
+    // === CLASS EXPRESSION PROPERTIES ===
+    /// [Intersection of class expressions](https://www.w3.org/TR/owl2-syntax/#Intersection_of_Class_Expressions)
+    pub const INTERSECTION_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#intersectionOf");
+    /// [Union of class expressions](https://www.w3.org/TR/owl2-syntax/#Union_of_Class_Expressions)
+    pub const UNION_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#unionOf");
+    /// [Complement of a class expression](https://www.w3.org/TR/owl2-syntax/#Complement_of_Class_Expressions)
+    pub const COMPLEMENT_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#complementOf");
+    /// [Enumeration of individuals](https://www.w3.org/TR/owl2-syntax/#Enumeration_of_Individuals)
+    pub const ONE_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#oneOf");
+    /// [Equivalent classes declaration](https://www.w3.org/TR/owl2-syntax/#Equivalent_Classes)
+    pub const EQUIVALENT_CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#equivalentClass");
+    /// [Disjoint classes declaration](https://www.w3.org/TR/owl2-syntax/#Disjoint_Classes)
+    pub const DISJOINT_WITH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#disjointWith");
+    /// [Disjoint union of class expressions](https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions)
+    pub const DISJOINT_UNION_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#disjointUnionOf");
+    /// [Universal quantification restriction](https://www.w3.org/TR/owl2-syntax/#Universal_Quantification)
+    pub const ALL_VALUES_FROM: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#allValuesFrom");
+    /// [Existential quantification restriction](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification)
+    pub const SOME_VALUES_FROM: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#someValuesFrom");
+    /// [Individual value restriction](https://www.w3.org/TR/owl2-syntax/#Individual_Value_Restriction)
+    pub const HAS_VALUE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#hasValue");
+    /// [Self restriction](https://www.w3.org/TR/owl2-syntax/#Self-Restriction)
+    pub const HAS_SELF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#hasSelf");
+    /// [Minimum cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const MIN_CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#minCardinality");
+    /// [Maximum cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const MAX_CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#maxCardinality");
+    /// [Exact cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#cardinality");
+    /// [Minimum qualified cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const MIN_QUALIFIED_CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#minQualifiedCardinality");
+    /// [Maximum qualified cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const MAX_QUALIFIED_CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#maxQualifiedCardinality");
+    /// [Exact qualified cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const QUALIFIED_CARDINALITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#qualifiedCardinality");
+    /// [Property in a restriction](https://www.w3.org/TR/owl2-syntax/#Property_Restrictions)
+    pub const ON_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onProperty");
+    /// [Class in a qualified cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const ON_CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onClass");
+    /// [Data range in a qualified cardinality restriction](https://www.w3.org/TR/owl2-syntax/#Cardinality_Restrictions)
+    pub const ON_DATA_RANGE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onDataRange");
+
+    // === PROPERTY RELATIONS ===
+    /// [Inverse property declaration](https://www.w3.org/TR/owl2-syntax/#Inverse_Object_Properties)
+    pub const INVERSE_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#inverseOf");
+    /// [Property chain axiom](https://www.w3.org/TR/owl2-syntax/#Object_Subproperties)
+    pub const PROPERTY_CHAIN_AXIOM: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#propertyChainAxiom");
+    /// [Equivalent properties declaration](https://www.w3.org/TR/owl2-syntax/#Equivalent_Object_Properties)
+    pub const EQUIVALENT_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#equivalentProperty");
+    /// [Disjoint properties declaration](https://www.w3.org/TR/owl2-syntax/#Disjoint_Object_Properties)
+    pub const PROPERTY_DISJOINT_WITH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#propertyDisjointWith");
+    /// [Key properties for a class](https://www.w3.org/TR/owl2-syntax/#Keys)
+    pub const HAS_KEY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#hasKey");
+
+    // === INDIVIDUAL RELATIONS ===
+    /// [Same individual as](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
+    pub const SAME_AS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#sameAs");
+    /// [Different individual from](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
+    pub const DIFFERENT_FROM: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#differentFrom");
+    /// [List of pairwise distinct individuals](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
+    pub const DISTINCT_MEMBERS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#distinctMembers");
+    /// [Members of a disjoint set](https://www.w3.org/TR/owl2-syntax/#Disjoint_Classes)
+    pub const MEMBERS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#members");
+
+    // === ONTOLOGY PROPERTIES ===
+    /// [Ontology imports declaration](https://www.w3.org/TR/owl2-syntax/#Ontology_IRI_and_Version_IRI)
+    pub const IMPORTS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#imports");
+    /// [Ontology version IRI](https://www.w3.org/TR/owl2-syntax/#Ontology_IRI_and_Version_IRI)
+    pub const VERSION_IRI: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#versionIRI");
+    /// [Ontology version info annotation](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const VERSION_INFO: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#versionInfo");
+    /// [Prior version of ontology](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const PRIOR_VERSION: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#priorVersion");
+    /// [Backward compatible with prior version](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const BACKWARD_COMPATIBLE_WITH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#backwardCompatibleWith");
+    /// [Incompatible with prior version](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const INCOMPATIBLE_WITH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#incompatibleWith");
+    /// [Deprecated entity marker](https://www.w3.org/TR/owl2-syntax/#Annotations)
+    pub const DEPRECATED: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#deprecated");
+
+    // === TOP AND BOTTOM PROPERTIES ===
+    /// [The universal object property](https://www.w3.org/TR/owl2-syntax/#The_Top_and_Bottom_Object_Properties)
+    pub const TOP_OBJECT_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#topObjectProperty");
+    /// [The empty object property](https://www.w3.org/TR/owl2-syntax/#The_Top_and_Bottom_Object_Properties)
+    pub const BOTTOM_OBJECT_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#bottomObjectProperty");
+    /// [The universal datatype property](https://www.w3.org/TR/owl2-syntax/#The_Top_and_Bottom_Data_Properties)
+    pub const TOP_DATA_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#topDataProperty");
+    /// [The empty datatype property](https://www.w3.org/TR/owl2-syntax/#The_Top_and_Bottom_Data_Properties)
+    pub const BOTTOM_DATA_PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#bottomDataProperty");
+
+    // === DATATYPES ===
+    /// [Real numbers datatype](https://www.w3.org/TR/owl2-syntax/#Real_Numbers.2C_Decimal_Numbers.2C_and_Integers)
+    pub const REAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#real");
+    /// [Rational numbers datatype](https://www.w3.org/TR/owl2-syntax/#Real_Numbers.2C_Decimal_Numbers.2C_and_Integers)
+    pub const RATIONAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#rational");
+}

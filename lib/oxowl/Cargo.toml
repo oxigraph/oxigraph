@@ -1,0 +1,32 @@
+[package]
+name = "oxowl"
+version = "0.1.0"
+authors.workspace = true
+license.workspace = true
+description = "OWL 2 ontology support for Oxigraph"
+edition.workspace = true
+rust-version.workspace = true
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxowl"
+documentation = "https://docs.rs/oxowl"
+keywords = ["owl", "ontology", "rdf", "semantic-web", "knowledge-graph"]
+categories = ["database", "parser-implementations"]
+
+[features]
+default = ["reasoner-rl"]
+reasoner-rl = []
+reasoner-el = []
+reasoner-rdfs = []
+# rdf-12 feature disabled until oxrdfio properly supports it
+# rdf-12 = ["oxrdf/rdf-12"]
+
+[dependencies]
+oxrdf.workspace = true
+oxiri.workspace = true
+thiserror.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+oxrdfio.workspace = true
+
+[lints]
+workspace = true
