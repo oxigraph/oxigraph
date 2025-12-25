@@ -19,7 +19,11 @@ const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 /**
  * RDF/JS DataFactory-compatible methods
  */
+export function namedNode(value: string): NamedNode;
+export function blankNode(value?: string): BlankNode;
 export function literal(value: string | undefined, languageOrDataType?: string | NamedNode | {language: string, direction?: "ltr" | "rtl"}): Literal;
+export function defaultGraph(): DefaultGraph;
+export function variable(value: string): Variable;
 export function triple(subject: Triple_Subject, predicate: Triple_Predicate, object: Triple_Object): Triple;
 export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph?: Quad_Graph): Quad;
 
@@ -254,6 +258,13 @@ export class Dataset {
 
     toString(): string;
     clone(): Dataset;
+
+    forEach(callback: (quad: Quad) => void): void;
+    filter(callback: (quad: Quad) => boolean): Dataset;
+    some(callback: (quad: Quad) => boolean): boolean;
+    every(callback: (quad: Quad) => boolean): boolean;
+    find(callback: (quad: Quad) => boolean): Quad | undefined;
+    toArray(): Quad[];
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -1595,5 +1606,74 @@ impl JsDataset {
         Self {
             inner: self.inner.clone(),
         }
+    }
+
+    // Collection methods for JavaScript compatibility
+    #[wasm_bindgen(js_name = forEach)]
+    pub fn for_each(&self, callback: &js_sys::Function) -> Result<(), JsValue> {
+        let this = JsValue::NULL;
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            callback.call1(&this, &quad_js)?;
+        }
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn filter(&self, callback: &js_sys::Function) -> Result<JsDataset, JsValue> {
+        let this = JsValue::NULL;
+        let mut filtered = Dataset::new();
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.clone().into_owned()).into();
+            if callback.call1(&this, &quad_js)?.is_truthy() {
+                filtered.insert(&quad.into_owned());
+            }
+        }
+        Ok(Self { inner: filtered })
+    }
+
+    #[wasm_bindgen]
+    pub fn some(&self, callback: &js_sys::Function) -> Result<bool, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            if callback.call1(&this, &quad_js)?.is_truthy() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    #[wasm_bindgen]
+    pub fn every(&self, callback: &js_sys::Function) -> Result<bool, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            if !callback.call1(&this, &quad_js)?.is_truthy() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    #[wasm_bindgen]
+    pub fn find(&self, callback: &js_sys::Function) -> Result<JsValue, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            if callback.call1(&this, &quad_js)?.is_truthy() {
+                return Ok(quad_js);
+            }
+        }
+        Ok(JsValue::UNDEFINED)
+    }
+
+    #[wasm_bindgen(js_name = toArray)]
+    pub fn to_array(&self) -> Box<[JsValue]> {
+        self.inner
+            .iter()
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 }

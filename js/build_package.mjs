@@ -49,6 +49,28 @@ for (const file of ["./pkg/web.js", "./pkg/node.js"]) {
             }
         }
 
+        // Find and patch QuerySolutions class to add Symbol.iterator
+        if (content.includes("class QuerySolutions")) {
+            const querySolutionsMatch = content.match(/(class QuerySolutions\s*{[\s\S]*?)(\n}\n)/);
+            if (querySolutionsMatch) {
+                const classContent = querySolutionsMatch[1];
+                const classEnd = querySolutionsMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(querySolutionsMatch[0], updatedClass);
+            }
+        }
+
+        // Find and patch QueryTriples class to add Symbol.iterator
+        if (content.includes("class QueryTriples")) {
+            const queryTriplesMatch = content.match(/(class QueryTriples\s*{[\s\S]*?)(\n}\n)/);
+            if (queryTriplesMatch) {
+                const classContent = queryTriplesMatch[1];
+                const classEnd = queryTriplesMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(queryTriplesMatch[0], updatedClass);
+            }
+        }
+
         // Add DataFactory export
         // Find the end of the exports section (usually near the end of the file)
         // and add the DataFactory object that groups all factory functions

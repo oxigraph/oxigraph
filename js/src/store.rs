@@ -23,6 +23,8 @@ export class Store {
 
     constructor(quads?: Iterable<Quad>);
 
+    isEmpty(): boolean;
+
     add(quad: Quad): void;
 
     delete(quad: Quad): void;
@@ -185,6 +187,11 @@ impl JsStore {
     #[wasm_bindgen(getter)]
     pub fn length(&self) -> Result<usize, JsError> {
         Ok(self.store.len()?)
+    }
+
+    #[wasm_bindgen(js_name = isEmpty)]
+    pub fn is_empty(&self) -> Result<bool, JsError> {
+        Ok(self.store.is_empty()?)
     }
 
     #[wasm_bindgen(js_name = match)]

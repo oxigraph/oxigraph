@@ -408,6 +408,13 @@ impl JsQuerySolutions {
     pub fn values(&self) -> Array {
         self.solutions.clone()
     }
+
+    // Symbol.iterator implementation - must be manually wired up in JavaScript
+    // as wasm-bindgen doesn't support computed property names
+    #[wasm_bindgen(skip_typescript)]
+    pub fn __iterator(&self) -> JsValue {
+        self.solutions.values().into()
+    }
 }
 
 /// Result of a SPARQL ASK query
@@ -489,5 +496,12 @@ impl JsQueryTriples {
     /// Returns the triples as an array (for iteration)
     pub fn values(&self) -> Array {
         self.triples.clone()
+    }
+
+    // Symbol.iterator implementation - must be manually wired up in JavaScript
+    // as wasm-bindgen doesn't support computed property names
+    #[wasm_bindgen(skip_typescript)]
+    pub fn __iterator(&self) -> JsValue {
+        self.triples.values().into()
     }
 }
