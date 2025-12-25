@@ -1,5 +1,5 @@
 use crate::blank_node::{BlankNode, BlankNodeRef};
-use crate::triple::Triple;
+use crate::triple::{GraphName, Quad, Triple};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -86,6 +86,84 @@ impl Formula {
             id: self.id.as_ref(),
             triples: &self.triples,
         }
+    }
+
+    /// Converts the formula's triples to quads.
+    ///
+    /// Each triple in the formula is converted to a quad using the formula's
+    /// blank node ID as the graph name. This enables formulas to be stored
+    /// in quad stores.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{BlankNode, Formula, NamedNode, Triple};
+    ///
+    /// let id = BlankNode::new("f1").unwrap();
+    /// let ex = NamedNode::new("http://example.com").unwrap();
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    ///
+    /// let quads = formula.to_quads();
+    /// assert_eq!(quads.len(), 1);
+    /// // The quad's graph name should be the formula's ID
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn to_quads(&self) -> Vec<Quad> {
+        let graph_name = GraphName::BlankNode(self.id.clone());
+        self.triples
+            .iter()
+            .map(|triple| Quad {
+                subject: triple.subject.clone(),
+                predicate: triple.predicate.clone(),
+                object: triple.object.clone(),
+                graph_name: graph_name.clone(),
+            })
+            .collect()
+    }
+
+    /// Creates a formula from quads.
+    ///
+    /// This constructor extracts the triples from the provided quads and uses
+    /// the graph name from the first quad as the formula's ID. If the graph name
+    /// is not a blank node, a new blank node ID is generated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{BlankNode, Formula, GraphName, NamedNode, Quad};
+    ///
+    /// let id = BlankNode::new("f1").unwrap();
+    /// let ex = NamedNode::new("http://example.com").unwrap();
+    /// let quad = Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex,
+    ///     GraphName::BlankNode(id.clone())
+    /// );
+    ///
+    /// let formula = Formula::from_quads(vec![quad]);
+    /// assert_eq!(formula.triples().len(), 1);
+    /// assert_eq!(formula.id(), &id);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn from_quads(quads: impl IntoIterator<Item = Quad>) -> Self {
+        let mut quads_vec: Vec<Quad> = quads.into_iter().collect();
+
+        // Extract the ID from the first quad's graph name, or create a new blank node
+        let id = if let Some(first_quad) = quads_vec.first() {
+            match &first_quad.graph_name {
+                GraphName::BlankNode(bn) => bn.clone(),
+                _ => BlankNode::default(),
+            }
+        } else {
+            BlankNode::default()
+        };
+
+        // Convert quads to triples
+        let triples = quads_vec.drain(..).map(Triple::from).collect();
+
+        Self::new(id, triples)
     }
 }
 
@@ -365,5 +443,145 @@ mod tests {
 
         let formula2: Formula = serde_json::from_str(&json).unwrap();
         assert_eq!(formula, formula2);
+    }
+
+    #[test]
+    fn test_to_quads() {
+        use crate::triple::GraphName;
+
+        let id = BlankNode::new("f1").unwrap();
+        let ex = NamedNode::new("http://example.com").unwrap();
+        let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
+        let formula = Formula::new(id.clone(), vec![triple.clone()]);
+
+        let quads = formula.to_quads();
+        assert_eq!(quads.len(), 1);
+
+        let quad = &quads[0];
+        assert_eq!(quad.subject, triple.subject);
+        assert_eq!(quad.predicate, triple.predicate);
+        assert_eq!(quad.object, triple.object);
+        assert_eq!(quad.graph_name, GraphName::BlankNode(id));
+    }
+
+    #[test]
+    fn test_from_quads() {
+        use crate::triple::{GraphName, Quad};
+
+        let id = BlankNode::new("f1").unwrap();
+        let ex = NamedNode::new("http://example.com").unwrap();
+        let quad = Quad::new(
+            ex.clone(),
+            ex.clone(),
+            ex.clone(),
+            GraphName::BlankNode(id.clone()),
+        );
+
+        let formula = Formula::from_quads(vec![quad.clone()]);
+        assert_eq!(formula.triples().len(), 1);
+        assert_eq!(formula.id(), &id);
+
+        let triple = &formula.triples()[0];
+        assert_eq!(triple.subject, quad.subject);
+        assert_eq!(triple.predicate, quad.predicate);
+        assert_eq!(triple.object, quad.object);
+    }
+
+    #[test]
+    fn test_round_trip_conversion() {
+        let id = BlankNode::new("f1").unwrap();
+        let ex = NamedNode::new("http://example.com").unwrap();
+        let ex2 = NamedNode::new("http://example.org").unwrap();
+
+        let triple1 = Triple::new(ex.clone(), ex.clone(), ex.clone());
+        let triple2 = Triple::new(ex2.clone(), ex2.clone(), ex2.clone());
+        let original_formula = Formula::new(id.clone(), vec![triple1, triple2]);
+
+        // Convert to quads and back
+        let quads = original_formula.to_quads();
+        let restored_formula = Formula::from_quads(quads);
+
+        // Check that the formula is preserved
+        assert_eq!(restored_formula.id(), &id);
+        assert_eq!(restored_formula.triples().len(), 2);
+        assert_eq!(restored_formula.triples(), original_formula.triples());
+    }
+
+    #[test]
+    fn test_from_quads_empty() {
+        let formula = Formula::from_quads(vec![]);
+        assert_eq!(formula.triples().len(), 0);
+        // Should have a valid blank node ID
+        assert!(!formula.id().as_str().is_empty());
+    }
+
+    #[test]
+    fn test_from_quads_with_named_graph() {
+        use crate::triple::{GraphName, Quad};
+
+        let ex = NamedNode::new("http://example.com").unwrap();
+        let graph_node = NamedNode::new("http://graph.example.com").unwrap();
+        let quad = Quad::new(
+            ex.clone(),
+            ex.clone(),
+            ex.clone(),
+            GraphName::NamedNode(graph_node),
+        );
+
+        let formula = Formula::from_quads(vec![quad.clone()]);
+        assert_eq!(formula.triples().len(), 1);
+        // When graph name is not a blank node, a new blank node should be generated
+        assert!(!formula.id().as_str().is_empty());
+
+        let triple = &formula.triples()[0];
+        assert_eq!(triple.subject, quad.subject);
+        assert_eq!(triple.predicate, quad.predicate);
+        assert_eq!(triple.object, quad.object);
+    }
+
+    #[test]
+    fn test_to_quads_empty_formula() {
+        let formula = Formula::default();
+        let quads = formula.to_quads();
+        assert_eq!(quads.len(), 0);
+    }
+
+    #[test]
+    fn test_multiple_quads_round_trip() {
+        use crate::triple::GraphName;
+        use crate::Literal;
+
+        let id = BlankNode::new("f1").unwrap();
+        let ex = NamedNode::new("http://example.com").unwrap();
+        let predicate = NamedNode::new("http://example.com/predicate").unwrap();
+        let lit = Literal::new_simple_literal("test");
+
+        let triple1 = Triple::new(ex.clone(), predicate.clone(), ex.clone());
+        let triple2 = Triple::new(ex.clone(), predicate.clone(), lit);
+        let triple3 = Triple::new(
+            BlankNode::new("b1").unwrap(),
+            predicate.clone(),
+            ex.clone(),
+        );
+
+        let original_formula = Formula::new(id.clone(), vec![triple1, triple2, triple3]);
+
+        // Convert to quads
+        let quads = original_formula.to_quads();
+        assert_eq!(quads.len(), 3);
+
+        // All quads should have the same graph name
+        for quad in &quads {
+            assert_eq!(
+                quad.graph_name,
+                GraphName::BlankNode(id.clone())
+            );
+        }
+
+        // Convert back
+        let restored_formula = Formula::from_quads(quads);
+        assert_eq!(restored_formula.id(), &id);
+        assert_eq!(restored_formula.triples().len(), 3);
+        assert_eq!(restored_formula, original_formula);
     }
 }

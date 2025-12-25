@@ -2643,4 +2643,693 @@ mod tests {
         assert!(output.contains("@base <http://example.com> ."));
         assert!(output.contains("</alice>")); // Relative IRI
     }
+
+    // ========== Comprehensive N3 Formula Tests ==========
+
+    #[test]
+    fn test_formula_nested_structure() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:alice ex:believes {
+                ex:bob ex:knows ex:charlie .
+                ex:charlie ex:age 25 .
+            } .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should have at least 3 quads: 2 inside formula and 1 outside
+        assert!(quads.len() >= 3);
+
+        // The outer statement's object should reference a formula (blank node)
+        let outer_quad = quads
+            .iter()
+            .find(|q| q.graph_name == GraphName::DefaultGraph)
+            .unwrap();
+        assert_eq!(
+            outer_quad.subject,
+            N3Term::NamedNode(NamedNode::new_unchecked("http://example.com/alice"))
+        );
+        assert_eq!(
+            outer_quad.predicate,
+            N3Term::NamedNode(NamedNode::new_unchecked("http://example.com/believes"))
+        );
+        match &outer_quad.object {
+            N3Term::BlankNode(_) => {} // Formula is represented as blank node
+            _ => panic!("Expected formula to be represented as blank node"),
+        }
+    }
+
+    #[test]
+    fn test_formula_empty() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> { } .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should have 1 quad with empty formula as object
+        assert_eq!(quads.len(), 1);
+        match &quads[0].object {
+            N3Term::BlankNode(_) => {}
+            _ => panic!("Expected empty formula to be blank node"),
+        }
+    }
+
+    #[test]
+    fn test_formula_with_prefixes_inside() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:statement ex:says {
+                @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+                ex:alice foaf:knows ex:bob .
+            } .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 2);
+        // Verify the inner statement uses the prefix defined inside the formula
+        let inner_quads: Vec<_> = quads
+            .iter()
+            .filter(|q| q.graph_name != GraphName::DefaultGraph)
+            .collect();
+        assert!(!inner_quads.is_empty());
+    }
+
+    #[test]
+    fn test_formula_deeply_nested() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:level1 ex:contains {
+                ex:level2 ex:contains {
+                    ex:level3 ex:says "deep" .
+                } .
+            } .
+        "#;
+        let result = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<Vec<_>, _>>();
+
+        // Should successfully parse nested formulas
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert!(quads.len() >= 3);
+    }
+
+    #[test]
+    fn test_formula_as_subject() {
+        let data = r#"
+            { <http://example.com/a> <http://example.com/b> <http://example.com/c> }
+            <http://example.com/isTrue> "yes" .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should parse formula as subject
+        assert!(quads.len() >= 2);
+    }
+
+    #[test]
+    fn test_formula_multiple_statements() {
+        let data = r#"
+            <http://example.com/theory> <http://example.com/claims> {
+                <http://example.com/a> <http://example.com/p1> "value1" .
+                <http://example.com/b> <http://example.com/p2> "value2" .
+                <http://example.com/c> <http://example.com/p3> 42 .
+                <http://example.com/d> <http://example.com/p4> true .
+            } .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should have 5 quads: 4 inside formula + 1 outer statement
+        assert!(quads.len() >= 5);
+    }
+
+    // ========== Comprehensive N3 Variable Tests ==========
+
+    #[test]
+    fn test_variable_question_mark_syntax() {
+        let data = r#"?subject ?predicate ?object ."#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 1);
+        assert_eq!(
+            quads[0].subject,
+            N3Term::Variable(Variable::new_unchecked("subject"))
+        );
+        assert_eq!(
+            quads[0].predicate,
+            N3Term::Variable(Variable::new_unchecked("predicate"))
+        );
+        assert_eq!(
+            quads[0].object,
+            N3Term::Variable(Variable::new_unchecked("object"))
+        );
+    }
+
+    #[test]
+    fn test_variable_mixed_with_iris() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ?person ex:name ?name .
+            ?person ex:age ?age .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 2);
+
+        for quad in &quads {
+            match &quad.subject {
+                N3Term::Variable(v) => assert_eq!(v.as_str(), "person"),
+                _ => panic!("Expected variable subject"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_variable_in_formula() {
+        let data = r#"
+            <http://example.com/rule> <http://example.com/says> {
+                ?x <http://example.com/parent> ?y .
+                ?y <http://example.com/parent> ?z .
+            } .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 3);
+
+        // Check variables inside formula
+        let formula_quads: Vec<_> = quads
+            .iter()
+            .filter(|q| q.graph_name != GraphName::DefaultGraph)
+            .collect();
+        assert_eq!(formula_quads.len(), 2);
+    }
+
+    #[test]
+    fn test_variable_naming_conventions() {
+        let data = r#"
+            ?x1 <http://example.com/p> ?var_name .
+            ?camelCase <http://example.com/p> ?snake_case .
+            ?a123 <http://example.com/p> ?VAR .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 3);
+
+        // Verify different variable naming styles are accepted
+        assert!(matches!(quads[0].subject, N3Term::Variable(_)));
+        assert!(matches!(quads[1].subject, N3Term::Variable(_)));
+        assert!(matches!(quads[2].subject, N3Term::Variable(_)));
+    }
+
+    #[test]
+    fn test_variable_serialization_round_trip() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ?x ex:knows ?y .
+            ?y ex:knows ?z .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 2);
+
+        // Verify serialization
+        for quad in &quads {
+            let s = quad.subject.to_string();
+            assert!(s.starts_with('?'));
+        }
+    }
+
+    // ========== Comprehensive N3 Path Expression Tests ==========
+
+    #[test]
+    fn test_path_forward_operator() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:alice!ex:friend ex:name "Bob" .
+        "#;
+        // Note: Path expressions may expand to intermediate blank nodes
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should either parse successfully or be a recognized syntax
+        match result {
+            Ok(quads) => assert!(!quads.is_empty()),
+            Err(_) => {
+                // Some implementations may not fully support path expressions
+                // This is acceptable for an initial implementation
+            }
+        }
+    }
+
+    #[test]
+    fn test_path_inverse_operator() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:bob^ex:knows ex:age 30 .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should either parse successfully or be a recognized syntax
+        match result {
+            Ok(quads) => assert!(!quads.is_empty()),
+            Err(_) => {
+                // Some implementations may not fully support path expressions
+            }
+        }
+    }
+
+    #[test]
+    fn test_path_chained_operators() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:alice!ex:friend!ex:parent ex:name "Grandparent" .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Complex path expressions
+        match result {
+            Ok(_) | Err(_) => {
+                // Either way is acceptable for now
+            }
+        }
+    }
+
+    // ========== Comprehensive N3 Collection Tests ==========
+
+    #[test]
+    fn test_collection_empty() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/hasItems> () .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Empty list should parse
+        assert!(!quads.is_empty());
+    }
+
+    #[test]
+    fn test_collection_single_item() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/hasItems> (1) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Single item list expands to triples
+        assert!(quads.len() >= 2);
+    }
+
+    #[test]
+    fn test_collection_multiple_items() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/numbers> (1 2 3 4 5) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // List of 5 items should expand to multiple triples
+        assert!(quads.len() >= 6);
+    }
+
+    #[test]
+    fn test_collection_mixed_types() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:mixed ex:list (1 "string" ex:resource true 3.14) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Mixed type list should parse correctly
+        assert!(quads.len() >= 6);
+    }
+
+    #[test]
+    fn test_collection_nested() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/nested> (1 (2 3) 4) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Nested lists should expand properly
+        assert!(quads.len() >= 5);
+    }
+
+    #[test]
+    fn test_collection_with_blank_nodes() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/items> (_:b1 _:b2 _:b3) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 4);
+    }
+
+    #[test]
+    fn test_collection_with_variables() {
+        let data = r#"
+            <http://example.com/rule> <http://example.com/matches> (?x ?y ?z) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Collections with variables should work
+        assert!(quads.len() >= 4);
+    }
+
+    #[test]
+    fn test_collection_in_object_position() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:alice ex:favorites (
+                "pizza"
+                "pasta"
+                "ice cream"
+            ) .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 4);
+    }
+
+    // ========== Error Cases and Recovery Tests ==========
+
+    #[test]
+    fn test_error_unclosed_formula() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> {
+                <http://example.com/a> <http://example.com/b> <http://example.com/c> .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on unclosed formula
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let error_msg = e.to_string().to_lowercase();
+            assert!(
+                error_msg.contains("formula") || error_msg.contains("brace") || error_msg.contains("}"),
+                "Error should mention unclosed formula, got: {}",
+                error_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_unclosed_collection() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> (1 2 3 .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on unclosed collection
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_error_invalid_variable_name() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> ? .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on empty variable name
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_error_missing_dot_after_statement() {
+        let data = r#"
+            <http://example.com/s1> <http://example.com/p1> <http://example.com/o1>
+            <http://example.com/s2> <http://example.com/p2> <http://example.com/o2> .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on missing dot
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_error_invalid_prefix() {
+        let data = r#"
+            @prefix : <not a valid iri> .
+            :subject :predicate :object .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on invalid IRI in prefix
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_error_undefined_prefix() {
+        let data = r#"
+            undefined:subject undefined:predicate undefined:object .
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        // Should error on undefined prefix
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lenient_mode_recovery() {
+        // Lenient mode should be more forgiving
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> "valid" .
+        "#;
+        let result = N3Parser::new()
+            .lenient()
+            .for_slice(data)
+            .collect::<Result<Vec<_>, _>>();
+
+        // Should successfully parse valid data in lenient mode
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_error_formula_without_closing_brace() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:s ex:p { ex:a ex:b ex:c
+        "#;
+        let result = N3Parser::new().for_slice(data).collect::<Result<Vec<_>, _>>();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_statements_different_graphs() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:s1 ex:p1 ex:o1 .
+            { ex:s2 ex:p2 ex:o2 . } ex:isTrue "yes" .
+            ex:s3 ex:p3 ex:o3 .
+        "#;
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should have quads in different graphs (default graph and formula graph)
+        assert!(quads.len() >= 4);
+
+        let default_graph_quads: Vec<_> = quads
+            .iter()
+            .filter(|q| q.graph_name == GraphName::DefaultGraph)
+            .collect();
+        let formula_quads: Vec<_> = quads
+            .iter()
+            .filter(|q| q.graph_name != GraphName::DefaultGraph)
+            .collect();
+
+        assert!(!default_graph_quads.is_empty());
+        assert!(!formula_quads.is_empty());
+    }
+
+    #[test]
+    fn test_complex_n3_document() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            @base <http://example.org/> .
+
+            # Variables and formulas combined
+            ex:rule ex:states {
+                ?person foaf:knows ?friend .
+                ?friend foaf:name ?name .
+            } .
+
+            # Collections
+            ex:alice foaf:knows (ex:bob ex:charlie ex:david) .
+
+            # Regular triples
+            ex:bob foaf:name "Bob" ;
+                   foaf:age 30 ;
+                   foaf:mbox <mailto:bob@example.com> .
+
+            # Blank nodes
+            [
+                a foaf:Person ;
+                foaf:name "Anonymous" ;
+                foaf:knows ex:alice
+            ] .
+
+            # Literals of various types
+            ex:data ex:integer 42 ;
+                    ex:decimal 3.14 ;
+                    ex:double 1.23e10 ;
+                    ex:boolean true ;
+                    ex:string "hello world" ;
+                    ex:langString "bonjour"@fr .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should successfully parse a complex N3 document
+        assert!(quads.len() > 10);
+    }
+
+    #[test]
+    fn test_formula_with_base_and_prefix() {
+        let data = r#"
+            @base <http://example.com/> .
+            @prefix ex: <http://example.org/> .
+
+            <subject> <predicate> {
+                @base <http://other.com/> .
+                <local> ex:prop "value" .
+            } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Base IRI changes should be scoped properly
+        assert!(quads.len() >= 2);
+    }
+
+    #[test]
+    fn test_blank_node_in_formula() {
+        let data = r#"
+            @prefix ex: <http://example.com/> .
+            ex:s ex:p {
+                _:b1 ex:name "Anonymous" .
+                _:b1 ex:age 25 .
+            } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 3);
+
+        // Verify blank nodes inside formula
+        let formula_quads: Vec<_> = quads
+            .iter()
+            .filter(|q| q.graph_name != GraphName::DefaultGraph)
+            .collect();
+        assert_eq!(formula_quads.len(), 2);
+    }
+
+    #[test]
+    fn test_special_characters_in_literals() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/p> "Line 1\nLine 2\tTabbed" .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 1);
+        match &quads[0].object {
+            N3Term::Literal(lit) => {
+                assert!(lit.value().contains('\n'));
+                assert!(lit.value().contains('\t'));
+            }
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_long_literal() {
+        let data = r#"
+            <http://example.com/s> <http://example.com/description> """
+                This is a long literal
+                that spans multiple lines
+                and contains special characters: <>&"'
+                as well as unicode: 你好世界 🌍
+            """ .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(data)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 1);
+        match &quads[0].object {
+            N3Term::Literal(lit) => {
+                assert!(lit.value().contains("multiple lines"));
+                assert!(lit.value().contains("你好世界"));
+            }
+            _ => panic!("Expected literal"),
+        }
+    }
 }

@@ -37,6 +37,22 @@ use std::path::PathBuf;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
+///
+/// Create an in-memory store:
+///
+/// >>> store = Store()
+/// >>> len(store)
+/// 0
+///
+/// Create a persistent store:
+///
+/// >>> import tempfile
+/// >>> import os
+/// >>> temp_dir = tempfile.mkdtemp()
+/// >>> store = Store(temp_dir)
+/// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o')))
+/// >>> len(store)
+/// 1
 #[pyclass(frozen, name = "Store", module = "pyoxigraph")]
 #[derive(Clone)]
 pub struct PyStore {
@@ -80,6 +96,16 @@ impl PyStore {
     /// :return: the opened store.
     /// :rtype: Store
     /// :raises OSError: if the target directory contains invalid data or could not be accessed.
+    ///
+    /// >>> import tempfile
+    /// >>> temp_dir = tempfile.mkdtemp()
+    /// >>> # Create and populate a store
+    /// >>> store = Store(temp_dir)
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o')))
+    /// >>> # Open read-only
+    /// >>> ro_store = Store.read_only(temp_dir)
+    /// >>> len(ro_store)
+    /// 1
     #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
@@ -194,6 +220,22 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    ///
+    /// Match all quads with a specific predicate:
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com/s1'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.add(Quad(NamedNode('http://example.com/s2'), NamedNode('http://example.com/p'), Literal('2')))
+    /// >>> len(list(store.quads_for_pattern(None, NamedNode('http://example.com/p'), None, None)))
+    /// 2
+    ///
+    /// Match quads in the default graph:
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('default')))
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('named'), NamedNode('http://example.com/g')))
+    /// >>> len(list(store.quads_for_pattern(None, None, None, DefaultGraph())))
+    /// 1
     #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn quads_for_pattern(
@@ -802,6 +844,186 @@ impl PyStore {
     /// >>> store.validate()
     fn validate(&self, py: Python<'_>) -> PyResult<()> {
         py.detach(|| self.inner.validate().map_err(map_storage_error))
+    }
+
+    /// Loads Turtle data into the store.
+    ///
+    /// This is a convenience method that wraps :py:func:`load` with the Turtle format.
+    /// The data is parsed and loaded in a transactional manner: either the full operation succeeds,
+    /// or nothing is written to the database.
+    ///
+    /// :param data: the Turtle data to load as a string.
+    /// :type data: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the data or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises OSError: if an error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.load_turtle('@prefix ex: <http://example.com/> . ex:subject ex:predicate "value" .')
+    /// >>> len(store)
+    /// 1
+    #[pyo3(signature = (data, *, base_iri = None, to_graph = None))]
+    fn load_turtle(
+        &self,
+        data: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<PyGraphNameRef<'_>>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
+        py.detach(|| {
+            let mut parser = RdfParser::from_format(oxigraph::io::RdfFormat::Turtle);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            }
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_reader(parser, data.as_bytes())
+                .map_err(|e| map_loader_error(e, None))
+        })
+    }
+
+    /// Loads N-Triples data into the store.
+    ///
+    /// This is a convenience method that wraps :py:func:`load` with the N-Triples format.
+    /// The data is parsed and loaded in a transactional manner: either the full operation succeeds,
+    /// or nothing is written to the database.
+    ///
+    /// :param data: the N-Triples data to load as a string.
+    /// :type data: str
+    /// :param to_graph: the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises OSError: if an error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.load_ntriples('<http://example.com/s> <http://example.com/p> "o" .')
+    /// >>> len(store)
+    /// 1
+    #[pyo3(signature = (data, *, to_graph = None))]
+    fn load_ntriples(
+        &self,
+        data: &str,
+        to_graph: Option<PyGraphNameRef<'_>>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
+        py.detach(|| {
+            let mut parser = RdfParser::from_format(oxigraph::io::RdfFormat::NTriples);
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_reader(parser, data.as_bytes())
+                .map_err(|e| map_loader_error(e, None))
+        })
+    }
+
+    /// Serializes all quads in the store to Turtle format.
+    ///
+    /// This is a convenience method that wraps :py:func:`dump` with the Turtle format.
+    /// Since Turtle is a triple format (not a quad format), you must specify which graph to serialize.
+    ///
+    /// :param from_graph: the store graph from which to dump the triples. By default, the default graph is used.
+    /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param prefixes: the prefixes used in the serialization.
+    /// :type prefixes: dict[str, str] or None, optional
+    /// :param base_iri: the base IRI used in the serialization.
+    /// :type base_iri: str or None, optional
+    /// :return: the Turtle serialization as a string.
+    /// :rtype: str
+    /// :raises OSError: if an error happens during the serialization.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o')))
+    /// >>> turtle = store.to_turtle()
+    /// >>> '<http://example.com/s>' in turtle
+    /// True
+    #[pyo3(signature = (*, from_graph = None, prefixes = None, base_iri = None))]
+    fn to_turtle(
+        &self,
+        from_graph: Option<PyGraphNameRef<'_>>,
+        prefixes: Option<BTreeMap<String, String>>,
+        base_iri: Option<&str>,
+        py: Python<'_>,
+    ) -> PyResult<String> {
+        let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
+        let bytes = py.detach(|| -> PyResult<Vec<u8>> {
+            let mut serializer = RdfSerializer::from_format(oxigraph::io::RdfFormat::Turtle);
+            if let Some(prefixes) = prefixes {
+                for (prefix_name, prefix_iri) in &prefixes {
+                    serializer = serializer.with_prefix(prefix_name, prefix_iri).map_err(|e| {
+                        PyValueError::new_err(format!(
+                            "Invalid prefix {prefix_name} IRI '{prefix_iri}', {e}"
+                        ))
+                    })?;
+                }
+            }
+            if let Some(base_iri) = base_iri {
+                serializer = serializer
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}")))?;
+            }
+            let mut output = Vec::new();
+            if let Some(from_graph_name) = from_graph_name {
+                self.inner
+                    .dump_graph_to_writer(from_graph_name, serializer, &mut output)
+            } else {
+                self.inner
+                    .dump_graph_to_writer(GraphNameRef::DefaultGraph, serializer, &mut output)
+            }
+            .map_err(map_serializer_error)?;
+            Ok(output)
+        })?;
+        String::from_utf8(bytes).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Serializes all quads in the store to N-Triples format.
+    ///
+    /// This is a convenience method that wraps :py:func:`dump` with the N-Triples format.
+    /// Since N-Triples is a triple format (not a quad format), you must specify which graph to serialize.
+    ///
+    /// :param from_graph: the store graph from which to dump the triples. By default, the default graph is used.
+    /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :return: the N-Triples serialization as a string.
+    /// :rtype: str
+    /// :raises OSError: if an error happens during the serialization.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o')))
+    /// >>> ntriples = store.to_ntriples()
+    /// >>> '<http://example.com/s>' in ntriples
+    /// True
+    #[pyo3(signature = (*, from_graph = None))]
+    fn to_ntriples(
+        &self,
+        from_graph: Option<PyGraphNameRef<'_>>,
+        py: Python<'_>,
+    ) -> PyResult<String> {
+        let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
+        let bytes = py.detach(|| -> PyResult<Vec<u8>> {
+            let serializer = RdfSerializer::from_format(oxigraph::io::RdfFormat::NTriples);
+            let mut output = Vec::new();
+            if let Some(from_graph_name) = from_graph_name {
+                self.inner
+                    .dump_graph_to_writer(from_graph_name, serializer, &mut output)
+            } else {
+                self.inner
+                    .dump_graph_to_writer(GraphNameRef::DefaultGraph, serializer, &mut output)
+            }
+            .map_err(map_serializer_error)?;
+            Ok(output)
+        })?;
+        String::from_utf8(bytes).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     /// Returns a bulk loader for efficient loading of large amounts of data.

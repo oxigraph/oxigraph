@@ -17,14 +17,170 @@ thread_local! {
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 /**
- * RDF/JS DataFactory-compatible methods
+ * RDF/JS DataFactory-compatible methods for creating RDF terms.
+ *
+ * @see {@link https://rdf.js.org/data-model-spec/#datafactory-interface | RDF/JS DataFactory}
+ */
+
+/**
+ * Creates a NamedNode (IRI reference).
+ *
+ * @param value - The IRI string
+ * @returns A new NamedNode
+ * @throws {URIError} If the IRI is invalid
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-IRIs | RDF 1.1 IRIs}
+ *
+ * @example
+ * ```typescript
+ * const person = namedNode('http://example.com/alice');
+ * const foafName = namedNode('http://xmlns.com/foaf/0.1/name');
+ * ```
  */
 export function namedNode(value: string): NamedNode;
+
+/**
+ * Creates a BlankNode (anonymous node).
+ *
+ * @param value - Optional blank node identifier. If not provided, a unique ID is generated
+ * @returns A new BlankNode
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes | RDF 1.1 Blank Nodes}
+ *
+ * @example
+ * ```typescript
+ * // Auto-generated ID
+ * const bn1 = blankNode(); // e.g., _:b0
+ *
+ * // Custom ID
+ * const bn2 = blankNode('person1'); // _:person1
+ * ```
+ */
 export function blankNode(value?: string): BlankNode;
+
+/**
+ * Creates a Literal (value with optional language tag or datatype).
+ *
+ * @param value - The lexical form of the literal
+ * @param languageOrDataType - Either:
+ *   - A language tag string (e.g., 'en', 'fr')
+ *   - A NamedNode for the datatype (e.g., xsd:integer)
+ *   - An object with language and optional direction (RDF 1.2)
+ * @returns A new Literal
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal | RDF 1.1 Literals}
+ *
+ * @example
+ * ```typescript
+ * // Simple string literal (xsd:string)
+ * const name = literal('Alice');
+ *
+ * // Language-tagged literal
+ * const greeting = literal('Hello', 'en');
+ *
+ * // Typed literal
+ * const age = literal('30', namedNode('http://www.w3.org/2001/XMLSchema#integer'));
+ *
+ * // Directional language-tagged literal (RDF 1.2)
+ * const rtl = literal('مرحبا', { language: 'ar', direction: 'rtl' });
+ * ```
+ */
 export function literal(value: string | undefined, languageOrDataType?: string | NamedNode | {language: string, direction?: "ltr" | "rtl"}): Literal;
+
+/**
+ * Creates the DefaultGraph term.
+ * Used to represent the default (unnamed) graph in a dataset.
+ *
+ * @returns The DefaultGraph singleton
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-dataset | RDF 1.1 Datasets}
+ *
+ * @example
+ * ```typescript
+ * const q = quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   literal('Alice'),
+ *   defaultGraph() // Explicitly specify default graph
+ * );
+ * ```
+ */
 export function defaultGraph(): DefaultGraph;
+
+/**
+ * Creates a Variable (used in SPARQL queries).
+ *
+ * @param value - The variable name (without the '?' or '$' prefix)
+ * @returns A new Variable
+ *
+ * @example
+ * ```typescript
+ * const subjectVar = variable('s');
+ * const predicateVar = variable('p');
+ * const objectVar = variable('o');
+ * ```
+ */
 export function variable(value: string): Variable;
+
+/**
+ * Creates a Triple (RDF-star nested triple without graph).
+ *
+ * @param subject - The subject of the triple
+ * @param predicate - The predicate of the triple
+ * @param object - The object of the triple
+ * @returns A new Triple
+ *
+ * @see {@link https://www.w3.org/TR/rdf12-concepts/#section-triples | RDF 1.2 Triples (RDF-star)}
+ *
+ * @example
+ * ```typescript
+ * // Create a nested triple
+ * const innerTriple = triple(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/knows'),
+ *   namedNode('http://example.com/bob')
+ * );
+ *
+ * // Use it as a subject in another triple (quoted triple pattern)
+ * const metaTriple = quad(
+ *   innerTriple,
+ *   namedNode('http://example.com/certainty'),
+ *   literal('0.9', namedNode('http://www.w3.org/2001/XMLSchema#decimal'))
+ * );
+ * ```
+ */
 export function triple(subject: Triple_Subject, predicate: Triple_Predicate, object: Triple_Object): Triple;
+
+/**
+ * Creates a Quad (RDF statement with optional graph name).
+ *
+ * @param subject - The subject of the quad
+ * @param predicate - The predicate of the quad
+ * @param object - The object of the quad
+ * @param graph - Optional graph name (defaults to DefaultGraph)
+ * @returns A new Quad
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-triples | RDF 1.1 Triples}
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-dataset | RDF 1.1 Datasets}
+ *
+ * @example
+ * ```typescript
+ * // Triple in default graph
+ * const triple = quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   literal('Alice')
+ * );
+ *
+ * // Quad in named graph
+ * const quadInGraph = quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/knows'),
+ *   namedNode('http://example.com/bob'),
+ *   namedNode('http://example.com/socialGraph')
+ * );
+ * ```
+ */
 export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph?: Quad_Graph): Quad;
 
 
@@ -78,16 +234,99 @@ export function fromTerm(original: Term | null): Term | null;
  */
 export function fromQuad(original: BaseQuad | null): Quad | null;
 /**
- * RDF/JS-compatible BlankNode term
+ * RDF/JS-compatible BlankNode term.
+ *
+ * Blank nodes are used to express data that doesn't have a global identifier.
+ * They act as local identifiers within an RDF graph.
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes | RDF 1.1 Blank Nodes}
+ * @see {@link https://rdf.js.org/data-model-spec/#blanknode-interface | RDF/JS BlankNode}
+ *
+ * @example
+ * ```typescript
+ * // Create a blank node with auto-generated ID
+ * const bn = blankNode();
+ * console.log(bn.value); // e.g., "b0"
+ *
+ * // Create a blank node with specific ID
+ * const bn2 = blankNode('person1');
+ * console.log(bn2.value); // "person1"
+ *
+ * // Use in a quad
+ * store.add(quad(
+ *   bn,
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   literal('Anonymous Person')
+ * ));
+ * ```
  */
 export class BlankNode {
+    /** Always "BlankNode" for blank node terms */
     readonly termType: "BlankNode";
+
+    /** The blank node identifier (label) */
     readonly value: string;
 
+    /**
+     * Checks if this blank node equals another term.
+     * Blank nodes are only equal if they have the same identifier.
+     *
+     * @param other - The term to compare with
+     * @returns true if the terms are equal
+     *
+     * @example
+     * ```typescript
+     * const bn1 = blankNode('x');
+     * const bn2 = blankNode('x');
+     * const bn3 = blankNode('y');
+     * console.log(bn1.equals(bn2)); // true
+     * console.log(bn1.equals(bn3)); // false
+     * ```
+     */
     equals(other: Term | null | undefined): boolean;
+
+    /**
+     * Returns a string representation of the blank node.
+     * Format: "_:identifier"
+     *
+     * @returns String representation
+     *
+     * @example
+     * ```typescript
+     * const bn = blankNode('person1');
+     * console.log(bn.toString()); // "_:person1"
+     * ```
+     */
     toString(): string;
+
+    /**
+     * Returns the blank node identifier.
+     * Alias for the value property.
+     *
+     * @returns The identifier
+     */
     valueOf(): string;
+
+    /**
+     * Returns a JSON representation of the blank node.
+     * Useful for serialization.
+     *
+     * @returns JSON object with termType and value
+     *
+     * @example
+     * ```typescript
+     * const bn = blankNode('x');
+     * console.log(JSON.stringify(bn));
+     * // {"termType":"BlankNode","value":"x"}
+     * ```
+     */
     toJSON(): { termType: "BlankNode"; value: string };
+
+    /**
+     * Creates a shallow copy of the blank node.
+     *
+     * @returns A new BlankNode with the same identifier
+     */
     clone(): BlankNode;
 }
 
@@ -106,33 +345,226 @@ export class DefaultGraph {
 }
 
 /**
- * RDF/JS-compatible Literal term
+ * RDF/JS-compatible Literal term.
+ *
+ * Literals represent values such as strings, numbers, and dates in RDF.
+ * They have a lexical form (the string value), a datatype, and optionally a language tag.
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal | RDF 1.1 Literals}
+ * @see {@link https://rdf.js.org/data-model-spec/#literal-interface | RDF/JS Literal}
+ *
+ * @example
+ * ```typescript
+ * // Simple string literal
+ * const name = literal('Alice');
+ *
+ * // Language-tagged string
+ * const greeting = literal('Hello', 'en');
+ * const bonjour = literal('Bonjour', 'fr');
+ *
+ * // Typed literal (number)
+ * const age = literal('30', namedNode('http://www.w3.org/2001/XMLSchema#integer'));
+ *
+ * // With directional language tag (RDF 1.2)
+ * const rtlText = literal('مرحبا', { language: 'ar', direction: 'rtl' });
+ *
+ * // Use in a quad
+ * store.add(quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   name
+ * ));
+ * ```
  */
 export class Literal {
+    /**
+     * The datatype of the literal as a NamedNode.
+     * For plain literals, this is xsd:string.
+     * For language-tagged literals, this is rdf:langString.
+     * @readonly
+     */
     readonly datatype: NamedNode;
+
+    /**
+     * The language tag (e.g., 'en', 'fr', 'de').
+     * Empty string if not a language-tagged literal.
+     * @readonly
+     */
     readonly language: string;
+
+    /**
+     * The text direction ('ltr', 'rtl', or '').
+     * Only available with RDF 1.2 feature enabled.
+     * @readonly
+     */
     readonly direction: "ltr" | "rtl" | "";
+
+    /** Always "Literal" for literal terms */
     readonly termType: "Literal";
+
+    /** The lexical form (string representation) of the literal */
     readonly value: string;
 
+    /**
+     * Checks if this literal equals another term.
+     * Literals are equal if they have the same value, language, direction, and datatype.
+     *
+     * @param other - The term to compare with
+     * @returns true if the terms are equal
+     *
+     * @example
+     * ```typescript
+     * const lit1 = literal('hello', 'en');
+     * const lit2 = literal('hello', 'en');
+     * const lit3 = literal('hello', 'fr');
+     * const lit4 = literal('hello'); // Different datatype
+     *
+     * console.log(lit1.equals(lit2)); // true
+     * console.log(lit1.equals(lit3)); // false (different language)
+     * console.log(lit1.equals(lit4)); // false (different datatype)
+     * ```
+     */
     equals(other: Term | null | undefined): boolean;
+
+    /**
+     * Returns a string representation of the literal.
+     * Format varies based on the literal type:
+     * - Simple: "value"
+     * - Language-tagged: "value"@lang
+     * - Typed: "value"^^<datatype>
+     *
+     * @returns String representation
+     *
+     * @example
+     * ```typescript
+     * console.log(literal('Alice').toString()); // "Alice"
+     * console.log(literal('Hello', 'en').toString()); // "Hello"@en
+     * console.log(literal('42', namedNode('http://www.w3.org/2001/XMLSchema#integer')).toString());
+     * // "42"^^<http://www.w3.org/2001/XMLSchema#integer>
+     * ```
+     */
     toString(): string;
+
+    /**
+     * Returns the lexical form of the literal.
+     * Alias for the value property.
+     *
+     * @returns The string value
+     */
     valueOf(): string;
+
+    /**
+     * Returns a JSON representation of the literal.
+     * Useful for serialization.
+     *
+     * @returns JSON object with termType, value, datatype, language, and optionally direction
+     *
+     * @example
+     * ```typescript
+     * const lit = literal('Hello', 'en');
+     * console.log(JSON.stringify(lit));
+     * // {"termType":"Literal","value":"Hello","datatype":{...},"language":"en"}
+     * ```
+     */
     toJSON(): { termType: "Literal"; value: string; datatype: { termType: "NamedNode"; value: string }; language: string; direction?: "ltr" | "rtl" | "" };
+
+    /**
+     * Creates a shallow copy of the literal.
+     *
+     * @returns A new Literal with the same value, language, and datatype
+     */
     clone(): Literal;
 }
 
 /**
- * RDF/JS-compatible NamedNode term
+ * RDF/JS-compatible NamedNode term.
+ *
+ * Named nodes represent IRIs (Internationalized Resource Identifiers) in RDF.
+ * They are used to identify resources, properties, and datatypes.
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-IRIs | RDF 1.1 IRIs}
+ * @see {@link https://rdf.js.org/data-model-spec/#namednode-interface | RDF/JS NamedNode}
+ *
+ * @example
+ * ```typescript
+ * // Create a named node for a person
+ * const alice = namedNode('http://example.com/alice');
+ *
+ * // Use with common vocabularies
+ * const foafName = namedNode('http://xmlns.com/foaf/0.1/name');
+ * const rdfType = namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type');
+ *
+ * // Create a triple
+ * store.add(quad(alice, foafName, literal('Alice')));
+ * ```
  */
 export class NamedNode {
+    /** Always "NamedNode" for named node terms */
     readonly termType: "NamedNode";
+
+    /** The IRI string value */
     readonly value: string;
 
+    /**
+     * Checks if this named node equals another term.
+     * Named nodes are equal if they have the same IRI.
+     *
+     * @param other - The term to compare with
+     * @returns true if the terms are equal
+     *
+     * @example
+     * ```typescript
+     * const nn1 = namedNode('http://example.com/alice');
+     * const nn2 = namedNode('http://example.com/alice');
+     * const nn3 = namedNode('http://example.com/bob');
+     * console.log(nn1.equals(nn2)); // true
+     * console.log(nn1.equals(nn3)); // false
+     * ```
+     */
     equals(other: Term | null | undefined): boolean;
+
+    /**
+     * Returns a string representation of the named node.
+     * Format: "<IRI>"
+     *
+     * @returns String representation with angle brackets
+     *
+     * @example
+     * ```typescript
+     * const nn = namedNode('http://example.com/alice');
+     * console.log(nn.toString()); // "<http://example.com/alice>"
+     * ```
+     */
     toString(): string;
+
+    /**
+     * Returns the IRI value.
+     * Alias for the value property.
+     *
+     * @returns The IRI string
+     */
     valueOf(): string;
+
+    /**
+     * Returns a JSON representation of the named node.
+     * Useful for serialization.
+     *
+     * @returns JSON object with termType and value
+     *
+     * @example
+     * ```typescript
+     * const nn = namedNode('http://example.com/alice');
+     * console.log(JSON.stringify(nn));
+     * // {"termType":"NamedNode","value":"http://example.com/alice"}
+     * ```
+     */
     toJSON(): { termType: "NamedNode"; value: string };
+
+    /**
+     * Creates a shallow copy of the named node.
+     *
+     * @returns A new NamedNode with the same IRI
+     */
     clone(): NamedNode;
 }
 
@@ -156,20 +588,161 @@ export interface BaseQuad {
 }
 
 /**
- * RDF/JS-compatible Quad term
+ * RDF/JS-compatible Quad term.
+ *
+ * A quad (or RDF statement) is the fundamental unit of RDF data.
+ * It consists of a subject, predicate, object, and optionally a graph name.
+ * Without a graph name (using DefaultGraph), it represents an RDF triple.
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-triples | RDF 1.1 Triples}
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-dataset | RDF 1.1 Datasets}
+ * @see {@link https://rdf.js.org/data-model-spec/#quad-interface | RDF/JS Quad}
+ *
+ * @example
+ * ```typescript
+ * // Create a simple triple (quad in default graph)
+ * const triple = quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   literal('Alice')
+ * );
+ *
+ * // Create a quad in a named graph
+ * const quadInGraph = quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/knows'),
+ *   namedNode('http://example.com/bob'),
+ *   namedNode('http://example.com/socialGraph')
+ * );
+ *
+ * // Add to store
+ * store.add(triple);
+ * store.add(quadInGraph);
+ *
+ * // Access components
+ * console.log(triple.subject.value); // 'http://example.com/alice'
+ * console.log(triple.predicate.value); // 'http://xmlns.com/foaf/0.1/name'
+ * console.log(triple.object.value); // 'Alice'
+ * console.log(triple.graph.termType); // 'DefaultGraph'
+ * ```
  */
 export class Quad implements BaseQuad {
+    /**
+     * The graph name (context) of the quad.
+     * Can be a NamedNode, BlankNode, or DefaultGraph.
+     * @readonly
+     */
     readonly graph: Quad_Graph;
+
+    /**
+     * The object of the quad.
+     * Can be any term: NamedNode, BlankNode, Literal, or nested Quad/Triple.
+     * @readonly
+     */
     readonly object: Quad_Object;
+
+    /**
+     * The predicate (property) of the quad.
+     * Must be a NamedNode or Variable.
+     * @readonly
+     */
     readonly predicate: Quad_Predicate;
+
+    /**
+     * The subject of the quad.
+     * Can be a NamedNode, BlankNode, Variable, or nested Quad/Triple.
+     * @readonly
+     */
     readonly subject: Quad_Subject;
+
+    /** Always "Quad" for quad terms */
     readonly termType: "Quad";
+
+    /** Always empty string for quads (RDF/JS spec) */
     readonly value: "";
 
+    /**
+     * Checks if this quad equals another term.
+     * Quads are equal if all four components (subject, predicate, object, graph) are equal.
+     *
+     * @param other - The term to compare with
+     * @returns true if the quads are equal
+     *
+     * @example
+     * ```typescript
+     * const q1 = quad(
+     *   namedNode('http://example.com/alice'),
+     *   namedNode('http://xmlns.com/foaf/0.1/name'),
+     *   literal('Alice')
+     * );
+     * const q2 = quad(
+     *   namedNode('http://example.com/alice'),
+     *   namedNode('http://xmlns.com/foaf/0.1/name'),
+     *   literal('Alice')
+     * );
+     * console.log(q1.equals(q2)); // true
+     *
+     * const q3 = quad(
+     *   namedNode('http://example.com/bob'),
+     *   namedNode('http://xmlns.com/foaf/0.1/name'),
+     *   literal('Bob')
+     * );
+     * console.log(q1.equals(q3)); // false
+     * ```
+     */
     equals(other: Term | null | undefined): boolean;
+
+    /**
+     * Returns a string representation of the quad.
+     * Format: "subject predicate object graph"
+     *
+     * @returns String representation
+     *
+     * @example
+     * ```typescript
+     * const q = quad(
+     *   namedNode('http://example.com/alice'),
+     *   namedNode('http://xmlns.com/foaf/0.1/name'),
+     *   literal('Alice')
+     * );
+     * console.log(q.toString());
+     * // <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
+     * ```
+     */
     toString(): string;
+
+    /**
+     * Returns the empty string (RDF/JS spec requirement).
+     * Alias for the value property.
+     *
+     * @returns Empty string
+     */
     valueOf(): string;
+
+    /**
+     * Returns a JSON representation of the quad.
+     * Useful for serialization.
+     *
+     * @returns JSON object with termType, value, and all components
+     *
+     * @example
+     * ```typescript
+     * const q = quad(
+     *   namedNode('http://example.com/alice'),
+     *   namedNode('http://xmlns.com/foaf/0.1/name'),
+     *   literal('Alice')
+     * );
+     * console.log(JSON.stringify(q));
+     * // {"termType":"Quad","value":"","subject":{...},"predicate":{...},"object":{...},"graph":{...}}
+     * ```
+     */
     toJSON(): { termType: "Quad"; value: ""; subject: any; predicate: any; object: any; graph: any };
+
+    /**
+     * Creates a deep copy of the quad.
+     *
+     * @returns A new Quad with the same components
+     */
     clone(): Quad;
 }
 

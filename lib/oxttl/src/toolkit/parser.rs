@@ -36,6 +36,53 @@ pub struct RuleRecognizerError {
     pub message: String,
 }
 
+impl RuleRecognizerError {
+    /// Create a new rule error.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    /// Create an error for an unexpected token.
+    pub fn unexpected(expected: &str, found: &str) -> Self {
+        Self {
+            message: format!("Expected {}, but found {}", expected, found),
+        }
+    }
+
+    /// Create an error for a missing required element.
+    pub fn missing(what: &str) -> Self {
+        Self {
+            message: format!("Missing required {}", what),
+        }
+    }
+
+    /// Create an error for an invalid construct.
+    pub fn invalid(what: &str, why: &str) -> Self {
+        Self {
+            message: format!("Invalid {}: {}", what, why),
+        }
+    }
+
+    /// Create an error for an unclosed delimiter.
+    pub fn unclosed(opening: &str, closing: &str, context: &str) -> Self {
+        Self {
+            message: format!(
+                "Unclosed {}: missing '{}' to match '{}'. Check that all {} are properly closed.",
+                context, closing, opening, context
+            ),
+        }
+    }
+
+    /// Create an error with a suggestion.
+    pub fn with_suggestion(message: impl Into<String>, suggestion: impl Into<String>) -> Self {
+        Self {
+            message: format!("{}. Suggestion: {}", message.into(), suggestion.into()),
+        }
+    }
+}
+
 impl<S: Into<String>> From<S> for RuleRecognizerError {
     fn from(message: S) -> Self {
         Self {

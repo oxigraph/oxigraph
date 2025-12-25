@@ -48,8 +48,23 @@ use std::sync::OnceLock;
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
 ///
+/// Parse Turtle with relative IRIs:
+///
 /// >>> list(parse(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
+///
+/// Parse N-Triples:
+///
+/// >>> quads = parse(input='<http://example.com/s> <http://example.com/p> "value" .', format=RdfFormat.N_TRIPLES)
+/// >>> len(list(quads))
+/// 1
+///
+/// Parse N-Quads (dataset format):
+///
+/// >>> quads = parse(input=b'<http://example.com/s> <http://example.com/p> "o" <http://example.com/g> .', format=RdfFormat.N_QUADS)
+/// >>> quad = next(quads)
+/// >>> str(quad.graph_name)
+/// '<http://example.com/g>'
 #[pyfunction]
 #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false, lenient = false))]
 pub fn parse(
@@ -113,14 +128,24 @@ pub fn parse(
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
 /// :raises OSError: if a system error happens while writing the file.
 ///
+/// Serialize triples to Turtle:
+///
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], format=RdfFormat.TURTLE)
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
+///
+/// Serialize with prefixes and base IRI:
 ///
 /// >>> import io
 /// >>> output = io.BytesIO()
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, RdfFormat.TURTLE, prefixes={"ex": "http://example.com/"}, base_iri="http://example.com")
 /// >>> output.getvalue()
 /// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
+///
+/// Serialize to N-Triples:
+///
+/// >>> result = serialize([Triple(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o'))], format=RdfFormat.N_TRIPLES)
+/// >>> b'<http://example.com/s>' in result
+/// True
 #[pyfunction]
 #[pyo3(signature = (input, output = None, format = None, *, prefixes = None, base_iri = None))]
 pub fn serialize<'py>(
