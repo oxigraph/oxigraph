@@ -18,3 +18,80 @@ pkg.repository = {
     directory: "js",
 };
 fs.writeFileSync("./pkg/package.json", JSON.stringify(pkg, null, 2));
+
+// Add Symbol.iterator support to Store and Dataset classes
+for (const file of ["./pkg/web.js", "./pkg/node.js"]) {
+    if (fs.existsSync(file)) {
+        let content = fs.readFileSync(file, "utf8");
+
+        // Find and patch Store class to add Symbol.iterator
+        // Look for the Store class and add the iterator method after the opening brace
+        if (content.includes("class Store")) {
+            // Find where the Store class definition ends (just before the final })
+            // Add Symbol.iterator method by finding the last method in the class
+            const storeMatch = content.match(/(class Store\s*{[\s\S]*?)(\n}\n)/);
+            if (storeMatch) {
+                const classContent = storeMatch[1];
+                const classEnd = storeMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(storeMatch[0], updatedClass);
+            }
+        }
+
+        // Find and patch Dataset class to add Symbol.iterator
+        if (content.includes("class Dataset")) {
+            const datasetMatch = content.match(/(class Dataset\s*{[\s\S]*?)(\n}\n)/);
+            if (datasetMatch) {
+                const classContent = datasetMatch[1];
+                const classEnd = datasetMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(datasetMatch[0], updatedClass);
+            }
+        }
+
+        // Find and patch QuerySolutions class to add Symbol.iterator
+        if (content.includes("class QuerySolutions")) {
+            const querySolutionsMatch = content.match(/(class QuerySolutions\s*{[\s\S]*?)(\n}\n)/);
+            if (querySolutionsMatch) {
+                const classContent = querySolutionsMatch[1];
+                const classEnd = querySolutionsMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(querySolutionsMatch[0], updatedClass);
+            }
+        }
+
+        // Find and patch QueryTriples class to add Symbol.iterator
+        if (content.includes("class QueryTriples")) {
+            const queryTriplesMatch = content.match(/(class QueryTriples\s*{[\s\S]*?)(\n}\n)/);
+            if (queryTriplesMatch) {
+                const classContent = queryTriplesMatch[1];
+                const classEnd = queryTriplesMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(queryTriplesMatch[0], updatedClass);
+            }
+        }
+
+        // Add DataFactory export
+        // Find the end of the exports section (usually near the end of the file)
+        // and add the DataFactory object that groups all factory functions
+        if (content.includes("export { namedNode, blankNode")) {
+            // DataFactory already uses individual exports, add it as an object
+            const dataFactoryExport = `\n// RDF/JS DataFactory interface
+export const DataFactory = {
+    namedNode,
+    blankNode,
+    literal,
+    variable,
+    defaultGraph,
+    triple,
+    quad,
+    fromTerm,
+    fromQuad
+};\n`;
+            // Append at the end of the file
+            content += dataFactoryExport;
+        }
+
+        fs.writeFileSync(file, content);
+    }
+}
