@@ -1604,7 +1604,10 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "oxigraph",
+ "oxrdf",
+ "oxrdfio",
  "spargeo",
+ "sparshacl",
  "wasm-bindgen",
 ]
 
