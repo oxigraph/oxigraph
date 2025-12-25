@@ -5,6 +5,7 @@ authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SHACL", "RDF", "validation"]
+categories = ["data-structures", "parser-implementations"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparshacl"
 description = "SHACL (Shapes Constraint Language) validation engine"
 documentation = "https://docs.rs/sparshacl"

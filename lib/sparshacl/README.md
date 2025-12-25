@@ -2,6 +2,9 @@
 
 [![Latest Version](https://img.shields.io/crates/v/sparshacl.svg)](https://crates.io/crates/sparshacl)
 [![Released API docs](https://docs.rs/sparshacl/badge.svg)](https://docs.rs/sparshacl)
+[![Crates.io downloads](https://img.shields.io/crates/d/sparshacl)](https://crates.io/crates/sparshacl)
+[![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 sparshacl is a Rust implementation of the [W3C SHACL (Shapes Constraint Language)](https://www.w3.org/TR/shacl/) specification for validating RDF graphs against a set of conditions called "shapes".
 
@@ -16,11 +19,11 @@ sparshacl is a Rust implementation of the [W3C SHACL (Shapes Constraint Language
 
 ## Usage
 
-```rust
+```rust,ignore
 use sparshacl::{ShaclValidator, ShapesGraph, ValidationReport};
-use oxrdf::{Graph, Dataset};
+use oxrdf::Graph;
 
-// Load shapes graph
+// Load shapes graph from RDF
 let shapes_graph = ShapesGraph::from_graph(&shapes)?;
 
 // Create validator
@@ -47,7 +50,9 @@ if report.conforms() {
 
 This project is licensed under either of
 
-* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+  `<http://www.apache.org/licenses/LICENSE-2.0>`)
+* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+  `<http://opensource.org/licenses/MIT>`)
 
 at your option.

@@ -1,25 +1,8 @@
-//! sparshacl is a Rust implementation of the [W3C SHACL (Shapes Constraint Language)](https://www.w3.org/TR/shacl/)
-//! specification for validating RDF graphs against a set of conditions called "shapes".
-//!
-//! # Example
-//!
-//! ```
-//! use sparshacl::{ShaclValidator, ShapesGraph, ValidationReport};
-//! use oxrdf::Graph;
-//!
-//! // Create a shapes graph (would normally be parsed from RDF)
-//! let shapes = Graph::new();
-//! let shapes_graph = ShapesGraph::from_graph(&shapes).unwrap();
-//!
-//! // Create a data graph to validate
-//! let data = Graph::new();
-//!
-//! // Create validator and validate
-//! let validator = ShaclValidator::new(shapes_graph);
-//! let report = validator.validate(&data).unwrap();
-//!
-//! assert!(report.conforms());
-//! ```
+#![doc = include_str!("../README.md")]
+#![doc(test(attr(deny(warnings))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 mod constraint;
 mod error;

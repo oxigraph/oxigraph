@@ -45,21 +45,24 @@ impl PyShaclShapesGraph {
     /// ...     @prefix ex: <http://example.org/> .
     /// ...     ex:Shape a sh:NodeShape .
     /// ... ''')
-    pub fn parse(&mut self, data: &str) -> PyResult<()> {
+    pub fn parse(&mut self, py: Python<'_>, data: &str) -> PyResult<()> {
         use oxrdf::Graph;
         use oxrdfio::{RdfFormat, RdfParser};
 
-        let mut graph = Graph::new();
-        let parser = RdfParser::from_format(RdfFormat::Turtle);
+        let data_owned = data.to_string();
+        let shapes_graph = py.allow_threads(|| -> PyResult<ShapesGraph> {
+            let mut graph = Graph::new();
+            let parser = RdfParser::from_format(RdfFormat::Turtle);
 
-        for quad_result in parser.for_reader(data.as_bytes()) {
-            let quad = quad_result.map_err(|e| PyValueError::new_err(e.to_string()))?;
-            graph.insert(quad.as_ref());
-        }
+            for quad_result in parser.for_reader(data_owned.as_bytes()) {
+                let quad = quad_result.map_err(|e| PyValueError::new_err(e.to_string()))?;
+                graph.insert(quad.as_ref());
+            }
 
-        self.inner =
-            ShapesGraph::from_graph(&graph).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            ShapesGraph::from_graph(&graph).map_err(|e| PyValueError::new_err(e.to_string()))
+        })?;
 
+        self.inner = shapes_graph;
         Ok(())
     }
 
@@ -71,6 +74,10 @@ impl PyShaclShapesGraph {
     /// Returns True if the shapes graph is empty.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<ShaclShapesGraph size={}>", self.inner.len())
     }
 }
 
@@ -127,19 +134,23 @@ impl PyShaclValidator {
     /// ... ''')
     /// >>> report.conforms
     /// True
-    pub fn validate(&self, data: &str) -> PyResult<PyShaclValidationReport> {
+    pub fn validate(&self, py: Python<'_>, data: &str) -> PyResult<PyShaclValidationReport> {
         use oxrdf::Graph;
         use oxrdfio::{RdfFormat, RdfParser};
 
-        let mut graph = Graph::new();
-        let parser = RdfParser::from_format(RdfFormat::Turtle);
+        let data_owned = data.to_string();
+        let validator_clone = self.inner.clone();
+        let report = py.allow_threads(|| -> PyResult<ValidationReport> {
+            let mut graph = Graph::new();
+            let parser = RdfParser::from_format(RdfFormat::Turtle);
 
-        for quad_result in parser.for_reader(data.as_bytes()) {
-            let quad = quad_result.map_err(|e| PyValueError::new_err(e.to_string()))?;
-            graph.insert(quad.as_ref());
-        }
+            for quad_result in parser.for_reader(data_owned.as_bytes()) {
+                let quad = quad_result.map_err(|e| PyValueError::new_err(e.to_string()))?;
+                graph.insert(quad.as_ref());
+            }
 
-        let report = self.inner.validate(&graph).map_err(map_shacl_error)?;
+            validator_clone.validate(&graph).map_err(map_shacl_error)
+        })?;
 
         Ok(PyShaclValidationReport { inner: report })
     }
@@ -149,22 +160,31 @@ impl PyShaclValidator {
     /// :param graph: The oxrdf Graph to validate
     /// :return: A validation report
     /// :raises RuntimeError: If validation fails
-    pub fn validate_graph(&self, graph: &PyDataset) -> PyResult<PyShaclValidationReport> {
-        // Convert PyDataset to oxrdf Graph (use default graph)
-        let oxrdf_graph = graph.inner.iter().fold(oxrdf::Graph::new(), |mut g, q| {
-            if q.graph_name.is_default_graph() {
-                g.insert(&oxrdf::Triple::new(
-                    q.subject.clone(),
-                    q.predicate.clone(),
-                    q.object.clone(),
-                ));
-            }
-            g
-        });
+    pub fn validate_graph(&self, py: Python<'_>, graph: &PyDataset) -> PyResult<PyShaclValidationReport> {
+        let validator_clone = self.inner.clone();
+        let dataset_clone = graph.inner.clone();
 
-        let report = self.inner.validate(&oxrdf_graph).map_err(map_shacl_error)?;
+        let report = py.allow_threads(|| -> PyResult<ValidationReport> {
+            // Convert PyDataset to oxrdf Graph (use default graph)
+            let oxrdf_graph = dataset_clone.iter().fold(oxrdf::Graph::new(), |mut g, q| {
+                if q.graph_name.is_default_graph() {
+                    g.insert(&oxrdf::Triple::new(
+                        q.subject.clone(),
+                        q.predicate.clone(),
+                        q.object.clone(),
+                    ));
+                }
+                g
+            });
+
+            validator_clone.validate(&oxrdf_graph).map_err(map_shacl_error)
+        })?;
 
         Ok(PyShaclValidationReport { inner: report })
+    }
+
+    fn __repr__(&self) -> String {
+        "<ShaclValidator>".to_string()
     }
 }
 
@@ -215,37 +235,36 @@ impl PyShaclValidationReport {
     }
 
     /// Returns the report as a Turtle string.
-    pub fn to_turtle(&self) -> PyResult<String> {
+    pub fn to_turtle(&self, py: Python<'_>) -> PyResult<String> {
         use oxrdfio::{RdfFormat, RdfSerializer};
         use std::io::Cursor;
 
-        let graph = self.inner.to_graph();
-        let mut buffer = Cursor::new(Vec::new());
+        let graph_clone = self.inner.to_graph();
 
-        {
-            let mut serializer =
-                RdfSerializer::from_format(RdfFormat::Turtle).for_writer(&mut buffer);
-            for triple in graph.iter() {
+        py.allow_threads(|| -> PyResult<String> {
+            let mut buffer = Cursor::new(Vec::new());
+
+            {
+                let mut serializer =
+                    RdfSerializer::from_format(RdfFormat::Turtle).for_writer(&mut buffer);
+                for triple in graph_clone.iter() {
+                    serializer
+                        .serialize_triple(triple)
+                        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                }
                 serializer
-                    .serialize_triple(triple)
+                    .finish()
                     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             }
-            serializer
-                .finish()
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        }
 
-        String::from_utf8(buffer.into_inner()).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+            String::from_utf8(buffer.into_inner()).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        })
     }
 
-    pub fn __repr__(&self) -> String {
-        format!(
-            "ShaclValidationReport(conforms={}, violations={}, warnings={}, info={})",
+    fn __repr__(&self) -> String {
+        format!("<ShaclValidationReport conforms={} violations={}>",
             self.inner.conforms(),
-            self.inner.violation_count(),
-            self.inner.warning_count(),
-            self.inner.info_count()
-        )
+            self.inner.violation_count())
     }
 }
 
@@ -289,13 +308,10 @@ impl PyShaclValidationResult {
         }
     }
 
-    pub fn __repr__(&self) -> String {
-        format!(
-            "ShaclValidationResult(severity='{}', focus_node={}, message={:?})",
-            self.severity(),
+    fn __repr__(&self) -> String {
+        format!("<ShaclValidationResult focusNode={} severity={:?}>",
             self.inner.focus_node,
-            self.inner.result_message
-        )
+            self.inner.result_severity)
     }
 }
 
@@ -323,12 +339,12 @@ impl PyShaclValidationResult {
 /// >>> report.conforms
 /// True
 #[pyfunction]
-pub fn shacl_validate(shapes_data: &str, data: &str) -> PyResult<PyShaclValidationReport> {
+pub fn shacl_validate(py: Python<'_>, shapes_data: &str, data: &str) -> PyResult<PyShaclValidationReport> {
     let mut shapes = PyShaclShapesGraph::new();
-    shapes.parse(shapes_data)?;
+    shapes.parse(py, shapes_data)?;
 
     let validator = PyShaclValidator::new(&shapes);
-    validator.validate(data)
+    validator.validate(py, data)
 }
 
 fn map_shacl_error(error: ShaclError) -> PyErr {

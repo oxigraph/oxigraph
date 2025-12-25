@@ -1037,7 +1037,9 @@ impl<'a> ValidationContext<'a> {
             self.regex_cache.insert(key.clone(), regex);
         }
 
-        Ok(&self.regex_cache[&key])
+        self.regex_cache
+            .get(&key)
+            .ok_or_else(|| ShaclValidationError::internal("regex cache miss").into())
     }
 }
 
@@ -1058,6 +1060,8 @@ fn is_instance_of(graph: &Graph, term: &Term, class: &NamedNode) -> bool {
                 _ => false,
             }),
         Term::Literal(_) => false,
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => false,
     }
 }
 
@@ -1119,6 +1123,8 @@ fn get_property_values(graph: &Graph, subject: &Term, predicate: &NamedNode) -> 
             .map(TermRef::into_owned)
             .collect(),
         Term::Literal(_) => Vec::new(),
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => Vec::new(),
     }
 }
 
@@ -1144,6 +1150,8 @@ fn get_triples_for_subject(graph: &Graph, subject: &Term) -> Vec<SimpleTriple> {
             })
             .collect(),
         Term::Literal(_) => Vec::new(),
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => Vec::new(),
     }
 }
 

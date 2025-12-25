@@ -9,10 +9,10 @@
 //! - [`ShapesGraph`] - Collection of shapes parsed from an RDF graph
 
 use oxrdf::{
-    vocab::{rdf, rdfs, shacl},
+    vocab::{rdf, rdfs, shacl, xsd},
     BlankNode, Graph, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Term, TermRef,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 
 use crate::constraint::Constraint;
@@ -498,16 +498,28 @@ fn parse_constraints(
 
     // sh:minCount
     if let Some(n) = get_integer(graph, shape_term, shacl::MIN_COUNT) {
-        shape
-            .constraints
-            .push(Constraint::MinCount(usize::try_from(n).unwrap_or(0)));
+        let count = usize::try_from(n).map_err(|_| {
+            ShaclParseError::invalid_property_value(
+                shape_term.clone(),
+                shacl::MIN_COUNT.into_owned(),
+                "non-negative integer".to_string(),
+                Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
+            )
+        })?;
+        shape.constraints.push(Constraint::MinCount(count));
     }
 
     // sh:maxCount
     if let Some(n) = get_integer(graph, shape_term, shacl::MAX_COUNT) {
-        shape
-            .constraints
-            .push(Constraint::MaxCount(usize::try_from(n).unwrap_or(0)));
+        let count = usize::try_from(n).map_err(|_| {
+            ShaclParseError::invalid_property_value(
+                shape_term.clone(),
+                shacl::MAX_COUNT.into_owned(),
+                "non-negative integer".to_string(),
+                Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
+            )
+        })?;
+        shape.constraints.push(Constraint::MaxCount(count));
     }
 
     // sh:minExclusive
@@ -532,16 +544,28 @@ fn parse_constraints(
 
     // sh:minLength
     if let Some(n) = get_integer(graph, shape_term, shacl::MIN_LENGTH) {
-        shape
-            .constraints
-            .push(Constraint::MinLength(usize::try_from(n).unwrap_or(0)));
+        let length = usize::try_from(n).map_err(|_| {
+            ShaclParseError::invalid_property_value(
+                shape_term.clone(),
+                shacl::MIN_LENGTH.into_owned(),
+                "non-negative integer".to_string(),
+                Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
+            )
+        })?;
+        shape.constraints.push(Constraint::MinLength(length));
     }
 
     // sh:maxLength
     if let Some(n) = get_integer(graph, shape_term, shacl::MAX_LENGTH) {
-        shape
-            .constraints
-            .push(Constraint::MaxLength(usize::try_from(n).unwrap_or(0)));
+        let length = usize::try_from(n).map_err(|_| {
+            ShaclParseError::invalid_property_value(
+                shape_term.clone(),
+                shacl::MAX_LENGTH.into_owned(),
+                "non-negative integer".to_string(),
+                Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
+            )
+        })?;
+        shape.constraints.push(Constraint::MaxLength(length));
     }
 
     // sh:pattern
@@ -796,6 +820,9 @@ fn term_to_shape_id(term: Term) -> Result<ShapeId, ShaclParseError> {
     }
 }
 
+/// Maximum allowed length for RDF lists to prevent DoS attacks.
+const MAX_LIST_LENGTH: usize = 10000;
+
 fn parse_string_list(
     graph: &Graph,
     list_head: Term,
@@ -804,12 +831,24 @@ fn parse_string_list(
     use oxrdf::vocab::rdf;
     let mut strings = Vec::new();
     let mut current = list_head;
+    let mut visited = FxHashSet::default();
 
     loop {
+        // Check if we've reached rdf:nil
         if let Term::NamedNode(n) = &current {
             if n.as_ref() == rdf::NIL {
                 break;
             }
+        }
+
+        // Check for list length limit
+        if strings.len() >= MAX_LIST_LENGTH {
+            return Err(ShaclParseError::list_too_long(MAX_LIST_LENGTH));
+        }
+
+        // Check for circular reference
+        if !visited.insert(current.clone()) {
+            return Err(ShaclParseError::circular_list(current));
         }
 
         let first = get_object(graph, &current, rdf::FIRST).ok_or_else(|| {
@@ -838,12 +877,24 @@ fn parse_term_list(
     use oxrdf::vocab::rdf;
     let mut terms = Vec::new();
     let mut current = list_head;
+    let mut visited = FxHashSet::default();
 
     loop {
+        // Check if we've reached rdf:nil
         if let Term::NamedNode(n) = &current {
             if n.as_ref() == rdf::NIL {
                 break;
             }
+        }
+
+        // Check for list length limit
+        if terms.len() >= MAX_LIST_LENGTH {
+            return Err(ShaclParseError::list_too_long(MAX_LIST_LENGTH));
+        }
+
+        // Check for circular reference
+        if !visited.insert(current.clone()) {
+            return Err(ShaclParseError::circular_list(current));
         }
 
         let first = get_object(graph, &current, rdf::FIRST).ok_or_else(|| {

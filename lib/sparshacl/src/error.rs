@@ -47,6 +47,14 @@ pub enum ShaclParseError {
     #[error("Invalid RDF list in shape {shape}: {message}")]
     InvalidRdfList { shape: Box<Term>, message: String },
 
+    /// Circular RDF list detected.
+    #[error("Circular RDF list detected at node {node}")]
+    CircularList { node: Box<Term> },
+
+    /// RDF list too long.
+    #[error("RDF list exceeds maximum length of {max_length}")]
+    ListTooLong { max_length: usize },
+
     /// Cyclic shape reference detected.
     #[error("Cyclic shape reference detected: {message}")]
     CyclicReference { message: String },
@@ -124,6 +132,18 @@ impl ShaclParseError {
             shape: Box::new(shape.into()),
             message: message.into(),
         }
+    }
+
+    /// Creates a circular list error.
+    pub fn circular_list(node: impl Into<Term>) -> Self {
+        Self::CircularList {
+            node: Box::new(node.into()),
+        }
+    }
+
+    /// Creates a list too long error.
+    pub fn list_too_long(max_length: usize) -> Self {
+        Self::ListTooLong { max_length }
     }
 
     /// Creates a cyclic reference error.

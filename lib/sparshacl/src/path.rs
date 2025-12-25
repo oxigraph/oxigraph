@@ -344,6 +344,9 @@ fn is_rdf_list_head(graph: &Graph, term: &Term) -> bool {
     get_object(graph, term, rdf::FIRST).is_some()
 }
 
+/// Maximum length for RDF lists to prevent DoS attacks.
+const MAX_LIST_LENGTH: usize = 10000;
+
 fn parse_path_list(
     graph: &Graph,
     list_head: Term,
@@ -353,6 +356,7 @@ fn parse_path_list(
 
     let mut paths = Vec::new();
     let mut current = list_head;
+    let mut visited = FxHashSet::default();
 
     loop {
         // Check for nil (end of list)
@@ -360,6 +364,16 @@ fn parse_path_list(
             if n.as_ref() == rdf::NIL {
                 break;
             }
+        }
+
+        // Check for cycles
+        if !visited.insert(current.clone()) {
+            return Err(ShaclParseError::circular_list(current));
+        }
+
+        // Check list length to prevent DoS
+        if paths.len() >= MAX_LIST_LENGTH {
+            return Err(ShaclParseError::list_too_long(MAX_LIST_LENGTH));
         }
 
         // Get first element
@@ -417,5 +431,96 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], Term::NamedNode(s));
+    }
+
+    #[test]
+    fn test_circular_list_detection() {
+        use oxrdf::{BlankNode, vocab::rdf};
+
+        let mut graph = Graph::new();
+        let shape = Term::NamedNode(NamedNode::new("http://example.org/Shape").unwrap());
+
+        // Create a circular list: node1 -> node2 -> node1
+        let node1 = BlankNode::new_unchecked("node1");
+        let node2 = BlankNode::new_unchecked("node2");
+        let pred = NamedNode::new("http://example.org/p").unwrap();
+
+        // node1 rdf:first <predicate>
+        graph.insert(&Triple::new(
+            node1.clone(),
+            rdf::FIRST,
+            Term::NamedNode(pred.clone()),
+        ));
+
+        // node1 rdf:rest node2
+        graph.insert(&Triple::new(
+            node1.clone(),
+            rdf::REST,
+            Term::BlankNode(node2.clone()),
+        ));
+
+        // node2 rdf:first <predicate>
+        graph.insert(&Triple::new(
+            node2.clone(),
+            rdf::FIRST,
+            Term::NamedNode(pred),
+        ));
+
+        // node2 rdf:rest node1 (creates cycle)
+        graph.insert(&Triple::new(
+            node2,
+            rdf::REST,
+            Term::BlankNode(node1.clone()),
+        ));
+
+        // Attempt to parse the circular list should fail
+        let result = parse_path_list(&graph, Term::BlankNode(node1), &shape);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), ShaclParseError::CircularList { .. }));
+    }
+
+    #[test]
+    fn test_list_length_limit() {
+        use oxrdf::{BlankNode, vocab::rdf};
+
+        let mut graph = Graph::new();
+        let shape = Term::NamedNode(NamedNode::new("http://example.org/Shape").unwrap());
+        let pred = NamedNode::new("http://example.org/p").unwrap();
+
+        // Create a very long list (longer than MAX_LIST_LENGTH)
+        let mut current_node = BlankNode::new_unchecked("start");
+        let start_node = current_node.clone();
+
+        // Create a list with MAX_LIST_LENGTH + 1 elements
+        for i in 0..=MAX_LIST_LENGTH {
+            graph.insert(&Triple::new(
+                current_node.clone(),
+                rdf::FIRST,
+                Term::NamedNode(pred.clone()),
+            ));
+
+            let next_node = if i == MAX_LIST_LENGTH {
+                // Last element points to rdf:nil
+                Term::NamedNode(NamedNode::new_unchecked(rdf::NIL.as_str()))
+            } else {
+                // Create next node in the list
+                Term::BlankNode(BlankNode::new_unchecked(format!("node{}", i)))
+            };
+
+            graph.insert(&Triple::new(
+                current_node.clone(),
+                rdf::REST,
+                next_node.clone(),
+            ));
+
+            if let Term::BlankNode(bn) = next_node {
+                current_node = bn;
+            }
+        }
+
+        // Attempt to parse the too-long list should fail
+        let result = parse_path_list(&graph, Term::BlankNode(start_node), &shape);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), ShaclParseError::ListTooLong { .. }));
     }
 }
