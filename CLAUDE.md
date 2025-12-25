@@ -1,5 +1,45 @@
 # Claude Code Guide for Oxigraph
 
+## IMPORTANT: Development Workflow
+
+**When implementing features, fixing bugs, or improving code quality, ALWAYS use maximum 10 agent concurrency with the 80/20 principle:**
+
+```
+Implement best practices using maximum claude code 10 agent concurrency
+hyper advanced core team best practices to close gaps 80/20
+```
+
+### How to Apply This:
+
+1. **Launch 10 parallel agents** using the Task tool for comprehensive coverage
+2. **Focus on 80/20** - identify the 20% of changes that deliver 80% of value
+3. **Divide work across agents** by:
+   - Different files/modules
+   - Different aspects (implementation, tests, types, docs)
+   - Different verification tasks (compilation, linting, review)
+
+### Example Agent Distribution:
+```
+Agent 1: Verify/fix Store methods
+Agent 2: Verify/fix Dataset methods
+Agent 3: Verify/fix I/O module
+Agent 4: Verify/fix SPARQL module
+Agent 5: Check TypeScript declarations
+Agent 6: Check error handling
+Agent 7: Add missing tests
+Agent 8: Check RDF/JS compatibility
+Agent 9: Verify async methods
+Agent 10: Final compilation check
+```
+
+### After Agents Complete:
+1. Review all agent outputs
+2. Fix any compilation errors
+3. Commit with descriptive message
+4. Push to feature branch
+
+---
+
 ## Project Overview
 
 Oxigraph is a graph database implementing the SPARQL standard. It provides:
