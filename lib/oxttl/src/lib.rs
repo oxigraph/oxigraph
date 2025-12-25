@@ -15,7 +15,7 @@ mod toolkit;
 pub mod trig;
 pub mod turtle;
 
-pub use crate::n3::N3Parser;
+pub use crate::n3::{N3Parser, N3Serializer};
 pub use crate::nquads::{NQuadsParser, NQuadsSerializer};
 pub use crate::ntriples::{NTriplesParser, NTriplesSerializer};
 pub use crate::toolkit::{TextPosition, TurtleParseError, TurtleSyntaxError};

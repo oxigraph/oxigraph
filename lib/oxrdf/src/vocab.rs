@@ -321,8 +321,7 @@ pub mod shacl {
 
     // === NODE KIND VALUES ===
     /// Node kind: IRI.
-    pub const IRI: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#IRI");
+    pub const IRI: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#IRI");
     /// Node kind: Literal.
     pub const LITERAL: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Literal");
@@ -397,14 +396,11 @@ pub mod shacl {
 
     // === LOGICAL CONSTRAINTS ===
     /// Negation constraint.
-    pub const NOT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#not");
+    pub const NOT: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#not");
     /// Conjunction constraint (all shapes must match).
-    pub const AND: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#and");
+    pub const AND: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#and");
     /// Disjunction constraint (at least one shape must match).
-    pub const OR: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#or");
+    pub const OR: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#or");
     /// Exclusive disjunction constraint (exactly one shape must match).
     pub const XONE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#xone");
@@ -440,8 +436,7 @@ pub mod shacl {
     pub const HAS_VALUE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#hasValue");
     /// In allowed values list constraint.
-    pub const IN: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#in");
+    pub const IN: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#in");
 
     // === VALIDATION REPORT ===
     /// The class of validation reports.
@@ -526,8 +521,7 @@ pub mod shacl {
     pub const SELECT: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#select");
     /// SPARQL ASK query for constraint.
-    pub const ASK: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ask");
+    pub const ASK: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ask");
     /// Prefixes for SPARQL queries.
     pub const PREFIXES: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#prefixes");
@@ -615,7 +609,9 @@ pub mod shacl {
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#LessThanConstraintComponent");
     /// Less than or equals constraint component.
     pub const LESS_THAN_OR_EQUALS_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#LessThanOrEqualsConstraintComponent");
+        NamedNodeRef::new_unchecked(
+            "http://www.w3.org/ns/shacl#LessThanOrEqualsConstraintComponent",
+        );
     /// Not constraint component.
     pub const NOT_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#NotConstraintComponent");
@@ -636,7 +632,9 @@ pub mod shacl {
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#PropertyConstraintComponent");
     /// Qualified value shape constraint component.
     pub const QUALIFIED_VALUE_SHAPE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#QualifiedValueShapeConstraintComponent");
+        NamedNodeRef::new_unchecked(
+            "http://www.w3.org/ns/shacl#QualifiedValueShapeConstraintComponent",
+        );
     /// Closed constraint component.
     pub const CLOSED_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ClosedConstraintComponent");
