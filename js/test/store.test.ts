@@ -1129,6 +1129,7 @@ describe("RdfFormat", () => {
         assert.strictEqual("application/n-triples", RdfFormat.N_TRIPLES.media_type);
         assert.strictEqual("application/n-quads", RdfFormat.N_QUADS.media_type);
         assert.strictEqual("application/trig", RdfFormat.TRIG.media_type);
+        assert.strictEqual("text/n3", RdfFormat.N3.media_type);
     });
 
     it("should support from_media_type lookup", () => {
@@ -1143,10 +1144,21 @@ describe("RdfFormat", () => {
         assert.strictEqual("application/n-triples", format?.media_type);
     });
 
+    it("should support N3 format lookup", () => {
+        const formatByMediaType = RdfFormat.from_media_type("text/n3");
+        assert.notStrictEqual(null, formatByMediaType);
+        assert.strictEqual("n3", formatByMediaType?.file_extension);
+
+        const formatByExtension = RdfFormat.from_extension("n3");
+        assert.notStrictEqual(null, formatByExtension);
+        assert.strictEqual("text/n3", formatByExtension?.media_type);
+    });
+
     it("should indicate dataset support", () => {
         assert.strictEqual(false, RdfFormat.TURTLE.supports_datasets);
         assert.strictEqual(true, RdfFormat.N_QUADS.supports_datasets);
         assert.strictEqual(true, RdfFormat.TRIG.supports_datasets);
+        assert.strictEqual(false, RdfFormat.N3.supports_datasets);
     });
 });
 
@@ -1239,6 +1251,27 @@ describe("parse()", () => {
         // With rename_blank_nodes, blank node IDs should be different
         assert.notStrictEqual(quads1[0].subject.value, quads2[0].subject.value);
     });
+
+    it("should parse N3 format", () => {
+        const n3Data = `
+            @prefix ex: <http://example.com/> .
+            ex:subject ex:predicate ex:object .
+        `;
+        const quads = parse(n3Data, RdfFormat.N3, {});
+        assert.strictEqual(1, quads.length);
+        assert.strictEqual("http://example.com/subject", quads[0].subject.value);
+        assert.strictEqual("http://example.com/predicate", quads[0].predicate.value);
+        assert.strictEqual("http://example.com/object", quads[0].object.value);
+    });
+
+    it("should parse N3 with formulas", () => {
+        const n3Data = `
+            @prefix : <http://example.org/> .
+            :Alice :says { :Bob :likes :Pizza } .
+        `;
+        const quads = parse(n3Data, RdfFormat.N3, {});
+        assert(quads.length > 0, "Should parse N3 with formulas");
+    });
 });
 
 describe("serialize()", () => {
@@ -1288,6 +1321,24 @@ describe("serialize()", () => {
         const result = serialize(quads, RdfFormat.N_QUADS, {});
         assert(result.includes("<http://example.com>"));
         assert.strictEqual(4, result.split("<http://example.com>").length - 1);
+    });
+
+    it("should serialize to N3 format", () => {
+        const store = new Store([dataModel.quad(ex, ex, ex)]);
+        const quads = store.match();
+        const result = serialize(quads, RdfFormat.N3, {});
+        assert(result.includes("<http://example.com>"));
+        assert(result.length > 0);
+    });
+
+    it("should serialize to N3 with prefixes", () => {
+        const store = new Store([dataModel.quad(ex, ex, ex)]);
+        const quads = store.match();
+        const result = serialize(quads, RdfFormat.N3, {
+            prefixes: { ex: "http://example.com/" },
+        });
+        assert(result.length > 0);
+        assert(result.includes("ex:"));
     });
 });
 

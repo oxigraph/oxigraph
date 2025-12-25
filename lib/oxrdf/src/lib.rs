@@ -6,6 +6,7 @@
 
 mod blank_node;
 pub mod dataset;
+mod formula;
 pub mod graph;
 mod interning;
 mod literal;
@@ -17,6 +18,7 @@ pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
 pub use crate::dataset::Dataset;
+pub use crate::formula::{Formula, FormulaRef};
 pub use crate::graph::Graph;
 #[cfg(feature = "rdf-12")]
 pub use crate::literal::BaseDirection;

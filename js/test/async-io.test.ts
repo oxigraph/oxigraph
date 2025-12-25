@@ -120,4 +120,36 @@ describe('Async I/O Functions', () => {
       'Should reject with an error for invalid input'
     );
   });
+
+  it('parseAsync should parse N3 format', async () => {
+    const n3Data = `
+      @prefix ex: <http://example.com/> .
+      ex:subject ex:predicate "object" .
+    `;
+
+    const quads = await parseAsync(n3Data, RdfFormat.N3, {});
+
+    assert.ok(Array.isArray(quads), 'Result should be an array');
+    assert.strictEqual(quads.length, 1, 'Should have one quad');
+    assert.strictEqual(quads[0].subject.value, 'http://example.com/subject');
+    assert.strictEqual(quads[0].predicate.value, 'http://example.com/predicate');
+  });
+
+  it('serializeAsync should serialize to N3 format', async () => {
+    const quads = [
+      quad(
+        namedNode('http://example.com/subject'),
+        namedNode('http://example.com/predicate'),
+        literal('object')
+      )
+    ];
+
+    const n3 = await serializeAsync(quads, RdfFormat.N3, {
+      prefixes: { ex: 'http://example.com/' }
+    });
+
+    assert.ok(typeof n3 === 'string', 'Result should be a string');
+    assert.ok(n3.length > 0, 'Result should not be empty');
+    assert.ok(n3.includes('ex:'), 'Should use the prefix');
+  });
 });
