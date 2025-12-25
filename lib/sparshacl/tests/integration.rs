@@ -2,7 +2,7 @@
 
 use oxrdf::{Graph, Literal, NamedNode, Triple};
 use oxrdfio::{RdfFormat, RdfParser};
-use sparshacl::{ShaclValidator, Severity, ShapesGraph};
+use sparshacl::{Severity, ShaclValidator, ShapesGraph};
 
 /// Helper to parse a Turtle string into a Graph.
 fn parse_turtle(turtle: &str) -> Graph {
@@ -745,9 +745,9 @@ fn test_validation_report_to_graph() {
     let shacl_validation_report =
         NamedNode::new("http://www.w3.org/ns/shacl#ValidationReport").unwrap();
     let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-    let has_report = report_graph
-        .iter()
-        .any(|t| t.predicate == rdf_type.as_ref() && t.object == shacl_validation_report.as_ref().into());
+    let has_report = report_graph.iter().any(|t| {
+        t.predicate == rdf_type.as_ref() && t.object == shacl_validation_report.as_ref().into()
+    });
     assert!(has_report);
 }
 
@@ -784,10 +784,7 @@ fn test_validation_result_properties() {
     let result = &results[0];
 
     // Check focus node
-    assert_eq!(
-        result.focus_node.to_string(),
-        "<http://example.org/alice>"
-    );
+    assert_eq!(result.focus_node.to_string(), "<http://example.org/alice>");
 
     // Check severity
     assert_eq!(result.result_severity, Severity::Violation);
@@ -1112,7 +1109,6 @@ fn test_combined_sequence_and_alternative_path() {
     // carol's address has neither city nor town
     assert_eq!(report.violation_count(), 1);
 }
-
 
 // =============================================================================
 // Edge cases and error handling
@@ -1807,7 +1803,6 @@ fn test_circular_rdf_list_in_sh_in() {
     );
 }
 
-
 #[test]
 fn test_list_too_long_in_sh_in() {
     // Create a shape with an extremely long RDF list (> 10000 elements)
@@ -1831,26 +1826,58 @@ fn test_list_too_long_in_sh_in() {
     let rdf_nil = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap();
 
     // Add shape triples
-    graph.insert(&Triple::new(ex_shape.clone(), rdf_type.clone(), sh_node_shape.clone()));
-    graph.insert(&Triple::new(ex_shape.clone(), sh_target_class.clone(), ex_thing.clone()));
+    graph.insert(&Triple::new(
+        ex_shape.clone(),
+        rdf_type.clone(),
+        sh_node_shape.clone(),
+    ));
+    graph.insert(&Triple::new(
+        ex_shape.clone(),
+        sh_target_class.clone(),
+        ex_thing.clone(),
+    ));
 
     let prop_node = NamedNode::new("http://example.org/prop1").unwrap();
-    graph.insert(&Triple::new(ex_shape.clone(), sh_property.clone(), prop_node.clone()));
-    graph.insert(&Triple::new(prop_node.clone(), sh_path.clone(), ex_status.clone()));
-    graph.insert(&Triple::new(prop_node.clone(), sh_in.clone(), ex_list_head.clone()));
+    graph.insert(&Triple::new(
+        ex_shape.clone(),
+        sh_property.clone(),
+        prop_node.clone(),
+    ));
+    graph.insert(&Triple::new(
+        prop_node.clone(),
+        sh_path.clone(),
+        ex_status.clone(),
+    ));
+    graph.insert(&Triple::new(
+        prop_node.clone(),
+        sh_in.clone(),
+        ex_list_head.clone(),
+    ));
 
     // Create a very long list (10001 elements, which exceeds MAX_LIST_LENGTH of 10000)
     let mut current = ex_list_head;
     for i in 0..10001 {
         let value = Literal::new_simple_literal(format!("value{}", i));
-        graph.insert(&Triple::new(current.clone(), rdf_first.clone(), value.clone()));
+        graph.insert(&Triple::new(
+            current.clone(),
+            rdf_first.clone(),
+            value.clone(),
+        ));
 
         if i < 10000 {
             let next = NamedNode::new(format!("http://example.org/node{}", i + 1)).unwrap();
-            graph.insert(&Triple::new(current.clone(), rdf_rest.clone(), next.clone()));
+            graph.insert(&Triple::new(
+                current.clone(),
+                rdf_rest.clone(),
+                next.clone(),
+            ));
             current = next;
         } else {
-            graph.insert(&Triple::new(current.clone(), rdf_rest.clone(), rdf_nil.clone()));
+            graph.insert(&Triple::new(
+                current.clone(),
+                rdf_rest.clone(),
+                rdf_nil.clone(),
+            ));
         }
     }
 
@@ -1887,7 +1914,10 @@ fn test_negative_min_count_rejected() {
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert!(
-        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        matches!(
+            error,
+            sparshacl::ShaclParseError::InvalidPropertyValue { .. }
+        ),
         "Expected InvalidPropertyValue error, got: {:?}",
         error
     );
@@ -1914,7 +1944,10 @@ fn test_negative_max_count_rejected() {
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert!(
-        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        matches!(
+            error,
+            sparshacl::ShaclParseError::InvalidPropertyValue { .. }
+        ),
         "Expected InvalidPropertyValue error, got: {:?}",
         error
     );
@@ -1941,7 +1974,10 @@ fn test_negative_min_length_rejected() {
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert!(
-        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        matches!(
+            error,
+            sparshacl::ShaclParseError::InvalidPropertyValue { .. }
+        ),
         "Expected InvalidPropertyValue error, got: {:?}",
         error
     );
@@ -1968,7 +2004,10 @@ fn test_negative_max_length_rejected() {
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert!(
-        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        matches!(
+            error,
+            sparshacl::ShaclParseError::InvalidPropertyValue { .. }
+        ),
         "Expected InvalidPropertyValue error, got: {:?}",
         error
     );

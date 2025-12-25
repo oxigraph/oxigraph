@@ -143,6 +143,9 @@ export class Store {
     findIndex(predicate: (quad: Quad) => boolean, thisArg?: any): number;
     join(separator?: string): string;
 
+    map<T>(callback: (quad: Quad) => T, thisArg?: any): T[];
+
+    reduce<T>(callback: (accumulator: T, quad: Quad, index: number) => T, initialValue: T): T;
 
     entries(): IterableIterator<[number, Quad]>;
 
@@ -308,8 +311,7 @@ impl JsStore {
             };
 
             use_default_graph_as_union =
-                Reflect::get(options, &JsValue::from_str("useDefaultGraphAsUnion"))?
-                    .is_truthy();
+                Reflect::get(options, &JsValue::from_str("useDefaultGraphAsUnion"))?.is_truthy();
 
             let js_results_format = Reflect::get(options, &JsValue::from_str("resultsFormat"))?;
             if !js_results_format.is_undefined() && !js_results_format.is_null() {
@@ -458,7 +460,8 @@ impl JsStore {
             let mut named_graphs = None;
             let mut substitutions = None;
             if !options.is_undefined() {
-                base_iri = convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
+                base_iri =
+                    convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
 
                 let js_prefixes = Reflect::get(&options, &JsValue::from_str("prefixes"))?;
                 if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
@@ -495,7 +498,8 @@ impl JsStore {
                     Reflect::get(&options, &JsValue::from_str("useDefaultGraphAsUnion"))?
                         .is_truthy();
 
-                let js_results_format = Reflect::get(&options, &JsValue::from_str("resultsFormat"))?;
+                let js_results_format =
+                    Reflect::get(&options, &JsValue::from_str("resultsFormat"))?;
                 if !js_results_format.is_undefined() && !js_results_format.is_null() {
                     results_format = Some(
                         js_results_format
@@ -553,10 +557,11 @@ impl JsStore {
             Ok(match results {
                 QueryResults::Solutions(solutions) => {
                     if let Some(results_format) = results_format {
-                        let mut serializer =
-                            QueryResultsSerializer::from_format(query_results_format(&results_format)?)
-                                .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
-                                .map_err(JsError::from)?;
+                        let mut serializer = QueryResultsSerializer::from_format(
+                            query_results_format(&results_format)?,
+                        )
+                        .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
+                        .map_err(JsError::from)?;
                         for solution in solutions {
                             serializer
                                 .serialize(&solution.map_err(JsError::from)?)
@@ -592,8 +597,9 @@ impl JsStore {
                 }
                 QueryResults::Graph(triples) => {
                     if let Some(results_format) = results_format {
-                        let mut serializer = RdfSerializer::from_format(rdf_format(&results_format)?)
-                            .for_writer(Vec::new());
+                        let mut serializer =
+                            RdfSerializer::from_format(rdf_format(&results_format)?)
+                                .for_writer(Vec::new());
                         for triple in triples {
                             serializer
                                 .serialize_triple(&triple.map_err(JsError::from)?)
@@ -691,7 +697,8 @@ impl JsStore {
             let mut base_iri = None;
             let mut prefixes = None;
             if !options.is_undefined() {
-                base_iri = convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
+                base_iri =
+                    convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
 
                 let js_prefixes = Reflect::get(&options, &JsValue::from_str("prefixes"))?;
                 if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
@@ -1048,7 +1055,11 @@ impl JsStore {
         Ok(())
     }
 
-    pub fn filter(&self, predicate: &Function, this_arg: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+    pub fn filter(
+        &self,
+        predicate: &Function,
+        this_arg: &JsValue,
+    ) -> Result<Box<[JsValue]>, JsValue> {
         let this = if this_arg.is_undefined() {
             JsValue::NULL
         } else {
@@ -1151,7 +1162,8 @@ impl JsStore {
     }
 
     pub fn slice(&self, start: Option<i32>, end: Option<i32>) -> Result<Box<[JsValue]>, JsValue> {
-        let quads: Vec<JsValue> = self.store
+        let quads: Vec<JsValue> = self
+            .store
             .quads_for_pattern(None, None, None, None)
             .map(|q| q.map(|quad| JsQuad::from(quad).into()))
             .collect::<Result<Vec<_>, _>>()
@@ -1162,14 +1174,23 @@ impl JsStore {
         let end = end.unwrap_or(len);
 
         // Handle negative indices
-        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
-        let end = if end < 0 { (len + end).max(0) } else { end.min(len) } as usize;
+        let start = if start < 0 {
+            (len + start).max(0)
+        } else {
+            start.min(len)
+        } as usize;
+        let end = if end < 0 {
+            (len + end).max(0)
+        } else {
+            end.min(len)
+        } as usize;
 
         Ok(quads[start..end.max(start)].to_vec().into_boxed_slice())
     }
 
     pub fn concat(&self, others: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
-        let mut results: Vec<JsValue> = self.store
+        let mut results: Vec<JsValue> = self
+            .store
             .quads_for_pattern(None, None, None, None)
             .map(|q| q.map(|quad| JsQuad::from(quad).into()))
             .collect::<Result<Vec<_>, _>>()
@@ -1197,7 +1218,11 @@ impl JsStore {
     #[wasm_bindgen(js_name = indexOf)]
     pub fn index_of(&self, quad: &JsValue) -> Result<i32, JsValue> {
         let target = FROM_JS.with(|c| c.to_quad(quad))?;
-        for (index, q) in self.store.quads_for_pattern(None, None, None, None).enumerate() {
+        for (index, q) in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .enumerate()
+        {
             let q = q.map_err(JsError::from)?;
             if q == target {
                 return Ok(index as i32);
@@ -1206,11 +1231,18 @@ impl JsStore {
         Ok(-1)
     }
 
-
     #[wasm_bindgen(js_name = findIndex)]
     pub fn find_index(&self, predicate: &Function, this_arg: &JsValue) -> Result<i32, JsValue> {
-        let this = if this_arg.is_undefined() { JsValue::NULL } else { this_arg.clone() };
-        for (index, quad) in self.store.quads_for_pattern(None, None, None, None).enumerate() {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
+        for (index, quad) in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .enumerate()
+        {
             let quad = quad.map_err(JsError::from)?;
             let js_quad = JsQuad::from(quad).into();
             if predicate.call1(&this, &js_quad)?.is_truthy() {
@@ -1221,7 +1253,8 @@ impl JsStore {
     }
     pub fn join(&self, separator: Option<String>) -> Result<String, JsValue> {
         let sep = separator.unwrap_or_else(|| ",".to_string());
-        let strings: Vec<String> = self.store
+        let strings: Vec<String> = self
+            .store
             .quads_for_pattern(None, None, None, None)
             .map(|q| q.map(|quad| quad.to_string()))
             .collect::<Result<Vec<_>, _>>()
@@ -1229,16 +1262,59 @@ impl JsStore {
         Ok(strings.join(&sep))
     }
 
+    pub fn map(&self, callback: &Function, this_arg: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
+        let mut results = Vec::new();
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            let mapped = callback.call1(&this, &js_quad)?;
+            results.push(mapped);
+        }
+        Ok(results.into_boxed_slice())
+    }
+
+    pub fn reduce(&self, callback: &Function, initial_value: &JsValue) -> Result<JsValue, JsValue> {
+        let quads: Vec<Quad> = self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+
+        let mut accumulator = initial_value.clone();
+        for (index, quad) in quads.iter().enumerate() {
+            let js_quad = JsQuad::from(quad.clone()).into();
+            accumulator = callback.call3(
+                &JsValue::UNDEFINED,
+                &accumulator,
+                &js_quad,
+                &JsValue::from(index as u32),
+            )?;
+        }
+        Ok(accumulator)
+    }
+
     pub fn entries(&self) -> Result<JsValue, JsValue> {
-        let quads: Vec<_> = self.store
+        let quads: Vec<_> = self
+            .store
             .quads_for_pattern(None, None, None, None)
             .enumerate()
-            .map(|(i, q)| q.map(|quad| {
-                let arr = Array::new();
-                arr.push(&JsValue::from(i as u32));
-                arr.push(&JsQuad::from(quad).into());
-                arr.into()
-            }))
+            .map(|(i, q)| {
+                q.map(|quad| {
+                    let arr = Array::new();
+                    arr.push(&JsValue::from(i as u32));
+                    arr.push(&JsQuad::from(quad).into());
+                    arr.into()
+                })
+            })
             .collect::<Result<Vec<JsValue>, _>>()
             .map_err(JsError::from)?;
         Ok(Array::from_iter(quads).values().into())
@@ -1251,14 +1327,14 @@ impl JsStore {
     }
 
     pub fn values(&self) -> Result<JsValue, JsValue> {
-        let quads: Vec<JsValue> = self.store
+        let quads: Vec<JsValue> = self
+            .store
             .quads_for_pattern(None, None, None, None)
             .map(|q| q.map(|quad| JsQuad::from(quad).into()))
             .collect::<Result<Vec<_>, _>>()
             .map_err(JsError::from)?;
         Ok(Array::from_iter(quads).values().into())
     }
-
 
     // Symbol.iterator implementation - must be manually wired up in JavaScript
     // as wasm-bindgen doesn't support computed property names

@@ -9,8 +9,8 @@
 //! - [`ShapesGraph`] - Collection of shapes parsed from an RDF graph
 
 use oxrdf::{
-    vocab::{rdf, rdfs, shacl, xsd},
     BlankNode, Graph, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Term, TermRef,
+    vocab::{rdf, rdfs, shacl, xsd},
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
@@ -571,7 +571,9 @@ fn parse_constraints(
     // sh:pattern
     if let Some(pattern) = get_string(graph, shape_term, shacl::PATTERN) {
         let flags = get_string(graph, shape_term, shacl::FLAGS);
-        shape.constraints.push(Constraint::Pattern { pattern, flags });
+        shape
+            .constraints
+            .push(Constraint::Pattern { pattern, flags });
     }
 
     // sh:languageIn
@@ -659,12 +661,15 @@ fn parse_constraints(
     // sh:closed
     if let Some(b) = get_boolean(graph, shape_term, shacl::CLOSED) {
         if b {
-            let ignored = if let Some(list_head) = get_object(graph, shape_term, shacl::IGNORED_PROPERTIES) {
-                parse_named_node_list(graph, list_head, shape_term)?
-            } else {
-                Vec::new()
-            };
-            shape.constraints.push(Constraint::Closed { ignored_properties: ignored });
+            let ignored =
+                if let Some(list_head) = get_object(graph, shape_term, shacl::IGNORED_PROPERTIES) {
+                    parse_named_node_list(graph, list_head, shape_term)?
+                } else {
+                    Vec::new()
+                };
+            shape.constraints.push(Constraint::Closed {
+                ignored_properties: ignored,
+            });
         }
     }
 
@@ -851,17 +856,15 @@ fn parse_string_list(
             return Err(ShaclParseError::circular_list(current));
         }
 
-        let first = get_object(graph, &current, rdf::FIRST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first")
-        })?;
+        let first = get_object(graph, &current, rdf::FIRST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first"))?;
 
         if let Term::Literal(lit) = first {
             strings.push(lit.value().to_owned());
         }
 
-        let rest = get_object(graph, &current, rdf::REST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest")
-        })?;
+        let rest = get_object(graph, &current, rdf::REST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest"))?;
 
         current = rest;
     }
@@ -897,15 +900,13 @@ fn parse_term_list(
             return Err(ShaclParseError::circular_list(current));
         }
 
-        let first = get_object(graph, &current, rdf::FIRST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first")
-        })?;
+        let first = get_object(graph, &current, rdf::FIRST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first"))?;
 
         terms.push(first);
 
-        let rest = get_object(graph, &current, rdf::REST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest")
-        })?;
+        let rest = get_object(graph, &current, rdf::REST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest"))?;
 
         current = rest;
     }

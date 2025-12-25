@@ -4,8 +4,8 @@
 //! the W3C SHACL specification.
 
 use oxrdf::{
-    vocab::{rdf, shacl, xsd},
     BlankNode, Graph, Literal, NamedNodeRef, Term, Triple,
+    vocab::{rdf, shacl, xsd},
 };
 
 use crate::constraint::ConstraintComponent;
@@ -232,10 +232,7 @@ impl ValidationReport {
         graph.insert(&Triple::new(
             report_node.clone(),
             shacl::CONFORMS,
-            Literal::new_typed_literal(
-                if self.conforms { "true" } else { "false" },
-                xsd::BOOLEAN,
-            ),
+            Literal::new_typed_literal(if self.conforms { "true" } else { "false" }, xsd::BOOLEAN),
         ));
 
         // Add results
@@ -431,9 +428,7 @@ mod tests {
         assert!(!graph.is_empty());
 
         // Check that conforms is false
-        let conforms_values: Vec<_> = graph
-            .triples_for_predicate(shacl::CONFORMS)
-            .collect();
+        let conforms_values: Vec<_> = graph.triples_for_predicate(shacl::CONFORMS).collect();
         assert_eq!(conforms_values.len(), 1);
     }
 }

@@ -98,9 +98,7 @@ pub enum Constraint {
 
     // === Other Constraints ===
     /// sh:closed - Only specified properties are allowed.
-    Closed {
-        ignored_properties: Vec<NamedNode>,
-    },
+    Closed { ignored_properties: Vec<NamedNode> },
 
     /// sh:hasValue - At least one value must equal the specified value.
     HasValue(Term),
