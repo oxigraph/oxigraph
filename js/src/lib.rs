@@ -1,7 +1,9 @@
 #![allow(clippy::mem_forget)]
 use wasm_bindgen::prelude::*;
 
+mod io;
 mod model;
+mod sparql;
 mod store;
 mod utils;
 

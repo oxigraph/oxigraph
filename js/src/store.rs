@@ -65,6 +65,20 @@ export class Store {
             base_iri?: NamedNode | string;
         }
     ): void;
+
+    extend(quads: Iterable<Quad>): void;
+
+    named_graphs(): (BlankNode | NamedNode)[];
+
+    contains_named_graph(graph_name: BlankNode | DefaultGraph | NamedNode): boolean;
+
+    add_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+
+    clear_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+
+    remove_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+
+    clear(): void;
 }
 "###;
 
@@ -463,6 +477,85 @@ impl JsStore {
         }
         .map_err(JsError::from)?;
         Ok(String::from_utf8(buffer).map_err(JsError::from)?)
+    }
+
+    pub fn extend(&self, quads: &JsValue) -> Result<(), JsValue> {
+        let quads = if let Some(quads) = try_iter(quads)? {
+            quads
+                .map(|q| FROM_JS.with(|c| c.to_quad(&q?)))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            return Err(format_err!("quads argument must be iterable"));
+        };
+        self.store.extend(quads).map_err(JsError::from)?;
+        Ok(())
+    }
+
+    pub fn named_graphs(&self) -> Result<Box<[JsValue]>, JsValue> {
+        Ok(self
+            .store
+            .named_graphs()
+            .map(|g| {
+                g.map(|g| {
+                    JsTerm::from(match g {
+                        NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n),
+                        NamedOrBlankNode::BlankNode(n) => Term::BlankNode(n),
+                    })
+                    .into()
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+            .into_boxed_slice())
+    }
+
+    pub fn contains_named_graph(&self, graph_name: &JsValue) -> Result<bool, JsValue> {
+        let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
+        let graph_name_ref = GraphName::try_from(graph_name)?;
+        let result = match &graph_name_ref {
+            GraphName::DefaultGraph => Ok(true),
+            GraphName::NamedNode(g) => self.store.contains_named_graph(g),
+            GraphName::BlankNode(g) => self.store.contains_named_graph(g),
+        };
+        Ok(result.map_err(JsError::from)?)
+    }
+
+    pub fn add_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
+        let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
+        let graph_name_ref = GraphName::try_from(graph_name)?;
+        match &graph_name_ref {
+            GraphName::DefaultGraph => Ok(()),
+            GraphName::NamedNode(g) => self.store.insert_named_graph(g),
+            GraphName::BlankNode(g) => self.store.insert_named_graph(g),
+        }
+        .map_err(JsError::from)?;
+        Ok(())
+    }
+
+    pub fn clear_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
+        let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
+        let graph_name_ref = GraphName::try_from(graph_name)?;
+        self.store
+            .clear_graph(&graph_name_ref)
+            .map_err(JsError::from)?;
+        Ok(())
+    }
+
+    pub fn remove_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
+        let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
+        let graph_name_ref = GraphName::try_from(graph_name)?;
+        match &graph_name_ref {
+            GraphName::DefaultGraph => self.store.clear_graph(GraphNameRef::DefaultGraph),
+            GraphName::NamedNode(g) => self.store.remove_named_graph(g),
+            GraphName::BlankNode(g) => self.store.remove_named_graph(g),
+        }
+        .map_err(JsError::from)?;
+        Ok(())
+    }
+
+    pub fn clear(&self) -> Result<(), JsValue> {
+        self.store.clear().map_err(JsError::from)?;
+        Ok(())
     }
 }
 
