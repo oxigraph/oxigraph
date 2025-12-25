@@ -2,6 +2,7 @@
 use wasm_bindgen::prelude::*;
 
 mod model;
+mod shacl;
 mod store;
 mod utils;
 

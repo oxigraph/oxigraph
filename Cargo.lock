@@ -1604,7 +1604,10 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "oxigraph",
+ "oxrdf",
+ "oxrdfio",
  "spargeo",
+ "sparshacl",
  "wasm-bindgen",
 ]
 
@@ -1965,6 +1968,7 @@ dependencies = [
  "oxigraph",
  "pyo3",
  "spargeo",
+ "sparshacl",
 ]
 
 [[package]]
@@ -2515,6 +2519,20 @@ name = "sparql-smith"
 version = "0.1.0-alpha.12"
 dependencies = [
  "arbitrary",
+]
+
+[[package]]
+name = "sparshacl"
+version = "0.1.0"
+dependencies = [
+ "oxrdf",
+ "oxrdfio",
+ "oxsdatatypes",
+ "regex",
+ "rustc-hash",
+ "spareval",
+ "spargebra",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

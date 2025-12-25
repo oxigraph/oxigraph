@@ -7,12 +7,16 @@
 mod dataset;
 mod io;
 mod model;
+#[cfg(feature = "shacl")]
+mod shacl;
 mod sparql;
 mod store;
 
 use crate::dataset::*;
 use crate::io::*;
 use crate::model::*;
+#[cfg(feature = "shacl")]
+use crate::shacl::*;
 use crate::sparql::*;
 use crate::store::*;
 use pyo3::prelude::*;
@@ -32,5 +36,11 @@ pub mod pyoxigraph {
         PyNamedNode, PyQuad, PyQuadParser, PyQueryBoolean, PyQueryResultsFormat, PyQuerySolution,
         PyQuerySolutions, PyQueryTriples, PyRdfFormat, PyStore, PyTriple, PyVariable, parse,
         parse_query_results, serialize,
+    };
+    #[cfg(feature = "shacl")]
+    #[pymodule_export]
+    use super::{
+        PyShaclShapesGraph, PyShaclValidationReport, PyShaclValidationResult, PyShaclValidator,
+        shacl_validate,
     };
 }

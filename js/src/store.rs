@@ -70,7 +70,7 @@ export class Store {
 
 #[wasm_bindgen(js_name = Store, skip_typescript)]
 pub struct JsStore {
-    store: Store,
+    pub(crate) store: Store,
 }
 
 #[wasm_bindgen(js_class = Store)]
