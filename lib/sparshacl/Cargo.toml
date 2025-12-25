@@ -1,0 +1,36 @@
+[package]
+name = "sparshacl"
+version = "0.1.0"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["SHACL", "RDF", "validation"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparshacl"
+description = "SHACL (Shapes Constraint Language) validation engine"
+documentation = "https://docs.rs/sparshacl"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+rdf-12 = ["oxrdf/rdf-12"]
+sparql = ["dep:spargebra", "dep:spareval"]
+
+[dependencies]
+oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxsdatatypes.workspace = true
+regex.workspace = true
+rustc-hash.workspace = true
+thiserror.workspace = true
+spargebra = { workspace = true, optional = true }
+spareval = { workspace = true, optional = true }
+
+[dev-dependencies]
+oxrdfio.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

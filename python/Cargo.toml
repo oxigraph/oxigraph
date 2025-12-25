@@ -19,15 +19,17 @@ doctest = false
 doc = false
 
 [features]
-default = ["geosparql", "rdf-12"]
+default = ["geosparql", "rdf-12", "shacl"]
 abi3 = ["pyo3/abi3-py38"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 geosparql = ["dep:spargeo"]
-rdf-12 = ["oxigraph/rdf-12"]
+shacl = ["dep:sparshacl"]
+rdf-12 = ["oxigraph/rdf-12", "sparshacl?/rdf-12"]
 
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] } # TODO: remove the feature in a few months
 spargeo = { workspace = true, optional = true }
+sparshacl = { workspace = true, optional = true }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
 oxigraph = { workspace = true, features = ["http-client-native-tls"] }
