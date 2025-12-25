@@ -501,6 +501,290 @@ describe("Store", () => {
             assert.strictEqual(1, quads.length);
         });
     });
+
+    describe("#forEach()", () => {
+        it("should iterate over all quads", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            const values: string[] = [];
+            store.forEach((quad) => {
+                values.push(quad.object.value);
+            });
+            assert.strictEqual(3, values.length);
+            assert(values.includes("1"));
+            assert(values.includes("2"));
+            assert(values.includes("3"));
+        });
+
+        it("should work with empty store", () => {
+            const store = new Store();
+            let count = 0;
+            store.forEach(() => {
+                count++;
+            });
+            assert.strictEqual(0, count);
+        });
+
+        it("should allow side effects", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+            ]);
+            const collected: Quad[] = [];
+            store.forEach((quad) => {
+                collected.push(quad);
+            });
+            assert.strictEqual(2, collected.length);
+        });
+    });
+
+    describe("#filter()", () => {
+        it("should filter quads based on predicate", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            const filtered = store.filter((quad) => quad.object.value === "2");
+            assert.strictEqual(1, filtered.length);
+            assert.strictEqual("2", filtered[0].object.value);
+        });
+
+        it("should return empty array when no quads match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+            ]);
+            const filtered = store.filter((quad) => quad.object.value === "99");
+            assert.strictEqual(0, filtered.length);
+        });
+
+        it("should return all quads when predicate always returns true", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+            ]);
+            const filtered = store.filter(() => true);
+            assert.strictEqual(2, filtered.length);
+        });
+
+        it("should work with empty store", () => {
+            const store = new Store();
+            const filtered = store.filter(() => true);
+            assert.strictEqual(0, filtered.length);
+        });
+
+        it("should filter based on quad properties", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("hello")),
+                dataModel.quad(ex2, ex, dataModel.literal("world")),
+            ]);
+            const filtered = store.filter((quad) => quad.subject.value === ex.value);
+            assert.strictEqual(1, filtered.length);
+            assert.strictEqual(ex.value, filtered[0].subject.value);
+        });
+    });
+
+    describe("#some()", () => {
+        it("should return true if any quad matches predicate", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            assert.strictEqual(true, store.some((quad) => quad.object.value === "2"));
+        });
+
+        it("should return false if no quads match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+            ]);
+            assert.strictEqual(false, store.some((quad) => quad.object.value === "99"));
+        });
+
+        it("should return false for empty store", () => {
+            const store = new Store();
+            assert.strictEqual(false, store.some(() => true));
+        });
+
+        it("should short-circuit on first match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            let count = 0;
+            const result = store.some((quad) => {
+                count++;
+                return quad.object.value === "1";
+            });
+            assert.strictEqual(true, result);
+            assert.strictEqual(1, count); // Should stop after first match
+        });
+    });
+
+    describe("#every()", () => {
+        it("should return true if all quads match predicate", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+            ]);
+            assert.strictEqual(true, store.every((quad) => quad.subject.equals(ex)));
+        });
+
+        it("should return false if any quad doesn't match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex2, ex, dataModel.literal("2")),
+            ]);
+            assert.strictEqual(false, store.every((quad) => quad.subject.equals(ex)));
+        });
+
+        it("should return true for empty store", () => {
+            const store = new Store();
+            assert.strictEqual(true, store.every(() => false));
+        });
+
+        it("should short-circuit on first non-match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex2, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            let count = 0;
+            const result = store.every((quad) => {
+                count++;
+                return quad.subject.equals(ex);
+            });
+            assert.strictEqual(false, result);
+            assert.strictEqual(2, count); // Should stop after first non-match
+        });
+    });
+
+    describe("#find()", () => {
+        it("should return first quad matching predicate", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            const found = store.find((quad) => quad.object.value === "2");
+            assert(found !== undefined);
+            assert.strictEqual("2", found.object.value);
+        });
+
+        it("should return undefined if no quad matches", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+            ]);
+            const found = store.find((quad) => quad.object.value === "99");
+            assert.strictEqual(undefined, found);
+        });
+
+        it("should return undefined for empty store", () => {
+            const store = new Store();
+            const found = store.find(() => true);
+            assert.strictEqual(undefined, found);
+        });
+
+        it("should short-circuit on first match", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            let count = 0;
+            const found = store.find((quad) => {
+                count++;
+                return quad.object.value === "1";
+            });
+            assert(found !== undefined);
+            assert.strictEqual(1, count); // Should stop after first match
+        });
+
+        it("should find based on complex predicates", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("hello")),
+                dataModel.quad(ex2, ex, dataModel.literal("world")),
+            ]);
+            const found = store.find((quad) =>
+                quad.subject.value === ex2.value && quad.object.value === "world"
+            );
+            assert(found !== undefined);
+            assert.strictEqual("world", found.object.value);
+        });
+    });
+
+    describe("#queryAsync()", () => {
+        it("should execute ASK query asynchronously", async () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const result = await store.queryAsync("ASK { ?s ?p ?o }");
+            assert.strictEqual(true, result);
+        });
+
+        it("should execute SELECT query asynchronously", async () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const results = await store.queryAsync("SELECT ?s WHERE { ?s ?p ?o }") as Map<string, Term>[];
+            assert.strictEqual(1, results.length);
+            assert(ex.equals(results[0]?.get("s")));
+        });
+
+        it("should execute CONSTRUCT query asynchronously", async () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const results = await store.queryAsync("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }") as Quad[];
+            assert.strictEqual(1, results.length);
+            assert(dataModel.quad(ex, ex, ex).equals(results[0]));
+        });
+
+        it("should support query options", async () => {
+            const store = new Store();
+            const results = await store.queryAsync("SELECT * WHERE { BIND(<t> AS ?t) }", {
+                baseIri: "http://example.com/",
+            }) as Map<string, Term>[];
+            assert.strictEqual(1, results.length);
+        });
+
+        it("should handle empty results", async () => {
+            const store = new Store();
+            const results = await store.queryAsync("SELECT ?s WHERE { ?s ?p ?o }") as Map<string, Term>[];
+            assert.strictEqual(0, results.length);
+        });
+    });
+
+    describe("#updateAsync()", () => {
+        it("should execute INSERT DATA asynchronously", async () => {
+            const store = new Store();
+            await store.updateAsync(
+                "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }"
+            );
+            assert.strictEqual(1, store.size);
+        });
+
+        it("should execute DELETE DATA asynchronously", async () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            await store.updateAsync(
+                "DELETE DATA { <http://example.com> <http://example.com> <http://example.com> }"
+            );
+            assert.strictEqual(0, store.size);
+        });
+
+        it("should execute DELETE WHERE asynchronously", async () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            await store.updateAsync("DELETE WHERE { ?v ?v ?v }");
+            assert.strictEqual(0, store.size);
+        });
+
+        it("should support update options", async () => {
+            const store = new Store();
+            await store.updateAsync(
+                "PREFIX ex: <http://example.com/> INSERT DATA { ex:s ex:p ex:o }",
+                { prefixes: { ex: "http://example.com/" } }
+            );
+            assert.strictEqual(1, store.size);
+        });
+    });
 });
 
 describe("RdfFormat", () => {

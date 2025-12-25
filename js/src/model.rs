@@ -84,6 +84,7 @@ export class BlankNode {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "BlankNode"; value: string };
+    clone(): BlankNode;
 }
 
 /**
@@ -97,6 +98,7 @@ export class DefaultGraph {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "DefaultGraph"; value: "" };
+    clone(): DefaultGraph;
 }
 
 /**
@@ -113,6 +115,7 @@ export class Literal {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "Literal"; value: string; datatype: { termType: "NamedNode"; value: string }; language: string; direction?: "ltr" | "rtl" | "" };
+    clone(): Literal;
 }
 
 /**
@@ -126,6 +129,7 @@ export class NamedNode {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "NamedNode"; value: string };
+    clone(): NamedNode;
 }
 
 /**
@@ -162,6 +166,7 @@ export class Quad implements BaseQuad {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "Quad"; value: ""; subject: any; predicate: any; object: any; graph: any };
+    clone(): Quad;
 }
 
 /**
@@ -178,6 +183,7 @@ export class Triple {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "Triple"; value: ""; subject: any; predicate: any; object: any };
+    clone(): Triple;
 }
 
 /**
@@ -208,6 +214,7 @@ export class Variable {
     toString(): string;
     valueOf(): string;
     toJSON(): { termType: "Variable"; value: string };
+    clone(): Variable;
 }
 
 /**
@@ -246,6 +253,7 @@ export class Dataset {
     canonicalize(algorithm: CanonicalizationAlgorithm): void;
 
     toString(): string;
+    clone(): Dataset;
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -422,6 +430,13 @@ impl JsNamedNode {
         Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
         obj.into()
     }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl From<NamedNode> for JsNamedNode {
@@ -498,6 +513,13 @@ impl JsBlankNode {
         Reflect::set(&obj, &"termType".into(), &"BlankNode".into()).unwrap();
         Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
         obj.into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -605,6 +627,13 @@ impl JsLiteral {
         }
         obj.into()
     }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl From<Literal> for JsLiteral {
@@ -626,7 +655,7 @@ impl From<JsLiteral> for Term {
 }
 
 #[wasm_bindgen(js_name = DefaultGraph, skip_typescript)]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct JsDefaultGraph;
 
 #[wasm_bindgen(js_class = DefaultGraph)]
@@ -667,6 +696,11 @@ impl JsDefaultGraph {
         Reflect::set(&obj, &"termType".into(), &"DefaultGraph".into()).unwrap();
         Reflect::set(&obj, &"value".into(), &"".into()).unwrap();
         obj.into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        *self
     }
 }
 
@@ -714,6 +748,13 @@ impl JsVariable {
         Reflect::set(&obj, &"termType".into(), &"Variable".into()).unwrap();
         Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
         obj.into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -822,6 +863,13 @@ impl JsTriple {
         }
 
         obj.into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -959,6 +1007,13 @@ impl JsQuad {
         }
 
         obj.into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -1533,5 +1588,12 @@ impl JsDataset {
             .map(|quad| JsQuad::from(quad.into_owned()).into())
             .collect();
         Array::from_iter(quads).values().into()
+    }
+
+    #[wasm_bindgen]
+    pub fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }

@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::{console_warn, format_err};
-use js_sys::{Array, Map, Reflect, try_iter};
+use js_sys::{Array, Function, Map, Promise, Reflect, try_iter};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
@@ -9,6 +9,7 @@ use oxigraph::store::Store;
 #[cfg(feature = "geosparql")]
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::future_to_promise;
 
 // We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
 // instead of any and improve compatibility with RDF/JS Dataset interfaces (https://rdf.js.org/dataset-spec/).
@@ -29,9 +30,9 @@ export class Store {
     dump(
         options: {
             format: string;
-            from_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            fromGraphName?: BlankNode | DefaultGraph | NamedNode;
             prefixes?: Record<string, string>;
-            base_iri?: NamedNode | string;
+            baseIri?: NamedNode | string;
         }
     ): string;
 
@@ -40,10 +41,10 @@ export class Store {
     load(
         data: string,
         options: {
-            base_iri?: NamedNode | string;
+            baseIri?: NamedNode | string;
             format: string;
-            no_transaction?: boolean;
-            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            noTransaction?: boolean;
+            toGraphName?: BlankNode | DefaultGraph | NamedNode;
             unchecked?: boolean;
             lenient?: boolean;
         }
@@ -54,32 +55,53 @@ export class Store {
     query(
         query: string,
         options?: {
-            base_iri?: NamedNode | string;
+            baseIri?: NamedNode | string;
             prefixes?: Record<string, string>;
-            results_format?: string;
-            default_graph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
-            named_graphs?: Iterable<BlankNode | NamedNode>;
-            use_default_graph_as_union?: boolean;
+            resultsFormat?: string;
+            defaultGraph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
+            namedGraphs?: Iterable<BlankNode | NamedNode>;
+            useDefaultGraphAsUnion?: boolean;
             substitutions?: Record<string, Term>;
         }
     ): boolean | Map<string, Term>[] | Quad[] | string;
 
+    queryAsync(
+        query: string,
+        options?: {
+            baseIri?: NamedNode | string;
+            prefixes?: Record<string, string>;
+            resultsFormat?: string;
+            defaultGraph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
+            namedGraphs?: Iterable<BlankNode | NamedNode>;
+            useDefaultGraphAsUnion?: boolean;
+            substitutions?: Record<string, Term>;
+        }
+    ): Promise<boolean | Map<string, Term>[] | Quad[] | string>;
+
     update(
         update: string,
         options?: {
-            base_iri?: NamedNode | string;
+            baseIri?: NamedNode | string;
             prefixes?: Record<string, string>;
         }
     ): void;
+
+    updateAsync(
+        update: string,
+        options?: {
+            baseIri?: NamedNode | string;
+            prefixes?: Record<string, string>;
+        }
+    ): Promise<void>;
 
     extend(quads: Iterable<Quad>): void;
 
     bulkLoad(
         data: string,
         options: {
-            base_iri?: NamedNode | string;
+            baseIri?: NamedNode | string;
             format: string;
-            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            toGraphName?: BlankNode | DefaultGraph | NamedNode;
             lenient?: boolean;
         }
     ): void;
@@ -95,6 +117,16 @@ export class Store {
     removeGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
     clear(): void;
+
+    forEach(callback: (quad: Quad) => void): void;
+
+    filter(predicate: (quad: Quad) => boolean): Quad[];
+
+    some(predicate: (quad: Quad) => boolean): boolean;
+
+    every(predicate: (quad: Quad) => boolean): boolean;
+
+    find(predicate: (quad: Quad) => boolean): Quad | undefined;
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -211,14 +243,14 @@ impl JsStore {
         let mut named_graphs = None;
         let mut substitutions = None;
         if !options.is_undefined() {
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("baseIri"))?)?;
 
             let js_prefixes = Reflect::get(options, &JsValue::from_str("prefixes"))?;
             if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
                 prefixes = Some(extract_prefixes(&js_prefixes)?);
             }
 
-            let js_default_graph = Reflect::get(options, &JsValue::from_str("default_graph"))?;
+            let js_default_graph = Reflect::get(options, &JsValue::from_str("defaultGraph"))?;
             default_graph = if js_default_graph.is_undefined() || js_default_graph.is_null() {
                 None
             } else if let Some(iter) = try_iter(&js_default_graph)? {
@@ -232,28 +264,28 @@ impl JsStore {
                 ])
             };
 
-            let js_named_graphs = Reflect::get(options, &JsValue::from_str("named_graphs"))?;
+            let js_named_graphs = Reflect::get(options, &JsValue::from_str("namedGraphs"))?;
             named_graphs = if js_named_graphs.is_null() || js_named_graphs.is_undefined() {
                 None
             } else {
                 Some(
-                    try_iter(&Reflect::get(options, &JsValue::from_str("named_graphs"))?)?
-                        .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
+                    try_iter(&Reflect::get(options, &JsValue::from_str("namedGraphs"))?)?
+                        .ok_or_else(|| format_err!("namedGraphs option must be iterable"))?
                         .map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
                         .collect::<Result<Vec<NamedOrBlankNode>, _>>()?,
                 )
             };
 
             use_default_graph_as_union =
-                Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
+                Reflect::get(options, &JsValue::from_str("useDefaultGraphAsUnion"))?
                     .is_truthy();
 
-            let js_results_format = Reflect::get(options, &JsValue::from_str("results_format"))?;
+            let js_results_format = Reflect::get(options, &JsValue::from_str("resultsFormat"))?;
             if !js_results_format.is_undefined() && !js_results_format.is_null() {
                 results_format = Some(
                     js_results_format
                         .as_string()
-                        .ok_or_else(|| format_err!("results_format option must be a string"))?,
+                        .ok_or_else(|| format_err!("resultsFormat option must be a string"))?,
                 );
             }
 
@@ -382,12 +414,213 @@ impl JsStore {
         })
     }
 
+    #[wasm_bindgen(js_name = queryAsync)]
+    pub fn query_async(&self, query: String, options: JsValue) -> Promise {
+        let store = self.store.clone();
+        future_to_promise(async move {
+            // Parsing options
+            let mut base_iri = None;
+            let mut prefixes = None;
+            let mut use_default_graph_as_union = false;
+            let mut results_format = None;
+            let mut default_graph = None;
+            let mut named_graphs = None;
+            let mut substitutions = None;
+            if !options.is_undefined() {
+                base_iri = convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
+
+                let js_prefixes = Reflect::get(&options, &JsValue::from_str("prefixes"))?;
+                if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
+                    prefixes = Some(extract_prefixes(&js_prefixes)?);
+                }
+
+                let js_default_graph = Reflect::get(&options, &JsValue::from_str("defaultGraph"))?;
+                default_graph = if js_default_graph.is_undefined() || js_default_graph.is_null() {
+                    None
+                } else if let Some(iter) = try_iter(&js_default_graph)? {
+                    Some(
+                        iter.map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
+                            .collect::<Result<Vec<GraphName>, _>>()?,
+                    )
+                } else {
+                    Some(vec![
+                        FROM_JS.with(|c| c.to_term(&js_default_graph))?.try_into()?,
+                    ])
+                };
+
+                let js_named_graphs = Reflect::get(&options, &JsValue::from_str("namedGraphs"))?;
+                named_graphs = if js_named_graphs.is_null() || js_named_graphs.is_undefined() {
+                    None
+                } else {
+                    Some(
+                        try_iter(&Reflect::get(&options, &JsValue::from_str("namedGraphs"))?)?
+                            .ok_or_else(|| format_err!("namedGraphs option must be iterable"))?
+                            .map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
+                            .collect::<Result<Vec<NamedOrBlankNode>, _>>()?,
+                    )
+                };
+
+                use_default_graph_as_union =
+                    Reflect::get(&options, &JsValue::from_str("useDefaultGraphAsUnion"))?
+                        .is_truthy();
+
+                let js_results_format = Reflect::get(&options, &JsValue::from_str("resultsFormat"))?;
+                if !js_results_format.is_undefined() && !js_results_format.is_null() {
+                    results_format = Some(
+                        js_results_format
+                            .as_string()
+                            .ok_or_else(|| format_err!("resultsFormat option must be a string"))?,
+                    );
+                }
+
+                let js_substitutions = Reflect::get(&options, &JsValue::from_str("substitutions"))?;
+                if !js_substitutions.is_undefined() && !js_substitutions.is_null() {
+                    substitutions = Some(extract_substitutions(&js_substitutions)?);
+                }
+            }
+
+            let mut evaluator = SparqlEvaluator::new();
+            #[cfg(feature = "geosparql")]
+            for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+                evaluator = evaluator.with_custom_function(name.into(), implementation)
+            }
+            if let Some(base_iri) = base_iri {
+                evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+            }
+            if let Some(prefixes) = prefixes {
+                for (prefix_name, prefix_iri) in prefixes {
+                    evaluator = evaluator
+                        .with_prefix(&prefix_name, &prefix_iri)
+                        .map_err(JsError::from)?;
+                }
+            }
+
+            let mut prepared_query = evaluator.parse_query(&query).map_err(JsError::from)?;
+            if use_default_graph_as_union {
+                prepared_query.dataset_mut().set_default_graph_as_union();
+            }
+            if let Some(default_graph) = default_graph {
+                prepared_query
+                    .dataset_mut()
+                    .set_default_graph(default_graph);
+            }
+            if let Some(named_graphs) = named_graphs {
+                prepared_query
+                    .dataset_mut()
+                    .set_available_named_graphs(named_graphs);
+            }
+            if let Some(substitutions) = substitutions {
+                for (variable, term) in substitutions {
+                    prepared_query = prepared_query.substitute_variable(variable, term);
+                }
+            }
+
+            let results = prepared_query
+                .on_store(&store)
+                .execute()
+                .map_err(JsError::from)?;
+            Ok(match results {
+                QueryResults::Solutions(solutions) => {
+                    if let Some(results_format) = results_format {
+                        let mut serializer =
+                            QueryResultsSerializer::from_format(query_results_format(&results_format)?)
+                                .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
+                                .map_err(JsError::from)?;
+                        for solution in solutions {
+                            serializer
+                                .serialize(&solution.map_err(JsError::from)?)
+                                .map_err(JsError::from)?;
+                        }
+                        JsValue::from_str(
+                            &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                                .map_err(JsError::from)?,
+                        )
+                    } else {
+                        let results = Array::new();
+                        let mut count = 0;
+                        for solution in solutions {
+                            let solution = solution.map_err(JsError::from)?;
+                            let result = Map::new();
+                            for (variable, value) in solution.iter() {
+                                result.set(
+                                    &variable.as_str().into(),
+                                    &JsTerm::from(value.clone()).into(),
+                                );
+                            }
+                            results.push(&result.into());
+
+                            // Yield to the event loop every 1000 solutions to keep the UI responsive
+                            count += 1;
+                            if count % 1000 == 0 {
+                                let promise = Promise::resolve(&JsValue::undefined());
+                                wasm_bindgen_futures::JsFuture::from(promise).await?;
+                            }
+                        }
+                        results.into()
+                    }
+                }
+                QueryResults::Graph(triples) => {
+                    if let Some(results_format) = results_format {
+                        let mut serializer = RdfSerializer::from_format(rdf_format(&results_format)?)
+                            .for_writer(Vec::new());
+                        for triple in triples {
+                            serializer
+                                .serialize_triple(&triple.map_err(JsError::from)?)
+                                .map_err(JsError::from)?;
+                        }
+                        JsValue::from_str(
+                            &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                                .map_err(JsError::from)?,
+                        )
+                    } else {
+                        let results = Array::new();
+                        let mut count = 0;
+                        for triple in triples {
+                            results.push(
+                                &JsQuad::from(
+                                    triple
+                                        .map_err(JsError::from)?
+                                        .in_graph(GraphName::DefaultGraph),
+                                )
+                                .into(),
+                            );
+
+                            // Yield to the event loop every 1000 triples to keep the UI responsive
+                            count += 1;
+                            if count % 1000 == 0 {
+                                let promise = Promise::resolve(&JsValue::undefined());
+                                wasm_bindgen_futures::JsFuture::from(promise).await?;
+                            }
+                        }
+                        results.into()
+                    }
+                }
+                QueryResults::Boolean(b) => {
+                    if let Some(results_format) = results_format {
+                        JsValue::from_str(
+                            &String::from_utf8(
+                                QueryResultsSerializer::from_format(query_results_format(
+                                    &results_format,
+                                )?)
+                                .serialize_boolean_to_writer(Vec::new(), b)
+                                .map_err(JsError::from)?,
+                            )
+                            .map_err(JsError::from)?,
+                        )
+                    } else {
+                        b.into()
+                    }
+                }
+            })
+        })
+    }
+
     pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut base_iri = None;
         let mut prefixes = None;
         if !options.is_undefined() {
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("baseIri"))?)?;
 
             let js_prefixes = Reflect::get(options, &JsValue::from_str("prefixes"))?;
             if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
@@ -419,6 +652,49 @@ impl JsStore {
             .map_err(JsError::from)?)
     }
 
+    #[wasm_bindgen(js_name = updateAsync)]
+    pub fn update_async(&self, update: String, options: JsValue) -> Promise {
+        let store = self.store.clone();
+        future_to_promise(async move {
+            // Parsing options
+            let mut base_iri = None;
+            let mut prefixes = None;
+            if !options.is_undefined() {
+                base_iri = convert_base_iri(&Reflect::get(&options, &JsValue::from_str("baseIri"))?)?;
+
+                let js_prefixes = Reflect::get(&options, &JsValue::from_str("prefixes"))?;
+                if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
+                    prefixes = Some(extract_prefixes(&js_prefixes)?);
+                }
+            }
+
+            let mut evaluator = SparqlEvaluator::new();
+            #[cfg(feature = "geosparql")]
+            for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+                evaluator = evaluator.with_custom_function(name.into(), implementation)
+            }
+            if let Some(base_iri) = base_iri {
+                evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+            }
+            if let Some(prefixes) = prefixes {
+                for (prefix_name, prefix_iri) in prefixes {
+                    evaluator = evaluator
+                        .with_prefix(&prefix_name, &prefix_iri)
+                        .map_err(JsError::from)?;
+                }
+            }
+
+            evaluator
+                .parse_update(&update)
+                .map_err(JsError::from)?
+                .on_store(&store)
+                .execute()
+                .map_err(JsError::from)?;
+
+            Ok(JsValue::undefined())
+        })
+    }
+
     pub fn load(
         &self,
         data: &str,
@@ -446,25 +722,25 @@ impl JsStore {
                 format = Some(rdf_format(&format_str)?);
             }
             parsed_base_iri =
-                convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
-            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
+                convert_base_iri(&Reflect::get(options, &JsValue::from_str("baseIri"))?)?;
+            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("toGraphName"))?;
             parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
             unchecked = Reflect::get(options, &JsValue::from_str("unchecked"))?.is_truthy();
             lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
             no_transaction =
-                Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
+                Reflect::get(options, &JsValue::from_str("noTransaction"))?.is_truthy();
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {{format: 'nt'}}"))?;
         if let Some(base_iri) = convert_base_iri(base_iri)? {
             console_warn!(
-                "The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})"
+                "The baseIri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', baseIri: 'http//example.com'}})"
             );
             parsed_base_iri = Some(base_iri);
         }
         if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
             console_warn!(
-                "The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', to_graph_name: 'http//example.com'}})"
+                "The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', toGraphName: 'http//example.com'}})"
             );
             parsed_to_graph_name = Some(to_graph_name);
         }
@@ -516,7 +792,7 @@ impl JsStore {
             {
                 format = Some(rdf_format(&format_str)?);
             }
-            let from_graph_name_js = Reflect::get(options, &JsValue::from_str("from_graph_name"))?;
+            let from_graph_name_js = Reflect::get(options, &JsValue::from_str("fromGraphName"))?;
             parsed_from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
 
             // Parse prefixes option
@@ -555,13 +831,13 @@ impl JsStore {
             }
 
             // Parse base_iri option
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("baseIri"))?)?;
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
         if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
             console_warn!(
-                "The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})"
+                "The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', fromGraphName: 'http//example.com'}})"
             );
             parsed_from_graph_name = Some(from_graph_name);
         }
@@ -618,8 +894,8 @@ impl JsStore {
                 format = Some(rdf_format(&format_str)?);
             }
             parsed_base_iri =
-                convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
-            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
+                convert_base_iri(&Reflect::get(options, &JsValue::from_str("baseIri"))?)?;
+            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("toGraphName"))?;
             parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
             lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
         }
@@ -715,6 +991,95 @@ impl JsStore {
     pub fn clear(&self) -> Result<(), JsValue> {
         self.store.clear().map_err(JsError::from)?;
         Ok(())
+    }
+
+    /// JavaScript-idiomatic collection methods
+    /// Note: These methods iterate over all quads and call JavaScript callbacks,
+    /// which crosses the JS/WASM boundary for each quad. For large datasets,
+    /// consider using SPARQL queries or the match() method for better performance.
+
+    #[wasm_bindgen(js_name = forEach)]
+    pub fn for_each(&self, callback: &Function) -> Result<(), JsValue> {
+        let this = JsValue::NULL;
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            callback.call1(&this, &js_quad)?;
+        }
+        Ok(())
+    }
+
+    pub fn filter(&self, predicate: &Function) -> Result<Box<[JsValue]>, JsValue> {
+        let this = JsValue::NULL;
+        let mut results = Vec::new();
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            let matches = predicate.call1(&this, &js_quad)?;
+            if matches.is_truthy() {
+                results.push(js_quad);
+            }
+        }
+        Ok(results.into_boxed_slice())
+    }
+
+    pub fn some(&self, predicate: &Function) -> Result<bool, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            let matches = predicate.call1(&this, &js_quad)?;
+            if matches.is_truthy() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn every(&self, predicate: &Function) -> Result<bool, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            let matches = predicate.call1(&this, &js_quad)?;
+            if !matches.is_truthy() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    pub fn find(&self, predicate: &Function) -> Result<JsValue, JsValue> {
+        let this = JsValue::NULL;
+        for quad in self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?
+        {
+            let js_quad = JsQuad::from(quad).into();
+            let matches = predicate.call1(&this, &js_quad)?;
+            if matches.is_truthy() {
+                return Ok(js_quad);
+            }
+        }
+        Ok(JsValue::UNDEFINED)
     }
 
     // Symbol.iterator implementation - must be manually wired up in JavaScript

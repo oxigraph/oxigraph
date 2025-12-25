@@ -49,6 +49,27 @@ for (const file of ["./pkg/web.js", "./pkg/node.js"]) {
             }
         }
 
+        // Add DataFactory export
+        // Find the end of the exports section (usually near the end of the file)
+        // and add the DataFactory object that groups all factory functions
+        if (content.includes("export { namedNode, blankNode")) {
+            // DataFactory already uses individual exports, add it as an object
+            const dataFactoryExport = `\n// RDF/JS DataFactory interface
+export const DataFactory = {
+    namedNode,
+    blankNode,
+    literal,
+    variable,
+    defaultGraph,
+    triple,
+    quad,
+    fromTerm,
+    fromQuad
+};\n`;
+            // Append at the end of the file
+            content += dataFactoryExport;
+        }
+
         fs.writeFileSync(file, content);
     }
 }
