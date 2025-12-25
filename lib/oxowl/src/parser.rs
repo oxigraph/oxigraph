@@ -5,68 +5,19 @@
 
 use crate::axiom::Axiom;
 use crate::entity::{OwlClass, ObjectProperty, DataProperty, AnnotationProperty, Individual};
-use crate::expression::{ClassExpression, ObjectPropertyExpression, DataRange};
+use crate::expression::{ClassExpression, ObjectPropertyExpression};
 use crate::ontology::Ontology;
 use crate::error::{OwlParseError, ParseErrorKind};
 use oxrdf::{
-    Graph, GraphRef, NamedNode, NamedNodeRef, BlankNode, BlankNodeRef,
-    Term, TermRef, Triple, TripleRef, Literal,
-    vocab::{rdf, rdfs, xsd},
+    Graph, BlankNodeRef, NamedOrBlankNodeRef,
+    Term, TermRef,
+    vocab::{rdf, rdfs, owl},
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// OWL 2 namespace.
 pub const OWL_NAMESPACE: &str = "http://www.w3.org/2002/07/owl#";
 
-// OWL vocabulary constants
-mod vocab {
-    use oxrdf::NamedNodeRef;
-
-    pub const CLASS: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Class");
-    pub const THING: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Thing");
-    pub const NOTHING: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Nothing");
-    pub const ONTOLOGY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Ontology");
-    pub const OBJECT_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#ObjectProperty");
-    pub const DATATYPE_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#DatatypeProperty");
-    pub const ANNOTATION_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AnnotationProperty");
-    pub const NAMED_INDIVIDUAL: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#NamedIndividual");
-    pub const RESTRICTION: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#Restriction");
-
-    // Properties
-    pub const IMPORTS: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#imports");
-    pub const VERSION_IRI: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#versionIRI");
-    pub const EQUIVALENT_CLASS: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#equivalentClass");
-    pub const DISJOINT_WITH: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#disjointWith");
-    pub const EQUIVALENT_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#equivalentProperty");
-    pub const INVERSE_OF: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#inverseOf");
-    pub const SAME_AS: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#sameAs");
-    pub const DIFFERENT_FROM: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#differentFrom");
-
-    // Restrictions
-    pub const ON_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onProperty");
-    pub const SOME_VALUES_FROM: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#someValuesFrom");
-    pub const ALL_VALUES_FROM: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#allValuesFrom");
-    pub const HAS_VALUE: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#hasValue");
-    pub const MIN_CARDINALITY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#minCardinality");
-    pub const MAX_CARDINALITY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#maxCardinality");
-    pub const CARDINALITY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#cardinality");
-    pub const ON_CLASS: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onClass");
-
-    // Boolean combinations
-    pub const INTERSECTION_OF: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#intersectionOf");
-    pub const UNION_OF: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#unionOf");
-    pub const COMPLEMENT_OF: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#complementOf");
-    pub const ONE_OF: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#oneOf");
-
-    // Property characteristics
-    pub const FUNCTIONAL_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#FunctionalProperty");
-    pub const INVERSE_FUNCTIONAL_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#InverseFunctionalProperty");
-    pub const TRANSITIVE_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#TransitiveProperty");
-    pub const SYMMETRIC_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#SymmetricProperty");
-    pub const ASYMMETRIC_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AsymmetricProperty");
-    pub const REFLEXIVE_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#ReflexiveProperty");
-    pub const IRREFLEXIVE_PROPERTY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#IrreflexiveProperty");
-}
 
 /// Parser configuration.
 #[derive(Debug, Clone, Default)]
@@ -90,6 +41,7 @@ impl ParserConfig {
     }
 
     /// Sets lenient mode.
+    #[must_use]
     pub fn lenient(mut self) -> Self {
         self.lenient = true;
         self
@@ -100,7 +52,6 @@ impl ParserConfig {
 pub struct OntologyParser<'a> {
     graph: &'a Graph,
     config: ParserConfig,
-    visited: FxHashSet<Term>,
 }
 
 impl<'a> OntologyParser<'a> {
@@ -114,7 +65,6 @@ impl<'a> OntologyParser<'a> {
         Self {
             graph,
             config,
-            visited: FxHashSet::default(),
         }
     }
 
@@ -125,17 +75,17 @@ impl<'a> OntologyParser<'a> {
         // Find ontology IRI
         for triple in self.graph.triples_for_predicate(rdf::TYPE) {
             if let TermRef::NamedNode(obj) = triple.object {
-                if obj == vocab::ONTOLOGY {
-                    if let Some(subject) = triple.subject.as_named_node() {
+                if obj == owl::ONTOLOGY {
+                    if let NamedOrBlankNodeRef::NamedNode(subject) = triple.subject {
                         ontology.set_iri(Some(subject.into_owned()));
 
                         // Parse imports
                         for import_triple in self.graph.triples_for_subject(triple.subject) {
-                            if import_triple.predicate == vocab::IMPORTS {
+                            if import_triple.predicate == owl::IMPORTS {
                                 if let TermRef::NamedNode(import_iri) = import_triple.object {
                                     ontology.add_import(import_iri.into_owned());
                                 }
-                            } else if import_triple.predicate == vocab::VERSION_IRI {
+                            } else if import_triple.predicate == owl::VERSION_IRI {
                                 if let TermRef::NamedNode(version) = import_triple.object {
                                     ontology.set_version_iri(Some(version.into_owned()));
                                 }
@@ -159,18 +109,18 @@ impl<'a> OntologyParser<'a> {
     fn parse_declarations(&self, ontology: &mut Ontology) -> Result<(), OwlParseError> {
         for triple in self.graph.triples_for_predicate(rdf::TYPE) {
             if let TermRef::NamedNode(obj) = triple.object {
-                if let Some(subject) = triple.subject.as_named_node() {
+                if let NamedOrBlankNodeRef::NamedNode(subject) = triple.subject {
                     let node = subject.into_owned();
 
-                    if obj == vocab::CLASS {
+                    if obj == owl::CLASS {
                         ontology.add_axiom(Axiom::DeclareClass(OwlClass::new(node)));
-                    } else if obj == vocab::OBJECT_PROPERTY {
+                    } else if obj == owl::OBJECT_PROPERTY {
                         ontology.add_axiom(Axiom::DeclareObjectProperty(ObjectProperty::new(node)));
-                    } else if obj == vocab::DATATYPE_PROPERTY {
+                    } else if obj == owl::DATATYPE_PROPERTY {
                         ontology.add_axiom(Axiom::DeclareDataProperty(DataProperty::new(node)));
-                    } else if obj == vocab::ANNOTATION_PROPERTY {
+                    } else if obj == owl::ANNOTATION_PROPERTY {
                         ontology.add_axiom(Axiom::DeclareAnnotationProperty(AnnotationProperty::new(node)));
-                    } else if obj == vocab::NAMED_INDIVIDUAL {
+                    } else if obj == owl::NAMED_INDIVIDUAL {
                         ontology.add_axiom(Axiom::DeclareNamedIndividual(Individual::Named(node)));
                     }
                 }
@@ -189,14 +139,14 @@ impl<'a> OntologyParser<'a> {
         }
 
         // Parse EquivalentClass (owl:equivalentClass)
-        for triple in self.graph.triples_for_predicate(vocab::EQUIVALENT_CLASS) {
+        for triple in self.graph.triples_for_predicate(owl::EQUIVALENT_CLASS) {
             let class1 = self.parse_class_expression(triple.subject.into())?;
             let class2 = self.parse_class_expression(triple.object)?;
             ontology.add_axiom(Axiom::EquivalentClasses(vec![class1, class2]));
         }
 
         // Parse DisjointWith (owl:disjointWith)
-        for triple in self.graph.triples_for_predicate(vocab::DISJOINT_WITH) {
+        for triple in self.graph.triples_for_predicate(owl::DISJOINT_WITH) {
             let class1 = self.parse_class_expression(triple.subject.into())?;
             let class2 = self.parse_class_expression(triple.object)?;
             ontology.add_axiom(Axiom::DisjointClasses(vec![class1, class2]));
@@ -224,7 +174,7 @@ impl<'a> OntologyParser<'a> {
 
         // Parse SameAs (owl:sameAs)
         let mut same_as_pairs: FxHashMap<Term, Vec<Term>> = FxHashMap::default();
-        for triple in self.graph.triples_for_predicate(vocab::SAME_AS) {
+        for triple in self.graph.triples_for_predicate(owl::SAME_AS) {
             let subject: Term = triple.subject.into();
             let object: Term = triple.object.into();
             same_as_pairs.entry(subject.clone()).or_default().push(object.clone());
@@ -249,7 +199,7 @@ impl<'a> OntologyParser<'a> {
         }
 
         // Parse DifferentFrom (owl:differentFrom)
-        for triple in self.graph.triples_for_predicate(vocab::DIFFERENT_FROM) {
+        for triple in self.graph.triples_for_predicate(owl::DIFFERENT_FROM) {
             let ind1 = self.term_to_individual(triple.subject.into())?;
             let ind2 = self.term_to_individual(triple.object)?;
             ontology.add_axiom(Axiom::DifferentIndividuals(vec![ind1, ind2]));
@@ -257,22 +207,22 @@ impl<'a> OntologyParser<'a> {
 
         // Parse property characteristics
         for triple in self.graph.triples_for_predicate(rdf::TYPE) {
-            if let Some(subject) = triple.subject.as_named_node() {
+            if let NamedOrBlankNodeRef::NamedNode(subject) = triple.subject {
                 let prop = ObjectProperty::new(subject.into_owned());
                 if let TermRef::NamedNode(obj) = triple.object {
-                    if obj == vocab::FUNCTIONAL_PROPERTY {
+                    if obj == owl::FUNCTIONAL_PROPERTY {
                         ontology.add_axiom(Axiom::FunctionalObjectProperty(prop));
-                    } else if obj == vocab::INVERSE_FUNCTIONAL_PROPERTY {
+                    } else if obj == owl::INVERSE_FUNCTIONAL_PROPERTY {
                         ontology.add_axiom(Axiom::InverseFunctionalObjectProperty(prop));
-                    } else if obj == vocab::TRANSITIVE_PROPERTY {
+                    } else if obj == owl::TRANSITIVE_PROPERTY {
                         ontology.add_axiom(Axiom::TransitiveObjectProperty(prop));
-                    } else if obj == vocab::SYMMETRIC_PROPERTY {
+                    } else if obj == owl::SYMMETRIC_PROPERTY {
                         ontology.add_axiom(Axiom::SymmetricObjectProperty(prop));
-                    } else if obj == vocab::ASYMMETRIC_PROPERTY {
+                    } else if obj == owl::ASYMMETRIC_PROPERTY {
                         ontology.add_axiom(Axiom::AsymmetricObjectProperty(prop));
-                    } else if obj == vocab::REFLEXIVE_PROPERTY {
+                    } else if obj == owl::REFLEXIVE_PROPERTY {
                         ontology.add_axiom(Axiom::ReflexiveObjectProperty(prop));
-                    } else if obj == vocab::IRREFLEXIVE_PROPERTY {
+                    } else if obj == owl::IRREFLEXIVE_PROPERTY {
                         ontology.add_axiom(Axiom::IrreflexiveObjectProperty(prop));
                     }
                 }
@@ -280,8 +230,8 @@ impl<'a> OntologyParser<'a> {
         }
 
         // Parse InverseOf
-        for triple in self.graph.triples_for_predicate(vocab::INVERSE_OF) {
-            if let (Some(sub), TermRef::NamedNode(obj)) = (triple.subject.as_named_node(), triple.object) {
+        for triple in self.graph.triples_for_predicate(owl::INVERSE_OF) {
+            if let (Some(sub), TermRef::NamedNode(obj)) = (match triple.subject { NamedOrBlankNodeRef::NamedNode(n) => Some(n), _ => None }, triple.object) {
                 ontology.add_axiom(Axiom::InverseObjectProperties(
                     ObjectProperty::new(sub.into_owned()),
                     ObjectProperty::new(obj.into_owned()),
@@ -291,7 +241,7 @@ impl<'a> OntologyParser<'a> {
 
         // Parse SubPropertyOf (rdfs:subPropertyOf)
         for triple in self.graph.triples_for_predicate(rdfs::SUB_PROPERTY_OF) {
-            if let (Some(sub), TermRef::NamedNode(sup)) = (triple.subject.as_named_node(), triple.object) {
+            if let (Some(sub), TermRef::NamedNode(sup)) = (match triple.subject { NamedOrBlankNodeRef::NamedNode(n) => Some(n), _ => None }, triple.object) {
                 ontology.add_axiom(Axiom::SubObjectPropertyOf {
                     sub_property: ObjectPropertyExpression::ObjectProperty(ObjectProperty::new(sub.into_owned())),
                     super_property: ObjectPropertyExpression::ObjectProperty(ObjectProperty::new(sup.into_owned())),
@@ -301,7 +251,7 @@ impl<'a> OntologyParser<'a> {
 
         // Parse domain (rdfs:domain)
         for triple in self.graph.triples_for_predicate(rdfs::DOMAIN) {
-            if let Some(sub) = triple.subject.as_named_node() {
+            if let NamedOrBlankNodeRef::NamedNode(sub) = triple.subject {
                 if let Ok(domain) = self.parse_class_expression(triple.object) {
                     ontology.add_axiom(Axiom::ObjectPropertyDomain {
                         property: ObjectProperty::new(sub.into_owned()),
@@ -313,7 +263,7 @@ impl<'a> OntologyParser<'a> {
 
         // Parse range (rdfs:range)
         for triple in self.graph.triples_for_predicate(rdfs::RANGE) {
-            if let Some(sub) = triple.subject.as_named_node() {
+            if let NamedOrBlankNodeRef::NamedNode(sub) = triple.subject {
                 if let Ok(range) = self.parse_class_expression(triple.object) {
                     ontology.add_axiom(Axiom::ObjectPropertyRange {
                         property: ObjectProperty::new(sub.into_owned()),
@@ -339,22 +289,18 @@ impl<'a> OntologyParser<'a> {
             TermRef::Literal(_) => {
                 Err(OwlParseError::invalid_value("Literal cannot be a class expression"))
             }
-            #[cfg(feature = "rdf-12")]
-            TermRef::Triple(_) => {
-                Err(OwlParseError::invalid_value("Quoted triple cannot be a class expression"))
-            }
         }
     }
 
     /// Parses an anonymous class expression (restriction or boolean).
     fn parse_anonymous_class(&mut self, bnode: BlankNodeRef<'_>) -> Result<ClassExpression, OwlParseError> {
-        let subject = bnode.into();
+        let subject: NamedOrBlankNodeRef<'_> = bnode.into();
 
         // Check for restriction
         for triple in self.graph.triples_for_subject(subject) {
             if triple.predicate == rdf::TYPE {
                 if let TermRef::NamedNode(obj) = triple.object {
-                    if obj == vocab::RESTRICTION {
+                    if obj == owl::RESTRICTION {
                         return self.parse_restriction(bnode);
                     }
                 }
@@ -363,16 +309,16 @@ impl<'a> OntologyParser<'a> {
 
         // Check for boolean class expressions
         for triple in self.graph.triples_for_subject(subject) {
-            if triple.predicate == vocab::INTERSECTION_OF {
+            if triple.predicate == owl::INTERSECTION_OF {
                 let classes = self.parse_class_list(triple.object)?;
                 return Ok(ClassExpression::ObjectIntersectionOf(classes));
-            } else if triple.predicate == vocab::UNION_OF {
+            } else if triple.predicate == owl::UNION_OF {
                 let classes = self.parse_class_list(triple.object)?;
                 return Ok(ClassExpression::ObjectUnionOf(classes));
-            } else if triple.predicate == vocab::COMPLEMENT_OF {
+            } else if triple.predicate == owl::COMPLEMENT_OF {
                 let class = self.parse_class_expression(triple.object)?;
                 return Ok(ClassExpression::ObjectComplementOf(Box::new(class)));
-            } else if triple.predicate == vocab::ONE_OF {
+            } else if triple.predicate == owl::ONE_OF {
                 let individuals = self.parse_individual_list(triple.object)?;
                 return Ok(ClassExpression::ObjectOneOf(individuals));
             }
@@ -386,7 +332,7 @@ impl<'a> OntologyParser<'a> {
 
     /// Parses an OWL restriction.
     fn parse_restriction(&mut self, bnode: BlankNodeRef<'_>) -> Result<ClassExpression, OwlParseError> {
-        let subject = bnode.into();
+        let subject: NamedOrBlankNodeRef<'_> = bnode.into();
 
         // Get the property
         let mut property = None;
@@ -399,29 +345,29 @@ impl<'a> OntologyParser<'a> {
         let mut on_class = None;
 
         for triple in self.graph.triples_for_subject(subject) {
-            if triple.predicate == vocab::ON_PROPERTY {
+            if triple.predicate == owl::ON_PROPERTY {
                 if let TermRef::NamedNode(p) = triple.object {
                     property = Some(ObjectProperty::new(p.into_owned()));
                 }
-            } else if triple.predicate == vocab::SOME_VALUES_FROM {
+            } else if triple.predicate == owl::SOME_VALUES_FROM {
                 some_values = Some(self.parse_class_expression(triple.object)?);
-            } else if triple.predicate == vocab::ALL_VALUES_FROM {
+            } else if triple.predicate == owl::ALL_VALUES_FROM {
                 all_values = Some(self.parse_class_expression(triple.object)?);
-            } else if triple.predicate == vocab::HAS_VALUE {
+            } else if triple.predicate == owl::HAS_VALUE {
                 has_value = Some(triple.object);
-            } else if triple.predicate == vocab::MIN_CARDINALITY {
+            } else if triple.predicate == owl::MIN_CARDINALITY {
                 if let TermRef::Literal(lit) = triple.object {
                     min_card = lit.value().parse().ok();
                 }
-            } else if triple.predicate == vocab::MAX_CARDINALITY {
+            } else if triple.predicate == owl::MAX_CARDINALITY {
                 if let TermRef::Literal(lit) = triple.object {
                     max_card = lit.value().parse().ok();
                 }
-            } else if triple.predicate == vocab::CARDINALITY {
+            } else if triple.predicate == owl::CARDINALITY {
                 if let TermRef::Literal(lit) = triple.object {
                     exact_card = lit.value().parse().ok();
                 }
-            } else if triple.predicate == vocab::ON_CLASS {
+            } else if triple.predicate == owl::ON_CLASS {
                 on_class = Some(self.parse_class_expression(triple.object)?);
             }
         }
@@ -493,15 +439,22 @@ impl<'a> OntologyParser<'a> {
                 return Err(OwlParseError::malformed_list("List too long"));
             }
 
+            // Convert current to NamedOrBlankNodeRef
+            let current_ref = match current.as_ref() {
+                TermRef::NamedNode(n) => NamedOrBlankNodeRef::NamedNode(n),
+                TermRef::BlankNode(b) => NamedOrBlankNodeRef::BlankNode(b),
+                _ => return Err(OwlParseError::malformed_list("List node must be named or blank node")),
+            };
+
             // Get rdf:first
             let first = self.graph
-                .object_for_subject_predicate(current.as_ref().into(), rdf::FIRST)
+                .object_for_subject_predicate(current_ref, rdf::FIRST)
                 .ok_or_else(|| OwlParseError::malformed_list("Missing rdf:first"))?;
             result.push(self.parse_class_expression(first)?);
 
             // Get rdf:rest
             current = self.graph
-                .object_for_subject_predicate(current.as_ref().into(), rdf::REST)
+                .object_for_subject_predicate(current_ref, rdf::REST)
                 .ok_or_else(|| OwlParseError::malformed_list("Missing rdf:rest"))?
                 .into_owned();
         }
@@ -521,13 +474,20 @@ impl<'a> OntologyParser<'a> {
                 return Err(OwlParseError::malformed_list("List too long"));
             }
 
+            // Convert current to NamedOrBlankNodeRef
+            let current_ref = match current.as_ref() {
+                TermRef::NamedNode(n) => NamedOrBlankNodeRef::NamedNode(n),
+                TermRef::BlankNode(b) => NamedOrBlankNodeRef::BlankNode(b),
+                _ => return Err(OwlParseError::malformed_list("List node must be named or blank node")),
+            };
+
             let first = self.graph
-                .object_for_subject_predicate(current.as_ref().into(), rdf::FIRST)
+                .object_for_subject_predicate(current_ref, rdf::FIRST)
                 .ok_or_else(|| OwlParseError::malformed_list("Missing rdf:first"))?;
             result.push(self.term_to_individual(first)?);
 
             current = self.graph
-                .object_for_subject_predicate(current.as_ref().into(), rdf::REST)
+                .object_for_subject_predicate(current_ref, rdf::REST)
                 .ok_or_else(|| OwlParseError::malformed_list("Missing rdf:rest"))?
                 .into_owned();
         }
@@ -545,7 +505,6 @@ impl<'a> OntologyParser<'a> {
     }
 }
 
-use oxrdf::NamedOrBlankNodeRef;
 
 /// Parses an ontology from an RDF graph.
 pub fn parse_ontology(graph: &Graph) -> Result<Ontology, OwlParseError> {

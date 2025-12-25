@@ -117,12 +117,7 @@ impl Ontology {
                 self.declare_classes_in_expression(sub_class);
                 self.declare_classes_in_expression(super_class);
             }
-            Axiom::EquivalentClasses(classes) => {
-                for c in classes {
-                    self.declare_classes_in_expression(c);
-                }
-            }
-            Axiom::DisjointClasses(classes) => {
+            Axiom::EquivalentClasses(classes) | Axiom::DisjointClasses(classes) => {
                 for c in classes {
                     self.declare_classes_in_expression(c);
                 }
@@ -267,7 +262,7 @@ impl Ontology {
 impl std::fmt::Display for Ontology {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(iri) = &self.iri {
-            write!(f, "Ontology({})", iri)?;
+            write!(f, "Ontology({iri})")?;
         } else {
             write!(f, "Ontology(anonymous)")?;
         }

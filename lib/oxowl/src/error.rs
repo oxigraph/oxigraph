@@ -25,11 +25,11 @@ pub enum OwlError {
 impl fmt::Display for OwlError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(e) => write!(f, "OWL parse error: {}", e),
-            Self::Reasoning(e) => write!(f, "Reasoning error: {}", e),
-            Self::Inconsistent(e) => write!(f, "Inconsistency: {}", e),
-            Self::InvalidIri(e) => write!(f, "Invalid IRI: {}", e),
-            Self::Other(msg) => write!(f, "{}", msg),
+            Self::Parse(e) => write!(f, "OWL parse error: {e}"),
+            Self::Reasoning(e) => write!(f, "Reasoning error: {e}"),
+            Self::Inconsistent(e) => write!(f, "Inconsistency: {e}"),
+            Self::InvalidIri(e) => write!(f, "Invalid IRI: {e}"),
+            Self::Other(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -95,6 +95,20 @@ pub enum ParseErrorKind {
     Syntax,
 }
 
+impl fmt::Display for ParseErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingProperty => write!(f, "Missing property"),
+            Self::InvalidValue => write!(f, "Invalid value"),
+            Self::UnknownConstruct => write!(f, "Unknown construct"),
+            Self::MalformedList => write!(f, "Malformed list"),
+            Self::CircularReference => write!(f, "Circular reference"),
+            Self::InvalidCardinality => write!(f, "Invalid cardinality"),
+            Self::Syntax => write!(f, "Syntax error"),
+        }
+    }
+}
+
 impl OwlParseError {
     /// Creates a new parse error.
     pub fn new(kind: ParseErrorKind, message: impl Into<String>) -> Self {
@@ -106,7 +120,7 @@ impl OwlParseError {
 
     /// Creates a missing property error.
     pub fn missing_property(property: &str) -> Self {
-        Self::new(ParseErrorKind::MissingProperty, format!("Missing required property: {}", property))
+        Self::new(ParseErrorKind::MissingProperty, format!("Missing required property: {property}"))
     }
 
     /// Creates an invalid value error.
@@ -132,7 +146,7 @@ impl OwlParseError {
 
 impl fmt::Display for OwlParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {}", self.kind, self.message)
+        write!(f, "{}: {}", self.kind, self.message)
     }
 }
 
@@ -159,6 +173,18 @@ pub enum ReasoningErrorKind {
     Internal,
 }
 
+impl fmt::Display for ReasoningErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MaxIterationsExceeded => write!(f, "Max iterations exceeded"),
+            Self::MemoryLimitExceeded => write!(f, "Memory limit exceeded"),
+            Self::UnsupportedConstruct => write!(f, "Unsupported construct"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::Internal => write!(f, "Internal error"),
+        }
+    }
+}
+
 impl ReasoningError {
     /// Creates a new reasoning error.
     pub fn new(kind: ReasoningErrorKind, message: impl Into<String>) -> Self {
@@ -172,7 +198,7 @@ impl ReasoningError {
     pub fn max_iterations_exceeded(iterations: usize) -> Self {
         Self::new(
             ReasoningErrorKind::MaxIterationsExceeded,
-            format!("Exceeded maximum iterations ({})", iterations),
+            format!("Exceeded maximum iterations ({iterations})"),
         )
     }
 
@@ -180,7 +206,7 @@ impl ReasoningError {
     pub fn unsupported_construct(construct: &str, profile: &str) -> Self {
         Self::new(
             ReasoningErrorKind::UnsupportedConstruct,
-            format!("{} is not supported in {} profile", construct, profile),
+            format!("{construct} is not supported in {profile} profile"),
         )
     }
 
@@ -192,7 +218,7 @@ impl ReasoningError {
 
 impl fmt::Display for ReasoningError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {}", self.kind, self.message)
+        write!(f, "{}: {}", self.kind, self.message)
     }
 }
 
@@ -244,6 +270,3 @@ impl fmt::Display for InconsistencyError {
 }
 
 impl Error for InconsistencyError {}
-
-/// Result type for OWL operations.
-pub type OwlResult<T> = Result<T, OwlError>;

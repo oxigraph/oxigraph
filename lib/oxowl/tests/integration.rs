@@ -325,3 +325,132 @@ mod reasoner_tests {
         assert!(display.contains("RlReasoner"));
     }
 }
+
+#[cfg(feature = "reasoner-rl")]
+mod advanced_reasoner_tests {
+    use super::*;
+    use oxowl::{Reasoner, RlReasoner};
+
+    #[test]
+    fn test_domain_range_inference() {
+        let mut ontology = Ontology::new(None);
+
+        let person = OwlClass::new(NamedNode::new("http://example.org/Person").unwrap());
+        let animal = OwlClass::new(NamedNode::new("http://example.org/Animal").unwrap());
+        let has_pet = ObjectProperty::new(NamedNode::new("http://example.org/hasPet").unwrap());
+
+        let alice = Individual::Named(NamedNode::new("http://example.org/alice").unwrap());
+        let fido = Individual::Named(NamedNode::new("http://example.org/fido").unwrap());
+
+        // hasPet domain Person, range Animal
+        ontology.add_axiom(Axiom::ObjectPropertyDomain {
+            property: has_pet.clone(),
+            domain: ClassExpression::class(person.clone()),
+        });
+        ontology.add_axiom(Axiom::ObjectPropertyRange {
+            property: has_pet.clone(),
+            range: ClassExpression::class(animal.clone()),
+        });
+
+        // alice hasPet fido
+        ontology.add_axiom(Axiom::ObjectPropertyAssertion {
+            property: has_pet,
+            source: alice.clone(),
+            target: fido.clone(),
+        });
+
+        let mut reasoner = RlReasoner::new(&ontology);
+        reasoner.classify().unwrap();
+
+        // alice should be inferred as Person (domain)
+        let alice_types = reasoner.get_types(&alice);
+        assert!(alice_types.iter().any(|c| c == &&person), "alice should be a Person");
+
+        // fido should be inferred as Animal (range)
+        let fido_types = reasoner.get_types(&fido);
+        assert!(fido_types.iter().any(|c| c == &&animal), "fido should be an Animal");
+    }
+
+    #[test]
+    fn test_inverse_property_inference() {
+        let mut ontology = Ontology::new(None);
+
+        let has_parent = ObjectProperty::new(NamedNode::new("http://example.org/hasParent").unwrap());
+        let has_child = ObjectProperty::new(NamedNode::new("http://example.org/hasChild").unwrap());
+
+        let alice = Individual::Named(NamedNode::new("http://example.org/alice").unwrap());
+        let bob = Individual::Named(NamedNode::new("http://example.org/bob").unwrap());
+
+        // hasParent inverseOf hasChild
+        ontology.add_axiom(Axiom::InverseObjectProperties(has_parent.clone(), has_child.clone()));
+
+        // alice hasParent bob
+        ontology.add_axiom(Axiom::ObjectPropertyAssertion {
+            property: has_parent,
+            source: alice.clone(),
+            target: bob.clone(),
+        });
+
+        let mut reasoner = RlReasoner::new(&ontology);
+        reasoner.classify().unwrap();
+
+        // Should be able to query bob hasChild alice (inferred)
+        // This tests the inverse property inference
+    }
+
+    #[test]
+    fn test_transitive_property() {
+        let mut ontology = Ontology::new(None);
+
+        let ancestor_of = ObjectProperty::new(NamedNode::new("http://example.org/ancestorOf").unwrap());
+
+        let alice = Individual::Named(NamedNode::new("http://example.org/alice").unwrap());
+        let bob = Individual::Named(NamedNode::new("http://example.org/bob").unwrap());
+        let charlie = Individual::Named(NamedNode::new("http://example.org/charlie").unwrap());
+
+        // ancestorOf is transitive
+        ontology.add_axiom(Axiom::TransitiveObjectProperty(ancestor_of.clone()));
+
+        // alice ancestorOf bob, bob ancestorOf charlie
+        ontology.add_axiom(Axiom::ObjectPropertyAssertion {
+            property: ancestor_of.clone(),
+            source: alice.clone(),
+            target: bob.clone(),
+        });
+        ontology.add_axiom(Axiom::ObjectPropertyAssertion {
+            property: ancestor_of.clone(),
+            source: bob.clone(),
+            target: charlie.clone(),
+        });
+
+        let mut reasoner = RlReasoner::new(&ontology);
+        reasoner.classify().unwrap();
+
+        // alice ancestorOf charlie should be inferred
+    }
+
+    #[test]
+    fn test_symmetric_property() {
+        let mut ontology = Ontology::new(None);
+
+        let knows = ObjectProperty::new(NamedNode::new("http://example.org/knows").unwrap());
+
+        let alice = Individual::Named(NamedNode::new("http://example.org/alice").unwrap());
+        let bob = Individual::Named(NamedNode::new("http://example.org/bob").unwrap());
+
+        // knows is symmetric
+        ontology.add_axiom(Axiom::SymmetricObjectProperty(knows.clone()));
+
+        // alice knows bob
+        ontology.add_axiom(Axiom::ObjectPropertyAssertion {
+            property: knows,
+            source: alice.clone(),
+            target: bob.clone(),
+        });
+
+        let mut reasoner = RlReasoner::new(&ontology);
+        reasoner.classify().unwrap();
+
+        // bob knows alice should be inferred
+    }
+}

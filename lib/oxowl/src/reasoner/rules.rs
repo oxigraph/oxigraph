@@ -1,6 +1,10 @@
 //! OWL 2 RL entailment rules.
 
 /// OWL 2 RL rule identifier.
+///
+/// These identifiers correspond to the OWL 2 RL/RDF rules from the W3C specification.
+/// They are available for debugging, logging, and rule selection purposes.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RlRule {
     // Class axiom rules
@@ -72,8 +76,8 @@ impl RlRule {
         ]
     }
 
-    /// Returns the rule name.
-    pub fn name(&self) -> &'static str {
+    #[expect(dead_code)]
+    pub fn name(self) -> &'static str {
         match self {
             RlRule::CaxSco => "cax-sco",
             RlRule::CaxEqc1 => "cax-eqc1",

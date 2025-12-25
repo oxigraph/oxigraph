@@ -31,7 +31,7 @@ impl OwlClass {
 
     /// Returns a reference to this class.
     #[inline]
-    pub fn as_ref(&self) -> OwlClassRef<'_> {
+    pub fn as_class_ref(&self) -> OwlClassRef<'_> {
         OwlClassRef(self.0.as_ref())
     }
 
@@ -104,7 +104,7 @@ impl fmt::Display for OwlClassRef<'_> {
 
 impl<'a> From<&'a OwlClass> for OwlClassRef<'a> {
     fn from(class: &'a OwlClass) -> Self {
-        class.as_ref()
+        class.as_class_ref()
     }
 }
 
@@ -141,7 +141,7 @@ impl ObjectProperty {
 
     /// Returns a reference to this property.
     #[inline]
-    pub fn as_ref(&self) -> ObjectPropertyRef<'_> {
+    pub fn as_property_ref(&self) -> ObjectPropertyRef<'_> {
         ObjectPropertyRef(self.0.as_ref())
     }
 
@@ -214,7 +214,7 @@ impl fmt::Display for ObjectPropertyRef<'_> {
 
 impl<'a> From<&'a ObjectProperty> for ObjectPropertyRef<'a> {
     fn from(prop: &'a ObjectProperty) -> Self {
-        prop.as_ref()
+        prop.as_property_ref()
     }
 }
 
@@ -251,7 +251,7 @@ impl DataProperty {
 
     /// Returns a reference to this property.
     #[inline]
-    pub fn as_ref(&self) -> DataPropertyRef<'_> {
+    pub fn as_data_property_ref(&self) -> DataPropertyRef<'_> {
         DataPropertyRef(self.0.as_ref())
     }
 
@@ -324,7 +324,7 @@ impl fmt::Display for DataPropertyRef<'_> {
 
 impl<'a> From<&'a DataProperty> for DataPropertyRef<'a> {
     fn from(prop: &'a DataProperty) -> Self {
-        prop.as_ref()
+        prop.as_data_property_ref()
     }
 }
 
@@ -362,7 +362,7 @@ impl AnnotationProperty {
 
     /// Returns a reference to this property.
     #[inline]
-    pub fn as_ref(&self) -> AnnotationPropertyRef<'_> {
+    pub fn as_annotation_property_ref(&self) -> AnnotationPropertyRef<'_> {
         AnnotationPropertyRef(self.0.as_ref())
     }
 
@@ -435,7 +435,7 @@ impl fmt::Display for AnnotationPropertyRef<'_> {
 
 impl<'a> From<&'a AnnotationProperty> for AnnotationPropertyRef<'a> {
     fn from(prop: &'a AnnotationProperty) -> Self {
-        prop.as_ref()
+        prop.as_annotation_property_ref()
     }
 }
 
@@ -491,7 +491,7 @@ impl Individual {
 
     /// Returns a reference to this individual.
     #[inline]
-    pub fn as_ref(&self) -> IndividualRef<'_> {
+    pub fn as_individual_ref(&self) -> IndividualRef<'_> {
         match self {
             Self::Named(n) => IndividualRef::Named(n.as_ref()),
             Self::Anonymous(b) => IndividualRef::Anonymous(b.as_ref()),
@@ -502,8 +502,8 @@ impl Individual {
 impl fmt::Display for Individual {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Named(n) => write!(f, "{}", n),
-            Self::Anonymous(b) => write!(f, "{}", b),
+            Self::Named(n) => write!(f, "{n}"),
+            Self::Anonymous(b) => write!(f, "{b}"),
         }
     }
 }
@@ -582,15 +582,15 @@ impl<'a> IndividualRef<'a> {
 impl fmt::Display for IndividualRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Named(n) => write!(f, "{}", n),
-            Self::Anonymous(b) => write!(f, "{}", b),
+            Self::Named(n) => write!(f, "{n}"),
+            Self::Anonymous(b) => write!(f, "{b}"),
         }
     }
 }
 
 impl<'a> From<&'a Individual> for IndividualRef<'a> {
     fn from(individual: &'a Individual) -> Self {
-        individual.as_ref()
+        individual.as_individual_ref()
     }
 }
 
@@ -626,7 +626,7 @@ mod tests {
         assert_eq!(class.iri(), &iri);
         assert_eq!(class.to_string(), iri.to_string());
 
-        let class_ref = class.as_ref();
+        let class_ref = class.as_class_ref();
         assert_eq!(class_ref.iri(), iri.as_ref());
         assert_eq!(class_ref.into_owned(), class);
     }
@@ -637,7 +637,7 @@ mod tests {
         let prop = ObjectProperty::new(iri.clone());
         assert_eq!(prop.iri(), &iri);
 
-        let prop_ref = prop.as_ref();
+        let prop_ref = prop.as_property_ref();
         assert_eq!(prop_ref.into_owned(), prop);
     }
 
@@ -679,7 +679,7 @@ mod tests {
     fn test_individual_ref() {
         let iri = NamedNode::new_unchecked("http://example.org/Bob");
         let individual = Individual::Named(iri.clone());
-        let individual_ref = individual.as_ref();
+        let individual_ref = individual.as_individual_ref();
 
         assert!(individual_ref.is_named());
         assert_eq!(individual_ref.as_named(), Some(iri.as_ref()));

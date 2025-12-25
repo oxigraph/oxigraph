@@ -16,7 +16,8 @@ default = ["reasoner-rl"]
 reasoner-rl = []
 reasoner-el = []
 reasoner-rdfs = []
-rdf-12 = ["oxrdf/rdf-12"]
+# rdf-12 feature disabled until oxrdfio properly supports it
+# rdf-12 = ["oxrdf/rdf-12"]
 
 [dependencies]
 oxrdf.workspace = true

@@ -184,10 +184,10 @@ impl ObjectPropertyExpression {
     }
 
     /// Returns the named property if this is one.
-    pub fn as_property(&self) -> Option<&ObjectProperty> {
+    pub fn as_property(&self) -> &ObjectProperty {
         match self {
-            Self::ObjectProperty(p) => Some(p),
-            Self::ObjectInverseOf(p) => Some(p.as_ref()),
+            Self::ObjectProperty(p) => p,
+            Self::ObjectInverseOf(p) => p.as_ref(),
         }
     }
 
