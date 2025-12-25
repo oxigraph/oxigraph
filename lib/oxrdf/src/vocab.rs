@@ -251,3 +251,418 @@ pub mod geosparql {
     pub const WKT_LITERAL: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
 }
+
+pub mod shacl {
+    //! [SHACL](https://www.w3.org/TR/shacl/) vocabulary.
+    //!
+    //! The Shapes Constraint Language (SHACL) is a W3C specification for validating
+    //! RDF graphs against a set of conditions called "shapes".
+    use crate::named_node::NamedNodeRef;
+
+    // === NAMESPACE ===
+    /// The SHACL namespace: `http://www.w3.org/ns/shacl#`
+    pub const NAMESPACE: &str = "http://www.w3.org/ns/shacl#";
+
+    // === SHAPE CLASSES ===
+    /// The class of all shapes.
+    pub const SHAPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Shape");
+    /// The class of all node shapes.
+    pub const NODE_SHAPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#NodeShape");
+    /// The class of all property shapes.
+    pub const PROPERTY_SHAPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#PropertyShape");
+
+    // === TARGET DECLARATIONS ===
+    /// Links a shape to a class whose instances are to be validated.
+    pub const TARGET_CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#targetClass");
+    /// Links a shape to specific focus nodes.
+    pub const TARGET_NODE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#targetNode");
+    /// Links a shape to subjects of triples with a specific predicate.
+    pub const TARGET_SUBJECTS_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#targetSubjectsOf");
+    /// Links a shape to objects of triples with a specific predicate.
+    pub const TARGET_OBJECTS_OF: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#targetObjectsOf");
+
+    // === PROPERTY PATH ===
+    /// Specifies a property path for a property shape.
+    pub const PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#path");
+    /// RDF list of alternative paths.
+    pub const ALTERNATIVE_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#alternativePath");
+    /// Inverse path operator.
+    pub const INVERSE_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#inversePath");
+    /// Zero-or-more path operator.
+    pub const ZERO_OR_MORE_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#zeroOrMorePath");
+    /// One-or-more path operator.
+    pub const ONE_OR_MORE_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#oneOrMorePath");
+    /// Zero-or-one path operator.
+    pub const ZERO_OR_ONE_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#zeroOrOnePath");
+
+    // === VALUE TYPE CONSTRAINTS ===
+    /// Specifies the datatype of all value nodes.
+    pub const DATATYPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#datatype");
+    /// Specifies the required class of all value nodes.
+    pub const CLASS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#class");
+    /// Specifies the node kind of all value nodes.
+    pub const NODE_KIND: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#nodeKind");
+
+    // === NODE KIND VALUES ===
+    /// Node kind: IRI.
+    pub const IRI: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#IRI");
+    /// Node kind: Literal.
+    pub const LITERAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Literal");
+    /// Node kind: BlankNode.
+    pub const BLANK_NODE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#BlankNode");
+    /// Node kind: BlankNodeOrIRI.
+    pub const BLANK_NODE_OR_IRI: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#BlankNodeOrIRI");
+    /// Node kind: BlankNodeOrLiteral.
+    pub const BLANK_NODE_OR_LITERAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#BlankNodeOrLiteral");
+    /// Node kind: IRIOrLiteral.
+    pub const IRI_OR_LITERAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#IRIOrLiteral");
+
+    // === CARDINALITY CONSTRAINTS ===
+    /// Minimum count constraint.
+    pub const MIN_COUNT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#minCount");
+    /// Maximum count constraint.
+    pub const MAX_COUNT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#maxCount");
+
+    // === VALUE RANGE CONSTRAINTS ===
+    /// Minimum exclusive value constraint.
+    pub const MIN_EXCLUSIVE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#minExclusive");
+    /// Maximum exclusive value constraint.
+    pub const MAX_EXCLUSIVE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#maxExclusive");
+    /// Minimum inclusive value constraint.
+    pub const MIN_INCLUSIVE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#minInclusive");
+    /// Maximum inclusive value constraint.
+    pub const MAX_INCLUSIVE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#maxInclusive");
+
+    // === STRING CONSTRAINTS ===
+    /// Minimum length constraint.
+    pub const MIN_LENGTH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#minLength");
+    /// Maximum length constraint.
+    pub const MAX_LENGTH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#maxLength");
+    /// Regular expression pattern constraint.
+    pub const PATTERN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#pattern");
+    /// Regex flags for pattern matching.
+    pub const FLAGS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#flags");
+    /// Allowed language tags constraint.
+    pub const LANGUAGE_IN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#languageIn");
+    /// Unique language constraint.
+    pub const UNIQUE_LANG: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#uniqueLang");
+
+    // === PROPERTY PAIR CONSTRAINTS ===
+    /// Equal property values constraint.
+    pub const EQUALS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#equals");
+    /// Disjoint property values constraint.
+    pub const DISJOINT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#disjoint");
+    /// Less than property values constraint.
+    pub const LESS_THAN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#lessThan");
+    /// Less than or equals property values constraint.
+    pub const LESS_THAN_OR_EQUALS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#lessThanOrEquals");
+
+    // === LOGICAL CONSTRAINTS ===
+    /// Negation constraint.
+    pub const NOT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#not");
+    /// Conjunction constraint (all shapes must match).
+    pub const AND: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#and");
+    /// Disjunction constraint (at least one shape must match).
+    pub const OR: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#or");
+    /// Exclusive disjunction constraint (exactly one shape must match).
+    pub const XONE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#xone");
+
+    // === SHAPE-BASED CONSTRAINTS ===
+    /// Links to a property shape.
+    pub const PROPERTY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#property");
+    /// Validates value nodes against a shape.
+    pub const NODE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#node");
+    /// Qualified value shape constraint.
+    pub const QUALIFIED_VALUE_SHAPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#qualifiedValueShape");
+    /// Qualified minimum count constraint.
+    pub const QUALIFIED_MIN_COUNT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#qualifiedMinCount");
+    /// Qualified maximum count constraint.
+    pub const QUALIFIED_MAX_COUNT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#qualifiedMaxCount");
+    /// Qualified value shapes disjoint constraint.
+    pub const QUALIFIED_VALUE_SHAPES_DISJOINT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#qualifiedValueShapesDisjoint");
+
+    // === OTHER CONSTRAINTS ===
+    /// Closed shape constraint.
+    pub const CLOSED: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#closed");
+    /// Properties to ignore in closed shapes.
+    pub const IGNORED_PROPERTIES: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ignoredProperties");
+    /// Has value constraint.
+    pub const HAS_VALUE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#hasValue");
+    /// In allowed values list constraint.
+    pub const IN: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#in");
+
+    // === VALIDATION REPORT ===
+    /// The class of validation reports.
+    pub const VALIDATION_REPORT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ValidationReport");
+    /// The class of validation results.
+    pub const VALIDATION_RESULT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ValidationResult");
+    /// Indicates overall conformance.
+    pub const CONFORMS: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#conforms");
+    /// Links a report to its results.
+    pub const RESULT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#result");
+    /// The focus node that caused a validation result.
+    pub const FOCUS_NODE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#focusNode");
+    /// The path that caused a validation result.
+    pub const RESULT_PATH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#resultPath");
+    /// The value that caused a validation result.
+    pub const VALUE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#value");
+    /// The source shape of a validation result.
+    pub const SOURCE_SHAPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#sourceShape");
+    /// The source constraint component of a validation result.
+    pub const SOURCE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#sourceConstraintComponent");
+    /// Human-readable message for a validation result.
+    pub const RESULT_MESSAGE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#resultMessage");
+    /// The severity of a validation result.
+    pub const RESULT_SEVERITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#resultSeverity");
+    /// Nested validation results.
+    pub const DETAIL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#detail");
+
+    // === SEVERITY LEVELS ===
+    /// Violation severity level.
+    pub const VIOLATION: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Violation");
+    /// Warning severity level.
+    pub const WARNING: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Warning");
+    /// Info severity level.
+    pub const INFO: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#Info");
+
+    // === SHAPE METADATA ===
+    /// Human-readable name for a shape or property.
+    pub const NAME: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#name");
+    /// Human-readable description for a shape or property.
+    pub const DESCRIPTION: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#description");
+    /// Custom validation message.
+    pub const MESSAGE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#message");
+    /// Custom severity level for a shape.
+    pub const SEVERITY: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#severity");
+    /// Deactivates a shape.
+    pub const DEACTIVATED: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#deactivated");
+    /// Property ordering hint.
+    pub const ORDER: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#order");
+    /// Property grouping.
+    pub const GROUP: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#group");
+    /// Default value.
+    pub const DEFAULT_VALUE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#defaultValue");
+
+    // === SPARQL CONSTRAINTS ===
+    /// SPARQL-based constraint.
+    pub const SPARQL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#sparql");
+    /// SPARQL SELECT query for constraint.
+    pub const SELECT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#select");
+    /// SPARQL ASK query for constraint.
+    pub const ASK: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ask");
+    /// Prefixes for SPARQL queries.
+    pub const PREFIXES: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#prefixes");
+    /// Prefix declaration.
+    pub const DECLARE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#declare");
+    /// Prefix name.
+    pub const PREFIX: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#prefix");
+    /// Namespace for prefix.
+    pub const NAMESPACE_PROP: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#namespace");
+
+    // === CONSTRAINT COMPONENTS ===
+    /// The class of constraint components.
+    pub const CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ConstraintComponent");
+    /// Parameter for a constraint component.
+    pub const PARAMETER: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#parameter");
+    /// Validator for constraint component.
+    pub const VALIDATOR: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#validator");
+    /// Node validator for constraint component.
+    pub const NODE_VALIDATOR: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#nodeValidator");
+    /// Property validator for constraint component.
+    pub const PROPERTY_VALIDATOR: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#propertyValidator");
+    /// Optional parameter.
+    pub const OPTIONAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#optional");
+
+    // === BUILT-IN CONSTRAINT COMPONENT IRIS ===
+    /// Class constraint component.
+    pub const CLASS_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ClassConstraintComponent");
+    /// Datatype constraint component.
+    pub const DATATYPE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#DatatypeConstraintComponent");
+    /// Node kind constraint component.
+    pub const NODE_KIND_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#NodeKindConstraintComponent");
+    /// Min count constraint component.
+    pub const MIN_COUNT_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MinCountConstraintComponent");
+    /// Max count constraint component.
+    pub const MAX_COUNT_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MaxCountConstraintComponent");
+    /// Min exclusive constraint component.
+    pub const MIN_EXCLUSIVE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MinExclusiveConstraintComponent");
+    /// Max exclusive constraint component.
+    pub const MAX_EXCLUSIVE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MaxExclusiveConstraintComponent");
+    /// Min inclusive constraint component.
+    pub const MIN_INCLUSIVE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MinInclusiveConstraintComponent");
+    /// Max inclusive constraint component.
+    pub const MAX_INCLUSIVE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MaxInclusiveConstraintComponent");
+    /// Min length constraint component.
+    pub const MIN_LENGTH_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MinLengthConstraintComponent");
+    /// Max length constraint component.
+    pub const MAX_LENGTH_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#MaxLengthConstraintComponent");
+    /// Pattern constraint component.
+    pub const PATTERN_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#PatternConstraintComponent");
+    /// Language in constraint component.
+    pub const LANGUAGE_IN_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#LanguageInConstraintComponent");
+    /// Unique lang constraint component.
+    pub const UNIQUE_LANG_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#UniqueLangConstraintComponent");
+    /// Equals constraint component.
+    pub const EQUALS_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#EqualsConstraintComponent");
+    /// Disjoint constraint component.
+    pub const DISJOINT_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#DisjointConstraintComponent");
+    /// Less than constraint component.
+    pub const LESS_THAN_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#LessThanConstraintComponent");
+    /// Less than or equals constraint component.
+    pub const LESS_THAN_OR_EQUALS_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#LessThanOrEqualsConstraintComponent");
+    /// Not constraint component.
+    pub const NOT_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#NotConstraintComponent");
+    /// And constraint component.
+    pub const AND_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#AndConstraintComponent");
+    /// Or constraint component.
+    pub const OR_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#OrConstraintComponent");
+    /// Xone constraint component.
+    pub const XONE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#XoneConstraintComponent");
+    /// Node constraint component.
+    pub const NODE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#NodeConstraintComponent");
+    /// Property constraint component.
+    pub const PROPERTY_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#PropertyConstraintComponent");
+    /// Qualified value shape constraint component.
+    pub const QUALIFIED_VALUE_SHAPE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#QualifiedValueShapeConstraintComponent");
+    /// Closed constraint component.
+    pub const CLOSED_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#ClosedConstraintComponent");
+    /// Has value constraint component.
+    pub const HAS_VALUE_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#HasValueConstraintComponent");
+    /// In constraint component.
+    pub const IN_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#InConstraintComponent");
+    /// SPARQL constraint component.
+    pub const SPARQL_CONSTRAINT_COMPONENT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#SPARQLConstraintComponent");
+
+    // === SHAPES GRAPH WELL-FORMEDNESS ===
+    /// Indicates the shapes graph is well-formed.
+    pub const SHAPES_GRAPH_WELL_FORMED: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#shapesGraphWellFormed");
+
+    // === SPARQL TARGET ===
+    /// SPARQL-based target.
+    pub const SPARQL_TARGET: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#SPARQLTarget");
+    /// SPARQL target type.
+    pub const SPARQL_TARGET_TYPE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#SPARQLTargetType");
+    /// Target property.
+    pub const TARGET: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/shacl#target");
+}

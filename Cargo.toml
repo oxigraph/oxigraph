@@ -15,6 +15,7 @@ members = [
     "lib/spargeo",
     "lib/sparopt",
     "lib/sparql-smith",
+    "lib/sparshacl",
     "oxrocksdb-sys",
     "python",
     "testsuite"
@@ -94,6 +95,7 @@ spargeo = { version = "=0.5.2", path = "lib/spargeo" }
 sparesults = { version = "=0.3.1", path = "lib/sparesults" }
 sparopt = { version = "=0.3.3", path = "lib/sparopt" }
 spareval = { version = "=0.2.3", path = "lib/spareval" }
+sparshacl = { version = "=0.1.0", path = "lib/sparshacl" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"

@@ -19,13 +19,16 @@ doc = false
 [features]
 default = ["geosparql", "rdf-12"]
 geosparql = ["dep:spargeo"]
-rdf-12 = ["oxigraph/rdf-12"]
+rdf-12 = ["oxigraph/rdf-12", "sparshacl/rdf-12"]
 
 [dependencies]
 console_error_panic_hook.workspace = true
 js-sys.workspace = true
 oxigraph = { workspace = true, features = ["js"] }
+oxrdf.workspace = true
+oxrdfio.workspace = true
 spargeo = { workspace = true, optional = true }
+sparshacl.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures = "0.4"
 

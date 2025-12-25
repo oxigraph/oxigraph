@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 
 mod io;
 mod model;
+mod shacl;
 mod sparql;
 mod store;
 mod utils;
