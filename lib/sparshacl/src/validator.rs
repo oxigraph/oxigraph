@@ -206,7 +206,6 @@ impl ShaclValidator {
     }
 
     /// Validates a single constraint against value nodes.
-    #[expect(clippy::too_many_arguments)]
     fn validate_constraint(
         &self,
         context: &mut ValidationContext<'_>,
@@ -356,8 +355,7 @@ impl ShaclValidator {
                         .with_value(value.clone())
                         .with_severity(severity)
                         .with_message(format!(
-                            "String length {} is less than minimum {}",
-                            len, min
+                            "String length {len} is less than minimum {min}"
                         ));
 
                         if let Some(p) = path {
@@ -381,8 +379,7 @@ impl ShaclValidator {
                         .with_value(value.clone())
                         .with_severity(severity)
                         .with_message(format!(
-                            "String length {} exceeds maximum {}",
-                            len, max
+                            "String length {len} exceeds maximum {max}"
                         ));
 
                         if let Some(p) = path {
@@ -407,7 +404,7 @@ impl ShaclValidator {
                         )
                         .with_value(value.clone())
                         .with_severity(severity)
-                        .with_message(format!("Value does not match pattern '{}'", pattern));
+                        .with_message(format!("Value does not match pattern '{pattern}'"));
 
                         if let Some(p) = path {
                             result = result.with_path(p.clone());
@@ -455,7 +452,7 @@ impl ShaclValidator {
                 for value in value_nodes {
                     if let Term::Literal(lit) = value {
                         if let Some(lang) = lit.language() {
-                            if !seen_langs.insert(lang.to_string()) {
+                            if !seen_langs.insert(lang.to_owned()) {
                                 let mut result = ValidationResult::new(
                                     focus_node.clone(),
                                     shape_id.clone(),
@@ -463,7 +460,7 @@ impl ShaclValidator {
                                 )
                                 .with_value(value.clone())
                                 .with_severity(severity)
-                                .with_message(format!("Duplicate language tag: {}", lang));
+                                .with_message(format!("Duplicate language tag: {lang}"));
 
                                 if let Some(p) = path {
                                     result = result.with_path(p.clone());
@@ -738,12 +735,14 @@ impl ShaclValidator {
 
             Constraint::Or(shape_ids) => {
                 for value in value_nodes {
-                    let conforms = shape_ids
-                        .iter()
-                        .any(|ref_shape_id| {
-                            self.node_conforms_to_shape(context, value, ref_shape_id, depth + 1)
-                                .unwrap_or(false)
-                        });
+                    // Check each shape and propagate errors
+                    let mut conforms = false;
+                    for ref_shape_id in shape_ids {
+                        if self.node_conforms_to_shape(context, value, ref_shape_id, depth + 1)? {
+                            conforms = true;
+                            break;
+                        }
+                    }
 
                     if !conforms {
                         let mut result = ValidationResult::new(
@@ -766,13 +765,13 @@ impl ShaclValidator {
 
             Constraint::Xone(shape_ids) => {
                 for value in value_nodes {
-                    let conforming_count = shape_ids
-                        .iter()
-                        .filter(|ref_shape_id| {
-                            self.node_conforms_to_shape(context, value, ref_shape_id, depth + 1)
-                                .unwrap_or(false)
-                        })
-                        .count();
+                    // Check each shape and propagate errors
+                    let mut conforming_count = 0;
+                    for ref_shape_id in shape_ids {
+                        if self.node_conforms_to_shape(context, value, ref_shape_id, depth + 1)? {
+                            conforming_count += 1;
+                        }
+                    }
 
                     if conforming_count != 1 {
                         let mut result = ValidationResult::new(
@@ -783,8 +782,7 @@ impl ShaclValidator {
                         .with_value(value.clone())
                         .with_severity(severity)
                         .with_message(format!(
-                            "Value conforms to {} shapes, expected exactly 1",
-                            conforming_count
+                            "Value conforms to {conforming_count} shapes, expected exactly 1"
                         ));
 
                         if let Some(p) = path {
@@ -897,13 +895,13 @@ impl ShaclValidator {
                 max_count,
                 ..
             } => {
-                let conforming_count = value_nodes
-                    .iter()
-                    .filter(|v| {
-                        self.node_conforms_to_shape(context, v, ref_shape_id, depth + 1)
-                            .unwrap_or(false)
-                    })
-                    .count();
+                // Check each value node and propagate errors
+                let mut conforming_count = 0;
+                for v in value_nodes {
+                    if self.node_conforms_to_shape(context, v, ref_shape_id, depth + 1)? {
+                        conforming_count += 1;
+                    }
+                }
 
                 if let Some(min) = min_count {
                     if conforming_count < *min {
@@ -914,8 +912,7 @@ impl ShaclValidator {
                         )
                         .with_severity(severity)
                         .with_message(format!(
-                            "Expected at least {} value(s) conforming to qualified shape, got {}",
-                            min, conforming_count
+                            "Expected at least {min} value(s) conforming to qualified shape, got {conforming_count}"
                         ));
 
                         if let Some(p) = path {
@@ -935,8 +932,7 @@ impl ShaclValidator {
                         )
                         .with_severity(severity)
                         .with_message(format!(
-                            "Expected at most {} value(s) conforming to qualified shape, got {}",
-                            max, conforming_count
+                            "Expected at most {max} value(s) conforming to qualified shape, got {conforming_count}"
                         ));
 
                         if let Some(p) = path {
@@ -1061,7 +1057,7 @@ fn is_instance_of(graph: &Graph, term: &Term, class: &NamedNode) -> bool {
                 TermRef::NamedNode(type_node) => type_node == class.as_ref(),
                 _ => false,
             }),
-        _ => false,
+        Term::Literal(_) => false,
     }
 }
 
@@ -1085,9 +1081,9 @@ fn matches_node_kind(term: &Term, node_kind: NamedNodeRef<'_>) -> bool {
 
 fn get_string_value(term: &Term) -> String {
     match term {
-        Term::NamedNode(n) => n.as_str().to_string(),
-        Term::BlankNode(b) => b.as_str().to_string(),
-        Term::Literal(l) => l.value().to_string(),
+        Term::NamedNode(n) => n.as_str().to_owned(),
+        Term::BlankNode(b) => b.as_str().to_owned(),
+        Term::Literal(l) => l.value().to_owned(),
         #[cfg(feature = "rdf-12")]
         Term::Triple(_) => String::new(),
     }
@@ -1116,13 +1112,13 @@ fn get_property_values(graph: &Graph, subject: &Term, predicate: &NamedNode) -> 
     match subject {
         Term::NamedNode(n) => graph
             .objects_for_subject_predicate(n, predicate)
-            .map(|t| t.into_owned())
+            .map(TermRef::into_owned)
             .collect(),
         Term::BlankNode(b) => graph
             .objects_for_subject_predicate(b, predicate)
-            .map(|t| t.into_owned())
+            .map(TermRef::into_owned)
             .collect(),
-        _ => Vec::new(),
+        Term::Literal(_) => Vec::new(),
     }
 }
 
@@ -1147,7 +1143,7 @@ fn get_triples_for_subject(graph: &Graph, subject: &Term) -> Vec<SimpleTriple> {
                 object: t.object.into_owned(),
             })
             .collect(),
-        _ => Vec::new(),
+        Term::Literal(_) => Vec::new(),
     }
 }
 
