@@ -1,5 +1,5 @@
-use oxrdf::{NamedNode, Variable, GraphName, vocab::rdf, Literal, vocab::xsd};
-use oxttl::n3::{N3Serializer, N3Quad, N3Term};
+use oxrdf::{GraphName, Literal, NamedNode, Variable, vocab::rdf, vocab::xsd};
+use oxttl::n3::{N3Quad, N3Serializer, N3Term};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("===== N3 Serializer Demo =====\n");

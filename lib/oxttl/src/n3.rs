@@ -17,9 +17,9 @@ use oxrdf::{
     BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Term, Variable,
 };
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
-use std::collections::BTreeMap;
 use std::fmt;
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -1383,13 +1383,38 @@ impl RuleRecognizer for N3Recognizer {
             [] | [N3State::N3Doc] => (),
             _ => {
                 // Check for specific unclosed constructs to give better error messages
-                if self.stack.iter().any(|s| matches!(s, N3State::FormulaContent | N3State::FormulaContentExpectDot)) {
-                    errors.push("Unexpected end of input: unclosed formula (missing closing brace '}')".into());
-                } else if self.stack.iter().any(|s| matches!(s, N3State::CollectionBeginning | N3State::CollectionPossibleEnd)) {
+                if self.stack.iter().any(|s| {
+                    matches!(
+                        s,
+                        N3State::FormulaContent | N3State::FormulaContentExpectDot
+                    )
+                }) {
+                    errors.push(
+                        "Unexpected end of input: unclosed formula (missing closing brace '}')"
+                            .into(),
+                    );
+                } else if self.stack.iter().any(|s| {
+                    matches!(
+                        s,
+                        N3State::CollectionBeginning | N3State::CollectionPossibleEnd
+                    )
+                }) {
                     errors.push("Unexpected end of input: unclosed collection (missing closing parenthesis ')')".into());
-                } else if self.stack.iter().any(|s| matches!(s, N3State::PropertyListMiddle | N3State::PropertyListEnd | N3State::IriPropertyList)) {
+                } else if self.stack.iter().any(|s| {
+                    matches!(
+                        s,
+                        N3State::PropertyListMiddle
+                            | N3State::PropertyListEnd
+                            | N3State::IriPropertyList
+                    )
+                }) {
                     errors.push("Unexpected end of input: unclosed property list (missing closing bracket ']')".into());
-                } else if self.stack.iter().any(|s| matches!(s, N3State::PathFollowUp | N3State::PathAfterIndicator { .. })) {
+                } else if self.stack.iter().any(|s| {
+                    matches!(
+                        s,
+                        N3State::PathFollowUp | N3State::PathAfterIndicator { .. }
+                    )
+                }) {
                     errors.push("Unexpected end of input: incomplete path expression (path operators '!' and '^' require a following term)".into());
                 } else {
                     errors.push("Unexpected end of input: incomplete N3 statement".into());
@@ -1537,7 +1562,7 @@ impl<'a> Iterator for N3PrefixesIter<'a> {
 /// };
 /// serializer.serialize_quad(&quad)?;
 ///
-/// let output = serializer.finish()?;
+/// let _output = serializer.finish()?;
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
@@ -1731,8 +1756,7 @@ impl LowLevelN3Serializer {
                         )
                     }
                 } else {
-                    self.current_subject_predicate =
-                        Some((q.subject.clone(), q.predicate.clone()));
+                    self.current_subject_predicate = Some((q.subject.clone(), q.predicate.clone()));
                     writeln!(writer, " .")?;
                     if !self.current_graph_name.is_default_graph() {
                         write!(writer, "\t")?;
@@ -1746,8 +1770,7 @@ impl LowLevelN3Serializer {
                     )
                 }
             } else {
-                self.current_subject_predicate =
-                    Some((q.subject.clone(), q.predicate.clone()));
+                self.current_subject_predicate = Some((q.subject.clone(), q.predicate.clone()));
                 if !self.current_graph_name.is_default_graph() {
                     write!(writer, "\t")?;
                 }
@@ -2204,9 +2227,7 @@ mod tests {
         // Verify we can serialize back using Display
         let serialized = format!(
             "{} {} {} .",
-            quads[0].subject,
-            quads[0].predicate,
-            quads[0].object
+            quads[0].subject, quads[0].predicate, quads[0].object
         );
 
         // Parse again
@@ -2231,9 +2252,7 @@ mod tests {
         // Serialize using Display
         let serialized = format!(
             "{} {} {} .",
-            quads[0].subject,
-            quads[0].predicate,
-            quads[0].object
+            quads[0].subject, quads[0].predicate, quads[0].object
         );
 
         // Parse again
@@ -2262,9 +2281,7 @@ mod tests {
         // Serialize and re-parse
         let serialized = format!(
             "{} {} {} .",
-            quads[0].subject,
-            quads[0].predicate,
-            quads[0].object
+            quads[0].subject, quads[0].predicate, quads[0].object
         );
 
         let quads2: Vec<_> = N3Parser::new()
@@ -2286,14 +2303,14 @@ mod tests {
         assert_eq!(quads.len(), 1);
         assert_eq!(
             quads[0].object,
-            N3Term::Literal(Literal::new_language_tagged_literal_unchecked("hello", "en"))
+            N3Term::Literal(Literal::new_language_tagged_literal_unchecked(
+                "hello", "en"
+            ))
         );
 
         let serialized = format!(
             "{} {} {} .",
-            quads[0].subject,
-            quads[0].predicate,
-            quads[0].object
+            quads[0].subject, quads[0].predicate, quads[0].object
         );
 
         let quads2: Vec<_> = N3Parser::new()

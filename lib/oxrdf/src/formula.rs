@@ -187,7 +187,7 @@ impl fmt::Display for FormulaRef<'_> {
             if i > 0 {
                 write!(f, " .")?;
             }
-            write!(f, " {}", triple)?;
+            write!(f, " {triple}")?;
         }
         if !self.triples.is_empty() {
             write!(f, " .")?;
