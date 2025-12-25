@@ -181,4 +181,12 @@ impl ShaclValidationError {
             message: message.into(),
         }
     }
+
+    /// Creates a SPARQL error.
+    #[cfg(feature = "sparql")]
+    pub fn sparql_error(message: impl Into<String>) -> Self {
+        Self::SparqlError {
+            message: message.into(),
+        }
+    }
 }

@@ -502,7 +502,7 @@ fn parse_constraints(
             ShaclParseError::invalid_property_value(
                 shape_term.clone(),
                 shacl::MIN_COUNT.into_owned(),
-                "non-negative integer".to_string(),
+                "non-negative integer".to_owned(),
                 Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
             )
         })?;
@@ -515,7 +515,7 @@ fn parse_constraints(
             ShaclParseError::invalid_property_value(
                 shape_term.clone(),
                 shacl::MAX_COUNT.into_owned(),
-                "non-negative integer".to_string(),
+                "non-negative integer".to_owned(),
                 Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
             )
         })?;
@@ -548,7 +548,7 @@ fn parse_constraints(
             ShaclParseError::invalid_property_value(
                 shape_term.clone(),
                 shacl::MIN_LENGTH.into_owned(),
-                "non-negative integer".to_string(),
+                "non-negative integer".to_owned(),
                 Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
             )
         })?;
@@ -561,7 +561,7 @@ fn parse_constraints(
             ShaclParseError::invalid_property_value(
                 shape_term.clone(),
                 shacl::MAX_LENGTH.into_owned(),
-                "non-negative integer".to_string(),
+                "non-negative integer".to_owned(),
                 Term::Literal(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
             )
         })?;

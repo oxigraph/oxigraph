@@ -1,6 +1,6 @@
 //! Integration tests for SHACL validation.
 
-use oxrdf::{Graph, NamedNode};
+use oxrdf::{Graph, Literal, NamedNode, Triple};
 use oxrdfio::{RdfFormat, RdfParser};
 use sparshacl::{ShaclValidator, Severity, ShapesGraph};
 
@@ -1766,4 +1766,210 @@ fn test_qualified_value_shape_with_additional_constraint() {
     let report = validator.validate(&data).expect("Validation failed");
     assert!(report.conforms());
     assert_eq!(report.violation_count(), 0);
+}
+
+// =============================================================================
+// Security and validation error tests
+// =============================================================================
+
+#[test]
+fn test_circular_rdf_list_in_sh_in() {
+    // Create a shape with a circular RDF list in sh:in constraint
+    let turtle = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+        ex:Shape a sh:NodeShape ;
+            sh:targetClass ex:Thing ;
+            sh:property [
+                sh:path ex:status ;
+                sh:in ex:circularList
+            ] .
+
+        # Create a circular list: node1 -> node2 -> node1
+        ex:circularList rdf:first "value1" ;
+            rdf:rest ex:node2 .
+        ex:node2 rdf:first "value2" ;
+            rdf:rest ex:circularList .
+    "#;
+
+    let graph = parse_turtle(turtle);
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with CircularList error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::CircularList { .. }),
+        "Expected CircularList error, got: {:?}",
+        error
+    );
+}
+
+
+#[test]
+fn test_list_too_long_in_sh_in() {
+    // Create a shape with an extremely long RDF list (> 10000 elements)
+    // This would be impractical to create inline, so we'll construct it programmatically
+    let mut graph = Graph::new();
+
+    // Add the shape definition
+    let ex_shape = NamedNode::new("http://example.org/Shape").unwrap();
+    let ex_thing = NamedNode::new("http://example.org/Thing").unwrap();
+    let ex_status = NamedNode::new("http://example.org/status").unwrap();
+    let ex_list_head = NamedNode::new("http://example.org/listHead").unwrap();
+
+    let sh_node_shape = NamedNode::new("http://www.w3.org/ns/shacl#NodeShape").unwrap();
+    let sh_target_class = NamedNode::new("http://www.w3.org/ns/shacl#targetClass").unwrap();
+    let sh_property = NamedNode::new("http://www.w3.org/ns/shacl#property").unwrap();
+    let sh_path = NamedNode::new("http://www.w3.org/ns/shacl#path").unwrap();
+    let sh_in = NamedNode::new("http://www.w3.org/ns/shacl#in").unwrap();
+    let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+    let rdf_first = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first").unwrap();
+    let rdf_rest = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest").unwrap();
+    let rdf_nil = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap();
+
+    // Add shape triples
+    graph.insert(&Triple::new(ex_shape.clone(), rdf_type.clone(), sh_node_shape.clone()));
+    graph.insert(&Triple::new(ex_shape.clone(), sh_target_class.clone(), ex_thing.clone()));
+
+    let prop_node = NamedNode::new("http://example.org/prop1").unwrap();
+    graph.insert(&Triple::new(ex_shape.clone(), sh_property.clone(), prop_node.clone()));
+    graph.insert(&Triple::new(prop_node.clone(), sh_path.clone(), ex_status.clone()));
+    graph.insert(&Triple::new(prop_node.clone(), sh_in.clone(), ex_list_head.clone()));
+
+    // Create a very long list (10001 elements, which exceeds MAX_LIST_LENGTH of 10000)
+    let mut current = ex_list_head;
+    for i in 0..10001 {
+        let value = Literal::new_simple_literal(format!("value{}", i));
+        graph.insert(&Triple::new(current.clone(), rdf_first.clone(), value.clone()));
+
+        if i < 10000 {
+            let next = NamedNode::new(format!("http://example.org/node{}", i + 1)).unwrap();
+            graph.insert(&Triple::new(current.clone(), rdf_rest.clone(), next.clone()));
+            current = next;
+        } else {
+            graph.insert(&Triple::new(current.clone(), rdf_rest.clone(), rdf_nil.clone()));
+        }
+    }
+
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with ListTooLong error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::ListTooLong { .. }),
+        "Expected ListTooLong error, got: {:?}",
+        error
+    );
+}
+
+#[test]
+fn test_negative_min_count_rejected() {
+    let turtle = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:Shape a sh:NodeShape ;
+            sh:targetClass ex:Thing ;
+            sh:property [
+                sh:path ex:prop ;
+                sh:minCount -1
+            ] .
+    "#;
+
+    let graph = parse_turtle(turtle);
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with InvalidPropertyValue error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        "Expected InvalidPropertyValue error, got: {:?}",
+        error
+    );
+}
+
+#[test]
+fn test_negative_max_count_rejected() {
+    let turtle = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:Shape a sh:NodeShape ;
+            sh:targetClass ex:Thing ;
+            sh:property [
+                sh:path ex:prop ;
+                sh:maxCount -5
+            ] .
+    "#;
+
+    let graph = parse_turtle(turtle);
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with InvalidPropertyValue error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        "Expected InvalidPropertyValue error, got: {:?}",
+        error
+    );
+}
+
+#[test]
+fn test_negative_min_length_rejected() {
+    let turtle = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:Shape a sh:NodeShape ;
+            sh:targetClass ex:Thing ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minLength -10
+            ] .
+    "#;
+
+    let graph = parse_turtle(turtle);
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with InvalidPropertyValue error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        "Expected InvalidPropertyValue error, got: {:?}",
+        error
+    );
+}
+
+#[test]
+fn test_negative_max_length_rejected() {
+    let turtle = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:Shape a sh:NodeShape ;
+            sh:targetClass ex:Thing ;
+            sh:property [
+                sh:path ex:name ;
+                sh:maxLength -100
+            ] .
+    "#;
+
+    let graph = parse_turtle(turtle);
+    let result = ShapesGraph::from_graph(&graph);
+
+    // Should fail with InvalidPropertyValue error
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, sparshacl::ShaclParseError::InvalidPropertyValue { .. }),
+        "Expected InvalidPropertyValue error, got: {:?}",
+        error
+    );
 }

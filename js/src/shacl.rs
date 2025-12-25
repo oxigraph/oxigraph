@@ -2,6 +2,7 @@
 
 use crate::format_err;
 use crate::model::JsTerm;
+use crate::store::JsStore;
 use js_sys::Array;
 use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 use sparshacl::{ShaclValidator, ShapesGraph, ValidationReport, ValidationResult};
@@ -56,6 +57,15 @@ export class ShaclValidator {
      * @throws {Error} If the data cannot be parsed or validation fails
      */
     validate(data: string): ShaclValidationReport;
+
+    /**
+     * Validates a Store object against the shapes graph.
+     *
+     * @param store - The Store to validate
+     * @returns A validation report
+     * @throws {Error} If validation fails
+     */
+    validateStore(store: Store): ShaclValidationReport;
 }
 
 /**
@@ -206,6 +216,30 @@ impl JsShaclValidator {
             let quad = quad_result.map_err(|e| format_err!("{}", e))?;
             graph.insert(quad.as_ref());
         }
+
+        let report = self.inner.validate(&graph).map_err(|e| format_err!("{}", e))?;
+
+        Ok(JsShaclValidationReport { inner: report })
+    }
+
+    /// Validates a Store object against the shapes graph.
+    #[wasm_bindgen(js_name = validateStore)]
+    pub fn validate_store(&self, store: &JsStore) -> Result<JsShaclValidationReport, JsValue> {
+        use oxrdf::Graph;
+
+        // Extract quads from the store and build a graph (using default graph)
+        let graph = store.store.iter()
+            .filter_map(|quad_result| quad_result.ok())
+            .fold(Graph::new(), |mut g, quad| {
+                if quad.graph_name.is_default_graph() {
+                    g.insert(&oxrdf::Triple::new(
+                        quad.subject,
+                        quad.predicate,
+                        quad.object,
+                    ));
+                }
+                g
+            });
 
         let report = self.inner.validate(&graph).map_err(|e| format_err!("{}", e))?;
 
