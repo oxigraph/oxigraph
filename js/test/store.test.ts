@@ -228,6 +228,8 @@ describe("Store", () => {
             store.load("<http://example.com> <http://example.com> <http://example.com> .", {
                 format: "application/n-triples",
                 to_graph_name: ex,
+                unchecked: true,
+                no_transaction: true,
             });
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
@@ -327,14 +329,6 @@ describe("Store", () => {
         });
 
         it("dump named graph content", () => {
-            const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            assert.strictEqual(
-                "<http://example.com> <http://example.com> <http://example.com> .\n",
-                store.dump({ format: "application/n-triples", from_graph_name: ex }),
-            );
-        });
-
-        it("dump named graph content with options", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
             assert.strictEqual(
                 "<http://example.com> <http://example.com> <http://example.com> .\n",

@@ -242,6 +242,8 @@ export class Dataset {
 
     has(quad: Quad): boolean;
 
+    includes(quad: Quad): boolean;
+
     match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
 
     clear(): void;
@@ -259,12 +261,14 @@ export class Dataset {
     toString(): string;
     clone(): Dataset;
 
-    forEach(callback: (quad: Quad) => void): void;
-    filter(callback: (quad: Quad) => boolean): Dataset;
-    some(callback: (quad: Quad) => boolean): boolean;
-    every(callback: (quad: Quad) => boolean): boolean;
-    find(callback: (quad: Quad) => boolean): Quad | undefined;
+    forEach(callback: (quad: Quad) => void, thisArg?: any): void;
+    filter(callback: (quad: Quad) => boolean, thisArg?: any): Dataset;
+    some(callback: (quad: Quad) => boolean, thisArg?: any): boolean;
+    every(callback: (quad: Quad) => boolean, thisArg?: any): boolean;
+    find(callback: (quad: Quad) => boolean, thisArg?: any): Quad | undefined;
     toArray(): Quad[];
+    map<T>(callback: (quad: Quad) => T, thisArg?: any): T[];
+    reduce<T>(callback: (accumulator: T, quad: Quad) => T, initialValue: T): T;
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -1478,6 +1482,10 @@ impl JsDataset {
         Ok(self.inner.contains(&FROM_JS.with(|c| c.to_quad(quad))?))
     }
 
+    pub fn includes(&self, quad: &JsValue) -> Result<bool, JsValue> {
+        self.has(quad)
+    }
+
     #[wasm_bindgen(getter = size)]
     pub fn size(&self) -> usize {
         self.inner.len()
@@ -1610,8 +1618,12 @@ impl JsDataset {
 
     // Collection methods for JavaScript compatibility
     #[wasm_bindgen(js_name = forEach)]
-    pub fn for_each(&self, callback: &js_sys::Function) -> Result<(), JsValue> {
-        let this = JsValue::NULL;
+    pub fn for_each(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<(), JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
             callback.call1(&this, &quad_js)?;
@@ -1620,8 +1632,12 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn filter(&self, callback: &js_sys::Function) -> Result<JsDataset, JsValue> {
-        let this = JsValue::NULL;
+    pub fn filter(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<JsDataset, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         let mut filtered = Dataset::new();
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.clone().into_owned()).into();
@@ -1633,8 +1649,12 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn some(&self, callback: &js_sys::Function) -> Result<bool, JsValue> {
-        let this = JsValue::NULL;
+    pub fn some(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<bool, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
             if callback.call1(&this, &quad_js)?.is_truthy() {
@@ -1645,8 +1665,12 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn every(&self, callback: &js_sys::Function) -> Result<bool, JsValue> {
-        let this = JsValue::NULL;
+    pub fn every(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<bool, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
             if !callback.call1(&this, &quad_js)?.is_truthy() {
@@ -1657,8 +1681,12 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn find(&self, callback: &js_sys::Function) -> Result<JsValue, JsValue> {
-        let this = JsValue::NULL;
+    pub fn find(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<JsValue, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
             if callback.call1(&this, &quad_js)?.is_truthy() {
@@ -1675,5 +1703,31 @@ impl JsDataset {
             .map(|quad| JsQuad::from(quad.into_owned()).into())
             .collect::<Vec<_>>()
             .into_boxed_slice()
+    }
+
+    #[wasm_bindgen]
+    pub fn map(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
+        let mut results = Vec::new();
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            let result = callback.call1(&this, &quad_js)?;
+            results.push(result);
+        }
+        Ok(results.into_boxed_slice())
+    }
+
+    #[wasm_bindgen]
+    pub fn reduce(&self, callback: &js_sys::Function, initial_value: JsValue) -> Result<JsValue, JsValue> {
+        let mut accumulator = initial_value;
+        for quad in self.inner.iter() {
+            let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
+            accumulator = callback.call2(&JsValue::NULL, &accumulator, &quad_js)?;
+        }
+        Ok(accumulator)
     }
 }

@@ -40,6 +40,8 @@ export class Store {
 
     has(quad: Quad): boolean;
 
+    includes(quad: Quad): boolean;
+
     load(
         data: string,
         options: {
@@ -120,15 +122,15 @@ export class Store {
 
     clear(): void;
 
-    forEach(callback: (quad: Quad) => void): void;
+    forEach(callback: (quad: Quad) => void, thisArg?: any): void;
 
-    filter(predicate: (quad: Quad) => boolean): Quad[];
+    filter(predicate: (quad: Quad) => boolean, thisArg?: any): Quad[];
 
-    some(predicate: (quad: Quad) => boolean): boolean;
+    some(predicate: (quad: Quad) => boolean, thisArg?: any): boolean;
 
-    every(predicate: (quad: Quad) => boolean): boolean;
+    every(predicate: (quad: Quad) => boolean, thisArg?: any): boolean;
 
-    find(predicate: (quad: Quad) => boolean): Quad | undefined;
+    find(predicate: (quad: Quad) => boolean, thisArg?: any): Quad | undefined;
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -177,6 +179,10 @@ impl JsStore {
             .store
             .contains(&FROM_JS.with(|c| c.to_quad(quad))?)
             .map_err(JsError::from)?)
+    }
+
+    pub fn includes(&self, quad: &JsValue) -> Result<bool, JsValue> {
+        self.has(quad)
     }
 
     #[wasm_bindgen(getter=size)]
@@ -1006,8 +1012,12 @@ impl JsStore {
     /// consider using SPARQL queries or the match() method for better performance.
 
     #[wasm_bindgen(js_name = forEach)]
-    pub fn for_each(&self, callback: &Function) -> Result<(), JsValue> {
-        let this = JsValue::NULL;
+    pub fn for_each(&self, callback: &Function, this_arg: &JsValue) -> Result<(), JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self
             .store
             .quads_for_pattern(None, None, None, None)
@@ -1020,8 +1030,12 @@ impl JsStore {
         Ok(())
     }
 
-    pub fn filter(&self, predicate: &Function) -> Result<Box<[JsValue]>, JsValue> {
-        let this = JsValue::NULL;
+    pub fn filter(&self, predicate: &Function, this_arg: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         let mut results = Vec::new();
         for quad in self
             .store
@@ -1038,8 +1052,12 @@ impl JsStore {
         Ok(results.into_boxed_slice())
     }
 
-    pub fn some(&self, predicate: &Function) -> Result<bool, JsValue> {
-        let this = JsValue::NULL;
+    pub fn some(&self, predicate: &Function, this_arg: &JsValue) -> Result<bool, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self
             .store
             .quads_for_pattern(None, None, None, None)
@@ -1055,8 +1073,12 @@ impl JsStore {
         Ok(false)
     }
 
-    pub fn every(&self, predicate: &Function) -> Result<bool, JsValue> {
-        let this = JsValue::NULL;
+    pub fn every(&self, predicate: &Function, this_arg: &JsValue) -> Result<bool, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self
             .store
             .quads_for_pattern(None, None, None, None)
@@ -1072,8 +1094,12 @@ impl JsStore {
         Ok(true)
     }
 
-    pub fn find(&self, predicate: &Function) -> Result<JsValue, JsValue> {
-        let this = JsValue::NULL;
+    pub fn find(&self, predicate: &Function, this_arg: &JsValue) -> Result<JsValue, JsValue> {
+        let this = if this_arg.is_undefined() {
+            JsValue::NULL
+        } else {
+            this_arg.clone()
+        };
         for quad in self
             .store
             .quads_for_pattern(None, None, None, None)
