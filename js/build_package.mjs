@@ -18,3 +18,37 @@ pkg.repository = {
     directory: "js",
 };
 fs.writeFileSync("./pkg/package.json", JSON.stringify(pkg, null, 2));
+
+// Add Symbol.iterator support to Store and Dataset classes
+for (const file of ["./pkg/web.js", "./pkg/node.js"]) {
+    if (fs.existsSync(file)) {
+        let content = fs.readFileSync(file, "utf8");
+
+        // Find and patch Store class to add Symbol.iterator
+        // Look for the Store class and add the iterator method after the opening brace
+        if (content.includes("class Store")) {
+            // Find where the Store class definition ends (just before the final })
+            // Add Symbol.iterator method by finding the last method in the class
+            const storeMatch = content.match(/(class Store\s*{[\s\S]*?)(\n}\n)/);
+            if (storeMatch) {
+                const classContent = storeMatch[1];
+                const classEnd = storeMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(storeMatch[0], updatedClass);
+            }
+        }
+
+        // Find and patch Dataset class to add Symbol.iterator
+        if (content.includes("class Dataset")) {
+            const datasetMatch = content.match(/(class Dataset\s*{[\s\S]*?)(\n}\n)/);
+            if (datasetMatch) {
+                const classContent = datasetMatch[1];
+                const classEnd = datasetMatch[2];
+                const updatedClass = `${classContent}\n    [Symbol.iterator]() { return this.__iterator(); }${classEnd}`;
+                content = content.replace(datasetMatch[0], updatedClass);
+            }
+        }
+
+        fs.writeFileSync(file, content);
+    }
+}

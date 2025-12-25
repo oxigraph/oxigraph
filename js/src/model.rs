@@ -2,7 +2,7 @@
 
 use crate::format_err;
 use crate::io::JsCanonicalizationAlgorithm;
-use js_sys::{Reflect, UriError, try_iter};
+use js_sys::{Array, Reflect, UriError, try_iter};
 use oxigraph::model::dataset::Dataset;
 use oxigraph::model::*;
 use wasm_bindgen::prelude::*;
@@ -82,6 +82,8 @@ export class BlankNode {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "BlankNode"; value: string };
 }
 
 /**
@@ -93,6 +95,8 @@ export class DefaultGraph {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "DefaultGraph"; value: "" };
 }
 
 /**
@@ -107,10 +111,12 @@ export class Literal {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "Literal"; value: string; datatype: { termType: "NamedNode"; value: string }; language: string; direction?: "ltr" | "rtl" | "" };
 }
 
 /**
- * RDF/JS-compatible BlankNode term
+ * RDF/JS-compatible NamedNode term
  */
 export class NamedNode {
     readonly termType: "NamedNode";
@@ -118,6 +124,8 @@ export class NamedNode {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "NamedNode"; value: string };
 }
 
 /**
@@ -152,6 +160,8 @@ export class Quad implements BaseQuad {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "Quad"; value: ""; subject: any; predicate: any; object: any; graph: any };
 }
 
 /**
@@ -166,6 +176,8 @@ export class Triple {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "Triple"; value: ""; subject: any; predicate: any; object: any };
 }
 
 /**
@@ -194,6 +206,8 @@ export class Variable {
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
+    valueOf(): string;
+    toJSON(): { termType: "Variable"; value: string };
 }
 
 /**
@@ -221,17 +235,19 @@ export class Dataset {
 
     clear(): void;
 
-    quads_for_subject(subject: Quad_Subject): Quad[];
+    quadsForSubject(subject: Quad_Subject): Quad[];
 
-    quads_for_predicate(predicate: Quad_Predicate): Quad[];
+    quadsForPredicate(predicate: Quad_Predicate): Quad[];
 
-    quads_for_object(object: Quad_Object): Quad[];
+    quadsForObject(object: Quad_Object): Quad[];
 
-    quads_for_graph_name(graph: Quad_Graph): Quad[];
+    quadsForGraphName(graph: Quad_Graph): Quad[];
 
     canonicalize(algorithm: CanonicalizationAlgorithm): void;
 
     toString(): string;
+
+    [Symbol.iterator](): Iterator<Quad>;
 }
 "###;
 
@@ -393,6 +409,19 @@ impl JsNamedNode {
             false
         }
     }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        self.inner.as_str().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"NamedNode".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
+        obj.into()
+    }
 }
 
 impl From<NamedNode> for JsNamedNode {
@@ -456,6 +485,19 @@ impl JsBlankNode {
         } else {
             false
         }
+    }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        self.inner.as_str().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"BlankNode".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
+        obj.into()
     }
 }
 
@@ -538,6 +580,31 @@ impl JsLiteral {
             false
         }
     }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        self.inner.value().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"Literal".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &self.inner.value().into()).unwrap();
+        Reflect::set(&obj, &"datatype".into(), &self.datatype().to_json()).unwrap();
+        if let Some(language) = self.inner.language() {
+            Reflect::set(&obj, &"language".into(), &language.into()).unwrap();
+        } else {
+            Reflect::set(&obj, &"language".into(), &"".into()).unwrap();
+        }
+        #[cfg(feature = "rdf-12")]
+        if let Some(direction) = self.inner.direction() {
+            Reflect::set(&obj, &"direction".into(), &direction.to_string().into()).unwrap();
+        } else {
+            Reflect::set(&obj, &"direction".into(), &"".into()).unwrap();
+        }
+        obj.into()
+    }
 }
 
 impl From<Literal> for JsLiteral {
@@ -588,6 +655,19 @@ impl JsDefaultGraph {
             false
         }
     }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        String::new()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"DefaultGraph".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &"".into()).unwrap();
+        obj.into()
+    }
 }
 
 #[wasm_bindgen(js_name = Variable, skip_typescript)]
@@ -621,6 +701,19 @@ impl JsVariable {
         } else {
             false
         }
+    }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        self.inner.as_str().to_owned()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"Variable".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &self.inner.as_str().into()).unwrap();
+        obj.into()
     }
 }
 
@@ -681,6 +774,54 @@ impl JsTriple {
         } else {
             false
         }
+    }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        String::new()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"Triple".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &"".into()).unwrap();
+
+        // Convert subject, predicate, object to JSON
+        match JsTerm::from(self.inner.subject.clone()) {
+            JsTerm::NamedNode(nn) => {
+                Reflect::set(&obj, &"subject".into(), &nn.to_json()).unwrap();
+            }
+            JsTerm::BlankNode(bn) => {
+                Reflect::set(&obj, &"subject".into(), &bn.to_json()).unwrap();
+            }
+            JsTerm::Triple(t) => {
+                Reflect::set(&obj, &"subject".into(), &t.to_json()).unwrap();
+            }
+            _ => {}
+        }
+
+        if let JsTerm::NamedNode(nn) = JsTerm::from(self.inner.predicate.clone()) {
+            Reflect::set(&obj, &"predicate".into(), &nn.to_json()).unwrap();
+        }
+
+        match JsTerm::from(self.inner.object.clone()) {
+            JsTerm::NamedNode(nn) => {
+                Reflect::set(&obj, &"object".into(), &nn.to_json()).unwrap();
+            }
+            JsTerm::BlankNode(bn) => {
+                Reflect::set(&obj, &"object".into(), &bn.to_json()).unwrap();
+            }
+            JsTerm::Literal(lit) => {
+                Reflect::set(&obj, &"object".into(), &lit.to_json()).unwrap();
+            }
+            JsTerm::Triple(t) => {
+                Reflect::set(&obj, &"object".into(), &t.to_json()).unwrap();
+            }
+            _ => {}
+        }
+
+        obj.into()
     }
 }
 
@@ -751,6 +892,73 @@ impl JsQuad {
         } else {
             false
         }
+    }
+
+    #[wasm_bindgen(js_name = valueOf)]
+    pub fn value_of(&self) -> String {
+        String::new()
+    }
+
+    #[wasm_bindgen(js_name = toJSON)]
+    pub fn to_json(&self) -> JsValue {
+        let obj = js_sys::Object::new();
+        Reflect::set(&obj, &"termType".into(), &"Quad".into()).unwrap();
+        Reflect::set(&obj, &"value".into(), &"".into()).unwrap();
+
+        // Convert subject, predicate, object, graph to JSON
+        match JsTerm::from(self.inner.subject.clone()) {
+            JsTerm::NamedNode(nn) => {
+                Reflect::set(&obj, &"subject".into(), &nn.to_json()).unwrap();
+            }
+            JsTerm::BlankNode(bn) => {
+                Reflect::set(&obj, &"subject".into(), &bn.to_json()).unwrap();
+            }
+            JsTerm::Triple(t) => {
+                Reflect::set(&obj, &"subject".into(), &t.to_json()).unwrap();
+            }
+            JsTerm::Quad(q) => {
+                Reflect::set(&obj, &"subject".into(), &q.to_json()).unwrap();
+            }
+            _ => {}
+        }
+
+        if let JsTerm::NamedNode(nn) = JsTerm::from(self.inner.predicate.clone()) {
+            Reflect::set(&obj, &"predicate".into(), &nn.to_json()).unwrap();
+        }
+
+        match JsTerm::from(self.inner.object.clone()) {
+            JsTerm::NamedNode(nn) => {
+                Reflect::set(&obj, &"object".into(), &nn.to_json()).unwrap();
+            }
+            JsTerm::BlankNode(bn) => {
+                Reflect::set(&obj, &"object".into(), &bn.to_json()).unwrap();
+            }
+            JsTerm::Literal(lit) => {
+                Reflect::set(&obj, &"object".into(), &lit.to_json()).unwrap();
+            }
+            JsTerm::Triple(t) => {
+                Reflect::set(&obj, &"object".into(), &t.to_json()).unwrap();
+            }
+            JsTerm::Quad(q) => {
+                Reflect::set(&obj, &"object".into(), &q.to_json()).unwrap();
+            }
+            _ => {}
+        }
+
+        match JsTerm::from(self.inner.graph_name.clone()) {
+            JsTerm::NamedNode(nn) => {
+                Reflect::set(&obj, &"graph".into(), &nn.to_json()).unwrap();
+            }
+            JsTerm::BlankNode(bn) => {
+                Reflect::set(&obj, &"graph".into(), &bn.to_json()).unwrap();
+            }
+            JsTerm::DefaultGraph(dg) => {
+                Reflect::set(&obj, &"graph".into(), &dg.to_json()).unwrap();
+            }
+            _ => {}
+        }
+
+        obj.into()
     }
 }
 
@@ -1258,6 +1466,7 @@ impl JsDataset {
         self.inner.clear();
     }
 
+    #[wasm_bindgen(js_name = quadsForSubject)]
     pub fn quads_for_subject(&self, subject: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
         let subject = FROM_JS.with(|c| c.to_term(subject))?;
         let subject = NamedOrBlankNode::try_from(subject)?;
@@ -1269,6 +1478,7 @@ impl JsDataset {
             .into_boxed_slice())
     }
 
+    #[wasm_bindgen(js_name = quadsForPredicate)]
     pub fn quads_for_predicate(&self, predicate: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
         let predicate = FROM_JS.with(|c| c.to_term(predicate))?;
         let predicate = NamedNode::try_from(predicate)?;
@@ -1280,6 +1490,7 @@ impl JsDataset {
             .into_boxed_slice())
     }
 
+    #[wasm_bindgen(js_name = quadsForObject)]
     pub fn quads_for_object(&self, object: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
         let object = FROM_JS.with(|c| c.to_term(object))?;
         let object = Term::try_from(object)?;
@@ -1291,6 +1502,7 @@ impl JsDataset {
             .into_boxed_slice())
     }
 
+    #[wasm_bindgen(js_name = quadsForGraphName)]
     pub fn quads_for_graph_name(&self, graph_name: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
         let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
         let graph_name = GraphName::try_from(graph_name)?;
@@ -1309,5 +1521,17 @@ impl JsDataset {
     #[wasm_bindgen(js_name = toString)]
     pub fn to_string(&self) -> String {
         self.inner.to_string()
+    }
+
+    // Symbol.iterator implementation - must be manually wired up in JavaScript
+    // as wasm-bindgen doesn't support computed property names
+    #[wasm_bindgen(skip_typescript)]
+    pub fn __iterator(&self) -> JsValue {
+        let quads: Vec<JsValue> = self
+            .inner
+            .iter()
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect();
+        Array::from_iter(quads).values().into()
     }
 }

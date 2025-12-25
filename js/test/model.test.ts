@@ -278,47 +278,47 @@ describe("DataModel", () => {
             });
         });
 
-        describe("#quads_for_subject()", () => {
+        describe("#quadsForSubject()", () => {
             it("should return quads matching subject", () => {
                 const dataset = new oxigraph.Dataset([
                     dataModel.quad(ex, ex, ex),
                     dataModel.quad(ex, ex, ex2),
                     dataModel.quad(ex2, ex, ex),
                 ]);
-                const results = dataset.quads_for_subject(ex);
+                const results = dataset.quadsForSubject(ex);
                 assert.strictEqual(2, results.length);
             });
         });
 
-        describe("#quads_for_predicate()", () => {
+        describe("#quadsForPredicate()", () => {
             it("should return quads matching predicate", () => {
                 const dataset = new oxigraph.Dataset([
                     dataModel.quad(ex, ex, ex),
                     dataModel.quad(ex, ex2, ex),
                 ]);
-                const results = dataset.quads_for_predicate(ex2);
+                const results = dataset.quadsForPredicate(ex2);
                 assert.strictEqual(1, results.length);
             });
         });
 
-        describe("#quads_for_object()", () => {
+        describe("#quadsForObject()", () => {
             it("should return quads matching object", () => {
                 const dataset = new oxigraph.Dataset([
                     dataModel.quad(ex, ex, ex),
                     dataModel.quad(ex, ex, ex2),
                 ]);
-                const results = dataset.quads_for_object(ex2);
+                const results = dataset.quadsForObject(ex2);
                 assert.strictEqual(1, results.length);
             });
         });
 
-        describe("#quads_for_graph_name()", () => {
+        describe("#quadsForGraphName()", () => {
             it("should return quads matching graph", () => {
                 const dataset = new oxigraph.Dataset([
                     dataModel.quad(ex, ex, ex, ex),
                     dataModel.quad(ex, ex, ex, ex2),
                 ]);
-                const results = dataset.quads_for_graph_name(ex2);
+                const results = dataset.quadsForGraphName(ex2);
                 assert.strictEqual(1, results.length);
             });
 
@@ -327,8 +327,40 @@ describe("DataModel", () => {
                     dataModel.quad(ex, ex, ex),
                     dataModel.quad(ex, ex, ex2, ex),
                 ]);
-                const results = dataset.quads_for_graph_name(dataModel.defaultGraph());
+                const results = dataset.quadsForGraphName(dataModel.defaultGraph());
                 assert.strictEqual(1, results.length);
+            });
+        });
+
+        describe("#[Symbol.iterator]()", () => {
+            it("should make Dataset iterable with for...of", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const quads: oxigraph.Quad[] = [];
+                for (const quad of dataset) {
+                    quads.push(quad);
+                }
+                assert.strictEqual(3, quads.length);
+            });
+
+            it("should work with spread operator", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                ]);
+                const quads = [...dataset];
+                assert.strictEqual(2, quads.length);
+            });
+
+            it("should work with Array.from()", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const quads = Array.from(dataset);
+                assert.strictEqual(1, quads.length);
             });
         });
     });

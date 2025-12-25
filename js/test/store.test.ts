@@ -145,7 +145,7 @@ describe("Store", () => {
                 dataModel.quad(ex, ex, ex, ex2),
             ]);
             const results = store.query("SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }", {
-                named_graphs: [ex],
+                namedGraphs: [ex],
             }) as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
@@ -271,10 +271,10 @@ describe("Store", () => {
         });
     });
 
-    describe("#bulk_load()", () => {
+    describe("#bulkLoad()", () => {
         it("bulk load NTriples in the default graph", () => {
             const store = new Store();
-            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+            store.bulkLoad("<http://example.com> <http://example.com> <http://example.com> .", {
                 format: "application/n-triples",
             });
             assert(store.has(dataModel.quad(ex, ex, ex)));
@@ -282,7 +282,7 @@ describe("Store", () => {
 
         it("bulk load NTriples in another graph", () => {
             const store = new Store();
-            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+            store.bulkLoad("<http://example.com> <http://example.com> <http://example.com> .", {
                 format: "application/n-triples",
                 to_graph_name: ex,
             });
@@ -291,7 +291,7 @@ describe("Store", () => {
 
         it("bulk load Turtle with a base IRI", () => {
             const store = new Store();
-            store.bulk_load("<http://example.com> <http://example.com> <> .", {
+            store.bulkLoad("<http://example.com> <http://example.com> <> .", {
                 base_iri: "http://example.com",
                 format: "text/turtle",
             });
@@ -300,7 +300,7 @@ describe("Store", () => {
 
         it("bulk load NQuads", () => {
             const store = new Store();
-            store.bulk_load(
+            store.bulkLoad(
                 "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .",
                 { format: "application/n-quads" },
             );
@@ -309,7 +309,7 @@ describe("Store", () => {
 
         it("bulk load with lenient option", () => {
             const store = new Store();
-            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+            store.bulkLoad("<http://example.com> <http://example.com> <http://example.com> .", {
                 format: "application/n-triples",
                 lenient: true,
             });
@@ -354,27 +354,27 @@ describe("Store", () => {
         });
     });
 
-    describe("#is_empty()", () => {
+    describe("#isEmpty()", () => {
         it("should return true for empty store", () => {
             const store = new Store();
-            assert.strictEqual(true, store.is_empty());
+            assert.strictEqual(true, store.isEmpty());
         });
 
         it("should return false for non-empty store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
-            assert.strictEqual(false, store.is_empty());
+            assert.strictEqual(false, store.isEmpty());
         });
 
         it("should return true after clearing store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
             store.clear();
-            assert.strictEqual(true, store.is_empty());
+            assert.strictEqual(true, store.isEmpty());
         });
 
         it("should return false after adding quad", () => {
             const store = new Store();
             store.add(dataModel.quad(ex, ex, ex));
-            assert.strictEqual(false, store.is_empty());
+            assert.strictEqual(false, store.isEmpty());
         });
     });
 
@@ -404,58 +404,58 @@ describe("Store", () => {
         });
     });
 
-    describe("#named_graphs()", () => {
+    describe("#namedGraphs()", () => {
         it("should return all named graphs", () => {
             const store = new Store([
                 dataModel.quad(ex, ex, ex, ex),
                 dataModel.quad(ex, ex, ex, ex2),
             ]);
-            const graphs = store.named_graphs();
+            const graphs = store.namedGraphs();
             assert.strictEqual(2, graphs.length);
         });
     });
 
-    describe("#contains_named_graph()", () => {
+    describe("#containsNamedGraph()", () => {
         it("should return true for existing graph", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            assert.strictEqual(true, store.contains_named_graph(ex));
+            assert.strictEqual(true, store.containsNamedGraph(ex));
         });
 
         it("should return false for non-existing graph", () => {
             const store = new Store();
-            assert.strictEqual(false, store.contains_named_graph(ex));
+            assert.strictEqual(false, store.containsNamedGraph(ex));
         });
 
         it("should return true for default graph", () => {
             const store = new Store();
-            assert.strictEqual(true, store.contains_named_graph(dataModel.defaultGraph()));
+            assert.strictEqual(true, store.containsNamedGraph(dataModel.defaultGraph()));
         });
     });
 
-    describe("#add_graph()", () => {
+    describe("#addGraph()", () => {
         it("should add an empty named graph", () => {
             const store = new Store();
-            store.add_graph(ex);
-            assert.strictEqual(true, store.contains_named_graph(ex));
+            store.addGraph(ex);
+            assert.strictEqual(true, store.containsNamedGraph(ex));
             assert.strictEqual(0, store.size);
         });
     });
 
-    describe("#clear_graph()", () => {
+    describe("#clearGraph()", () => {
         it("should clear quads from a graph without removing it", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            store.clear_graph(ex);
+            store.clearGraph(ex);
             assert.strictEqual(0, store.size);
-            assert.strictEqual(true, store.contains_named_graph(ex));
+            assert.strictEqual(true, store.containsNamedGraph(ex));
         });
     });
 
-    describe("#remove_graph()", () => {
+    describe("#removeGraph()", () => {
         it("should remove a named graph entirely", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            store.remove_graph(ex);
+            store.removeGraph(ex);
             assert.strictEqual(0, store.size);
-            assert.strictEqual(false, store.contains_named_graph(ex));
+            assert.strictEqual(false, store.containsNamedGraph(ex));
         });
     });
 
@@ -467,6 +467,38 @@ describe("Store", () => {
             ]);
             store.clear();
             assert.strictEqual(0, store.size);
+        });
+    });
+
+    describe("#[Symbol.iterator]()", () => {
+        it("should make Store iterable with for...of", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+                dataModel.quad(ex, ex, dataModel.literal("3")),
+            ]);
+            const quads: Quad[] = [];
+            for (const quad of store) {
+                quads.push(quad);
+            }
+            assert.strictEqual(3, quads.length);
+        });
+
+        it("should work with spread operator", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+                dataModel.quad(ex, ex, dataModel.literal("2")),
+            ]);
+            const quads = [...store];
+            assert.strictEqual(2, quads.length);
+        });
+
+        it("should work with Array.from()", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, dataModel.literal("1")),
+            ]);
+            const quads = Array.from(store);
+            assert.strictEqual(1, quads.length);
         });
     });
 });

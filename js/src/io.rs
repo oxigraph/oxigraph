@@ -24,13 +24,13 @@ export class RdfFormat {
     static readonly JSON_LD: RdfFormat;
 
     readonly iri: string;
-    readonly media_type: string;
-    readonly file_extension: string;
+    readonly mediaType: string;
+    readonly fileExtension: string;
     readonly name: string;
-    readonly supports_datasets: boolean;
+    readonly supportsDatasets: boolean;
 
-    static from_media_type(media_type: string): RdfFormat | null;
-    static from_extension(extension: string): RdfFormat | null;
+    static fromMediaType(mediaType: string): RdfFormat | null;
+    static fromExtension(extension: string): RdfFormat | null;
     toString(): string;
 }
 
@@ -44,12 +44,12 @@ export class QueryResultsFormat {
     static readonly XML: QueryResultsFormat;
 
     readonly iri: string;
-    readonly media_type: string;
-    readonly file_extension: string;
+    readonly mediaType: string;
+    readonly fileExtension: string;
     readonly name: string;
 
-    static from_media_type(media_type: string): QueryResultsFormat | null;
-    static from_extension(extension: string): QueryResultsFormat | null;
+    static fromMediaType(mediaType: string): QueryResultsFormat | null;
+    static fromExtension(extension: string): QueryResultsFormat | null;
     toString(): string;
 }
 
@@ -60,9 +60,9 @@ export function parse(
     data: string,
     format: RdfFormat,
     options?: {
-        base_iri?: NamedNode | string;
-        without_named_graphs?: boolean;
-        rename_blank_nodes?: boolean;
+        baseIri?: NamedNode | string;
+        withoutNamedGraphs?: boolean;
+        renameBlankNodes?: boolean;
         lenient?: boolean;
     }
 ): Quad[];
@@ -76,9 +76,9 @@ export function parseAsync(
     data: string,
     format: RdfFormat,
     options?: {
-        base_iri?: NamedNode | string;
-        without_named_graphs?: boolean;
-        rename_blank_nodes?: boolean;
+        baseIri?: NamedNode | string;
+        withoutNamedGraphs?: boolean;
+        renameBlankNodes?: boolean;
         lenient?: boolean;
     }
 ): Promise<Quad[]>;
@@ -91,7 +91,7 @@ export function serialize(
     format: RdfFormat,
     options?: {
         prefixes?: Record<string, string>;
-        base_iri?: NamedNode | string;
+        baseIri?: NamedNode | string;
     }
 ): string;
 
@@ -105,7 +105,7 @@ export function serializeAsync(
     format: RdfFormat,
     options?: {
         prefixes?: Record<string, string>;
-        base_iri?: NamedNode | string;
+        baseIri?: NamedNode | string;
     }
 ): Promise<string>;
 
@@ -145,7 +145,7 @@ export function canonicalize(
 export class QuadParser {
     readonly quads: Quad[];
     readonly prefixes: Record<string, string>;
-    readonly base_iri: string | null;
+    readonly baseIri: string | null;
 }
 
 /**
@@ -155,9 +155,9 @@ export function parseWithMetadata(
     data: string,
     format: RdfFormat,
     options?: {
-        base_iri?: NamedNode | string;
-        without_named_graphs?: boolean;
-        rename_blank_nodes?: boolean;
+        baseIri?: NamedNode | string;
+        withoutNamedGraphs?: boolean;
+        renameBlankNodes?: boolean;
         lenient?: boolean;
     }
 ): QuadParser;
@@ -247,13 +247,13 @@ impl JsRdfFormat {
     }
 
     /// The format IANA media type
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = mediaType)]
     pub fn media_type(&self) -> String {
         self.inner.media_type().to_owned()
     }
 
     /// The format IANA-registered file extension
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = fileExtension)]
     pub fn file_extension(&self) -> String {
         self.inner.file_extension().to_owned()
     }
@@ -265,19 +265,19 @@ impl JsRdfFormat {
     }
 
     /// Whether the format supports RDF datasets (not just graphs)
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = supportsDatasets)]
     pub fn supports_datasets(&self) -> bool {
         self.inner.supports_datasets()
     }
 
     /// Looks for a known format from a media type
-    #[wasm_bindgen(js_name = from_media_type)]
+    #[wasm_bindgen(js_name = fromMediaType)]
     pub fn from_media_type(media_type: &str) -> Option<JsRdfFormat> {
         RdfFormat::from_media_type(media_type).map(|inner| Self { inner })
     }
 
     /// Looks for a known format from a file extension
-    #[wasm_bindgen(js_name = from_extension)]
+    #[wasm_bindgen(js_name = fromExtension)]
     pub fn from_extension(extension: &str) -> Option<JsRdfFormat> {
         RdfFormat::from_extension(extension).map(|inner| Self { inner })
     }
@@ -355,13 +355,13 @@ impl JsQueryResultsFormat {
     }
 
     /// The format IANA media type
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = mediaType)]
     pub fn media_type(&self) -> String {
         self.inner.media_type().to_owned()
     }
 
     /// The format IANA-registered file extension
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = fileExtension)]
     pub fn file_extension(&self) -> String {
         self.inner.file_extension().to_owned()
     }
@@ -373,13 +373,13 @@ impl JsQueryResultsFormat {
     }
 
     /// Looks for a known format from a media type
-    #[wasm_bindgen(js_name = from_media_type)]
+    #[wasm_bindgen(js_name = fromMediaType)]
     pub fn from_media_type(media_type: &str) -> Option<JsQueryResultsFormat> {
         QueryResultsFormat::from_media_type(media_type).map(|inner| Self { inner })
     }
 
     /// Looks for a known format from a file extension
-    #[wasm_bindgen(js_name = from_extension)]
+    #[wasm_bindgen(js_name = fromExtension)]
     pub fn from_extension(extension: &str) -> Option<JsQueryResultsFormat> {
         QueryResultsFormat::from_extension(extension).map(|inner| Self { inner })
     }
@@ -420,7 +420,7 @@ impl From<JsQueryResultsFormat> for QueryResultsFormat {
 /// import { parse, RdfFormat } from 'oxigraph';
 ///
 /// const quads = parse('<s> <p> <o> .', RdfFormat.TURTLE, {
-///   base_iri: 'http://example.com/'
+///   baseIri: 'http://example.com/'
 /// });
 /// ```
 #[wasm_bindgen(skip_typescript)]
@@ -436,13 +436,13 @@ pub fn parse(
     let mut lenient = false;
 
     if !options.is_undefined() && !options.is_null() {
-        let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("baseIri"))?;
         base_iri = convert_base_iri(&js_base_iri)?;
 
         without_named_graphs =
-            Reflect::get(options, &JsValue::from_str("without_named_graphs"))?.is_truthy();
+            Reflect::get(options, &JsValue::from_str("withoutNamedGraphs"))?.is_truthy();
         rename_blank_nodes =
-            Reflect::get(options, &JsValue::from_str("rename_blank_nodes"))?.is_truthy();
+            Reflect::get(options, &JsValue::from_str("renameBlankNodes"))?.is_truthy();
         lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
     }
 
@@ -498,7 +498,7 @@ pub fn parse(
 /// import { parseAsync, RdfFormat } from 'oxigraph';
 ///
 /// const quads = await parseAsync('<s> <p> <o> .', RdfFormat.TURTLE, {
-///   base_iri: 'http://example.com/'
+///   baseIri: 'http://example.com/'
 /// });
 /// ```
 #[wasm_bindgen(js_name = parseAsync, skip_typescript)]
@@ -511,13 +511,13 @@ pub fn parse_async(data: String, format: JsRdfFormat, options: JsValue) -> Promi
         let mut lenient = false;
 
         if !options.is_undefined() && !options.is_null() {
-            let js_base_iri = Reflect::get(&options, &JsValue::from_str("base_iri"))?;
+            let js_base_iri = Reflect::get(&options, &JsValue::from_str("baseIri"))?;
             base_iri = convert_base_iri(&js_base_iri)?;
 
             without_named_graphs =
-                Reflect::get(&options, &JsValue::from_str("without_named_graphs"))?.is_truthy();
+                Reflect::get(&options, &JsValue::from_str("withoutNamedGraphs"))?.is_truthy();
             rename_blank_nodes =
-                Reflect::get(&options, &JsValue::from_str("rename_blank_nodes"))?.is_truthy();
+                Reflect::get(&options, &JsValue::from_str("renameBlankNodes"))?.is_truthy();
             lenient = Reflect::get(&options, &JsValue::from_str("lenient"))?.is_truthy();
         }
 
@@ -618,7 +618,7 @@ pub fn serialize(
             prefixes = Some(prefix_map);
         }
 
-        let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("baseIri"))?;
         base_iri = convert_base_iri(&js_base_iri)?;
     }
 
@@ -725,7 +725,7 @@ pub fn serialize_async(quads: JsValue, format: JsRdfFormat, options: JsValue) ->
                 prefixes = Some(prefix_map);
             }
 
-            let js_base_iri = Reflect::get(&options, &JsValue::from_str("base_iri"))?;
+            let js_base_iri = Reflect::get(&options, &JsValue::from_str("baseIri"))?;
             base_iri = convert_base_iri(&js_base_iri)?;
         }
 
@@ -969,7 +969,7 @@ impl JsQuadParser {
     }
 
     /// The base IRI used during parsing
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = baseIri)]
     pub fn base_iri(&self) -> Option<String> {
         self.base_iri.clone()
     }
@@ -999,7 +999,7 @@ impl JsQuadParser {
 ///
 /// console.log(result.quads);       // Array of quads
 /// console.log(result.prefixes);    // { ex: "http://example.com/" }
-/// console.log(result.base_iri);    // null (no base IRI specified)
+/// console.log(result.baseIri);     // null (no base IRI specified)
 /// ```
 #[wasm_bindgen(js_name = parseWithMetadata, skip_typescript)]
 pub fn parse_with_metadata(
@@ -1014,13 +1014,13 @@ pub fn parse_with_metadata(
     let mut lenient = false;
 
     if !options.is_undefined() && !options.is_null() {
-        let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("baseIri"))?;
         base_iri = convert_base_iri(&js_base_iri)?;
 
         without_named_graphs =
-            Reflect::get(options, &JsValue::from_str("without_named_graphs"))?.is_truthy();
+            Reflect::get(options, &JsValue::from_str("withoutNamedGraphs"))?.is_truthy();
         rename_blank_nodes =
-            Reflect::get(options, &JsValue::from_str("rename_blank_nodes"))?.is_truthy();
+            Reflect::get(options, &JsValue::from_str("renameBlankNodes"))?.is_truthy();
         lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
     }
 

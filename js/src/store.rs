@@ -18,6 +18,7 @@ use wasm_bindgen::prelude::*;
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 export class Store {
     readonly size: number;
+    readonly length: number;
 
     constructor(quads?: Iterable<Quad>);
 
@@ -73,7 +74,7 @@ export class Store {
 
     extend(quads: Iterable<Quad>): void;
 
-    bulk_load(
+    bulkLoad(
         data: string,
         options: {
             base_iri?: NamedNode | string;
@@ -83,17 +84,19 @@ export class Store {
         }
     ): void;
 
-    named_graphs(): (BlankNode | NamedNode)[];
+    namedGraphs(): (BlankNode | NamedNode)[];
 
-    contains_named_graph(graph_name: BlankNode | DefaultGraph | NamedNode): boolean;
+    containsNamedGraph(graph_name: BlankNode | DefaultGraph | NamedNode): boolean;
 
-    add_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+    addGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
-    clear_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+    clearGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
-    remove_graph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
+    removeGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
     clear(): void;
+
+    [Symbol.iterator](): Iterator<Quad>;
 }
 "###;
 
@@ -144,6 +147,11 @@ impl JsStore {
 
     #[wasm_bindgen(getter=size)]
     pub fn size(&self) -> Result<usize, JsError> {
+        Ok(self.store.len()?)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn length(&self) -> Result<usize, JsError> {
         Ok(self.store.len()?)
     }
 
@@ -596,6 +604,7 @@ impl JsStore {
         Ok(())
     }
 
+    #[wasm_bindgen(js_name = bulkLoad)]
     pub fn bulk_load(&self, data: &str, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut format = None;
@@ -636,6 +645,7 @@ impl JsStore {
         Ok(())
     }
 
+    #[wasm_bindgen(js_name = namedGraphs)]
     pub fn named_graphs(&self) -> Result<Box<[JsValue]>, JsValue> {
         Ok(self
             .store
@@ -654,6 +664,7 @@ impl JsStore {
             .into_boxed_slice())
     }
 
+    #[wasm_bindgen(js_name = containsNamedGraph)]
     pub fn contains_named_graph(&self, graph_name: &JsValue) -> Result<bool, JsValue> {
         let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
         let graph_name_ref = GraphName::try_from(graph_name)?;
@@ -665,6 +676,7 @@ impl JsStore {
         Ok(result.map_err(JsError::from)?)
     }
 
+    #[wasm_bindgen(js_name = addGraph)]
     pub fn add_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
         let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
         let graph_name_ref = GraphName::try_from(graph_name)?;
@@ -677,6 +689,7 @@ impl JsStore {
         Ok(())
     }
 
+    #[wasm_bindgen(js_name = clearGraph)]
     pub fn clear_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
         let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
         let graph_name_ref = GraphName::try_from(graph_name)?;
@@ -686,6 +699,7 @@ impl JsStore {
         Ok(())
     }
 
+    #[wasm_bindgen(js_name = removeGraph)]
     pub fn remove_graph(&self, graph_name: &JsValue) -> Result<(), JsValue> {
         let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
         let graph_name_ref = GraphName::try_from(graph_name)?;
@@ -701,6 +715,19 @@ impl JsStore {
     pub fn clear(&self) -> Result<(), JsValue> {
         self.store.clear().map_err(JsError::from)?;
         Ok(())
+    }
+
+    // Symbol.iterator implementation - must be manually wired up in JavaScript
+    // as wasm-bindgen doesn't support computed property names
+    #[wasm_bindgen(skip_typescript)]
+    pub fn __iterator(&self) -> Result<JsValue, JsValue> {
+        let quads = self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .map(|v| v.map(|v| JsQuad::from(v).into()))
+            .collect::<Result<Vec<JsValue>, _>>()
+            .map_err(JsError::from)?;
+        Ok(Array::from_iter(quads).values().into())
     }
 }
 
