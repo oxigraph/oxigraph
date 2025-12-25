@@ -269,6 +269,8 @@ export class Dataset {
     toArray(): Quad[];
     map<T>(callback: (quad: Quad) => T, thisArg?: any): T[];
     reduce<T>(callback: (accumulator: T, quad: Quad) => T, initialValue: T): T;
+    at(index: number): Quad | undefined;
+    slice(start?: number, end?: number): Quad[];
 
     [Symbol.iterator](): Iterator<Quad>;
 }
@@ -1729,5 +1731,33 @@ impl JsDataset {
             accumulator = callback.call2(&JsValue::NULL, &accumulator, &quad_js)?;
         }
         Ok(accumulator)
+    }
+
+    pub fn at(&self, index: i32) -> JsValue {
+        let quads: Vec<_> = self.inner.iter().collect();
+        let len = quads.len() as i32;
+        let idx = if index < 0 { len + index } else { index };
+
+        if idx < 0 || idx >= len {
+            JsValue::UNDEFINED
+        } else {
+            JsQuad::from(quads[idx as usize].clone().into_owned()).into()
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn slice(&self, start: Option<i32>, end: Option<i32>) -> Box<[JsValue]> {
+        let quads: Vec<JsValue> = self.inner.iter()
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect();
+
+        let len = quads.len() as i32;
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(len);
+
+        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
+        let end = if end < 0 { (len + end).max(0) } else { end.min(len) } as usize;
+
+        quads[start..end.max(start)].to_vec().into_boxed_slice()
     }
 }

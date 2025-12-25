@@ -711,6 +711,348 @@ describe("Store", () => {
         });
     });
 
+    describe("Advanced collection methods", () => {
+        describe("#map()", () => {
+            it("should transform quads", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex2, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const subjects = store.map((q) => q.subject.value);
+                assert.strictEqual(3, subjects.length);
+                assert(subjects.includes(ex.value));
+                assert(subjects.includes(ex2.value));
+            });
+
+            it("should work with empty store", () => {
+                const store = new Store();
+                const result = store.map((q) => q.subject.value);
+                assert.strictEqual(0, result.length);
+            });
+
+            it("should transform to different types", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                ]);
+                const objectValues = store.map((q) => q.object.value);
+                assert.strictEqual(2, objectValues.length);
+                assert(objectValues.includes("1"));
+                assert(objectValues.includes("2"));
+            });
+
+            it("should support thisArg parameter", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const context = { prefix: "value:" };
+                const result = store.map(function(q) {
+                    return this.prefix + q.object.value;
+                }, context);
+                assert.strictEqual(1, result.length);
+                assert.strictEqual("value:1", result[0]);
+            });
+        });
+
+        describe("#reduce()", () => {
+            it("should accumulate values", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const count = store.reduce((acc, q) => acc + 1, 0);
+                assert.strictEqual(count, store.size);
+            });
+
+            it("should work with empty store and initial value", () => {
+                const store = new Store();
+                const result = store.reduce((acc, q) => acc + 1, 42);
+                assert.strictEqual(42, result);
+            });
+
+            it("should accumulate quad properties", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex2, ex, dataModel.literal("2")),
+                ]);
+                const subjects = store.reduce((acc, q) => {
+                    acc.push(q.subject.value);
+                    return acc;
+                }, [] as string[]);
+                assert.strictEqual(2, subjects.length);
+                assert(subjects.includes(ex.value));
+                assert(subjects.includes(ex2.value));
+            });
+
+            it("should sum numeric values", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const sum = store.reduce((acc, q) => acc + Number(q.object.value), 0);
+                assert.strictEqual(6, sum);
+            });
+        });
+
+        describe("#flatMap()", () => {
+            it("should map and flatten results", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex2, ex, dataModel.literal("2")),
+                ]);
+                const result = store.flatMap((q) => [q.subject.value, q.object.value]);
+                assert.strictEqual(4, result.length);
+                assert(result.includes(ex.value));
+                assert(result.includes(ex2.value));
+                assert(result.includes("1"));
+                assert(result.includes("2"));
+            });
+
+            it("should work with empty store", () => {
+                const store = new Store();
+                const result = store.flatMap((q) => [q.subject, q.object]);
+                assert.strictEqual(0, result.length);
+            });
+
+            it("should flatten nested arrays", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("a")),
+                ]);
+                const result = store.flatMap((q) => [[q.subject.value], [q.object.value]]);
+                assert.strictEqual(2, result.length);
+            });
+
+            it("should support thisArg parameter", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const context = { multiplier: 2 };
+                const result = store.flatMap(function(q) {
+                    return Array(this.multiplier).fill(q.object.value);
+                }, context);
+                assert.strictEqual(2, result.length);
+                assert.strictEqual("1", result[0]);
+                assert.strictEqual("1", result[1]);
+            });
+        });
+
+        describe("#includes()", () => {
+            it("should work as alias for has()", () => {
+                const store = new Store([dataModel.quad(ex, ex, ex)]);
+                assert.strictEqual(true, store.includes(dataModel.quad(ex, ex, ex)));
+            });
+
+            it("should return false for non-existent quad", () => {
+                const store = new Store([dataModel.quad(ex, ex, ex)]);
+                assert.strictEqual(false, store.includes(dataModel.quad(ex2, ex2, ex2)));
+            });
+
+            it("should work with empty store", () => {
+                const store = new Store();
+                assert.strictEqual(false, store.includes(dataModel.quad(ex, ex, ex)));
+            });
+
+            it("should check graph component", () => {
+                const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+                assert.strictEqual(true, store.includes(dataModel.quad(ex, ex, ex, ex)));
+                assert.strictEqual(false, store.includes(dataModel.quad(ex, ex, ex)));
+            });
+        });
+
+        describe("#indexOf()", () => {
+            it("should find quad index", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const quad2 = dataModel.quad(ex, ex, dataModel.literal("2"));
+                const index = store.indexOf(quad2);
+                assert(index >= 0 && index < 3);
+            });
+
+            it("should return -1 for non-existent quad", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const index = store.indexOf(dataModel.quad(ex2, ex2, ex2));
+                assert.strictEqual(-1, index);
+            });
+
+            it("should return -1 for empty store", () => {
+                const store = new Store();
+                const index = store.indexOf(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(-1, index);
+            });
+
+            it("should find first quad", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                ]);
+                const quad1 = dataModel.quad(ex, ex, dataModel.literal("1"));
+                const index = store.indexOf(quad1);
+                assert.strictEqual(0, index);
+            });
+        });
+
+        describe("#findIndex()", () => {
+            it("should find index by predicate", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const index = store.findIndex((q) => q.object.value === "2");
+                assert(index >= 0 && index < 3);
+                const allQuads = Array.from(store);
+                assert.strictEqual("2", allQuads[index].object.value);
+            });
+
+            it("should return -1 if no match", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const index = store.findIndex((q) => q.object.value === "99");
+                assert.strictEqual(-1, index);
+            });
+
+            it("should return -1 for empty store", () => {
+                const store = new Store();
+                const index = store.findIndex(() => true);
+                assert.strictEqual(-1, index);
+            });
+
+            it("should find first matching index", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex2, ex, dataModel.literal("2")),
+                ]);
+                const index = store.findIndex((q) => q.subject.value === ex.value);
+                assert.strictEqual(0, index);
+            });
+
+            it("should support thisArg parameter", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                ]);
+                const context = { target: "2" };
+                const index = store.findIndex(function(q) {
+                    return q.object.value === this.target;
+                }, context);
+                assert(index >= 0);
+            });
+        });
+
+        describe("#slice()", () => {
+            it("should get portion of quads", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                    dataModel.quad(ex, ex, dataModel.literal("4")),
+                ]);
+                const slice = store.slice(1, 3);
+                assert.strictEqual(2, slice.length);
+            });
+
+            it("should work with start only", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const slice = store.slice(1);
+                assert.strictEqual(2, slice.length);
+            });
+
+            it("should work with negative indices", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const slice = store.slice(-2);
+                assert.strictEqual(2, slice.length);
+            });
+
+            it("should return empty array for out of bounds", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                const slice = store.slice(10);
+                assert.strictEqual(0, slice.length);
+            });
+
+            it("should work with empty store", () => {
+                const store = new Store();
+                const slice = store.slice(0, 1);
+                assert.strictEqual(0, slice.length);
+            });
+        });
+
+        describe("#at()", () => {
+            it("should get quad at positive index", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const quad = store.at(1);
+                assert(quad !== undefined);
+                assert.strictEqual("2", quad.object.value);
+            });
+
+            it("should get quad at negative index", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                    dataModel.quad(ex, ex, dataModel.literal("2")),
+                    dataModel.quad(ex, ex, dataModel.literal("3")),
+                ]);
+                const quad = store.at(-1);
+                assert(quad !== undefined);
+                assert.strictEqual("3", quad.object.value);
+            });
+
+            it("should return undefined for out of bounds", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("1")),
+                ]);
+                assert.strictEqual(undefined, store.at(10));
+                assert.strictEqual(undefined, store.at(-10));
+            });
+
+            it("should work with empty store", () => {
+                const store = new Store();
+                assert.strictEqual(undefined, store.at(0));
+            });
+
+            it("should get first quad", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("first")),
+                    dataModel.quad(ex, ex, dataModel.literal("second")),
+                ]);
+                const quad = store.at(0);
+                assert(quad !== undefined);
+                assert.strictEqual("first", quad.object.value);
+            });
+
+            it("should get last quad with -1", () => {
+                const store = new Store([
+                    dataModel.quad(ex, ex, dataModel.literal("first")),
+                    dataModel.quad(ex, ex, dataModel.literal("last")),
+                ]);
+                const quad = store.at(-1);
+                assert(quad !== undefined);
+                assert.strictEqual("last", quad.object.value);
+            });
+        });
+    });
+
     describe("#queryAsync()", () => {
         it("should execute ASK query asynchronously", async () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);

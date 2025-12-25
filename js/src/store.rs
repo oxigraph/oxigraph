@@ -132,6 +132,24 @@ export class Store {
 
     find(predicate: (quad: Quad) => boolean, thisArg?: any): Quad | undefined;
 
+    at(index: number): Quad | undefined;
+
+    slice(start?: number, end?: number): Quad[];
+
+    concat(...others: (Quad | Iterable<Quad>)[]): Quad[];
+
+    indexOf(quad: Quad): number;
+
+    findIndex(predicate: (quad: Quad) => boolean, thisArg?: any): number;
+    join(separator?: string): string;
+
+
+    entries(): IterableIterator<[number, Quad]>;
+
+    keys(): IterableIterator<number>;
+
+    values(): IterableIterator<Quad>;
+
     [Symbol.iterator](): Iterator<Quad>;
 }
 "###;
@@ -1114,6 +1132,133 @@ impl JsStore {
         }
         Ok(JsValue::UNDEFINED)
     }
+
+    pub fn at(&self, index: i32) -> Result<JsValue, JsValue> {
+        let quads: Vec<Quad> = self
+            .store
+            .quads_for_pattern(None, None, None, None)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+
+        let len = quads.len() as i32;
+        let idx = if index < 0 { len + index } else { index };
+
+        if idx < 0 || idx >= len {
+            Ok(JsValue::UNDEFINED)
+        } else {
+            Ok(JsQuad::from(quads[idx as usize].clone()).into())
+        }
+    }
+
+    pub fn slice(&self, start: Option<i32>, end: Option<i32>) -> Result<Box<[JsValue]>, JsValue> {
+        let quads: Vec<JsValue> = self.store
+            .quads_for_pattern(None, None, None, None)
+            .map(|q| q.map(|quad| JsQuad::from(quad).into()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+
+        let len = quads.len() as i32;
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(len);
+
+        // Handle negative indices
+        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
+        let end = if end < 0 { (len + end).max(0) } else { end.min(len) } as usize;
+
+        Ok(quads[start..end.max(start)].to_vec().into_boxed_slice())
+    }
+
+    pub fn concat(&self, others: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let mut results: Vec<JsValue> = self.store
+            .quads_for_pattern(None, None, None, None)
+            .map(|q| q.map(|quad| JsQuad::from(quad).into()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+
+        // Handle additional iterables passed
+        if !others.is_undefined() && !others.is_null() {
+            if let Some(iter) = try_iter(others)? {
+                for item in iter {
+                    let item = item?;
+                    // If item is iterable (another store/dataset/array), flatten it
+                    if let Some(inner_iter) = try_iter(&item)? {
+                        for inner_item in inner_iter {
+                            results.push(inner_item?);
+                        }
+                    } else {
+                        results.push(item);
+                    }
+                }
+            }
+        }
+        Ok(results.into_boxed_slice())
+    }
+
+    #[wasm_bindgen(js_name = indexOf)]
+    pub fn index_of(&self, quad: &JsValue) -> Result<i32, JsValue> {
+        let target = FROM_JS.with(|c| c.to_quad(quad))?;
+        for (index, q) in self.store.quads_for_pattern(None, None, None, None).enumerate() {
+            let q = q.map_err(JsError::from)?;
+            if q == target {
+                return Ok(index as i32);
+            }
+        }
+        Ok(-1)
+    }
+
+
+    #[wasm_bindgen(js_name = findIndex)]
+    pub fn find_index(&self, predicate: &Function, this_arg: &JsValue) -> Result<i32, JsValue> {
+        let this = if this_arg.is_undefined() { JsValue::NULL } else { this_arg.clone() };
+        for (index, quad) in self.store.quads_for_pattern(None, None, None, None).enumerate() {
+            let quad = quad.map_err(JsError::from)?;
+            let js_quad = JsQuad::from(quad).into();
+            if predicate.call1(&this, &js_quad)?.is_truthy() {
+                return Ok(index as i32);
+            }
+        }
+        Ok(-1)
+    }
+    pub fn join(&self, separator: Option<String>) -> Result<String, JsValue> {
+        let sep = separator.unwrap_or_else(|| ",".to_string());
+        let strings: Vec<String> = self.store
+            .quads_for_pattern(None, None, None, None)
+            .map(|q| q.map(|quad| quad.to_string()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+        Ok(strings.join(&sep))
+    }
+
+    pub fn entries(&self) -> Result<JsValue, JsValue> {
+        let quads: Vec<_> = self.store
+            .quads_for_pattern(None, None, None, None)
+            .enumerate()
+            .map(|(i, q)| q.map(|quad| {
+                let arr = Array::new();
+                arr.push(&JsValue::from(i as u32));
+                arr.push(&JsQuad::from(quad).into());
+                arr.into()
+            }))
+            .collect::<Result<Vec<JsValue>, _>>()
+            .map_err(JsError::from)?;
+        Ok(Array::from_iter(quads).values().into())
+    }
+
+    pub fn keys(&self) -> Result<JsValue, JsValue> {
+        let count = self.store.len().map_err(JsError::from)? as u32;
+        let keys: Vec<JsValue> = (0..count).map(JsValue::from).collect();
+        Ok(Array::from_iter(keys).values().into())
+    }
+
+    pub fn values(&self) -> Result<JsValue, JsValue> {
+        let quads: Vec<JsValue> = self.store
+            .quads_for_pattern(None, None, None, None)
+            .map(|q| q.map(|quad| JsQuad::from(quad).into()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(JsError::from)?;
+        Ok(Array::from_iter(quads).values().into())
+    }
+
 
     // Symbol.iterator implementation - must be manually wired up in JavaScript
     // as wasm-bindgen doesn't support computed property names
