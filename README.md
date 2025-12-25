@@ -33,10 +33,25 @@ cargo add oxigraph
 ```
 ```rust
 use oxigraph::store::Store;
+use oxigraph::io::RdfFormat;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 
-let store = Store::new()?;
-store.load_from_path("data.ttl")?;
-let results = store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let store = Store::new()?;
+    let data = std::fs::read_to_string("data.ttl")?;
+    store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
+
+    if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+        .parse_query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")?
+        .on_store(&store)
+        .execute()?
+    {
+        while let Some(solution) = solutions.next() {
+            println!("{:?}", solution?);
+        }
+    }
+    Ok(())
+}
 ```
 
 ### Python
@@ -44,10 +59,10 @@ let results = store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")?;
 pip install pyoxigraph
 ```
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store()
-store.load("data.ttl", mime_type="text/turtle")
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
 for result in store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10"):
     print(result)
 ```
@@ -58,9 +73,13 @@ npm install oxigraph
 ```
 ```javascript
 const oxigraph = require('oxigraph');
+const fs = require('fs');
+
 const store = new oxigraph.Store();
+const data = fs.readFileSync('data.ttl', 'utf-8');
 store.load(data, { format: "text/turtle" });
-for (const binding of store.query("SELECT * WHERE { ?s ?p ?o }")) {
+
+for (const binding of store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")) {
     console.log(binding);
 }
 ```

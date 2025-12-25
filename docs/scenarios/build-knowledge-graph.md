@@ -769,7 +769,7 @@ def search_publications():
         FILTER(CONTAINS(LCASE(?title), LCASE("{q}")))
 
         {{
-            SELECT ?pub (GROUP_CONCAT(?authorName; separator=", ") as ?authors)
+            SELECT ?pub (GROUP_CONCAT(?authorName; SEPARATOR=", ") as ?authors)
             WHERE {{
                 ?pub acad:author ?author .
                 ?author acad:name ?authorName .

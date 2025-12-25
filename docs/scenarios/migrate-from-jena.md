@@ -127,8 +127,8 @@ dataset.close();
 #### Option A: Command-line Tool
 
 ```bash
-# Using oxigraph-server
-oxigraph load --location ./oxigraph-data --file export.nq --format nquads
+# Using oxigraph CLI
+oxigraph load --location ./oxigraph-data --file export.nq --format nq
 ```
 
 #### Option B: Rust Code

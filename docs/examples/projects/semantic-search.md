@@ -268,10 +268,8 @@ async fn main() -> Result<()> {
 
 fn load_schema(store: &Store) -> Result<()> {
     let schema = include_str!("../schema.ttl");
-    store.load_from_reader(
-        oxigraph::io::RdfFormat::Turtle,
-        schema.as_bytes(),
-    )?;
+    let parser = oxigraph::io::RdfParser::from_format(oxigraph::io::RdfFormat::Turtle);
+    store.load_from_reader(parser, schema.as_bytes())?;
     info!("Schema loaded");
     Ok(())
 }
@@ -900,7 +898,7 @@ nltk>=3.8
 ```python
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph
+from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph, RdfFormat
 from whoosh.index import create_in
 from whoosh.fields import Schema, TEXT, ID, STORED
 from whoosh.qparser import QueryParser, MultifieldParser
@@ -949,7 +947,7 @@ def load_schema():
     search:author a owl:ObjectProperty .
     search:category a owl:ObjectProperty .
     """
-    store.load(schema.encode(), "text/turtle")
+    store.load(input=schema.encode(), format=RdfFormat.TURTLE)
     print("Schema loaded")
 
 def load_sample_data():

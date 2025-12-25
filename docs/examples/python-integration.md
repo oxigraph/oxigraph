@@ -282,10 +282,10 @@ def load_data():
         return jsonify({"error": "Missing 'content' or 'format' field"}), 400
 
     content = data['content']
-    mime_type = data['format']
+    format_str = data['format']
     base_iri = data.get('base_iri')
 
-    logger.info(f"Loading data with format: {mime_type}")
+    logger.info(f"Loading data with format: {format_str}")
 
     # Convert format name to MIME type if needed
     format_map = {
@@ -301,9 +301,9 @@ def load_data():
         'jsonld': 'application/ld+json'
     }
 
-    mime_type = format_map.get(mime_type.lower(), mime_type)
+    rdf_format = format_map.get(format_str.lower(), format_str)
 
-    store.load(content.encode('utf-8'), mime_type=mime_type, base_iri=base_iri)
+    store.load(input=content.encode('utf-8'), format=rdf_format, base_iri=base_iri)
 
     return jsonify({
         "message": "Data loaded successfully",
@@ -326,14 +326,14 @@ def export_data():
         'trig': 'application/trig'
     }
 
-    mime_type = format_map.get(format_param.lower(), 'text/turtle')
+    rdf_format = format_map.get(format_param.lower(), 'text/turtle')
 
-    logger.info(f"Exporting data as {mime_type}")
+    logger.info(f"Exporting data as {rdf_format}")
 
     # Serialize the store
-    data = store.dump(mime_type=mime_type)
+    data = store.dump(format=rdf_format)
 
-    return data, 200, {'Content-Type': mime_type}
+    return data, 200, {'Content-Type': rdf_format}
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
@@ -647,12 +647,12 @@ async def load_data(data: LoadDataInput, background_tasks: BackgroundTasks):
         'trig': 'application/trig'
     }
 
-    mime_type = format_map.get(data.format.lower(), data.format)
+    rdf_format = format_map.get(data.format.lower(), data.format)
 
     def _load():
         store.load(
-            data.content.encode('utf-8'),
-            mime_type=mime_type,
+            input=data.content.encode('utf-8'),
+            format=rdf_format,
             base_iri=data.base_iri
         )
         logger.info(f"Data loaded successfully. Store size: {len(store)}")
@@ -680,14 +680,14 @@ async def export_data(format: str = Query("turtle", description="Export format")
         'trig': 'application/trig'
     }
 
-    mime_type = format_map.get(format.lower(), 'text/turtle')
+    rdf_format = format_map.get(format.lower(), 'text/turtle')
 
     def _export():
-        return store.dump(mime_type=mime_type)
+        return store.dump(format=rdf_format)
 
     try:
         data = await run_in_executor(_export)
-        return PlainTextResponse(content=data, media_type=mime_type)
+        return PlainTextResponse(content=data, media_type=rdf_format)
     except Exception as e:
         logger.error(f"Error exporting data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -896,7 +896,7 @@ ex:charlie schema:name "Charlie" ;
            schema:city "New York" .
 """
 
-store.load(data.encode('utf-8'), mime_type="text/turtle")
+store.load(input=data.encode('utf-8'), format="text/turtle")
 print(f"Loaded {len(store)} triples")
 
 # Cell 3: Query and display
@@ -1083,11 +1083,11 @@ def load(ctx, file, format):
         'trig': 'application/trig'
     }
 
-    mime_type = format_map.get(format, format)
+    rdf_format = format_map.get(format, format)
 
     with open(file, 'rb') as f:
         data = f.read()
-        store.load(data, mime_type=mime_type)
+        store.load(input=data, format=rdf_format)
 
     click.echo(f"Loaded data from {file}")
     click.echo(f"Store now contains {len(store)} quads")
@@ -1174,9 +1174,9 @@ def export(ctx, output, format):
         'trig': 'application/trig'
     }
 
-    mime_type = format_map.get(format, 'text/turtle')
+    rdf_format = format_map.get(format, 'text/turtle')
 
-    data = store.dump(mime_type=mime_type)
+    data = store.dump(format=rdf_format)
 
     with open(output, 'wb') as f:
         f.write(data.encode('utf-8'))
@@ -1240,11 +1240,11 @@ def load_rdf_file(file_path: str, format: str = 'turtle'):
         'nquads': 'application/n-quads'
     }
 
-    mime_type = format_map.get(format, 'text/turtle')
+    rdf_format = format_map.get(format, 'text/turtle')
 
     with open(file_path, 'rb') as f:
         data = f.read()
-        STORE.load(data, mime_type=mime_type)
+        STORE.load(input=data, format=rdf_format)
 
     logger.info(f"Loaded {file_path}. Store size: {len(STORE)}")
     return {"status": "success", "store_size": len(STORE)}

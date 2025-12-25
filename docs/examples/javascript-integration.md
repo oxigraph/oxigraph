@@ -320,7 +320,7 @@ app.post('/load', asyncHandler(async (req, res) => {
     try {
         const options = { format: mimeType };
         if (baseIri) {
-            options.base_iri = baseIri;
+            options.baseIri = baseIri;
         }
 
         store.load(content, options);
@@ -1150,25 +1150,25 @@ declare module 'oxigraph' {
     export type QueryResults = IterableIterator<Map<string, Term>> | IterableIterator<Quad> | boolean;
 
     export interface QueryOptions {
-        base_iri?: string;
-        use_default_graph_as_union?: boolean;
-        default_graph?: Term[];
-        named_graphs?: Term[];
+        baseIri?: string;
+        useDefaultGraphAsUnion?: boolean;
+        defaultGraph?: Term[];
+        namedGraphs?: Term[];
     }
 
     export interface UpdateOptions {
-        base_iri?: string;
+        baseIri?: string;
     }
 
     export interface LoadOptions {
         format: string;
-        base_iri?: string;
-        to_graph_name?: Term;
+        baseIri?: string;
+        toGraphName?: Term;
     }
 
     export interface DumpOptions {
         format: string;
-        from_graph_name?: Term;
+        fromGraphName?: Term;
     }
 
     export function namedNode(iri: string): NamedNode;
@@ -1255,7 +1255,7 @@ export class RdfService {
     loadTurtle(content: string, baseIri?: string): void {
         this.store.load(content, {
             format: 'text/turtle',
-            base_iri: baseIri
+            baseIri: baseIri
         });
     }
 

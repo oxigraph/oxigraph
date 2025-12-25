@@ -290,6 +290,7 @@ To persist your data to disk using RocksDB:
 
 ```rust
 use oxigraph::store::Store;
+use oxigraph::io::RdfFormat;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create or open a store at the specified path
@@ -297,6 +298,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Now use the store as before...
     // Data will be persisted to the "./my_data" directory
+
+    // Example: Load some data
+    let data = r#"<http://example.com/s> <http://example.com/p> "value" ."#;
+    store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
 
     Ok(())
 }
@@ -317,20 +322,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Sample Turtle data
     let data = r#"
-        @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-        @prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex: <http://example.org/> .
 
-        ex:alice foaf:name "Alice" ;
-                 foaf:knows ex:bob .
+ex:alice foaf:name "Alice" ;
+         foaf:knows ex:bob .
 
-        ex:bob foaf:name "Bob" .
+ex:bob foaf:name "Bob" .
     "#;
 
     // Load the data
-    store.load_from_reader(
-        RdfFormat::Turtle,
-        data.as_bytes()
-    )?;
+    store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
 
     println!("Data loaded successfully!");
 

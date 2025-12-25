@@ -26,7 +26,7 @@ cargo add oxigraph
 
 ```rust
 use oxigraph::model::*;
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,9 +47,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     store.insert(&quad)?;
 
     // Query using SPARQL
-    if let QueryResults::Solutions(mut solutions) = store.query(
-        "SELECT ?name WHERE { <http://example.com> <http://schema.org/name> ?name }"
-    )? {
+    if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+        .parse_query("SELECT ?name WHERE { <http://example.com> <http://schema.org/name> ?name }")?
+        .on_store(&store)
+        .execute()?
+    {
         while let Some(solution) = solutions.next() {
             let solution = solution?;
             println!("Name: {}", solution.get("name").unwrap());
@@ -64,16 +66,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use oxigraph::store::Store;
+use oxigraph::io::RdfFormat;
+use oxigraph::sparql::SparqlEvaluator;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a persistent store
     let store = Store::open("./my_database")?;
 
     // Load an RDF file
-    store.load_from_path("data.ttl")?;
+    let data = std::fs::read_to_string("data.ttl")?;
+    store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
 
     // Query
-    let results = store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")?;
+    let results = SparqlEvaluator::new()
+        .parse_query("SELECT * WHERE { ?s ?p ?o } LIMIT 10")?
+        .on_store(&store)
+        .execute()?;
 
     Ok(())
 }
@@ -120,13 +128,13 @@ for result in store.query("SELECT ?name WHERE { <http://example.com> <http://sch
 #### Persistent Store Example
 
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 # Create a persistent store
 store = Store("./my_database")
 
 # Load an RDF file
-store.load("data.ttl", mime_type="text/turtle")
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
 
 # Query
 for result in store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10"):
@@ -137,13 +145,13 @@ for result in store.query("SELECT * WHERE { ?s ?p ?o } LIMIT 10"):
 
 ```python
 import requests
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store()
 
 # Fetch and load remote RDF data
 response = requests.get("https://www.w3.org/People/Berners-Lee/card")
-store.load(response.content, mime_type="text/turtle")
+store.load(input=response.content, format=RdfFormat.TURTLE)
 
 # Query the data
 for result in store.query("SELECT ?name WHERE { ?person <http://xmlns.com/foaf/0.1/name> ?name } LIMIT 5"):
@@ -188,6 +196,7 @@ for (const binding of store.query("SELECT ?name WHERE { <http://example.com> <ht
 
 ```javascript
 import oxigraph from 'oxigraph/node.js';
+import { readFileSync } from 'fs';
 
 const store = new oxigraph.Store();
 store.add(oxigraph.triple(
@@ -197,8 +206,7 @@ store.add(oxigraph.triple(
 ));
 
 // Load from file
-const fs = require('fs');
-const data = fs.readFileSync('data.ttl', 'utf-8');
+const data = readFileSync('data.ttl', 'utf-8');
 store.load(data, { format: "text/turtle" });
 ```
 
@@ -363,10 +371,10 @@ oxigraph load --location ./my-database --file data.ttl
 
 ```bash
 # Convert Turtle to N-Quads
-oxigraph convert --from-format turtle --to-format nquads < input.ttl > output.nq
+oxigraph convert --from-format ttl --to-format nq < input.ttl > output.nq
 
 # Convert RDF/XML to Turtle
-oxigraph convert --from-format rdfxml --to-format turtle < input.rdf > output.ttl
+oxigraph convert --from-format rdf --to-format ttl < input.rdf > output.ttl
 ```
 
 **Next steps:** Run `oxigraph --help` for all options
@@ -387,17 +395,18 @@ use oxigraph::io::RdfFormat;
 let store = Store::open("./db")?;
 
 // From file
-store.load_from_path("data.ttl")?;
+let data = std::fs::read_to_string("data.ttl")?;
+store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
 
 // From string
-store.load_from_reader(
-    RdfFormat::Turtle,
-    "data.ttl".as_bytes()
-)?;
+let turtle_data = r#"<http://example.com/s> <http://example.com/p> "value" ."#;
+store.load_from_reader(RdfFormat::Turtle, turtle_data.as_bytes())?;
 
 // Bulk load (faster for large files)
-store.bulk_loader()
-    .load_from_path("large-file.nq")?;
+let file_data = std::fs::read_to_string("large-file.nq")?;
+let mut loader = store.bulk_loader();
+loader.load_from_reader(RdfFormat::NQuads, file_data.as_bytes())?;
+loader.commit()?;
 ```
 
 </details>
@@ -406,21 +415,21 @@ store.bulk_loader()
 <summary><b>Python</b></summary>
 
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store("./db")
 
 # From file
-store.load("data.ttl", mime_type="text/turtle")
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
 
 # From string
 data = """
 <http://ex.org/s> <http://ex.org/p> "value" .
 """
-store.load(data.encode(), mime_type="text/turtle")
+store.load(input=data.encode(), format=RdfFormat.TURTLE)
 
 # Bulk load
-store.bulk_load("large-file.nq", mime_type="application/n-quads")
+store.bulk_load(path="large-file.nq", format=RdfFormat.N_QUADS)
 ```
 
 </details>
@@ -451,11 +460,13 @@ store.load(fileData, { format: "text/turtle" });
 <summary><b>Rust</b></summary>
 
 ```rust
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 
 // SELECT query
-if let QueryResults::Solutions(mut solutions) =
-    store.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10")?
+if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    .parse_query("SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10")?
+    .on_store(&store)
+    .execute()?
 {
     while let Some(solution) = solutions.next() {
         let s = solution?;
@@ -464,15 +475,19 @@ if let QueryResults::Solutions(mut solutions) =
 }
 
 // ASK query
-if let QueryResults::Boolean(result) =
-    store.query("ASK { ?s ?p ?o }")?
+if let QueryResults::Boolean(result) = SparqlEvaluator::new()
+    .parse_query("ASK { ?s ?p ?o }")?
+    .on_store(&store)
+    .execute()?
 {
     println!("Has triples: {}", result);
 }
 
 // CONSTRUCT query
-if let QueryResults::Graph(graph) =
-    store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 10")?
+if let QueryResults::Graph(graph) = SparqlEvaluator::new()
+    .parse_query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 10")?
+    .on_store(&store)
+    .execute()?
 {
     for triple in graph {
         println!("{:?}", triple?);
@@ -529,22 +544,33 @@ for (const triple of triples) {
 <summary><b>Rust</b></summary>
 
 ```rust
+use oxigraph::sparql::SparqlEvaluator;
+
 // Insert data
-store.update("INSERT DATA {
-    <http://example.com/s> <http://example.com/p> 'value'
-}")?;
+SparqlEvaluator::new()
+    .parse_update("INSERT DATA {
+        <http://example.com/s> <http://example.com/p> 'value'
+    }")?
+    .on_store(&store)
+    .execute()?;
 
 // Delete data
-store.update("DELETE WHERE {
-    <http://example.com/s> ?p ?o
-}")?;
+SparqlEvaluator::new()
+    .parse_update("DELETE WHERE {
+        <http://example.com/s> ?p ?o
+    }")?
+    .on_store(&store)
+    .execute()?;
 
 // Delete/Insert
-store.update("
-    DELETE { ?s <http://example.com/oldProp> ?o }
-    INSERT { ?s <http://example.com/newProp> ?o }
-    WHERE { ?s <http://example.com/oldProp> ?o }
-")?;
+SparqlEvaluator::new()
+    .parse_update("
+        DELETE { ?s <http://example.com/oldProp> ?o }
+        INSERT { ?s <http://example.com/newProp> ?o }
+        WHERE { ?s <http://example.com/oldProp> ?o }
+    ")?
+    .on_store(&store)
+    .execute()?;
 ```
 
 </details>

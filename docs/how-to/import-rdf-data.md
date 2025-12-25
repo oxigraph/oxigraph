@@ -56,7 +56,7 @@ oxigraph load --location /path/to/store \
   --file data1.nq --file data2.ttl --file data3.rdf
 
 # Load from stdin
-cat data.ttl | oxigraph load --location /path/to/store --format turtle
+cat data.ttl | oxigraph load --location /path/to/store --format ttl
 
 # Load into specific graph
 oxigraph load --location /path/to/store \
@@ -80,7 +80,7 @@ oxigraph load --location /path/to/store \
 
 # Specify format explicitly
 oxigraph load --location /path/to/store \
-  --file data.txt --format turtle
+  --file data.txt --format ttl
 ```
 
 ### Loading Compressed Files
@@ -97,31 +97,34 @@ oxigraph load --location /path/to/store --file data.nq.gz
 
 ```rust
 use oxigraph::store::Store;
-use oxigraph::io::RdfFormat;
+use oxrdfio::RdfFormat;
 
 let store = Store::open("data")?;
 
 // Load from file
-store.load_from_path("data.ttl", RdfFormat::Turtle, None, None)?;
+let file_data = std::fs::read_to_string("data.ttl")?;
+store.load_from_reader(RdfFormat::Turtle, file_data.as_bytes())?;
 
 // Load from string
 let data = r#"
 @prefix ex: <http://example.com/> .
 ex:subject ex:predicate "object" .
 "#;
-store.load_from_reader(RdfFormat::Turtle, data.as_bytes(), None, None)?;
+store.load_from_reader(RdfFormat::Turtle, data.as_bytes())?;
 ```
 
 ### Import into Named Graph
 
 ```rust
-use oxigraph::model::{GraphName, NamedNode};
+use oxrdfio::RdfParser;
+use oxigraph::model::NamedNodeRef;
 
-let graph = GraphName::NamedNode(
-    NamedNode::new("http://example.com/mygraph")?
-);
+// Create a parser that loads into a specific named graph
+let parser = RdfParser::from_format(RdfFormat::Turtle)
+    .with_default_graph(NamedNodeRef::new("http://example.com/mygraph")?);
 
-store.load_from_path("data.ttl", RdfFormat::Turtle, &graph, None)?;
+let file_data = std::fs::read_to_string("data.ttl")?;
+store.load_from_reader(parser, file_data.as_bytes())?;
 ```
 
 ### Bulk Loading
@@ -130,23 +133,23 @@ For optimal performance when importing large amounts of data:
 
 ```rust
 use oxigraph::store::Store;
-use oxigraph::io::{RdfFormat, RdfParser};
+use oxrdfio::RdfFormat;
 use std::fs::File;
+use std::io::BufReader;
 
 let store = Store::open("data")?;
 
-// Create bulk loader
+// Create bulk loader with progress tracking
 let mut loader = store.bulk_loader()
     .on_progress(|size| {
-        eprintln!("Loaded {} triples", size);
+        if size % 100000 == 0 {
+            eprintln!("Loaded {} triples", size);
+        }
     });
 
-// Load data
-for quad in RdfParser::from_format(RdfFormat::NQuads)
-    .for_reader(File::open("large-data.nq")?)
-{
-    loader.load_quad(quad?)?;
-}
+// Load data from file
+let file = File::open("large-data.nq")?;
+loader.load_from_reader(RdfFormat::NQuads, BufReader::new(file))?;
 
 // Commit all changes
 loader.commit()?;
@@ -155,6 +158,9 @@ loader.commit()?;
 ### Bulk Loading with Error Handling
 
 ```rust
+use std::fs::File;
+use std::io::BufReader;
+
 let mut loader = store.bulk_loader()
     .on_parse_error(|error| {
         eprintln!("Parse error: {}", error);
@@ -166,7 +172,8 @@ let mut loader = store.bulk_loader()
         }
     });
 
-loader.load_from_path("data.nq")?;
+let file = File::open("data.nq")?;
+loader.load_from_reader(RdfFormat::NQuads, BufReader::new(file))?;
 loader.commit()?;
 ```
 
@@ -175,11 +182,19 @@ loader.commit()?;
 For maximum speed (trades safety for performance):
 
 ```rust
+use std::fs::File;
+use std::io::BufReader;
+
 let mut loader = store.bulk_loader()
     .without_atomicity()
-    .on_progress(|size| eprintln!("{} triples", size));
+    .on_progress(|size| {
+        if size % 1000000 == 0 {
+            eprintln!("{} triples", size);
+        }
+    });
 
-loader.load_from_path("huge-data.nq")?;
+let file = File::open("huge-data.nq")?;
+loader.load_from_reader(RdfFormat::NQuads, BufReader::new(file))?;
 loader.commit()?;
 ```
 
@@ -188,33 +203,33 @@ loader.commit()?;
 ### Basic Import
 
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store("data")
 
 # Load from file
-store.load(open("data.ttl", "rb"), mime_type="text/turtle")
+store.load(input=open("data.ttl", "rb"), format=RdfFormat.TURTLE)
 
 # Load from string
 data = """
 @prefix ex: <http://example.com/> .
 ex:subject ex:predicate "object" .
 """
-store.load(data.encode(), mime_type="text/turtle")
+store.load(input=data.encode(), format=RdfFormat.TURTLE)
 ```
 
 ### Import into Named Graph
 
 ```python
-from pyoxigraph import Store, NamedNode
+from pyoxigraph import Store, NamedNode, RdfFormat
 
 store = Store("data")
 graph = NamedNode("http://example.com/mygraph")
 
 # Load into named graph
 store.load(
-    open("data.ttl", "rb"),
-    mime_type="text/turtle",
+    input=open("data.ttl", "rb"),
+    format=RdfFormat.TURTLE,
     to_graph=graph
 )
 ```
@@ -222,14 +237,14 @@ store.load(
 ### Bulk Loading
 
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, parse, RdfFormat
 
 store = Store("data")
 
 # Read quads from file
-quads = store.parse(
-    open("large-data.nq", "rb"),
-    mime_type="application/n-quads"
+quads = parse(
+    input=open("large-data.nq", "rb"),
+    format=RdfFormat.N_QUADS
 )
 
 # Bulk extend (faster for large datasets)
@@ -240,8 +255,8 @@ store.bulk_extend(quads)
 
 ```python
 store.load(
-    open("data.ttl", "rb"),
-    mime_type="text/turtle",
+    input=open("data.ttl", "rb"),
+    format=RdfFormat.TURTLE,
     base_iri="http://example.com/"
 )
 ```
@@ -319,16 +334,17 @@ store.load(data, {
 ### Rust Streaming
 
 ```rust
-use oxigraph::io::{RdfFormat, RdfParser};
+use oxrdfio::{RdfFormat, RdfParser};
 use oxigraph::store::Store;
 use std::fs::File;
+use std::io::BufReader;
 
 let store = Store::open("data")?;
 
 // Stream large file
 let file = File::open("large-data.nt")?;
 let parser = RdfParser::from_format(RdfFormat::NTriples)
-    .for_reader(file);
+    .for_reader(BufReader::new(file));
 
 for quad in parser {
     let quad = quad?;
@@ -344,8 +360,8 @@ from pyoxigraph import Store
 store = Store("data")
 
 # Parse and insert one by one
-for quad in store.parse(open("large-data.nq", "rb"),
-                        mime_type="application/n-quads"):
+for quad in parse(input=open("large-data.nq", "rb"),
+                        format=RdfFormat.N_QUADS):
     store.add(quad)
 ```
 
@@ -356,7 +372,8 @@ for quad in store.parse(open("large-data.nq", "rb"),
 ```rust
 use oxigraph::store::LoaderError;
 
-match store.load_from_path("data.ttl", RdfFormat::Turtle, None, None) {
+let file_data = std::fs::read_to_string("data.ttl")?;
+match store.load_from_reader(RdfFormat::Turtle, file_data.as_bytes()) {
     Ok(_) => println!("Successfully loaded"),
     Err(LoaderError::Parsing(e)) => eprintln!("Parse error: {}", e),
     Err(LoaderError::Storage(e)) => eprintln!("Storage error: {}", e),
@@ -367,10 +384,10 @@ match store.load_from_path("data.ttl", RdfFormat::Turtle, None, None) {
 ### Python
 
 ```python
-from pyoxigraph import Store, ParseError
+from pyoxigraph import Store, ParseError, RdfFormat
 
 try:
-    store.load(data, mime_type="text/turtle")
+    store.load(data, format=RdfFormat.TURTLE)
 except ParseError as e:
     print(f"Parse error: {e}")
 except OSError as e:

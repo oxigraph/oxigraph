@@ -193,10 +193,8 @@ async fn main() -> Result<()> {
 
 fn load_schema(store: &Store) -> Result<()> {
     let schema = include_str!("../schema.ttl");
-    store.load_from_reader(
-        oxigraph::io::RdfFormat::Turtle,
-        schema.as_bytes(),
-    )?;
+    let parser = oxigraph::io::RdfParser::from_format(oxigraph::io::RdfFormat::Turtle);
+    store.load_from_reader(parser, schema.as_bytes())?;
     info!("Schema loaded");
     Ok(())
 }
@@ -660,7 +658,7 @@ rdflib>=7.0.0
 ```python
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph
+from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph, RdfFormat
 import uuid
 from datetime import datetime
 
@@ -703,7 +701,7 @@ def load_schema():
         rdfs:range xsd:string .
     """
 
-    store.load(schema.encode(), "text/turtle")
+    store.load(input=schema.encode(), format=RdfFormat.TURTLE)
     print("Schema loaded")
 
 def load_sample_data():
@@ -992,7 +990,7 @@ kb:email a owl:DatatypeProperty ;
     rdfs:range xsd:string .
 `;
 
-store.load(schema, "text/turtle");
+store.load(schema, {format: "text/turtle"});
 console.log("Schema loaded");
 
 // Load sample data
@@ -1243,7 +1241,8 @@ if __name__ == '__main__':
     load_documents_from_csv(store, sys.argv[1])
 
     # Save to file
-    store.dump_to_file("kb_data.nq", "application/n-quads")
+    with open("kb_data.nq", "wb") as f:
+        store.dump(f, format=RdfFormat.N_QUADS)
     print("Data saved to kb_data.nq")
 ```
 

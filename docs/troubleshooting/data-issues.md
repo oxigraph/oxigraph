@@ -236,7 +236,7 @@ import pyoxigraph as ox
 
 try:
     count = 0
-    for quad in ox.parse(open('suspicious.ttl', 'rb'), 'text/turtle'):
+    for quad in ox.parse(input=open('suspicious.ttl', 'rb'), 'text/turtle'):
         count += 1
     print(f"Successfully parsed {count} quads")
 except Exception as e:
@@ -490,7 +490,7 @@ from hashlib import sha256
 def skolemize_blank_nodes(input_file, output_file, base_uri="http://example.org/.well-known/genid/"):
     """Convert blank nodes to stable IRIs based on their properties."""
     store = ox.Store()
-    store.load(open(input_file, 'rb').read(), "text/turtle")
+    store.load(input=open(input_file, 'rb').read(), "text/turtle")
 
     skolemized = ox.Store()
 
@@ -583,7 +583,7 @@ store = ox.Store()
 
 files = ["source1.ttl", "source2.ttl", "source3.ttl"]
 for i, filename in enumerate(files):
-    quads = ox.parse(open(filename, 'rb').read(), "text/turtle")
+    quads = ox.parse(input=open(filename, 'rb').read(), "text/turtle")
     renamed = rename_blank_nodes(quads, prefix=f"file{i}")
     store.extend(renamed)
 ```
@@ -703,19 +703,19 @@ import pyoxigraph as ox
 store = ox.Store()
 
 # Load Turtle into default graph
-store.load(open('data.ttl', 'rb').read(), mime_type="text/turtle")
+store.load(input=open('data.ttl', 'rb').read(), format=RdfFormat.TURTLE)
 
 # Load Turtle into named graph
 graph = ox.NamedNode("http://example.org/my-graph")
 store.load(
     open('data.ttl', 'rb').read(),
-    mime_type="text/turtle",
+    format=RdfFormat.TURTLE,
     base_iri=None,
     to_graph=graph
 )
 
 # Load N-Quads (preserves graph info)
-store.load(open('data.nq', 'rb').read(), mime_type="application/n-quads")
+store.load(input=open('data.nq', 'rb').read(), format=RdfFormat.N_QUADS)
 ```
 
 **Prevention:**

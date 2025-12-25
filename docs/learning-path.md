@@ -312,7 +312,7 @@ from pyoxigraph import Store
 store = Store()
 
 # Load from file
-store.load("sample-data.ttl", mime_type="text/turtle")
+store.load(path="sample-data.ttl", format=RdfFormat.TURTLE)
 print("✓ Data loaded")
 
 # Query: Find all people and their names
@@ -342,7 +342,7 @@ const store = new oxigraph.Store();
 
 // Load from file
 const data = fs.readFileSync('sample-data.ttl', 'utf-8');
-store.load(data, { format: "text/turtle" });
+store.load(input=data, { format: "text/turtle" });
 console.log("✓ Data loaded");
 
 // Query: Find all people and their names
@@ -507,7 +507,7 @@ Write a program to load this data and run various queries:
 from pyoxigraph import Store
 
 store = Store()
-store.load("library.ttl", mime_type="text/turtle")
+store.load(path="library.ttl", format=RdfFormat.TURTLE)
 
 # Query 1: All books
 print("=== All Books ===")
@@ -711,7 +711,7 @@ loader.load_from_path("large-file.nq")?;
 
 **Python:**
 ```python
-store.bulk_load("large-file.nq", mime_type="application/n-quads")
+store.bulk_load(path="large-file.nq", format=RdfFormat.N_QUADS)
 ```
 
 #### Persistent vs In-Memory
@@ -1131,8 +1131,8 @@ ex:PersonShape a sh:NodeShape ;
 from pyoxigraph import Store
 
 store = Store()
-store.load("data.ttl", mime_type="text/turtle")
-store.load("shapes.ttl", mime_type="text/turtle")
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
+store.load(path="shapes.ttl", format=RdfFormat.TURTLE)
 
 # Validation (when SHACL support is available)
 # validation_report = store.validate_with_shacl("shapes.ttl")

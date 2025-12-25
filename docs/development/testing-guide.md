@@ -496,7 +496,7 @@ class TestStore:
     def test_load_formats(self, format, data):
         """Test loading different RDF formats."""
         store = Store()
-        store.load(data.encode(), mime_type=format)
+        store.load(input=data.encode(), format=format)
         assert len(store) == 1
 ```
 
@@ -535,7 +535,7 @@ describe('Store', () => {
         ['text/turtle', '<http://ex.com/s> <http://ex.com/p> "o" .'],
         ['application/n-triples', '<http://ex.com/s> <http://ex.com/p> "o" .'],
     ])('should load %s format', (format, data) => {
-        store.load(data, format);
+        store.load(input=data, format);
         expect(store.size).toBe(1);
     });
 });

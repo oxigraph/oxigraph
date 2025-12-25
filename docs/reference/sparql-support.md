@@ -313,7 +313,7 @@ Supported aggregate functions:
 | AVG | Average of values | `AVG(?age)` |
 | MIN | Minimum value | `MIN(?price)` |
 | MAX | Maximum value | `MAX(?score)` |
-| GROUP_CONCAT | Concatenate strings | `GROUP_CONCAT(?name; separator=", ")` |
+| GROUP_CONCAT | Concatenate strings | `GROUP_CONCAT(?name; SEPARATOR=", ")` |
 | SAMPLE | Arbitrary value | `SAMPLE(?value)` |
 
 **Example**:

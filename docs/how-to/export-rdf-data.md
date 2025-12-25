@@ -25,11 +25,11 @@ oxigraph dump --location /path/to/store --file dump.nq
 oxigraph dump --location /path/to/store --file dump.trig
 
 # Dump to stdout
-oxigraph dump --location /path/to/store --format nquads > dump.nq
+oxigraph dump --location /path/to/store --format nq > dump.nq
 
 # Specify format explicitly
 oxigraph dump --location /path/to/store \
-  --file output.txt --format turtle
+  --file output.txt --format ttl
 ```
 
 ### Export Specific Graph
@@ -70,7 +70,7 @@ curl -H 'Accept: application/trig' \
 
 ```rust
 use oxigraph::store::Store;
-use oxigraph::io::RdfFormat;
+use oxrdfio::RdfFormat;
 use std::fs::File;
 
 let store = Store::open("data")?;
@@ -90,7 +90,7 @@ store.dump_graph_to_writer(
 
 ```rust
 use oxigraph::store::Store;
-use oxigraph::io::RdfFormat;
+use oxrdfio::RdfFormat;
 
 let store = Store::open("data")?;
 
@@ -106,7 +106,7 @@ println!("{}", data);
 
 ```rust
 use oxigraph::model::{GraphNameRef, NamedNodeRef};
-use oxigraph::io::RdfFormat;
+use oxrdfio::RdfFormat;
 
 let graph = NamedNodeRef::new("http://example.com/mygraph")?;
 
@@ -120,7 +120,7 @@ store.dump_graph_to_writer(
 ### Export with Serialization Options
 
 ```rust
-use oxigraph::io::RdfSerializer;
+use oxrdfio::RdfSerializer;
 use oxigraph::model::GraphNameRef;
 
 let mut serializer = RdfSerializer::from_format(RdfFormat::Turtle)
@@ -138,7 +138,7 @@ serializer.finish()?;
 ### Custom Export Logic
 
 ```rust
-use oxigraph::io::RdfSerializer;
+use oxrdfio::RdfSerializer;
 use oxigraph::store::Store;
 use oxigraph::model::*;
 
@@ -166,13 +166,13 @@ from pyoxigraph import Store
 store = Store("data")
 
 # Dump entire dataset
-output = store.dump(format="application/n-quads")
+output = store.dump(format=RdfFormat.N_QUADS)
 with open("dump.nq", "w") as f:
     f.write(output)
 
 # Dump to file directly
 with open("dump.nq", "wb") as f:
-    store.dump(f, mime_type="application/n-quads")
+    store.dump(f, format=RdfFormat.N_QUADS)
 ```
 
 ### Export Specific Graph
@@ -184,14 +184,14 @@ store = Store("data")
 
 # Export default graph
 output = store.dump(
-    format="text/turtle",
+    format=RdfFormat.TURTLE,
     from_graph=None  # Default graph
 )
 
 # Export named graph
 graph = NamedNode("http://example.com/mygraph")
 output = store.dump(
-    format="text/turtle",
+    format=RdfFormat.TURTLE,
     from_graph=graph
 )
 
@@ -208,7 +208,7 @@ store = Store("data")
 
 # Manually serialize quads
 quads = list(store)
-serialized = serialize(quads, mime_type="application/n-quads")
+serialized = serialize(quads, format=RdfFormat.N_QUADS)
 
 with open("output.nq", "w") as f:
     f.write(serialized)
@@ -227,7 +227,7 @@ quads = list(store.quads_for_pattern(subject=subject))
 
 # Serialize filtered quads
 from pyoxigraph import serialize
-output = serialize(quads, mime_type="text/turtle")
+output = serialize(quads, format=RdfFormat.TURTLE)
 
 with open("filtered.ttl", "w") as f:
     f.write(output)
@@ -309,7 +309,7 @@ curl -X POST http://localhost:7878/query \
 
 ```rust
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxigraph::io::RdfSerializer;
+use oxrdfio::RdfSerializer;
 
 let evaluator = SparqlEvaluator::new();
 let query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s a <http://example.com/Person> }";
@@ -345,7 +345,7 @@ WHERE { ?s a <http://example.com/Person> . ?s ?p ?o }
 result = store.query(query)
 
 # Result is iterable of triples
-output = store.dump(result, mime_type="text/turtle")
+output = store.dump(result, format=RdfFormat.TURTLE)
 ```
 
 ### JavaScript API
@@ -457,7 +457,7 @@ oxigraph dump --location temp_store --file output.ttl
 ### Using Rust for Conversion
 
 ```rust
-use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 use std::fs::File;
 
 // Convert Turtle to N-Triples
@@ -503,7 +503,7 @@ for quad in store.quads_for_pattern(None, None, None, None) {
 
 ```bash
 # Direct compression
-oxigraph dump --location store --format nquads | gzip > dump.nq.gz
+oxigraph dump --location store --format nq | gzip > dump.nq.gz
 
 # Or dump to file and compress
 oxigraph dump --location store --file dump.nq

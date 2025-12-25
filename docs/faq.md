@@ -159,7 +159,7 @@ In code, batch your operations:
 ```python
 # Python
 store = Store("./db")
-store.bulk_load("data.nq", mime_type="application/n-quads")
+store.bulk_load(path="data.nq", format=RdfFormat.N_QUADS)
 ```
 
 ### Does Oxigraph support parallel queries?
@@ -343,9 +343,9 @@ store.bulk_loader().load_from_path("data.nq")?;
 
 **Python:**
 ```python
-store.load("data.ttl", mime_type="text/turtle")
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
 # Or bulk load
-store.bulk_load("data.nq", mime_type="application/n-quads")
+store.bulk_load(path="data.nq", format=RdfFormat.N_QUADS)
 ```
 
 ### Can I load data from URLs?
@@ -353,18 +353,18 @@ store.bulk_load("data.nq", mime_type="application/n-quads")
 **Python** (easiest):
 ```python
 import requests
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store()
 response = requests.get("https://example.com/data.ttl")
-store.load(response.content, mime_type="text/turtle")
+store.load(input=response.content, format=RdfFormat.TURTLE)
 ```
 
 **JavaScript:**
 ```javascript
 const response = await fetch("https://example.com/data.ttl");
 const data = await response.text();
-store.load(data, { format: "text/turtle" });
+store.load(input=data, { format: "text/turtle" });
 ```
 
 **CLI with SPARQL UPDATE:**
@@ -382,7 +382,7 @@ Note: LOAD in SPARQL UPDATE is disabled by default in the server for security.
 **Export to N-Quads** (preserves everything):
 ```bash
 # CLI
-oxigraph dump --location ./db --format nquads > backup.nq
+oxigraph dump --location ./db --format nq > backup.nq
 
 # HTTP API
 curl http://localhost:7878/store > backup.nq
@@ -409,7 +409,7 @@ See RocksDB documentation for checkpoint API.
 **Method 1: Export/Import**
 ```bash
 # Export from source
-oxigraph dump --location ./source-db --format nquads > export.nq
+oxigraph dump --location ./source-db --format nq > export.nq
 
 # Import to destination
 oxigraph load --location ./dest-db --file export.nq
@@ -931,7 +931,7 @@ let store = Store::open("./db")?;
 
 **Python** (embedded):
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat
 
 store = Store("./db")
 # Use in your app

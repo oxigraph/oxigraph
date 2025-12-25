@@ -34,11 +34,11 @@ from pyoxigraph import Store, shacl
 
 # Create store and load data
 store = Store()
-store.load(open("data.ttl", "rb"), mime_type="text/turtle")
+store.load(input=open("data.ttl", "rb"), format=RdfFormat.TURTLE)
 
 # Load SHACL shapes
 shapes_graph = Store()
-shapes_graph.load(open("shapes.ttl", "rb"), mime_type="text/turtle")
+shapes_graph.load(open("shapes.ttl", "rb"), format=RdfFormat.TURTLE)
 
 # Validate
 validator = shacl.ShaclValidator(shapes_graph)
@@ -94,10 +94,10 @@ ex:PersonShape a sh:NodeShape ;
 
 # Load data and shapes
 store = Store()
-store.load(data.encode(), mime_type="text/turtle")
+store.load(input=data.encode(), format=RdfFormat.TURTLE)
 
 shapes_store = Store()
-shapes_store.load(shapes.encode(), mime_type="text/turtle")
+shapes_store.load(shapes.encode(), format=RdfFormat.TURTLE)
 
 # Validate
 validator = shacl.ShaclValidator(shapes_store)
@@ -527,11 +527,11 @@ for (const result of report.results) {
 def safe_import(data_file, shapes_file, store):
     # Load data into temporary store
     temp = Store()
-    temp.load(open(data_file, "rb"), mime_type="text/turtle")
+    temp.load(open(data_file, "rb"), format=RdfFormat.TURTLE)
 
     # Load shapes
     shapes = Store()
-    shapes.load(open(shapes_file, "rb"), mime_type="text/turtle")
+    shapes.load(open(shapes_file, "rb"), format=RdfFormat.TURTLE)
 
     # Validate
     validator = shacl.ShaclValidator(shapes)
@@ -558,14 +558,14 @@ from pyoxigraph import Store, shacl
 app = Flask(__name__)
 store = Store("data")
 shapes = Store()
-shapes.load(open("shapes.ttl", "rb"), mime_type="text/turtle")
+shapes.load(open("shapes.ttl", "rb"), format=RdfFormat.TURTLE)
 validator = shacl.ShaclValidator(shapes)
 
 @app.route('/api/data', methods=['POST'])
 def add_data():
     # Parse input
     temp = Store()
-    temp.load(request.data, mime_type=request.content_type)
+    temp.load(request.data, format=request.content_type)
 
     # Validate
     report = validator.validate(temp)

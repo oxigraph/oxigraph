@@ -384,7 +384,7 @@ Concatenate values into a single string:
 ```sparql
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-SELECT ?person (GROUP_CONCAT(?friendName; separator=", ") AS ?friends)
+SELECT ?person (GROUP_CONCAT(?friendName; SEPARATOR=", ") AS ?friends)
 WHERE {
   ?person foaf:name ?name ;
           foaf:knows ?friend .
@@ -551,7 +551,7 @@ WHERE {
 
 Equivalent to: `?knownBy foaf:knows ?person`
 
-### Negated Property Set (!^)
+### Negated Property Set (!)
 
 Exclude specific properties:
 
@@ -576,9 +576,9 @@ query = """
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX ex: <http://example.com/>
 
-SELECT DISTINCT ?person ?distance
+SELECT DISTINCT ?person
 WHERE {
-  ex:alice foaf:knows{1,3} ?person .
+  ex:alice foaf:knows+ ?person .
 }
 """
 

@@ -741,7 +741,7 @@ def load(self, data: bytes, mime_type: str) -> None:
 
     Example:
         >>> store = Store()
-        >>> store.load(b'<s> <p> "o" .', mime_type="text/turtle")
+        >>> store.load(b'<s> <p> "o" .', format=RdfFormat.TURTLE)
     """
     pass
 ```

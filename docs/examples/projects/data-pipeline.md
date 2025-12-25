@@ -617,10 +617,8 @@ fn load_shapes(store: &Store, shapes_path: &Path) -> Result<()> {
     let file = File::open(shapes_path)
         .context("Failed to open shapes file")?;
 
-    store.load_from_reader(
-        RdfFormat::Turtle,
-        BufReader::new(file),
-    )?;
+    let parser = RdfParser::from_format(RdfFormat::Turtle);
+    store.load_from_reader(parser, BufReader::new(file))?;
 
     info!("SHACL shapes loaded");
     Ok(())
@@ -677,7 +675,8 @@ async fn validate_data(
 
     // Load data
     let data_file = File::open(&data)?;
-    store.load_from_reader(RdfFormat::NTriples, BufReader::new(data_file))?;
+    let parser = RdfParser::from_format(RdfFormat::NTriples);
+    store.load_from_reader(parser, BufReader::new(data_file))?;
 
     // Load shapes
     load_shapes(&store, &shapes)?;
@@ -796,7 +795,7 @@ import click
 import csv
 import json
 import pandas as pd
-from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph
+from pyoxigraph import Store, NamedNode, Literal, Quad, DefaultGraph, RdfFormat
 from tqdm import tqdm
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -1030,7 +1029,7 @@ def load_shapes(store: Store, shapes_path: str):
     logger.info(f"Loading SHACL shapes from {shapes_path}")
 
     with open(shapes_path, 'rb') as f:
-        store.load(f.read(), mime_type="text/turtle")
+        store.load(input=f.read(), format=RdfFormat.TURTLE)
 
     logger.info("SHACL shapes loaded")
 
@@ -1050,7 +1049,7 @@ def save_store(store: Store, output: str):
     logger.info(f"Saving to {output}")
 
     with open(output, 'wb') as f:
-        store.dump(f, "application/n-quads")
+        store.dump(f, format=RdfFormat.N_QUADS)
 
     logger.info("Data saved")
 
@@ -1066,7 +1065,7 @@ def validate(data, shapes, output):
 
     # Load data
     with open(data, 'rb') as f:
-        store.load(f.read(), mime_type="application/n-triples")
+        store.load(input=f.read(), format=RdfFormat.N_TRIPLES)
 
     # Load shapes
     load_shapes(store, shapes)

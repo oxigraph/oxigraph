@@ -593,17 +593,17 @@ store.load_from_reader(
 
 ```python
 # Auto-detect from extension
-store.load("data.ttl")
+store.load(path="data.ttl")
 
 # Explicit format
 store.load(
     "data.ttl",
-    mime_type="text/turtle"
+    format=RdfFormat.TURTLE
 )
 
 # From bytes
 data = open("data.ttl", "rb").read()
-store.load(data, mime_type="text/turtle")
+store.load(input=data, format=RdfFormat.TURTLE)
 ```
 
 </td>
@@ -619,7 +619,7 @@ const data = fs.readFileSync(
 );
 
 // Load into store
-store.load(data, {
+store.load(input=data, {
     format: "text/turtle"
 });
 ```
@@ -663,7 +663,7 @@ data = """
 
 store.load(
     data.encode(),
-    mime_type="application/n-triples"
+    format=RdfFormat.N_TRIPLES
 )
 ```
 
@@ -677,7 +677,7 @@ const data = `
     "value" .
 `;
 
-store.load(data, {
+store.load(input=data, {
     format: "application/n-triples"
 });
 ```
@@ -707,7 +707,7 @@ loader.load_from_path("huge.nq")?;
 # Much faster for large files
 store.bulk_load(
     "huge.nq",
-    mime_type="application/n-quads"
+    format=RdfFormat.N_QUADS
 )
 ```
 
@@ -1266,10 +1266,10 @@ cat data.ttl | oxigraph load --location ./data
 
 ```bash
 # Convert Turtle to N-Quads
-oxigraph convert --from-format turtle --to-format nquads < input.ttl > output.nq
+oxigraph convert --from-format ttl --to-format nq < input.ttl > output.nq
 
 # Convert RDF/XML to Turtle
-oxigraph convert --from-format rdfxml --to-format turtle < input.rdf > output.ttl
+oxigraph convert --from-format rdf --to-format ttl < input.rdf > output.ttl
 ```
 
 ### Backup

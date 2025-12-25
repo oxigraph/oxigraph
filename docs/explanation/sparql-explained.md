@@ -660,7 +660,7 @@ SELECT ?name ?email WHERE {
 ?p2 schema:parent ?grandparent .
 
 # Use property path:
-?person schema:parent{3} ?grandparent .
+?person schema:parent/schema:parent/schema:parent ?grandparent .
 ```
 
 ### Use BIND for Calculations

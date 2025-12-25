@@ -51,8 +51,9 @@ use axum::{
 };
 use once_cell::sync::Lazy;
 use oxigraph::{
+    io::{RdfFormat, RdfParser},
     model::*,
-    sparql::{QueryResults, QuerySolution},
+    sparql::{QueryResults, QuerySolution, SparqlEvaluator},
     store::Store,
 };
 use serde::{Deserialize, Serialize};
@@ -222,7 +223,10 @@ async fn execute_query(
     let query = req.query.clone();
 
     let results = tokio::task::spawn_blocking(move || {
-        store.query(&query)
+        SparqlEvaluator::new()
+            .parse_query(&query)?
+            .on_store(store)
+            .execute()
     })
     .await
     .map_err(|e| ApiError::BadRequest(e.to_string()))??;
@@ -423,11 +427,12 @@ async fn load_data(
     let base_iri = req.base_iri;
 
     tokio::task::spawn_blocking(move || {
-        store.load_from_reader(
-            data.as_bytes(),
-            format,
-            base_iri.as_deref(),
-        )
+        let mut parser = RdfParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(&base_iri)
+                .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        }
+        store.load_from_reader(parser, data.as_bytes())
     })
     .await
     .map_err(|e| ApiError::BadRequest(e.to_string()))??;
@@ -529,10 +534,12 @@ log = "0.4"
 use actix_web::{
     get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result,
 };
+use form_urlencoded;
 use log::info;
 use oxigraph::{
-    io::RdfFormat,
-    sparql::{QueryResults, Query},
+    io::{RdfFormat, RdfParser, RdfSerializer},
+    model::GraphName,
+    sparql::{QueryResults, SparqlEvaluator},
     store::Store,
 };
 use std::sync::Arc;
@@ -596,10 +603,15 @@ async fn sparql_query(
     info!("Executing query: {}", query_str);
 
     let store = data.store.clone();
-    let results = web::block(move || store.query(&query_str))
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?
-        .map_err(actix_web::error::ErrorBadRequest)?;
+    let results = web::block(move || {
+        SparqlEvaluator::new()
+            .parse_query(&query_str)?
+            .on_store(&store)
+            .execute()
+    })
+    .await
+    .map_err(actix_web::error::ErrorInternalServerError)?
+    .map_err(actix_web::error::ErrorBadRequest)?;
 
     // Determine response format from Accept header
     let accept = req
@@ -677,10 +689,12 @@ async fn upload_data(
     let store = data.store.clone();
     let data_bytes = body.to_vec();
 
-    web::block(move || store.load_from_reader(&data_bytes[..], format, None::<&str>))
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?
-        .map_err(actix_web::error::ErrorBadRequest)?;
+    web::block(move || {
+        store.load_from_reader(RdfParser::from_format(format), &data_bytes[..])
+    })
+    .await
+    .map_err(actix_web::error::ErrorInternalServerError)?
+    .map_err(actix_web::error::ErrorBadRequest)?;
 
     Ok(HttpResponse::Created().finish())
 }
@@ -704,7 +718,11 @@ async fn export_data(req: HttpRequest, data: web::Data<AppData>) -> Result<HttpR
     let store = data.store.clone();
     let buffer = web::block(move || {
         let mut buf = Vec::new();
-        store.dump_graph_to_writer(GraphName::DefaultGraph, format, &mut buf)?;
+        store.dump_graph_to_writer(
+            GraphName::DefaultGraph,
+            RdfSerializer::from_format(format),
+            &mut buf
+        )?;
         Ok::<_, std::io::Error>(buf)
     })
     .await
@@ -751,13 +769,17 @@ Proper async integration with Tokio runtime.
 
 ```rust
 use oxigraph::store::Store;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use tokio::task;
 use std::sync::Arc;
 
 // Pattern 1: Spawn blocking for I/O operations
 async fn query_async(store: Arc<Store>, query: String) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     task::spawn_blocking(move || {
-        let results = store.query(&query)?;
+        let results = SparqlEvaluator::new()
+            .parse_query(&query)?
+            .on_store(&store)
+            .execute()?;
 
         // Process results
         if let QueryResults::Solutions(solutions) = results {
@@ -789,7 +811,10 @@ async fn concurrent_queries(store: Arc<Store>) -> Result<(), Box<dyn std::error:
         let query = query.to_string();
 
         let handle = task::spawn_blocking(move || {
-            store.query(&query)
+            SparqlEvaluator::new()
+                .parse_query(&query)?
+                .on_store(&store)
+                .execute()
         });
 
         handles.push(handle);
@@ -846,7 +871,7 @@ Production-ready error handling with thiserror.
 ```rust
 use thiserror::Error;
 use oxigraph::store::StoreError;
-use oxigraph::sparql::{SparqlParseError, EvaluationError};
+use oxigraph::sparql::{QueryResults, SparqlEvaluator, QueryParseError, EvaluationError};
 
 #[derive(Error, Debug)]
 pub enum OxigraphApiError {
@@ -854,7 +879,7 @@ pub enum OxigraphApiError {
     Store(#[from] StoreError),
 
     #[error("SPARQL parse error: {0}")]
-    SparqlParse(#[from] SparqlParseError),
+    QueryParse(#[from] QueryParseError),
 
     #[error("Query evaluation failed: {0}")]
     QueryEval(#[from] EvaluationError),
@@ -877,7 +902,11 @@ pub enum OxigraphApiError {
 
 // Usage example
 pub fn safe_query(store: &Store, query: &str) -> Result<QueryResults, OxigraphApiError> {
-    store.query(query).map_err(Into::into)
+    SparqlEvaluator::new()
+        .parse_query(query)?
+        .on_store(store)
+        .execute()
+        .map_err(Into::into)
 }
 ```
 
@@ -886,8 +915,11 @@ pub fn safe_query(store: &Store, query: &str) -> Result<QueryResults, OxigraphAp
 Structured logging with tracing.
 
 ```rust
+use oxigraph::store::Store;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use tracing::{info, warn, error, instrument, span, Level};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use std::sync::Arc;
 
 pub fn init_logging() {
     tracing_subscriber::registry()
@@ -910,9 +942,14 @@ async fn instrumented_query(
     info!("Starting query execution");
 
     let start = std::time::Instant::now();
-    let result = tokio::task::spawn_blocking(move || store.query(&query))
-        .await
-        .map_err(|e| OxigraphApiError::Internal(e.to_string()))??;
+    let result = tokio::task::spawn_blocking(move || {
+        SparqlEvaluator::new()
+            .parse_query(&query)?
+            .on_store(&store)
+            .execute()
+    })
+    .await
+    .map_err(|e| OxigraphApiError::Internal(e.to_string()))??;
 
     let duration = start.elapsed();
     info!(duration_ms = duration.as_millis(), "Query completed");
@@ -1013,6 +1050,9 @@ fn transactional_update(store: &Store) -> Result<(), Box<dyn std::error::Error>>
 ### Streaming Large Results
 
 ```rust
+use oxigraph::sparql::{QueryResults, QuerySolution, EvaluationError, SparqlEvaluator};
+use std::sync::Arc;
+
 async fn stream_results(
     store: Arc<Store>,
     query: String,
@@ -1021,7 +1061,10 @@ async fn stream_results(
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         tokio::task::spawn_blocking(move || {
-            if let Ok(QueryResults::Solutions(solutions)) = store.query(&query) {
+            if let Ok(QueryResults::Solutions(solutions)) = SparqlEvaluator::new()
+                .parse_query(&query)
+                .and_then(|q| q.on_store(&store).execute())
+            {
                 for solution in solutions {
                     if tx.blocking_send(solution).is_err() {
                         break;

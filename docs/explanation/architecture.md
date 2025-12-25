@@ -461,7 +461,7 @@ Benefits:
 
 Property paths require special handling:
 
-**Fixed length path** `schema:parent{3}`:
+**Fixed length path** `schema:parent/schema:parent/schema:parent`:
 - Expand to 3 joins
 - Efficient
 
