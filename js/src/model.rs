@@ -213,6 +213,8 @@ export class Dataset {
 
     delete(quad: Quad): boolean;
 
+    discard(quad: Quad): void;
+
     has(quad: Quad): boolean;
 
     match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
@@ -1191,6 +1193,11 @@ impl JsDataset {
 
     pub fn delete(&mut self, quad: &JsValue) -> Result<bool, JsValue> {
         Ok(self.inner.remove(&FROM_JS.with(|c| c.to_quad(quad))?))
+    }
+
+    pub fn discard(&mut self, quad: &JsValue) -> Result<(), JsValue> {
+        self.inner.remove(&FROM_JS.with(|c| c.to_quad(quad))?);
+        Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {

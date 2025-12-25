@@ -59,6 +59,7 @@ export class Store {
             default_graph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
             named_graphs?: Iterable<BlankNode | NamedNode>;
             use_default_graph_as_union?: boolean;
+            substitutions?: Record<string, Term>;
         }
     ): boolean | Map<string, Term>[] | Quad[] | string;
 
@@ -200,6 +201,7 @@ impl JsStore {
         let mut results_format = None;
         let mut default_graph = None;
         let mut named_graphs = None;
+        let mut substitutions = None;
         if !options.is_undefined() {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
 
@@ -246,6 +248,11 @@ impl JsStore {
                         .ok_or_else(|| format_err!("results_format option must be a string"))?,
                 );
             }
+
+            let js_substitutions = Reflect::get(options, &JsValue::from_str("substitutions"))?;
+            if !js_substitutions.is_undefined() && !js_substitutions.is_null() {
+                substitutions = Some(extract_substitutions(&js_substitutions)?);
+            }
         }
 
         let mut evaluator = SparqlEvaluator::new();
@@ -277,6 +284,11 @@ impl JsStore {
             prepared_query
                 .dataset_mut()
                 .set_available_named_graphs(named_graphs);
+        }
+        if let Some(substitutions) = substitutions {
+            for (variable, term) in substitutions {
+                prepared_query = prepared_query.substitute_variable(variable, term);
+            }
         }
 
         let results = prepared_query
@@ -753,4 +765,23 @@ fn extract_prefixes(prefixes_obj: &JsValue) -> Result<Vec<(String, String)>, JsV
         prefixes.push((prefix_name, prefix_iri));
     }
     Ok(prefixes)
+}
+
+fn extract_substitutions(substitutions_obj: &JsValue) -> Result<Vec<(Variable, Term)>, JsValue> {
+    let mut substitutions = Vec::new();
+    let obj = js_sys::Object::try_from(substitutions_obj)
+        .ok_or_else(|| format_err!("substitutions option must be an object"))?;
+    let entries = js_sys::Object::entries(&obj);
+    for i in 0..entries.length() {
+        let entry = entries.get(i);
+        let pair = Array::from(&entry);
+        let variable_name = pair
+            .get(0)
+            .as_string()
+            .ok_or_else(|| format_err!("variable name must be a string"))?;
+        let variable = Variable::new(variable_name).map_err(JsError::from)?;
+        let term = Term::try_from(FROM_JS.with(|c| c.to_term(&pair.get(1)))?)?;
+        substitutions.push((variable, term));
+    }
+    Ok(substitutions)
 }

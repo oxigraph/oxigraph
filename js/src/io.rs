@@ -138,6 +138,29 @@ export function canonicalize(
     quads: Iterable<Quad>,
     algorithm: CanonicalizationAlgorithm
 ): Quad[];
+
+/**
+ * Result of parsing RDF data with metadata
+ */
+export class QuadParser {
+    readonly quads: Quad[];
+    readonly prefixes: Record<string, string>;
+    readonly base_iri: string | null;
+}
+
+/**
+ * Parses RDF data and returns a QuadParser object with quads, prefixes, and base IRI
+ */
+export function parseWithMetadata(
+    data: string,
+    format: RdfFormat,
+    options?: {
+        base_iri?: NamedNode | string;
+        without_named_graphs?: boolean;
+        rename_blank_nodes?: boolean;
+        lenient?: boolean;
+    }
+): QuadParser;
 "###;
 
 /// RDF serialization formats.
@@ -919,4 +942,137 @@ fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
             "If provided, the base IRI must be a NamedNode or a string"
         ))
     }
+}
+
+/// Result of parsing RDF data with metadata.
+///
+/// Contains the parsed quads along with prefixes and base IRI discovered during parsing.
+#[wasm_bindgen(js_name = QuadParser, skip_typescript)]
+pub struct JsQuadParser {
+    quads: Box<[JsValue]>,
+    prefixes: js_sys::Object,
+    base_iri: Option<String>,
+}
+
+#[wasm_bindgen(js_class = QuadParser)]
+impl JsQuadParser {
+    /// The parsed quads
+    #[wasm_bindgen(getter)]
+    pub fn quads(&self) -> Box<[JsValue]> {
+        self.quads.clone()
+    }
+
+    /// The prefixes discovered during parsing
+    #[wasm_bindgen(getter)]
+    pub fn prefixes(&self) -> js_sys::Object {
+        self.prefixes.clone()
+    }
+
+    /// The base IRI used during parsing
+    #[wasm_bindgen(getter)]
+    pub fn base_iri(&self) -> Option<String> {
+        self.base_iri.clone()
+    }
+}
+
+/// Parses RDF data and returns a QuadParser object with quads, prefixes, and base IRI.
+///
+/// # Arguments
+///
+/// * `data` - The RDF data to parse as a string
+/// * `format` - The RDF format of the data
+/// * `options` - Optional parsing options (base_iri, without_named_graphs, rename_blank_nodes, lenient)
+///
+/// # Returns
+///
+/// A QuadParser object containing the parsed quads, prefixes, and base IRI
+///
+/// # Example
+///
+/// ```javascript
+/// import { parseWithMetadata, RdfFormat } from 'oxigraph';
+///
+/// const result = parseWithMetadata(`
+///   @prefix ex: <http://example.com/> .
+///   ex:subject ex:predicate ex:object .
+/// `, RdfFormat.TURTLE);
+///
+/// console.log(result.quads);       // Array of quads
+/// console.log(result.prefixes);    // { ex: "http://example.com/" }
+/// console.log(result.base_iri);    // null (no base IRI specified)
+/// ```
+#[wasm_bindgen(js_name = parseWithMetadata, skip_typescript)]
+pub fn parse_with_metadata(
+    data: &str,
+    format: JsRdfFormat,
+    options: &JsValue,
+) -> Result<JsQuadParser, JsValue> {
+    // Parse options
+    let mut base_iri = None;
+    let mut without_named_graphs = false;
+    let mut rename_blank_nodes = false;
+    let mut lenient = false;
+
+    if !options.is_undefined() && !options.is_null() {
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+        base_iri = convert_base_iri(&js_base_iri)?;
+
+        without_named_graphs =
+            Reflect::get(options, &JsValue::from_str("without_named_graphs"))?.is_truthy();
+        rename_blank_nodes =
+            Reflect::get(options, &JsValue::from_str("rename_blank_nodes"))?.is_truthy();
+        lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
+    }
+
+    // Configure parser
+    let mut parser = RdfParser::from_format(format.inner);
+    if let Some(base_iri) = base_iri {
+        parser = parser
+            .with_base_iri(base_iri)
+            .map_err(|e| format_err!("Invalid base IRI: {}", e))?;
+    }
+    if without_named_graphs {
+        parser = parser.without_named_graphs();
+    }
+    if rename_blank_nodes {
+        parser = parser.rename_blank_nodes();
+    }
+    if lenient {
+        parser = parser.lenient();
+    }
+
+    // Parse the data
+    let mut quad_parser = parser.for_reader(data.as_bytes());
+    let mut quads = Vec::new();
+
+    for quad_result in &mut quad_parser {
+        let quad = quad_result.map_err(JsError::from)?;
+        quads.push(quad);
+    }
+
+    // Collect prefixes
+    let prefixes_obj = js_sys::Object::new();
+    for (prefix_name, prefix_iri) in quad_parser.prefixes() {
+        Reflect::set(
+            &prefixes_obj,
+            &JsValue::from_str(prefix_name),
+            &JsValue::from_str(prefix_iri),
+        )?;
+    }
+
+    // Get base IRI
+    let final_base_iri = quad_parser.base_iri().map(|s| s.to_owned());
+
+    // Convert quads to JS values
+    let js_quads = quads
+        .into_iter()
+        .map(|quad| JsQuad::from(quad).into())
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
+    Ok(JsQuadParser {
+        quads: js_quads,
+        prefixes: prefixes_obj,
+        base_iri: final_base_iri,
+    })
 }

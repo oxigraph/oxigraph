@@ -1,10 +1,15 @@
 import assert from "node:assert";
 import { webcrypto } from "node:crypto";
+// @ts-expect-error
+import dataModel from "@rdfjs/data-model";
 import { describe, it, vi } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
 vi.stubGlobal("crypto", webcrypto);
+
+const ex = dataModel.namedNode("http://example.com");
+const ex2 = dataModel.namedNode("http://example.com/2");
 
 // TODO: add back when https://github.com/rdfjs-base/data-model/pull/52 is released
 // runTests({ factory: oxigraph });
@@ -131,6 +136,200 @@ describe("DataModel", () => {
 
             assert.strictEqual(outerTriple.termType, "Triple");
             assert.ok(outerTriple.subject.equals(innerTriple));
+        });
+    });
+
+    describe("Dataset", () => {
+        describe("#constructor()", () => {
+            it("should create empty dataset", () => {
+                const dataset = new oxigraph.Dataset();
+                assert.strictEqual(0, dataset.size);
+            });
+
+            it("should create dataset with initial quads", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                ]);
+                assert.strictEqual(2, dataset.size);
+            });
+        });
+
+        describe("#add()", () => {
+            it("should add quad to dataset", () => {
+                const dataset = new oxigraph.Dataset();
+                dataset.add(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(1, dataset.size);
+                assert(dataset.has(dataModel.quad(ex, ex, ex)));
+            });
+
+            it("should not add duplicate quad", () => {
+                const dataset = new oxigraph.Dataset();
+                dataset.add(dataModel.quad(ex, ex, ex));
+                dataset.add(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(1, dataset.size);
+            });
+        });
+
+        describe("#delete()", () => {
+            it("should delete existing quad and return true", () => {
+                const dataset = new oxigraph.Dataset([dataModel.quad(ex, ex, ex)]);
+                const result = dataset.delete(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(true, result);
+                assert.strictEqual(0, dataset.size);
+            });
+
+            it("should return false when deleting non-existing quad", () => {
+                const dataset = new oxigraph.Dataset();
+                const result = dataset.delete(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(false, result);
+            });
+        });
+
+        describe("#discard()", () => {
+            it("should silently discard non-existing quad", () => {
+                const dataset = new oxigraph.Dataset();
+                dataset.discard(dataModel.quad(ex, ex, ex)); // Should not throw
+                assert.strictEqual(0, dataset.size);
+            });
+
+            it("should discard existing quad", () => {
+                const dataset = new oxigraph.Dataset([dataModel.quad(ex, ex, ex)]);
+                dataset.discard(dataModel.quad(ex, ex, ex));
+                assert.strictEqual(0, dataset.size);
+                assert(!dataset.has(dataModel.quad(ex, ex, ex)));
+            });
+
+            it("should not throw on empty dataset", () => {
+                const dataset = new oxigraph.Dataset();
+                dataset.discard(dataModel.quad(ex, ex, ex));
+                dataset.discard(dataModel.quad(ex2, ex2, ex2));
+                assert.strictEqual(0, dataset.size);
+            });
+        });
+
+        describe("#has()", () => {
+            it("should return true for existing quad", () => {
+                const dataset = new oxigraph.Dataset([dataModel.quad(ex, ex, ex)]);
+                assert(dataset.has(dataModel.quad(ex, ex, ex)));
+            });
+
+            it("should return false for non-existing quad", () => {
+                const dataset = new oxigraph.Dataset();
+                assert(!dataset.has(dataModel.quad(ex, ex, ex)));
+            });
+        });
+
+        describe("#match()", () => {
+            it("should return all quads with no pattern", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                ]);
+                const results = dataset.match();
+                assert.strictEqual(2, results.length);
+            });
+
+            it("should filter by subject", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex2, ex, ex),
+                ]);
+                const results = dataset.match(ex);
+                assert.strictEqual(1, results.length);
+            });
+
+            it("should filter by predicate", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex2, ex),
+                ]);
+                const results = dataset.match(null, ex2);
+                assert.strictEqual(1, results.length);
+            });
+
+            it("should filter by object", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                ]);
+                const results = dataset.match(null, null, ex2);
+                assert.strictEqual(1, results.length);
+            });
+
+            it("should filter by graph", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex, ex),
+                    dataModel.quad(ex, ex, ex, ex2),
+                ]);
+                const results = dataset.match(null, null, null, ex2);
+                assert.strictEqual(1, results.length);
+            });
+        });
+
+        describe("#clear()", () => {
+            it("should clear all quads", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                ]);
+                dataset.clear();
+                assert.strictEqual(0, dataset.size);
+            });
+        });
+
+        describe("#quads_for_subject()", () => {
+            it("should return quads matching subject", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                    dataModel.quad(ex2, ex, ex),
+                ]);
+                const results = dataset.quads_for_subject(ex);
+                assert.strictEqual(2, results.length);
+            });
+        });
+
+        describe("#quads_for_predicate()", () => {
+            it("should return quads matching predicate", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex2, ex),
+                ]);
+                const results = dataset.quads_for_predicate(ex2);
+                assert.strictEqual(1, results.length);
+            });
+        });
+
+        describe("#quads_for_object()", () => {
+            it("should return quads matching object", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2),
+                ]);
+                const results = dataset.quads_for_object(ex2);
+                assert.strictEqual(1, results.length);
+            });
+        });
+
+        describe("#quads_for_graph_name()", () => {
+            it("should return quads matching graph", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex, ex),
+                    dataModel.quad(ex, ex, ex, ex2),
+                ]);
+                const results = dataset.quads_for_graph_name(ex2);
+                assert.strictEqual(1, results.length);
+            });
+
+            it("should return quads in default graph", () => {
+                const dataset = new oxigraph.Dataset([
+                    dataModel.quad(ex, ex, ex),
+                    dataModel.quad(ex, ex, ex2, ex),
+                ]);
+                const results = dataset.quads_for_graph_name(dataModel.defaultGraph());
+                assert.strictEqual(1, results.length);
+            });
         });
     });
 });

@@ -354,6 +354,30 @@ describe("Store", () => {
         });
     });
 
+    describe("#is_empty()", () => {
+        it("should return true for empty store", () => {
+            const store = new Store();
+            assert.strictEqual(true, store.is_empty());
+        });
+
+        it("should return false for non-empty store", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            assert.strictEqual(false, store.is_empty());
+        });
+
+        it("should return true after clearing store", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            store.clear();
+            assert.strictEqual(true, store.is_empty());
+        });
+
+        it("should return false after adding quad", () => {
+            const store = new Store();
+            store.add(dataModel.quad(ex, ex, ex));
+            assert.strictEqual(false, store.is_empty());
+        });
+    });
+
     describe("#extend()", () => {
         it("should add multiple quads at once", () => {
             const store = new Store();
@@ -362,6 +386,21 @@ describe("Store", () => {
                 dataModel.quad(ex, ex, ex2),
             ]);
             assert.strictEqual(2, store.size);
+        });
+
+        it("should work with empty array", () => {
+            const store = new Store();
+            store.extend([]);
+            assert.strictEqual(0, store.size);
+        });
+
+        it("should add quads to existing store", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            store.extend([
+                dataModel.quad(ex, ex, ex2),
+                dataModel.quad(ex2, ex2, ex2),
+            ]);
+            assert.strictEqual(3, store.size);
         });
     });
 
@@ -496,6 +535,16 @@ describe("parse()", () => {
         assert.strictEqual("http://example.com/s", quads[0].subject.value);
     });
 
+    it("should parse Turtle with base IRI as NamedNode", () => {
+        const quads = parse(
+            "<s> <p> <o> .",
+            RdfFormat.TURTLE,
+            { base_iri: dataModel.namedNode("http://example.com/") },
+        );
+        assert.strictEqual(1, quads.length);
+        assert.strictEqual("http://example.com/s", quads[0].subject.value);
+    });
+
     it("should parse N-Quads", () => {
         const quads = parse(
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .",
@@ -504,6 +553,39 @@ describe("parse()", () => {
         );
         assert.strictEqual(1, quads.length);
         assert.strictEqual("http://example.com/g", quads[0].graph.value);
+    });
+
+    it("should parse Turtle without options", () => {
+        const quads = parse(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+            RdfFormat.TURTLE,
+        );
+        assert.strictEqual(1, quads.length);
+    });
+
+    it("should parse multiple triples", () => {
+        const quads = parse(
+            `<http://example.com/s1> <http://example.com/p> <http://example.com/o1> .
+             <http://example.com/s2> <http://example.com/p> <http://example.com/o2> .`,
+            RdfFormat.N_TRIPLES,
+            {},
+        );
+        assert.strictEqual(2, quads.length);
+    });
+
+    it("should rename blank nodes when option is set", () => {
+        const quads1 = parse(
+            "_:b1 <http://example.com/p> <http://example.com/o> .",
+            RdfFormat.N_TRIPLES,
+            { rename_blank_nodes: true },
+        );
+        const quads2 = parse(
+            "_:b1 <http://example.com/p> <http://example.com/o> .",
+            RdfFormat.N_TRIPLES,
+            { rename_blank_nodes: true },
+        );
+        // With rename_blank_nodes, blank node IDs should be different
+        assert.notStrictEqual(quads1[0].subject.value, quads2[0].subject.value);
     });
 });
 
@@ -522,6 +604,38 @@ describe("serialize()", () => {
             prefixes: { ex: "http://example.com/" },
         });
         assert(result.length > 0);
+    });
+
+    it("should serialize to Turtle with base IRI", () => {
+        const store = new Store([dataModel.quad(ex, ex, ex)]);
+        const quads = store.match();
+        const result = serialize(quads, RdfFormat.TURTLE, {
+            base_iri: "http://example.com/",
+        });
+        assert(result.length > 0);
+    });
+
+    it("should serialize to Turtle with prefixes and base IRI", () => {
+        const store = new Store([dataModel.quad(ex, ex, ex)]);
+        const quads = store.match();
+        const result = serialize(quads, RdfFormat.TURTLE, {
+            prefixes: { ex: "http://example.com/" },
+            base_iri: "http://example.com/",
+        });
+        assert(result.length > 0);
+    });
+
+    it("should serialize empty quads array", () => {
+        const result = serialize([], RdfFormat.N_TRIPLES, {});
+        assert.strictEqual("", result);
+    });
+
+    it("should serialize to N-Quads with named graphs", () => {
+        const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+        const quads = store.match();
+        const result = serialize(quads, RdfFormat.N_QUADS, {});
+        assert(result.includes("<http://example.com>"));
+        assert.strictEqual(4, result.split("<http://example.com>").length - 1);
     });
 });
 
