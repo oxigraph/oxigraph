@@ -210,13 +210,11 @@ for solution in results:
     person, name, age = solution
     print(f"{name.value} is {age.value}")
 
-    # Check if variable is bound
-    if 'email' in solution:
+    # Check if variable is bound (solution['email'] returns None if not bound)
+    if solution['email'] is not None:
         print(f"Email: {solution['email'].value}")
-
-    # Get with default
-    email = solution.get('email', Literal('N/A'))
-    print(f"Email: {email.value}")
+    else:
+        print("Email: N/A")
 ```
 
 ### Result Set Modifiers
@@ -424,8 +422,8 @@ query = """
 # Returns all people, with email when available
 for solution in store.query(query):
     name = solution['name'].value
-    email = solution.get('email')
-    if email:
+    email = solution['email']
+    if email is not None:
         print(f"{name}: {email.value}")
     else:
         print(f"{name}: no email")
@@ -615,8 +613,8 @@ def get_person_info(person_id: str) -> dict:
     if result:
         return {
             'name': result['name'].value,
-            'age': result.get('age', {}).value if result.get('age') else None,
-            'email': result.get('email', {}).value if result.get('email') else None
+            'age': result['age'].value if result['age'] is not None else None,
+            'email': result['email'].value if result['email'] is not None else None
         }
     return None
 

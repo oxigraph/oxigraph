@@ -320,15 +320,18 @@ for solution in store.query("SELECT ?name WHERE { ?s <http://schema.org/name> ?n
     name_string = solution['name'].value
 ```
 
-### 3. Not closing persistent stores
+### 3. Persistent stores are automatically managed
 
-When using persistent stores, it's good practice to manage the store lifecycle:
+Persistent stores in pyoxigraph are automatically managed and don't require explicit closing:
 
 ```python
-# Using context manager (recommended)
-with Store(path="my_database") as store:
-    store.add(Quad(subject, predicate, object))
-    # Store is automatically closed when exiting the block
+# Store is automatically flushed in background threads
+store = Store(path="my_database")
+store.add(Quad(subject, predicate, object))
+# Data is persisted automatically
+
+# You can force a flush if needed
+store.flush()
 ```
 
 ## Resources

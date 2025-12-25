@@ -608,7 +608,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Alice's friends:");
     for quad in store.quads_for_pattern(
         Some(alice.as_ref().into()),
-        Some(NamedNodeRef::new("http://xmlns.com/foaf/0.1/knows")?.into()),
+        Some(NamedNodeRef::new("http://xmlns.com/foaf/0.1/knows")?),
         None,
         None
     ) {

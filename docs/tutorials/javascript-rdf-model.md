@@ -574,14 +574,32 @@ console.log(dataset.toString());
 Canonicalize a dataset using RDF Dataset Canonicalization (RDFC-1.0):
 
 ```javascript
-const dataset = new oxigraph.Dataset();
+const { Dataset, CanonicalizationAlgorithm } = require('oxigraph');
+
+const dataset = new Dataset();
 // ... add quads with blank nodes ...
 
-// Canonicalize using URDNA2015
-dataset.canonicalize('urdna2015');
+// Canonicalize using RDFC-1.0 (the W3C standard algorithm)
+dataset.canonicalize(CanonicalizationAlgorithm.RDFC_1_0);
 
 // The blank node IDs are now canonical and deterministic
 console.log(dataset.toString());
+```
+
+Available canonicalization algorithms:
+
+```javascript
+// RDFC-1.0 with SHA-256 (the W3C standard, alias for RDFC_1_0_SHA_256)
+CanonicalizationAlgorithm.RDFC_1_0
+
+// RDFC-1.0 with SHA-256 (default)
+CanonicalizationAlgorithm.RDFC_1_0_SHA_256
+
+// RDFC-1.0 with SHA-384
+CanonicalizationAlgorithm.RDFC_1_0_SHA_384
+
+// Oxigraph's optimized algorithm (warning: may change between versions)
+CanonicalizationAlgorithm.UNSTABLE
 ```
 
 ## Next Steps

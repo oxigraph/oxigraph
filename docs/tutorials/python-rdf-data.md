@@ -245,17 +245,17 @@ formats = {
 ### Loading RDF Data into a Store
 
 ```python
-from pyoxigraph import Store
+from pyoxigraph import Store, RdfFormat, NamedNode
 
 store = Store()
 
-# Load from file
-store.load("data.ttl", format=RdfFormat.TURTLE)
+# Load from file using path parameter
+store.load(path="data.ttl", format=RdfFormat.TURTLE)
 
 # Load from file with base IRI
-store.load("data.ttl", format=RdfFormat.TURTLE, base_iri="http://example.org/")
+store.load(path="data.ttl", format=RdfFormat.TURTLE, base_iri="http://example.org/")
 
-# Load from string
+# Load from string (use input parameter)
 turtle_data = """
 @prefix schema: <http://schema.org/> .
 @prefix ex: <http://example.org/> .
@@ -263,11 +263,11 @@ turtle_data = """
 ex:alice schema:name "Alice" ;
          schema:age 30 .
 """
-store.load(turtle_data.encode('utf-8'), format=RdfFormat.TURTLE)
+store.load(input=turtle_data.encode('utf-8'), format=RdfFormat.TURTLE)
 
 # Load into a named graph
 graph = NamedNode("http://example.org/graph/social")
-store.load("social-data.ttl", format=RdfFormat.TURTLE, to_graph=graph)
+store.load(path="social-data.ttl", format=RdfFormat.TURTLE, to_graph=graph)
 ```
 
 ### Saving RDF Data
@@ -527,7 +527,9 @@ query = """
 """
 
 for solution in store.query(query):
-    print(f"{solution['name'].value}: {solution.get('age', 'unknown')}")
+    age = solution['age']
+    age_str = age.value if age is not None else 'unknown'
+    print(f"{solution['name'].value}: {age_str}")
 ```
 
 ### Integration with rdflib
