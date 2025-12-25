@@ -928,6 +928,53 @@ impl PyStore {
         })
     }
 
+    /// Loads N3 data into the store.
+    ///
+    /// This is a convenience method that wraps :py:func:`load` with the N3 format.
+    /// The data is parsed and loaded in a transactional manner: either the full operation succeeds,
+    /// or nothing is written to the database.
+    ///
+    /// N3 format supports formulas, rules, and other advanced features beyond basic RDF.
+    ///
+    /// :param data: the N3 data to load as a string.
+    /// :type data: str
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the data or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :rtype: None
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises OSError: if an error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.load_n3('@prefix ex: <http://example.com/> . ex:subject ex:predicate "value" .')
+    /// >>> len(store)
+    /// 1
+    #[pyo3(signature = (data, *, base_iri = None, to_graph = None))]
+    fn load_n3(
+        &self,
+        data: &str,
+        base_iri: Option<&str>,
+        to_graph: Option<PyGraphNameRef<'_>>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
+        py.detach(|| {
+            let mut parser = RdfParser::from_format(oxigraph::io::RdfFormat::N3);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            }
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_reader(parser, data.as_bytes())
+                .map_err(|e| map_loader_error(e, None))
+        })
+    }
+
     /// Serializes all quads in the store to Turtle format.
     ///
     /// This is a convenience method that wraps :py:func:`dump` with the Turtle format.
@@ -1019,6 +1066,64 @@ impl PyStore {
             } else {
                 self.inner
                     .dump_graph_to_writer(GraphNameRef::DefaultGraph, serializer, &mut output)
+            }
+            .map_err(map_serializer_error)?;
+            Ok(output)
+        })?;
+        String::from_utf8(bytes).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Serializes all quads in the store to N3 format.
+    ///
+    /// This is a convenience method that wraps :py:func:`dump` with the N3 format.
+    /// N3 format supports formulas, rules, and other advanced features beyond basic RDF.
+    ///
+    /// :param from_graph: the store graph from which to dump the triples. If None, serializes the entire dataset.
+    /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param prefixes: the prefixes used in the serialization.
+    /// :type prefixes: dict[str, str] or None, optional
+    /// :param base_iri: the base IRI used in the serialization.
+    /// :type base_iri: str or None, optional
+    /// :return: the N3 serialization as a string.
+    /// :rtype: str
+    /// :raises OSError: if an error happens during the serialization.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o')))
+    /// >>> n3 = store.to_n3()
+    /// >>> '<http://example.com/s>' in n3
+    /// True
+    #[pyo3(signature = (*, from_graph = None, prefixes = None, base_iri = None))]
+    fn to_n3(
+        &self,
+        from_graph: Option<PyGraphNameRef<'_>>,
+        prefixes: Option<BTreeMap<String, String>>,
+        base_iri: Option<&str>,
+        py: Python<'_>,
+    ) -> PyResult<String> {
+        let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
+        let bytes = py.detach(|| -> PyResult<Vec<u8>> {
+            let mut serializer = RdfSerializer::from_format(oxigraph::io::RdfFormat::N3);
+            if let Some(prefixes) = prefixes {
+                for (prefix_name, prefix_iri) in &prefixes {
+                    serializer = serializer.with_prefix(prefix_name, prefix_iri).map_err(|e| {
+                        PyValueError::new_err(format!(
+                            "Invalid prefix {prefix_name} IRI '{prefix_iri}', {e}"
+                        ))
+                    })?;
+                }
+            }
+            if let Some(base_iri) = base_iri {
+                serializer = serializer
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}")))?;
+            }
+            let mut output = Vec::new();
+            if let Some(from_graph_name) = from_graph_name {
+                self.inner
+                    .dump_graph_to_writer(from_graph_name, serializer, &mut output)
+            } else {
+                self.inner.dump_to_writer(serializer, &mut output)
             }
             .map_err(map_serializer_error)?;
             Ok(output)

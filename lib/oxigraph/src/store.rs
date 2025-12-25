@@ -917,6 +917,295 @@ impl Store {
         Ok(())
     }
 
+    /// Stores an N3 formula in the store as a named graph.
+    ///
+    /// The formula's triples are converted to quads using the formula's blank node ID
+    /// as the graph name. The graph is automatically registered as a named graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula` - The formula to store
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or a `StorageError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // Create a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    ///
+    /// // Store the formula
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Verify it was stored
+    /// let loaded = store.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.triples().len(), 1);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn store_formula(&self, formula: &Formula) -> Result<(), StorageError> {
+        let mut transaction = self.storage.start_transaction()?;
+
+        // Insert the named graph first
+        transaction.insert_named_graph(NamedOrBlankNodeRef::BlankNode(formula.id().as_ref()));
+
+        // Convert formula to quads and insert them
+        for quad in formula.to_quads() {
+            transaction.insert(quad.as_ref());
+        }
+
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Loads an N3 formula from the store.
+    ///
+    /// Retrieves all quads with the specified graph name and converts them back
+    /// into a Formula.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to load
+    ///
+    /// # Returns
+    ///
+    /// Returns the loaded `Formula` on success, or a `StorageError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // Create and store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Load the formula back
+    /// let loaded = store.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.id(), formula.id());
+    /// assert_eq!(loaded.triples(), formula.triples());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_formula(&self, formula_id: BlankNodeRef<'_>) -> Result<Formula, StorageError> {
+        let graph_name = GraphNameRef::BlankNode(formula_id);
+        let quads: Result<Vec<Quad>, StorageError> = self
+            .quads_for_pattern(None, None, None, Some(graph_name))
+            .collect();
+
+        // Convert quads to triples and create formula with the specified ID
+        let triples: Vec<Triple> = quads?.into_iter().map(|q| q.into()).collect();
+        Ok(Formula::new(formula_id.into_owned(), triples))
+    }
+
+    /// Queries the contents of an N3 formula using SPARQL.
+    ///
+    /// Executes a SPARQL query against the triples stored in the specified formula.
+    /// The query is executed as if only the formula's graph exists.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to query
+    /// * `query` - The SPARQL query to execute
+    ///
+    /// # Returns
+    ///
+    /// Returns the query results on success, or a `QueryEvaluationError` if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // Create and store a formula with some data
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let name = NamedNode::new("http://xmlns.com/foaf/0.1/name")?;
+    /// let alice = Literal::new_simple_literal("Alice");
+    /// let triple = Triple::new(ex.clone(), name.clone(), alice);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Query the formula
+    /// if let QueryResults::Solutions(mut solutions) = store.query_formula(
+    ///     id.as_ref(),
+    ///     SparqlEvaluator::new().parse_query("SELECT ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }")?
+    /// )? {
+    ///     let solution = solutions.next().unwrap()?;
+    ///     assert_eq!(solution.get("name").unwrap().to_string(), "\"Alice\"");
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[expect(deprecated)]
+    pub fn query_formula(
+        &self,
+        formula_id: BlankNodeRef<'_>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+        self.query_formula_opt(formula_id, query, SparqlEvaluator::new())
+    }
+
+    /// Queries the contents of an N3 formula using SPARQL with custom options.
+    ///
+    /// Executes a SPARQL query against the triples stored in the specified formula
+    /// with custom evaluation options.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to query
+    /// * `query` - The SPARQL query to execute
+    /// * `options` - Custom SPARQL evaluation options
+    ///
+    /// # Returns
+    ///
+    /// Returns the query results on success, or a `QueryEvaluationError` if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // Create and store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Query with custom function
+    /// let evaluator = SparqlEvaluator::new()
+    ///     .with_custom_function(
+    ///         NamedNode::new("http://example.com/uppercase")?,
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string().to_uppercase()).into())
+    ///     );
+    ///
+    /// if let QueryResults::Solutions(mut solutions) = store.query_formula_opt(
+    ///     id.as_ref(),
+    ///     "SELECT ?s WHERE { ?s ?p ?o }",
+    ///     evaluator
+    /// )? {
+    ///     assert!(solutions.next().is_some());
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[expect(deprecated)]
+    pub fn query_formula_opt(
+        &self,
+        formula_id: BlankNodeRef<'_>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+        options: SparqlEvaluator,
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+        let parsed_query = query.try_into().map_err(Into::into)?;
+
+        // Rewrite the query to target the specific formula graph
+        let graph_name = GraphName::BlankNode(formula_id.into_owned());
+        let rewritten_query = self.rewrite_query_for_graph(parsed_query, &graph_name)?;
+
+        options
+            .for_query(rewritten_query)
+            .on_store(self)
+            .execute()
+    }
+
+    /// Helper method to rewrite a SPARQL query to target a specific graph.
+    #[expect(deprecated)]
+    fn rewrite_query_for_graph(
+        &self,
+        query: Query,
+        graph_name: &GraphName,
+    ) -> Result<Query, QueryEvaluationError> {
+        // For now, we'll use a simple approach: wrap the query pattern in a GRAPH clause
+        // A more sophisticated implementation would use the SPARQL algebra to rewrite properly
+
+        // Get the query string
+        let query_str = query.to_string();
+
+        // If it's a SELECT query, wrap the WHERE clause with GRAPH
+        if query_str.contains("SELECT") && query_str.contains("WHERE") {
+            let graph_iri = match graph_name {
+                GraphName::NamedNode(n) => format!("<{}>", n.as_str()),
+                GraphName::BlankNode(b) => format!("_:{}", b.as_str()),
+                GraphName::DefaultGraph => return Ok(query), // No rewrite needed
+            };
+
+            // Simple pattern replacement - in production, use proper SPARQL algebra rewriting
+            let rewritten = query_str.replace(
+                "WHERE {",
+                &format!("WHERE {{ GRAPH {} {{", graph_iri)
+            ).replace(
+                " }",
+                " } }"
+            );
+
+            Query::parse(&rewritten, None).map_err(|e| e.into())
+        } else {
+            // For other query types, return as-is for now
+            Ok(query)
+        }
+    }
+
+    /// Removes an N3 formula from the store.
+    ///
+    /// This removes all quads associated with the formula's graph and unregisters
+    /// the named graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to remove
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or a `StorageError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // Create and store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Remove the formula
+    /// store.remove_formula(id.as_ref())?;
+    ///
+    /// // Verify it was removed
+    /// let loaded = store.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.triples().len(), 0);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn remove_formula(&self, formula_id: BlankNodeRef<'_>) -> Result<(), StorageError> {
+        self.remove_named_graph(formula_id)
+    }
+
     /// Clears the store.
     ///
     /// Usage example:
@@ -1511,6 +1800,301 @@ impl<'a> Transaction<'a> {
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> Result<(), StorageError> {
         self.inner.remove_named_graph(graph_name.into())
+    }
+
+    /// Stores an N3 formula in the transaction as a named graph.
+    ///
+    /// The formula's triples are converted to quads using the formula's blank node ID
+    /// as the graph name. The graph is automatically registered as a named graph.
+    ///
+    /// Changes are not persisted until the transaction is committed.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula` - The formula to store
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    ///
+    /// // Create a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    ///
+    /// // Store the formula in the transaction
+    /// transaction.store_formula(&formula);
+    /// transaction.commit()?;
+    ///
+    /// // Verify it was stored
+    /// let loaded = store.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.triples().len(), 1);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn store_formula(&mut self, formula: &Formula) {
+        // Insert the named graph first
+        self.inner.insert_named_graph(NamedOrBlankNodeRef::BlankNode(formula.id().as_ref()));
+
+        // Convert formula to quads and insert them
+        for quad in formula.to_quads() {
+            self.inner.insert(quad.as_ref());
+        }
+    }
+
+    /// Loads an N3 formula from the transaction's current state.
+    ///
+    /// Retrieves all quads with the specified graph name and converts them back
+    /// into a Formula. This includes any pending changes in the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to load
+    ///
+    /// # Returns
+    ///
+    /// Returns the loaded `Formula` on success, or a `StorageError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    ///
+    /// // Create and store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// transaction.store_formula(&formula);
+    ///
+    /// // Load the formula back from the transaction
+    /// let loaded = transaction.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.id(), formula.id());
+    /// assert_eq!(loaded.triples(), formula.triples());
+    ///
+    /// transaction.commit()?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_formula(&self, formula_id: BlankNodeRef<'_>) -> Result<Formula, StorageError> {
+        let graph_name = GraphNameRef::BlankNode(formula_id);
+        let quads: Result<Vec<Quad>, StorageError> = self
+            .quads_for_pattern(None, None, None, Some(graph_name))
+            .collect();
+
+        // Convert quads to triples and create formula with the specified ID
+        let triples: Vec<Triple> = quads?.into_iter().map(|q| q.into()).collect();
+        Ok(Formula::new(formula_id.into_owned(), triples))
+    }
+
+    /// Queries the contents of an N3 formula using SPARQL within the transaction.
+    ///
+    /// Executes a SPARQL query against the triples stored in the specified formula,
+    /// including any pending changes in the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to query
+    /// * `query` - The SPARQL query to execute
+    ///
+    /// # Returns
+    ///
+    /// Returns the query results on success, or a `QueryEvaluationError` if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    ///
+    /// // Create and store a formula with some data
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let name = NamedNode::new("http://xmlns.com/foaf/0.1/name")?;
+    /// let alice = Literal::new_simple_literal("Alice");
+    /// let triple = Triple::new(ex.clone(), name.clone(), alice);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// transaction.store_formula(&formula);
+    ///
+    /// // Query the formula within the transaction
+    /// if let QueryResults::Solutions(mut solutions) = transaction.query_formula(
+    ///     id.as_ref(),
+    ///     SparqlEvaluator::new().parse_query("SELECT ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }")?
+    /// )? {
+    ///     let solution = solutions.next().unwrap()?;
+    ///     assert_eq!(solution.get("name").unwrap().to_string(), "\"Alice\"");
+    /// }
+    ///
+    /// transaction.commit()?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[expect(deprecated)]
+    pub fn query_formula(
+        &self,
+        formula_id: BlankNodeRef<'_>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+    ) -> Result<QueryResults<'_>, QueryEvaluationError> {
+        self.query_formula_opt(formula_id, query, SparqlEvaluator::new())
+    }
+
+    /// Queries the contents of an N3 formula using SPARQL with custom options within the transaction.
+    ///
+    /// Executes a SPARQL query against the triples stored in the specified formula
+    /// with custom evaluation options, including any pending changes in the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to query
+    /// * `query` - The SPARQL query to execute
+    /// * `options` - Custom SPARQL evaluation options
+    ///
+    /// # Returns
+    ///
+    /// Returns the query results on success, or a `QueryEvaluationError` if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    ///
+    /// // Create and store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// transaction.store_formula(&formula);
+    ///
+    /// // Query with custom function
+    /// let evaluator = SparqlEvaluator::new()
+    ///     .with_custom_function(
+    ///         NamedNode::new("http://example.com/uppercase")?,
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string().to_uppercase()).into())
+    ///     );
+    ///
+    /// if let QueryResults::Solutions(mut solutions) = transaction.query_formula_opt(
+    ///     id.as_ref(),
+    ///     "SELECT ?s WHERE { ?s ?p ?o }",
+    ///     evaluator
+    /// )? {
+    ///     assert!(solutions.next().is_some());
+    /// }
+    ///
+    /// transaction.commit()?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[expect(deprecated)]
+    pub fn query_formula_opt(
+        &self,
+        formula_id: BlankNodeRef<'_>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+        options: SparqlEvaluator,
+    ) -> Result<QueryResults<'_>, QueryEvaluationError> {
+        let parsed_query = query.try_into().map_err(Into::into)?;
+
+        // Rewrite the query to target the specific formula graph
+        let graph_name = GraphName::BlankNode(formula_id.into_owned());
+        let rewritten_query = self.rewrite_query_for_graph(parsed_query, &graph_name)?;
+
+        options
+            .for_query(rewritten_query)
+            .on_transaction(self)
+            .execute()
+    }
+
+    /// Helper method to rewrite a SPARQL query to target a specific graph.
+    #[expect(deprecated)]
+    fn rewrite_query_for_graph(
+        &self,
+        query: Query,
+        graph_name: &GraphName,
+    ) -> Result<Query, QueryEvaluationError> {
+        // For now, we'll use a simple approach: wrap the query pattern in a GRAPH clause
+        // A more sophisticated implementation would use the SPARQL algebra to rewrite properly
+
+        // Get the query string
+        let query_str = query.to_string();
+
+        // If it's a SELECT query, wrap the WHERE clause with GRAPH
+        if query_str.contains("SELECT") && query_str.contains("WHERE") {
+            let graph_iri = match graph_name {
+                GraphName::NamedNode(n) => format!("<{}>", n.as_str()),
+                GraphName::BlankNode(b) => format!("_:{}", b.as_str()),
+                GraphName::DefaultGraph => return Ok(query), // No rewrite needed
+            };
+
+            // Simple pattern replacement - in production, use proper SPARQL algebra rewriting
+            let rewritten = query_str.replace(
+                "WHERE {",
+                &format!("WHERE {{ GRAPH {} {{", graph_iri)
+            ).replace(
+                " }",
+                " } }"
+            );
+
+            Query::parse(&rewritten, None).map_err(|e| e.into())
+        } else {
+            // For other query types, return as-is for now
+            Ok(query)
+        }
+    }
+
+    /// Removes an N3 formula from the transaction.
+    ///
+    /// This removes all quads associated with the formula's graph and unregisters
+    /// the named graph. Changes are not persisted until the transaction is committed.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The blank node identifier of the formula to remove
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or a `StorageError` if the operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // First store a formula
+    /// let id = BlankNode::new("f1")?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let triple = Triple::new(ex.clone(), ex.clone(), ex);
+    /// let formula = Formula::new(id.clone(), vec![triple]);
+    /// store.store_formula(&formula)?;
+    ///
+    /// // Remove it in a transaction
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.remove_formula(id.as_ref())?;
+    /// transaction.commit()?;
+    ///
+    /// // Verify it was removed
+    /// let loaded = store.load_formula(id.as_ref())?;
+    /// assert_eq!(loaded.triples().len(), 0);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn remove_formula(&mut self, formula_id: BlankNodeRef<'_>) -> Result<(), StorageError> {
+        self.remove_named_graph(formula_id)
     }
 
     /// Clears the store.

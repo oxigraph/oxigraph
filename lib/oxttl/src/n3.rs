@@ -169,6 +169,161 @@ impl From<Quad> for N3Quad {
     }
 }
 
+impl N3Quad {
+    /// Attempts to convert this N3Quad to a regular Quad.
+    ///
+    /// Returns `None` if any component is a variable, as variables are not valid in RDF quads.
+    /// This is useful for converting N3 data to a format that can be stored in RDF stores
+    /// and queried with SPARQL.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{GraphName, NamedNode, Quad};
+    /// use oxttl::n3::{N3Quad, N3Term};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let n3_quad = N3Quad {
+    ///     subject: N3Term::NamedNode(ex.clone()),
+    ///     predicate: N3Term::NamedNode(ex.clone()),
+    ///     object: N3Term::NamedNode(ex.clone()),
+    ///     graph_name: GraphName::DefaultGraph,
+    /// };
+    ///
+    /// let quad = n3_quad.try_into_quad();
+    /// assert!(quad.is_some());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn try_into_quad(self) -> Option<Quad> {
+        Some(Quad {
+            subject: self.subject.try_into_named_or_blank_node()?,
+            predicate: self.predicate.try_into_named_node()?,
+            object: self.object.try_into_term()?,
+            graph_name: self.graph_name,
+        })
+    }
+
+    /// Creates a new N3Quad.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{GraphName, NamedNode};
+    /// use oxttl::n3::{N3Quad, N3Term};
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = N3Quad::new(
+    ///     N3Term::NamedNode(ex.clone()),
+    ///     N3Term::NamedNode(ex.clone()),
+    ///     N3Term::NamedNode(ex),
+    ///     GraphName::DefaultGraph,
+    /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn new(subject: N3Term, predicate: N3Term, object: N3Term, graph_name: GraphName) -> Self {
+        Self {
+            subject,
+            predicate,
+            object,
+            graph_name,
+        }
+    }
+}
+
+impl N3Term {
+    /// Attempts to convert this N3Term to a regular Term.
+    ///
+    /// Returns `None` if this is a variable, as variables are not valid RDF terms.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{NamedNode, Term};
+    /// use oxttl::n3::N3Term;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let n3_term = N3Term::NamedNode(ex.clone());
+    /// let term = n3_term.try_into_term();
+    /// assert_eq!(term, Some(Term::NamedNode(ex)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn try_into_term(self) -> Option<Term> {
+        match self {
+            Self::NamedNode(n) => Some(Term::NamedNode(n)),
+            Self::BlankNode(n) => Some(Term::BlankNode(n)),
+            Self::Literal(l) => Some(Term::Literal(l)),
+            #[cfg(feature = "rdf-12")]
+            Self::Triple(t) => Some(Term::Triple(t)),
+            Self::Variable(_) => None,
+        }
+    }
+
+    /// Attempts to convert this N3Term to a NamedOrBlankNode.
+    ///
+    /// Returns `None` if this is not a named node or blank node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::{NamedNode, NamedOrBlankNode};
+    /// use oxttl::n3::N3Term;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let n3_term = N3Term::NamedNode(ex.clone());
+    /// let node = n3_term.try_into_named_or_blank_node();
+    /// assert_eq!(node, Some(NamedOrBlankNode::NamedNode(ex)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn try_into_named_or_blank_node(self) -> Option<NamedOrBlankNode> {
+        match self {
+            Self::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n)),
+            Self::BlankNode(n) => Some(NamedOrBlankNode::BlankNode(n)),
+            _ => None,
+        }
+    }
+
+    /// Attempts to convert this N3Term to a NamedNode.
+    ///
+    /// Returns `None` if this is not a named node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::NamedNode;
+    /// use oxttl::n3::N3Term;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let n3_term = N3Term::NamedNode(ex.clone());
+    /// let node = n3_term.try_into_named_node();
+    /// assert_eq!(node, Some(ex));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn try_into_named_node(self) -> Option<NamedNode> {
+        match self {
+            Self::NamedNode(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Checks if this is a variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::Variable;
+    /// use oxttl::n3::N3Term;
+    ///
+    /// let var = N3Term::Variable(Variable::new("x")?);
+    /// assert!(var.is_variable());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Self::Variable(_))
+    }
+}
+
 /// A [N3](https://w3c.github.io/N3/spec/) streaming parser.
 ///
 /// Count the number of people:
@@ -1722,7 +1877,7 @@ impl LowLevelN3Serializer {
                 writeln!(writer, " .")?;
             }
             if !self.current_graph_name.is_default_graph() {
-                writeln!(writer, "}}")?;
+                writeln!(writer, "}} .")?;
             }
             self.current_graph_name = q.graph_name.clone();
             self.current_subject_predicate = None;
@@ -1816,7 +1971,7 @@ impl LowLevelN3Serializer {
             writeln!(writer, " .")?;
         }
         if !self.current_graph_name.is_default_graph() {
-            writeln!(writer, "}}")?;
+            writeln!(writer, "}} .")?;
         }
         Ok(())
     }
@@ -3330,6 +3485,555 @@ mod tests {
                 assert!(lit.value().contains("你好世界"));
             }
             _ => panic!("Expected literal"),
+        }
+    }
+
+    // ========== Comprehensive Round-Trip Tests ==========
+
+    #[test]
+    fn test_round_trip_formula_simple() {
+        // Parse N3 with a formula
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:alice ex:believes {
+                ex:bob ex:knows ex:charlie .
+            } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(quads.len() >= 2);
+
+        // Serialize back to N3
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        // Parse the serialized output
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        // Should have the same number of quads
+        assert_eq!(quads.len(), quads2.len());
+
+        // Verify structure is preserved
+        let outer_quad = quads
+            .iter()
+            .find(|q| q.graph_name == GraphName::DefaultGraph)
+            .unwrap();
+        let outer_quad2 = quads2
+            .iter()
+            .find(|q| q.graph_name == GraphName::DefaultGraph)
+            .unwrap();
+
+        assert_eq!(outer_quad.subject, outer_quad2.subject);
+        assert_eq!(outer_quad.predicate, outer_quad2.predicate);
+    }
+
+    #[test]
+    fn test_round_trip_formula_nested() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:statement ex:contains {
+                ex:inner ex:contains {
+                    ex:deep ex:value "nested" .
+                } .
+            } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_formula_empty() {
+        let original = r#"
+            <http://example.com/s> <http://example.com/hasFormula> { } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new().for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_blank_nodes() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            _:b1 ex:name "Alice" .
+            _:b1 ex:knows _:b2 .
+            _:b2 ex:name "Bob" .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 3);
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_multiple_prefixes() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+            @prefix schema: <http://schema.org/> .
+
+            ex:alice a foaf:Person ;
+                foaf:name "Alice" ;
+                schema:email "alice@example.com" .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .with_prefix("foaf", "http://xmlns.com/foaf/0.1/")
+            .unwrap()
+            .with_prefix("schema", "http://schema.org/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+
+        // Verify all prefixes work correctly
+        for (q1, q2) in quads.iter().zip(quads2.iter()) {
+            assert_eq!(q1.subject, q2.subject);
+            assert_eq!(q1.predicate, q2.predicate);
+            assert_eq!(q1.object, q2.object);
+        }
+    }
+
+    #[test]
+    fn test_round_trip_typed_literals() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:data ex:hasInt 42 ;
+                ex:hasDecimal 3.14 ;
+                ex:hasDouble 1.23e10 ;
+                ex:hasBoolean true .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), 4);
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+
+        // Verify datatypes are preserved
+        for (q1, q2) in quads.iter().zip(quads2.iter()) {
+            match (&q1.object, &q2.object) {
+                (N3Term::Literal(l1), N3Term::Literal(l2)) => {
+                    assert_eq!(l1.datatype(), l2.datatype());
+                    assert_eq!(l1.value(), l2.value());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_round_trip_unicode_strings() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:test ex:hasUnicode "Hello 世界 🌍" ;
+                ex:hasEmoji "😀 🎉 ✨" ;
+                ex:hasRussian "Привет мир" ;
+                ex:hasArabic "مرحبا بالعالم" .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+
+        // Verify Unicode is preserved
+        for (q1, q2) in quads.iter().zip(quads2.iter()) {
+            match (&q1.object, &q2.object) {
+                (N3Term::Literal(l1), N3Term::Literal(l2)) => {
+                    assert_eq!(l1.value(), l2.value());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_round_trip_special_characters() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:test ex:hasNewline "Line 1\nLine 2" ;
+                ex:hasTab "Col1\tCol2" ;
+                ex:hasQuotes "She said \"hello\"" .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+
+        for (q1, q2) in quads.iter().zip(quads2.iter()) {
+            match (&q1.object, &q2.object) {
+                (N3Term::Literal(l1), N3Term::Literal(l2)) => {
+                    assert_eq!(l1.value(), l2.value());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_round_trip_collections() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:list ex:items (1 2 3) .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_empty_collection() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:test ex:emptyList () .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_with_base_iri() {
+        let original = r#"
+            @base <http://example.com/> .
+            <alice> <knows> <bob> .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_base_iri("http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+        assert_eq!(quads[0], quads2[0]);
+    }
+
+    #[test]
+    fn test_round_trip_complex_document() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+            ex:alice a foaf:Person ;
+                foaf:name "Alice" ;
+                ex:age 30 ;
+                ex:knows ex:bob , ex:charlie ;
+                ex:believes {
+                    ex:bob foaf:name "Bob" .
+                    ex:charlie foaf:name "Charlie" .
+                } .
+
+            ex:bob a foaf:Person ;
+                foaf:name "Bob" ;
+                ex:age 25 .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .with_prefix("foaf", "http://xmlns.com/foaf/0.1/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_formula_with_variables() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:rule ex:implies {
+                ?x ex:parent ?y .
+                ?y ex:parent ?z .
+            } .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+    }
+
+    #[test]
+    fn test_round_trip_long_literal() {
+        let original = r#"
+            @prefix ex: <http://example.com/> .
+            ex:doc ex:content """This is a long literal
+that spans multiple lines
+and contains various characters:
+- Unicode: 你好 🌍
+- Special: <>&"'
+- Newlines and tabs
+            """ .
+        "#;
+
+        let quads: Vec<_> = N3Parser::new()
+            .for_slice(original)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        let mut serializer = N3Serializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .for_writer(Vec::new());
+
+        for quad in &quads {
+            serializer.serialize_quad(quad).unwrap();
+        }
+
+        let serialized = String::from_utf8(serializer.finish().unwrap()).unwrap();
+
+        let quads2: Vec<_> = N3Parser::new()
+            .for_slice(&serialized)
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(quads.len(), quads2.len());
+
+        match (&quads[0].object, &quads2[0].object) {
+            (N3Term::Literal(l1), N3Term::Literal(l2)) => {
+                assert_eq!(l1.value(), l2.value());
+            }
+            _ => panic!("Expected literals"),
         }
     }
 }
