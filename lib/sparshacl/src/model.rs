@@ -400,7 +400,7 @@ fn parse_node_shape(graph: &Graph, id: &ShapeId) -> Result<NodeShape, ShaclParse
     let term = id.to_term();
 
     // Parse targets
-    parse_targets(graph, &term, &mut shape.base)?;
+    parse_targets(graph, &term, &mut shape.base);
 
     // Parse constraints
     parse_constraints(graph, &term, &mut shape.base)?;
@@ -409,7 +409,7 @@ fn parse_node_shape(graph: &Graph, id: &ShapeId) -> Result<NodeShape, ShaclParse
     parse_property_shapes(graph, &term, &mut shape.base)?;
 
     // Parse metadata
-    parse_metadata(graph, &term, &mut shape.base)?;
+    parse_metadata(graph, &term, &mut shape.base);
 
     Ok(shape)
 }
@@ -430,7 +430,7 @@ fn parse_property_shape(
     let mut shape = PropertyShape::new(id.clone(), path);
 
     // Parse targets
-    parse_targets(graph, &term, &mut shape.base)?;
+    parse_targets(graph, &term, &mut shape.base);
 
     // Parse constraints
     parse_constraints(graph, &term, &mut shape.base)?;
@@ -439,12 +439,12 @@ fn parse_property_shape(
     parse_property_shapes(graph, &term, &mut shape.base)?;
 
     // Parse metadata
-    parse_metadata(graph, &term, &mut shape.base)?;
+    parse_metadata(graph, &term, &mut shape.base);
 
     Ok(Some(shape))
 }
 
-fn parse_targets(graph: &Graph, shape_term: &Term, shape: &mut Shape) -> Result<(), ShaclParseError> {
+fn parse_targets(graph: &Graph, shape_term: &Term, shape: &mut Shape) {
     // sh:targetClass
     for obj in get_objects(graph, shape_term, shacl::TARGET_CLASS) {
         if let Term::NamedNode(class) = obj {
@@ -470,8 +470,6 @@ fn parse_targets(graph: &Graph, shape_term: &Term, shape: &mut Shape) -> Result<
             shape.targets.push(Target::ObjectsOf(pred));
         }
     }
-
-    Ok(())
 }
 
 fn parse_constraints(
@@ -500,12 +498,16 @@ fn parse_constraints(
 
     // sh:minCount
     if let Some(n) = get_integer(graph, shape_term, shacl::MIN_COUNT) {
-        shape.constraints.push(Constraint::MinCount(n as usize));
+        shape
+            .constraints
+            .push(Constraint::MinCount(usize::try_from(n).unwrap_or(0)));
     }
 
     // sh:maxCount
     if let Some(n) = get_integer(graph, shape_term, shacl::MAX_COUNT) {
-        shape.constraints.push(Constraint::MaxCount(n as usize));
+        shape
+            .constraints
+            .push(Constraint::MaxCount(usize::try_from(n).unwrap_or(0)));
     }
 
     // sh:minExclusive
@@ -530,12 +532,16 @@ fn parse_constraints(
 
     // sh:minLength
     if let Some(n) = get_integer(graph, shape_term, shacl::MIN_LENGTH) {
-        shape.constraints.push(Constraint::MinLength(n as usize));
+        shape
+            .constraints
+            .push(Constraint::MinLength(usize::try_from(n).unwrap_or(0)));
     }
 
     // sh:maxLength
     if let Some(n) = get_integer(graph, shape_term, shacl::MAX_LENGTH) {
-        shape.constraints.push(Constraint::MaxLength(n as usize));
+        shape
+            .constraints
+            .push(Constraint::MaxLength(usize::try_from(n).unwrap_or(0)));
     }
 
     // sh:pattern
@@ -641,9 +647,12 @@ fn parse_constraints(
     // sh:qualifiedValueShape
     if let Some(qvs) = get_object(graph, shape_term, shacl::QUALIFIED_VALUE_SHAPE) {
         let shape_id = term_to_shape_id(qvs)?;
-        let min = get_integer(graph, shape_term, shacl::QUALIFIED_MIN_COUNT).map(|n| n as usize);
-        let max = get_integer(graph, shape_term, shacl::QUALIFIED_MAX_COUNT).map(|n| n as usize);
-        let disjoint = get_boolean(graph, shape_term, shacl::QUALIFIED_VALUE_SHAPES_DISJOINT).unwrap_or(false);
+        let min = get_integer(graph, shape_term, shacl::QUALIFIED_MIN_COUNT)
+            .and_then(|n| usize::try_from(n).ok());
+        let max = get_integer(graph, shape_term, shacl::QUALIFIED_MAX_COUNT)
+            .and_then(|n| usize::try_from(n).ok());
+        let disjoint =
+            get_boolean(graph, shape_term, shacl::QUALIFIED_VALUE_SHAPES_DISJOINT).unwrap_or(false);
         shape.constraints.push(Constraint::QualifiedValueShape {
             shape: shape_id,
             min_count: min,
@@ -669,11 +678,7 @@ fn parse_property_shapes(
     Ok(())
 }
 
-fn parse_metadata(
-    graph: &Graph,
-    shape_term: &Term,
-    shape: &mut Shape,
-) -> Result<(), ShaclParseError> {
+fn parse_metadata(graph: &Graph, shape_term: &Term, shape: &mut Shape) {
     // sh:deactivated
     if let Some(b) = get_boolean(graph, shape_term, shacl::DEACTIVATED) {
         shape.deactivated = b;
@@ -697,8 +702,6 @@ fn parse_metadata(
 
     // sh:message
     shape.message = get_string(graph, shape_term, shacl::MESSAGE);
-
-    Ok(())
 }
 
 // Helper functions
@@ -707,11 +710,13 @@ fn get_object(graph: &Graph, subject: &Term, predicate: NamedNodeRef<'_>) -> Opt
     match subject {
         Term::NamedNode(n) => graph
             .object_for_subject_predicate(n, predicate)
-            .map(|t| t.into_owned()),
+            .map(TermRef::into_owned),
         Term::BlankNode(b) => graph
             .object_for_subject_predicate(b, predicate)
-            .map(|t| t.into_owned()),
-        _ => None,
+            .map(TermRef::into_owned),
+        Term::Literal(_) => None,
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => None,
     }
 }
 
@@ -719,20 +724,22 @@ fn get_objects(graph: &Graph, subject: &Term, predicate: NamedNodeRef<'_>) -> Ve
     match subject {
         Term::NamedNode(n) => graph
             .objects_for_subject_predicate(n, predicate)
-            .map(|t| t.into_owned())
+            .map(TermRef::into_owned)
             .collect(),
         Term::BlankNode(b) => graph
             .objects_for_subject_predicate(b, predicate)
-            .map(|t| t.into_owned())
+            .map(TermRef::into_owned)
             .collect(),
-        _ => Vec::new(),
+        Term::Literal(_) => Vec::new(),
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => Vec::new(),
     }
 }
 
 fn get_string(graph: &Graph, subject: &Term, predicate: NamedNodeRef<'_>) -> Option<String> {
     get_object(graph, subject, predicate).and_then(|t| {
         if let Term::Literal(lit) = t {
-            Some(lit.value().to_string())
+            Some(lit.value().to_owned())
         } else {
             None
         }
@@ -777,7 +784,12 @@ fn term_to_shape_id(term: Term) -> Result<ShapeId, ShaclParseError> {
     match term {
         Term::NamedNode(n) => Ok(ShapeId::Named(n)),
         Term::BlankNode(b) => Ok(ShapeId::Blank(b)),
-        _ => Err(ShaclParseError::invalid_shape(
+        Term::Literal(_) => Err(ShaclParseError::invalid_shape(
+            term,
+            "Shape reference must be an IRI or blank node",
+        )),
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => Err(ShaclParseError::invalid_shape(
             term,
             "Shape reference must be an IRI or blank node",
         )),
@@ -805,7 +817,7 @@ fn parse_string_list(
         })?;
 
         if let Term::Literal(lit) = first {
-            strings.push(lit.value().to_string());
+            strings.push(lit.value().to_owned());
         }
 
         let rest = get_object(graph, &current, rdf::REST).ok_or_else(|| {

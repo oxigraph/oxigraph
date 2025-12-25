@@ -91,6 +91,7 @@ impl ShaclValidator {
     }
 
     /// Finds all focus nodes for a shape based on its targets.
+    #[expect(clippy::unused_self)]
     fn find_focus_nodes(&self, shape: &Shape, data_graph: &Graph) -> Vec<Term> {
         let mut focus_nodes = FxHashSet::default();
 
@@ -124,7 +125,7 @@ impl ShaclValidator {
                 context,
                 report,
                 focus_node,
-                &[focus_node.clone()],
+                std::slice::from_ref(focus_node),
                 constraint,
                 &shape.base,
                 None,
@@ -163,10 +164,10 @@ impl ShaclValidator {
         }
 
         // Use shape's own severity if non-default, otherwise inherit from parent
-        let effective_severity = if shape.base.severity != Severity::Violation {
-            shape.base.severity
-        } else {
+        let effective_severity = if shape.base.severity == Severity::Violation {
             parent_severity
+        } else {
+            shape.base.severity
         };
 
         // Get value nodes via property path
@@ -205,7 +206,7 @@ impl ShaclValidator {
     }
 
     /// Validates a single constraint against value nodes.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn validate_constraint(
         &self,
         context: &mut ValidationContext<'_>,
@@ -894,7 +895,7 @@ impl ShaclValidator {
                 shape: ref_shape_id,
                 min_count,
                 max_count,
-                disjoint: _,
+                ..
             } => {
                 let conforming_count = value_nodes
                     .iter()
@@ -990,7 +991,7 @@ impl ShaclValidator {
 
 /// Internal validation context.
 struct ValidationContext<'a> {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     validator: &'a ShaclValidator,
     data_graph: &'a Graph,
     regex_cache: FxHashMap<String, Regex>,
@@ -1040,7 +1041,7 @@ impl<'a> ValidationContext<'a> {
             self.regex_cache.insert(key.clone(), regex);
         }
 
-        Ok(self.regex_cache.get(&key).unwrap())
+        Ok(&self.regex_cache[&key])
     }
 }
 

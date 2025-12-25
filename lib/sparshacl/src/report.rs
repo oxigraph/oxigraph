@@ -106,30 +106,35 @@ impl ValidationResult {
     }
 
     /// Sets the result path.
+    #[must_use]
     pub fn with_path(mut self, path: PropertyPath) -> Self {
         self.result_path = Some(path);
         self
     }
 
     /// Sets the value that caused the violation.
+    #[must_use]
     pub fn with_value(mut self, value: Term) -> Self {
         self.value = Some(value);
         self
     }
 
     /// Sets the result message.
+    #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.result_message = Some(message.into());
         self
     }
 
     /// Sets the severity.
+    #[must_use]
     pub fn with_severity(mut self, severity: Severity) -> Self {
         self.result_severity = severity;
         self
     }
 
     /// Adds a nested detail result.
+    #[must_use]
     pub fn with_detail(mut self, detail: ValidationResult) -> Self {
         self.detail.push(detail);
         self

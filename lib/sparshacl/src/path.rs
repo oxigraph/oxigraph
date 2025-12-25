@@ -130,7 +130,12 @@ impl PropertyPath {
                 ))
             }
 
-            _ => Err(ShaclParseError::invalid_property_path(
+            TermRef::Literal(_) => Err(ShaclParseError::invalid_property_path(
+                term.into_owned(),
+                "Property path must be an IRI or blank node",
+            )),
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => Err(ShaclParseError::invalid_property_path(
                 term.into_owned(),
                 "Property path must be an IRI or blank node",
             )),
@@ -210,7 +215,7 @@ impl PropertyPath {
                 } else {
                     // For complex inverse paths, we need to iterate all triples
                     // This is less efficient but correct
-                    for triple in graph.iter() {
+                    for triple in graph {
                         let mut temp_results = Vec::new();
                         inner.evaluate_into(
                             graph,
@@ -324,11 +329,13 @@ fn get_object(graph: &Graph, subject: &Term, predicate: NamedNodeRef<'_>) -> Opt
     match subject {
         Term::NamedNode(n) => graph
             .object_for_subject_predicate(n, predicate)
-            .map(|t| t.into_owned()),
+            .map(TermRef::into_owned),
         Term::BlankNode(b) => graph
             .object_for_subject_predicate(b, predicate)
-            .map(|t| t.into_owned()),
-        _ => None,
+            .map(TermRef::into_owned),
+        Term::Literal(_) => None,
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(_) => None,
     }
 }
 

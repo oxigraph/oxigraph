@@ -21,28 +21,31 @@ pub enum ShaclError {
 pub enum ShaclParseError {
     /// Invalid shape definition.
     #[error("Invalid shape definition for {shape}: {message}")]
-    InvalidShape { shape: Term, message: String },
+    InvalidShape { shape: Box<Term>, message: String },
 
     /// Missing required property.
     #[error("Missing required property {property} for shape {shape}")]
-    MissingProperty { shape: Term, property: NamedNode },
+    MissingProperty {
+        shape: Box<Term>,
+        property: NamedNode,
+    },
 
     /// Invalid property value.
     #[error("Invalid value for property {property} in shape {shape}: expected {expected}, got {actual}")]
     InvalidPropertyValue {
-        shape: Term,
+        shape: Box<Term>,
         property: NamedNode,
         expected: String,
-        actual: Term,
+        actual: Box<Term>,
     },
 
     /// Invalid property path.
     #[error("Invalid property path in shape {shape}: {message}")]
-    InvalidPropertyPath { shape: Term, message: String },
+    InvalidPropertyPath { shape: Box<Term>, message: String },
 
     /// Invalid RDF list.
     #[error("Invalid RDF list in shape {shape}: {message}")]
-    InvalidRdfList { shape: Term, message: String },
+    InvalidRdfList { shape: Box<Term>, message: String },
 
     /// Cyclic shape reference detected.
     #[error("Cyclic shape reference detected: {message}")]
@@ -79,7 +82,7 @@ impl ShaclParseError {
     /// Creates an invalid shape error.
     pub fn invalid_shape(shape: impl Into<Term>, message: impl Into<String>) -> Self {
         Self::InvalidShape {
-            shape: shape.into(),
+            shape: Box::new(shape.into()),
             message: message.into(),
         }
     }
@@ -87,7 +90,7 @@ impl ShaclParseError {
     /// Creates a missing property error.
     pub fn missing_property(shape: impl Into<Term>, property: impl Into<NamedNode>) -> Self {
         Self::MissingProperty {
-            shape: shape.into(),
+            shape: Box::new(shape.into()),
             property: property.into(),
         }
     }
@@ -100,17 +103,17 @@ impl ShaclParseError {
         actual: impl Into<Term>,
     ) -> Self {
         Self::InvalidPropertyValue {
-            shape: shape.into(),
+            shape: Box::new(shape.into()),
             property: property.into(),
             expected: expected.into(),
-            actual: actual.into(),
+            actual: Box::new(actual.into()),
         }
     }
 
     /// Creates an invalid property path error.
     pub fn invalid_property_path(shape: impl Into<Term>, message: impl Into<String>) -> Self {
         Self::InvalidPropertyPath {
-            shape: shape.into(),
+            shape: Box::new(shape.into()),
             message: message.into(),
         }
     }
@@ -118,7 +121,7 @@ impl ShaclParseError {
     /// Creates an invalid RDF list error.
     pub fn invalid_rdf_list(shape: impl Into<Term>, message: impl Into<String>) -> Self {
         Self::InvalidRdfList {
-            shape: shape.into(),
+            shape: Box::new(shape.into()),
             message: message.into(),
         }
     }
