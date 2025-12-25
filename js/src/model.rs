@@ -1,7 +1,9 @@
 #![allow(clippy::inherent_to_string, clippy::unused_self)]
 
 use crate::format_err;
-use js_sys::{Reflect, UriError};
+use crate::io::JsCanonicalizationAlgorithm;
+use js_sys::{Reflect, UriError, try_iter};
+use oxigraph::model::dataset::Dataset;
 use oxigraph::model::*;
 use wasm_bindgen::prelude::*;
 
@@ -16,10 +18,61 @@ thread_local! {
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 /**
  * RDF/JS DataFactory-compatible methods
- */ 
+ */
 export function literal(value: string | undefined, languageOrDataType?: string | NamedNode | {language: string, direction?: "ltr" | "rtl"}): Literal;
+export function triple(subject: Triple_Subject, predicate: Triple_Predicate, object: Triple_Object): Triple;
 export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph?: Quad_Graph): Quad;
 
+
+/**
+ * Converts a plain JavaScript object representing an RDF/JS term to an Oxigraph term.
+ * This enables interoperability with other RDF/JS libraries.
+ *
+ * @param original - A plain JavaScript object with {termType, value, ...} properties
+ * @returns An Oxigraph term (NamedNode, BlankNode, Literal, Variable, DefaultGraph, Quad, or Triple)
+ * @throws {Error} If the term type is not supported or the term is malformed
+ *
+ * @example
+ * ```typescript
+ * // Convert a plain object to an Oxigraph NamedNode
+ * const term = fromTerm({ termType: "NamedNode", value: "http://example.com" });
+ *
+ * // Convert a literal from another RDF/JS library
+ * const literal = fromTerm({
+ *   termType: "Literal",
+ *   value: "hello",
+ *   language: "en",
+ *   datatype: { termType: "NamedNode", value: "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" }
+ * });
+ * ```
+ */
+export function fromTerm(original: Term | null): Term | null;
+
+/**
+ * Converts a plain JavaScript object representing an RDF/JS quad to an Oxigraph Quad.
+ * This enables interoperability with other RDF/JS libraries.
+ *
+ * @param original - A plain JavaScript object with {subject, predicate, object, graph} properties
+ * @returns An Oxigraph Quad
+ * @throws {Error} If the quad is malformed or contains invalid terms
+ *
+ * @example
+ * ```typescript
+ * // Convert a plain object to an Oxigraph Quad
+ * const quad = fromQuad({
+ *   subject: { termType: "NamedNode", value: "http://example.com/s" },
+ *   predicate: { termType: "NamedNode", value: "http://example.com/p" },
+ *   object: { termType: "Literal", value: "hello", datatype: { termType: "NamedNode", value: "http://www.w3.org/2001/XMLSchema#string" } },
+ *   graph: { termType: "DefaultGraph", value: "" }
+ * });
+ *
+ * // Convert a quad from another RDF/JS library
+ * import { DataFactory } from '@rdfjs/data-model';
+ * const rdfJsQuad = DataFactory.quad(...);
+ * const oxigraphQuad = fromQuad(rdfJsQuad);
+ * ```
+ */
+export function fromQuad(original: BaseQuad | null): Quad | null;
 /**
  * RDF/JS-compatible BlankNode term
  */
@@ -102,17 +155,35 @@ export class Quad implements BaseQuad {
 }
 
 /**
+ * RDF-star Triple term (subject, predicate, object without graph)
+ */
+export class Triple {
+    readonly object: Triple_Object;
+    readonly predicate: Triple_Predicate;
+    readonly subject: Triple_Subject;
+    readonly termType: "Triple";
+    readonly value: "";
+
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
+}
+
+/**
  * Typedefs copied from the RDF/JS reference types (https://github.com/rdfjs/types)
  */
 export type Quad_Graph = DefaultGraph | NamedNode | BlankNode | Variable;
-export type Quad_Object = NamedNode | Literal | BlankNode | Quad | Variable;
+export type Quad_Object = NamedNode | Literal | BlankNode | Quad | Triple | Variable;
 export type Quad_Predicate = NamedNode | Variable;
-export type Quad_Subject = NamedNode | BlankNode | Quad | Variable;
+export type Quad_Subject = NamedNode | BlankNode | Quad | Triple | Variable;
+
+export type Triple_Object = NamedNode | Literal | BlankNode | Triple | Variable;
+export type Triple_Predicate = NamedNode | Variable;
+export type Triple_Subject = NamedNode | BlankNode | Triple | Variable;
 
 /**
  * RDF/JS-compatible Term typedef. See note above re: BaseQuad.
  */
-export type Term = NamedNode | BlankNode | Literal | Variable | DefaultGraph | BaseQuad;
+export type Term = NamedNode | BlankNode | Literal | Variable | DefaultGraph | BaseQuad | Triple;
 
 /**
  * RDF/JS-compatible Variable term
@@ -122,6 +193,42 @@ export class Variable {
     readonly value: string;
 
     equals(other: Term | null | undefined): boolean;
+    toString(): string;
+}
+
+/**
+ * An in-memory RDF dataset
+ *
+ * It can accommodate a fairly large number of quads (in the few millions).
+ *
+ * Warning: It interns the strings and does not do any garbage collection yet:
+ * if you insert and remove a lot of different terms, memory will grow without any reduction.
+ */
+export class Dataset {
+    readonly size: number;
+
+    constructor(quads?: Iterable<Quad>);
+
+    add(quad: Quad): void;
+
+    delete(quad: Quad): boolean;
+
+    has(quad: Quad): boolean;
+
+    match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
+
+    clear(): void;
+
+    quads_for_subject(subject: Quad_Subject): Quad[];
+
+    quads_for_predicate(predicate: Quad_Predicate): Quad[];
+
+    quads_for_object(object: Quad_Object): Quad[];
+
+    quads_for_graph_name(graph: Quad_Graph): Quad[];
+
+    canonicalize(algorithm: CanonicalizationAlgorithm): void;
+
     toString(): string;
 }
 "###;
@@ -211,9 +318,15 @@ pub fn variable(value: String) -> Result<JsVariable, JsError> {
     Ok(Variable::new(value)?.into())
 }
 
-#[wasm_bindgen(js_name = triple)]
-pub fn triple(subject: &JsValue, predicate: &JsValue, object: &JsValue) -> Result<JsQuad, JsValue> {
-    quad(subject, predicate, object, &JsValue::UNDEFINED)
+#[wasm_bindgen(js_name = triple, skip_typescript)]
+pub fn triple(
+    subject: &JsValue,
+    predicate: &JsValue,
+    object: &JsValue,
+) -> Result<JsTriple, JsValue> {
+    Ok(FROM_JS
+        .with(|c| c.to_triple_from_parts(subject, predicate, object))?
+        .into())
 }
 
 #[wasm_bindgen(js_name = quad, skip_typescript)]
@@ -521,6 +634,72 @@ impl From<JsVariable> for Variable {
     }
 }
 
+#[wasm_bindgen(js_name = Triple, skip_typescript)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct JsTriple {
+    inner: Triple,
+}
+
+#[wasm_bindgen(js_class = Triple)]
+impl JsTriple {
+    #[wasm_bindgen(getter = termType)]
+    pub fn term_type(&self) -> String {
+        "Triple".to_owned()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn value(&self) -> String {
+        String::new()
+    }
+
+    #[wasm_bindgen(getter = subject)]
+    pub fn subject(&self) -> JsValue {
+        JsTerm::from(self.inner.subject.clone()).into()
+    }
+
+    #[wasm_bindgen(getter = predicate)]
+    pub fn predicate(&self) -> JsValue {
+        JsTerm::from(self.inner.predicate.clone()).into()
+    }
+
+    #[wasm_bindgen(getter = object)]
+    pub fn object(&self) -> JsValue {
+        JsTerm::from(self.inner.object.clone()).into()
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
+    }
+
+    pub fn equals(&self, other: &JsValue) -> bool {
+        if let Ok(Some(JsTerm::Triple(other))) = FromJsConverter::default().to_optional_term(other)
+        {
+            self == &other
+        } else {
+            false
+        }
+    }
+}
+
+impl From<Triple> for JsTriple {
+    fn from(inner: Triple) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<JsTriple> for Triple {
+    fn from(triple: JsTriple) -> Self {
+        triple.inner
+    }
+}
+
+impl From<JsTriple> for Term {
+    fn from(triple: JsTriple) -> Self {
+        triple.inner.into()
+    }
+}
+
 #[wasm_bindgen(js_name = Quad, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsQuad {
@@ -606,6 +785,7 @@ pub enum JsTerm {
     Literal(JsLiteral),
     DefaultGraph(JsDefaultGraph),
     Variable(JsVariable),
+    Triple(JsTriple),
     Quad(JsQuad),
 }
 
@@ -617,6 +797,7 @@ impl From<JsTerm> for JsValue {
             JsTerm::Literal(v) => v.into(),
             JsTerm::DefaultGraph(v) => v.into(),
             JsTerm::Variable(v) => v.into(),
+            JsTerm::Triple(v) => v.into(),
             JsTerm::Quad(v) => v.into(),
         }
     }
@@ -679,13 +860,13 @@ impl From<Variable> for JsTerm {
 
 impl From<Triple> for JsTerm {
     fn from(triple: Triple) -> Self {
-        Self::Quad(triple.into())
+        Self::Triple(triple.into())
     }
 }
 
 impl From<Box<Triple>> for JsTerm {
     fn from(triple: Box<Triple>) -> Self {
-        triple.as_ref().clone().into()
+        Self::Triple(triple.as_ref().clone().into())
     }
 }
 
@@ -714,6 +895,10 @@ impl TryFrom<JsTerm> for NamedNode {
                 "The variable {} is not a named node",
                 variable.inner
             )),
+            JsTerm::Triple(triple) => Err(format_err!(
+                "The triple {} is not a named node",
+                triple.inner
+            )),
             JsTerm::Quad(quad) => Err(format_err!("The quad {} is not a named node", quad.inner)),
         }
     }
@@ -737,6 +922,10 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
                 "The variable {} is not a possible named or blank node term",
                 variable.inner
             )),
+            JsTerm::Triple(triple) => Err(format_err!(
+                "The triple {} is not a possible named or blank node term",
+                triple.inner
+            )),
             JsTerm::Quad(quad) => Err(format_err!(
                 "The quad {} is not a possible named or blank node term",
                 quad.inner
@@ -759,6 +948,13 @@ impl TryFrom<JsTerm> for Term {
             JsTerm::Variable(variable) => Err(format_err!(
                 "The variable {} is not a possible RDF term",
                 variable.inner
+            )),
+            #[cfg(feature = "rdf-12")]
+            JsTerm::Triple(triple) => Ok(triple.into()),
+            #[cfg(not(feature = "rdf-12"))]
+            JsTerm::Triple(triple) => Err(format_err!(
+                "The triple {} is not a possible RDF term",
+                triple.inner
             )),
             #[cfg(feature = "rdf-12")]
             JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
@@ -786,6 +982,10 @@ impl TryFrom<JsTerm> for GraphName {
             JsTerm::Variable(variable) => Err(format_err!(
                 "The variable {} is not a possible RDF term",
                 variable.inner
+            )),
+            JsTerm::Triple(triple) => Err(format_err!(
+                "The triple {} is not a possible RDF term",
+                triple.inner
             )),
             JsTerm::Quad(quad) => Err(format_err!(
                 "The quad {} is not a possible RDF term",
@@ -883,6 +1083,7 @@ impl FromJsConverter {
                 )
                 .map_err(JsError::from)?
                 .into()),
+                "Triple" => Ok(self.to_triple(value)?.into()),
                 "Quad" => Ok(self.to_quad(value)?.into()),
                 _ => Err(format_err!(
                     "The termType {term_type} is not supported by Oxigraph"
@@ -939,5 +1140,167 @@ impl FromJsConverter {
                 GraphName::try_from(self.to_term(graph_name)?)?
             },
         })
+    }
+
+    pub fn to_triple(&self, value: &JsValue) -> Result<Triple, JsValue> {
+        self.to_triple_from_parts(
+            &Reflect::get(value, &self.subject)?,
+            &Reflect::get(value, &self.predicate)?,
+            &Reflect::get(value, &self.object)?,
+        )
+    }
+
+    pub fn to_triple_from_parts(
+        &self,
+        subject: &JsValue,
+        predicate: &JsValue,
+        object: &JsValue,
+    ) -> Result<Triple, JsValue> {
+        Ok(Triple {
+            subject: NamedOrBlankNode::try_from(self.to_term(subject)?)?,
+            predicate: NamedNode::try_from(self.to_term(predicate)?)?,
+            object: Term::try_from(self.to_term(object)?)?,
+        })
+    }
+}
+
+#[wasm_bindgen(js_name = Dataset, skip_typescript)]
+pub struct JsDataset {
+    inner: Dataset,
+}
+
+#[wasm_bindgen(js_class = Dataset)]
+impl JsDataset {
+    #[wasm_bindgen(constructor)]
+    pub fn new(quads: &JsValue) -> Result<JsDataset, JsValue> {
+        let mut inner = Dataset::new();
+        if !quads.is_undefined() && !quads.is_null() {
+            if let Some(quads) = try_iter(quads)? {
+                for quad in quads {
+                    inner.insert(&FROM_JS.with(|c| c.to_quad(&quad?))?);
+                }
+            }
+        }
+        Ok(Self { inner })
+    }
+
+    pub fn add(&mut self, quad: &JsValue) -> Result<(), JsValue> {
+        self.inner.insert(&FROM_JS.with(|c| c.to_quad(quad))?);
+        Ok(())
+    }
+
+    pub fn delete(&mut self, quad: &JsValue) -> Result<bool, JsValue> {
+        Ok(self.inner.remove(&FROM_JS.with(|c| c.to_quad(quad))?))
+    }
+
+    pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
+        Ok(self.inner.contains(&FROM_JS.with(|c| c.to_quad(quad))?))
+    }
+
+    #[wasm_bindgen(getter = size)]
+    pub fn size(&self) -> usize {
+        self.inner.len()
+    }
+
+    #[wasm_bindgen(js_name = match)]
+    pub fn match_quads(
+        &self,
+        subject: &JsValue,
+        predicate: &JsValue,
+        object: &JsValue,
+        graph_name: &JsValue,
+    ) -> Result<Box<[JsValue]>, JsValue> {
+        let subject = if let Some(subject) = FROM_JS.with(|c| c.to_optional_term(subject))? {
+            Some(NamedOrBlankNode::try_from(subject)?)
+        } else {
+            None
+        };
+        let predicate = if let Some(predicate) = FROM_JS.with(|c| c.to_optional_term(predicate))? {
+            Some(NamedNode::try_from(predicate)?)
+        } else {
+            None
+        };
+        let object = if let Some(object) = FROM_JS.with(|c| c.to_optional_term(object))? {
+            Some(Term::try_from(object)?)
+        } else {
+            None
+        };
+        let graph_name =
+            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(graph_name))? {
+                Some(GraphName::try_from(graph_name)?)
+            } else {
+                None
+            };
+
+        let quads: Vec<JsValue> = self
+            .inner
+            .iter()
+            .filter(|quad| {
+                (subject.is_none() || subject.as_ref().map(|s| s.as_ref()) == Some(quad.subject))
+                    && (predicate.is_none() || predicate.as_ref().map(|p| p.as_ref()) == Some(quad.predicate))
+                    && (object.is_none() || object.as_ref().map(|o| o.as_ref()) == Some(quad.object))
+                    && (graph_name.is_none() || graph_name.as_ref().map(|g| g.as_ref()) == Some(quad.graph_name))
+            })
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect();
+
+        Ok(quads.into_boxed_slice())
+    }
+
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    pub fn quads_for_subject(&self, subject: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let subject = FROM_JS.with(|c| c.to_term(subject))?;
+        let subject = NamedOrBlankNode::try_from(subject)?;
+        Ok(self
+            .inner
+            .quads_for_subject(&subject)
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice())
+    }
+
+    pub fn quads_for_predicate(&self, predicate: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let predicate = FROM_JS.with(|c| c.to_term(predicate))?;
+        let predicate = NamedNode::try_from(predicate)?;
+        Ok(self
+            .inner
+            .quads_for_predicate(&predicate)
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice())
+    }
+
+    pub fn quads_for_object(&self, object: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let object = FROM_JS.with(|c| c.to_term(object))?;
+        let object = Term::try_from(object)?;
+        Ok(self
+            .inner
+            .quads_for_object(&object)
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice())
+    }
+
+    pub fn quads_for_graph_name(&self, graph_name: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+        let graph_name = FROM_JS.with(|c| c.to_term(graph_name))?;
+        let graph_name = GraphName::try_from(graph_name)?;
+        Ok(self
+            .inner
+            .quads_for_graph_name(&graph_name)
+            .map(|quad| JsQuad::from(quad.into_owned()).into())
+            .collect::<Vec<_>>()
+            .into_boxed_slice())
+    }
+
+    pub fn canonicalize(&mut self, algorithm: &JsCanonicalizationAlgorithm) {
+        self.inner.canonicalize((*algorithm).into());
+    }
+
+    #[wasm_bindgen(js_name = toString)]
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
     }
 }

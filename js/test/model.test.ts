@@ -51,5 +51,86 @@ describe("DataModel", () => {
                     .toString(),
             );
         });
+
+        it("triple().toString() should return SPARQL compatible syntax", () => {
+            assert.strictEqual(
+                "<<( <http://example.com/s> <http://example.com/p> <http://example.com/o> )>>",
+                oxigraph
+                    .triple(
+                        oxigraph.namedNode("http://example.com/s"),
+                        oxigraph.namedNode("http://example.com/p"),
+                        oxigraph.namedNode("http://example.com/o"),
+                    )
+                    .toString(),
+            );
+        });
+    });
+
+    describe("Triple", () => {
+        it("should have correct termType", () => {
+            const triple = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s"),
+                oxigraph.namedNode("http://example.com/p"),
+                oxigraph.namedNode("http://example.com/o"),
+            );
+            assert.strictEqual(triple.termType, "Triple");
+        });
+
+        it("should have empty value", () => {
+            const triple = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s"),
+                oxigraph.namedNode("http://example.com/p"),
+                oxigraph.namedNode("http://example.com/o"),
+            );
+            assert.strictEqual(triple.value, "");
+        });
+
+        it("should have subject, predicate, and object properties", () => {
+            const s = oxigraph.namedNode("http://example.com/s");
+            const p = oxigraph.namedNode("http://example.com/p");
+            const o = oxigraph.namedNode("http://example.com/o");
+            const triple = oxigraph.triple(s, p, o);
+
+            assert.ok(triple.subject.equals(s));
+            assert.ok(triple.predicate.equals(p));
+            assert.ok(triple.object.equals(o));
+        });
+
+        it("should support equals()", () => {
+            const triple1 = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s"),
+                oxigraph.namedNode("http://example.com/p"),
+                oxigraph.namedNode("http://example.com/o"),
+            );
+            const triple2 = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s"),
+                oxigraph.namedNode("http://example.com/p"),
+                oxigraph.namedNode("http://example.com/o"),
+            );
+            const triple3 = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s2"),
+                oxigraph.namedNode("http://example.com/p"),
+                oxigraph.namedNode("http://example.com/o"),
+            );
+
+            assert.ok(triple1.equals(triple2));
+            assert.ok(!triple1.equals(triple3));
+        });
+
+        it("should support nested triples (RDF-star)", () => {
+            const innerTriple = oxigraph.triple(
+                oxigraph.namedNode("http://example.com/s1"),
+                oxigraph.namedNode("http://example.com/p1"),
+                oxigraph.namedNode("http://example.com/o1"),
+            );
+            const outerTriple = oxigraph.triple(
+                innerTriple,
+                oxigraph.namedNode("http://example.com/p2"),
+                oxigraph.namedNode("http://example.com/o2"),
+            );
+
+            assert.strictEqual(outerTriple.termType, "Triple");
+            assert.ok(outerTriple.subject.equals(innerTriple));
+        });
     });
 });

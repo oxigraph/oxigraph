@@ -29,6 +29,8 @@ export class Store {
         options: {
             format: string;
             from_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            prefixes?: Record<string, string>;
+            base_iri?: NamedNode | string;
         }
     ): string;
 
@@ -52,6 +54,7 @@ export class Store {
         query: string,
         options?: {
             base_iri?: NamedNode | string;
+            prefixes?: Record<string, string>;
             results_format?: string;
             default_graph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
             named_graphs?: Iterable<BlankNode | NamedNode>;
@@ -63,10 +66,21 @@ export class Store {
         update: string,
         options?: {
             base_iri?: NamedNode | string;
+            prefixes?: Record<string, string>;
         }
     ): void;
 
     extend(quads: Iterable<Quad>): void;
+
+    bulk_load(
+        data: string,
+        options: {
+            base_iri?: NamedNode | string;
+            format: string;
+            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            lenient?: boolean;
+        }
+    ): void;
 
     named_graphs(): (BlankNode | NamedNode)[];
 
@@ -181,12 +195,18 @@ impl JsStore {
     pub fn query(&self, query: &str, options: &JsValue) -> Result<JsValue, JsValue> {
         // Parsing options
         let mut base_iri = None;
+        let mut prefixes = None;
         let mut use_default_graph_as_union = false;
         let mut results_format = None;
         let mut default_graph = None;
         let mut named_graphs = None;
         if !options.is_undefined() {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+
+            let js_prefixes = Reflect::get(options, &JsValue::from_str("prefixes"))?;
+            if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
+                prefixes = Some(extract_prefixes(&js_prefixes)?);
+            }
 
             let js_default_graph = Reflect::get(options, &JsValue::from_str("default_graph"))?;
             default_graph = if js_default_graph.is_undefined() || js_default_graph.is_null() {
@@ -235,6 +255,13 @@ impl JsStore {
         }
         if let Some(base_iri) = base_iri {
             evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+        }
+        if let Some(prefixes) = prefixes {
+            for (prefix_name, prefix_iri) in prefixes {
+                evaluator = evaluator
+                    .with_prefix(&prefix_name, &prefix_iri)
+                    .map_err(JsError::from)?;
+            }
         }
 
         let mut prepared_query = evaluator.parse_query(&query).map_err(JsError::from)?;
@@ -338,8 +365,14 @@ impl JsStore {
     pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut base_iri = None;
+        let mut prefixes = None;
         if !options.is_undefined() {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+
+            let js_prefixes = Reflect::get(options, &JsValue::from_str("prefixes"))?;
+            if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
+                prefixes = Some(extract_prefixes(&js_prefixes)?);
+            }
         }
 
         let mut evaluator = SparqlEvaluator::new();
@@ -349,6 +382,13 @@ impl JsStore {
         }
         if let Some(base_iri) = base_iri {
             evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+        }
+        if let Some(prefixes) = prefixes {
+            for (prefix_name, prefix_iri) in prefixes {
+                evaluator = evaluator
+                    .with_prefix(&prefix_name, &prefix_iri)
+                    .map_err(JsError::from)?;
+            }
         }
 
         Ok(evaluator
@@ -442,6 +482,8 @@ impl JsStore {
         // Serialization options
         let mut format = None;
         let mut parsed_from_graph_name = None;
+        let mut prefixes = None;
+        let mut base_iri = None;
         if let Some(format_str) = options.as_string() {
             // Backward compatibility with format as a string
             console_warn!(
@@ -456,6 +498,44 @@ impl JsStore {
             }
             let from_graph_name_js = Reflect::get(options, &JsValue::from_str("from_graph_name"))?;
             parsed_from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
+
+            // Parse prefixes option
+            let prefixes_js = Reflect::get(options, &JsValue::from_str("prefixes"))?;
+            if !prefixes_js.is_undefined() && !prefixes_js.is_null() {
+                let mut prefixes_map = Vec::new();
+
+                // Handle both plain objects and Maps
+                if let Some(entries) = try_iter(&prefixes_js)? {
+                    // It's a Map or other iterable
+                    for entry in entries {
+                        let entry = entry?;
+                        let key = Reflect::get(&entry, &0.into())?
+                            .as_string()
+                            .ok_or_else(|| format_err!("Prefix key must be a string"))?;
+                        let value = Reflect::get(&entry, &1.into())?
+                            .as_string()
+                            .ok_or_else(|| format_err!("Prefix IRI must be a string"))?;
+                        prefixes_map.push((key, value));
+                    }
+                } else {
+                    // It's a plain object
+                    let keys = js_sys::Object::keys(&js_sys::Object::from(prefixes_js.clone()));
+                    for i in 0..keys.length() {
+                        let key = keys
+                            .get(i)
+                            .as_string()
+                            .ok_or_else(|| format_err!("Prefix key must be a string"))?;
+                        let value = Reflect::get(&prefixes_js, &JsValue::from_str(&key))?
+                            .as_string()
+                            .ok_or_else(|| format_err!("Prefix IRI must be a string"))?;
+                        prefixes_map.push((key, value));
+                    }
+                }
+                prefixes = Some(prefixes_map);
+            }
+
+            // Parse base_iri option
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
@@ -466,14 +546,27 @@ impl JsStore {
             parsed_from_graph_name = Some(from_graph_name);
         }
 
+        // Create serializer with prefixes and base_iri
+        let mut serializer = RdfSerializer::from_format(format);
+        if let Some(prefixes) = prefixes {
+            for (prefix_name, prefix_iri) in prefixes {
+                serializer = serializer
+                    .with_prefix(&prefix_name, &prefix_iri)
+                    .map_err(JsError::from)?;
+            }
+        }
+        if let Some(base_iri) = base_iri {
+            serializer = serializer.with_base_iri(base_iri).map_err(JsError::from)?;
+        }
+
         let buffer = if let Some(from_graph_name) = parsed_from_graph_name {
             self.store.dump_graph_to_writer(
                 &GraphName::try_from(from_graph_name)?,
-                format,
+                serializer,
                 Vec::new(),
             )
         } else {
-            self.store.dump_to_writer(format, Vec::new())
+            self.store.dump_to_writer(serializer, Vec::new())
         }
         .map_err(JsError::from)?;
         Ok(String::from_utf8(buffer).map_err(JsError::from)?)
@@ -488,6 +581,46 @@ impl JsStore {
             return Err(format_err!("quads argument must be iterable"));
         };
         self.store.extend(quads).map_err(JsError::from)?;
+        Ok(())
+    }
+
+    pub fn bulk_load(&self, data: &str, options: &JsValue) -> Result<(), JsValue> {
+        // Parsing options
+        let mut format = None;
+        let mut parsed_base_iri = None;
+        let mut parsed_to_graph_name = None;
+        let mut lenient = false;
+        if !options.is_undefined() && !options.is_null() {
+            if let Some(format_str) =
+                Reflect::get(options, &JsValue::from_str("format"))?.as_string()
+            {
+                format = Some(rdf_format(&format_str)?);
+            }
+            parsed_base_iri =
+                convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
+            parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
+            lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
+        }
+        let format = format
+            .ok_or_else(|| format_err!("The format option should be provided like store.bulk_load(my_content, {{format: 'nt'}}"))?;
+
+        let mut parser = RdfParser::from_format(format);
+        if let Some(to_graph_name) = parsed_to_graph_name {
+            parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
+        }
+        if let Some(base_iri) = parsed_base_iri {
+            parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
+        }
+        if lenient {
+            parser = parser.lenient();
+        }
+
+        let mut loader = self.store.bulk_loader();
+        loader
+            .load_from_slice(parser, data.as_bytes())
+            .map_err(JsError::from)?;
+        loader.commit().map_err(JsError::from)?;
         Ok(())
     }
 
@@ -599,4 +732,25 @@ fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
             "If provided, the base IRI must be a NamedNode or a string"
         ))
     }
+}
+
+fn extract_prefixes(prefixes_obj: &JsValue) -> Result<Vec<(String, String)>, JsValue> {
+    let mut prefixes = Vec::new();
+    let obj = js_sys::Object::try_from(prefixes_obj)
+        .ok_or_else(|| format_err!("prefixes option must be an object"))?;
+    let entries = js_sys::Object::entries(&obj);
+    for i in 0..entries.length() {
+        let entry = entries.get(i);
+        let pair = Array::from(&entry);
+        let prefix_name = pair
+            .get(0)
+            .as_string()
+            .ok_or_else(|| format_err!("prefix name must be a string"))?;
+        let prefix_iri = pair
+            .get(1)
+            .as_string()
+            .ok_or_else(|| format_err!("prefix IRI must be a string"))?;
+        prefixes.push((prefix_name, prefix_iri));
+    }
+    Ok(prefixes)
 }

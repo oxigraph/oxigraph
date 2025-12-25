@@ -27,6 +27,7 @@ js-sys.workspace = true
 oxigraph = { workspace = true, features = ["js"] }
 spargeo = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
+wasm-bindgen-futures = "0.4"
 
 [lints]
 workspace = true

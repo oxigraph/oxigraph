@@ -4,8 +4,7 @@ use crate::format_err;
 use crate::model::JsTerm;
 use js_sys::{Array, Map};
 use oxigraph::sparql::results::{
-    QueryResultsFormat, QueryResultsParser, QueryResultsSerializer,
-    ReaderQueryResultsParserOutput,
+    QueryResultsFormat, QueryResultsParser, QueryResultsSerializer, ReaderQueryResultsParserOutput,
 };
 use wasm_bindgen::prelude::*;
 
@@ -94,7 +93,8 @@ pub fn parse_query_results(input: &str, format: &str) -> Result<JsValue, JsValue
         ReaderQueryResultsParserOutput::Solutions(solutions_reader) => {
             let results = Array::new();
             for solution in solutions_reader {
-                let solution = solution.map_err(|e| format_err!("Error reading solution: {}", e))?;
+                let solution =
+                    solution.map_err(|e| format_err!("Error reading solution: {}", e))?;
                 let result = Map::new();
                 for (variable, value) in solution.iter() {
                     result.set(
@@ -157,8 +157,7 @@ pub fn serialize_query_solutions(
             });
 
             // Create a QuerySolution from (variables, values)
-            let solution =
-                oxigraph::sparql::QuerySolution::from((vars.clone(), values));
+            let solution = oxigraph::sparql::QuerySolution::from((vars.clone(), values));
             serializer.serialize(&solution).map_err(JsError::from)?;
         }
     } else {

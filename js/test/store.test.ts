@@ -271,6 +271,52 @@ describe("Store", () => {
         });
     });
 
+    describe("#bulk_load()", () => {
+        it("bulk load NTriples in the default graph", () => {
+            const store = new Store();
+            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex)));
+        });
+
+        it("bulk load NTriples in another graph", () => {
+            const store = new Store();
+            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+                to_graph_name: ex,
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex, ex)));
+        });
+
+        it("bulk load Turtle with a base IRI", () => {
+            const store = new Store();
+            store.bulk_load("<http://example.com> <http://example.com> <> .", {
+                base_iri: "http://example.com",
+                format: "text/turtle",
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex)));
+        });
+
+        it("bulk load NQuads", () => {
+            const store = new Store();
+            store.bulk_load(
+                "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .",
+                { format: "application/n-quads" },
+            );
+            assert(store.has(dataModel.quad(ex, ex, ex, ex)));
+        });
+
+        it("bulk load with lenient option", () => {
+            const store = new Store();
+            store.bulk_load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+                lenient: true,
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex)));
+        });
+    });
+
     describe("#dump()", () => {
         it("dump dataset content", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
