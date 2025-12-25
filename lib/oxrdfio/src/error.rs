@@ -103,7 +103,20 @@ impl RdfSyntaxError {
                     },
                 )
             }
-            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) => None,
+            SyntaxErrorKind::RdfXml(e) => {
+                e.location().map(|location| {
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    }
+                })
+            }
+            SyntaxErrorKind::Msg(_) => None,
         }
     }
 

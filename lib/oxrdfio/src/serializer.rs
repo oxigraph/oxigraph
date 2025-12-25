@@ -18,6 +18,9 @@ use oxttl::ntriples::{NTriplesSerializer, WriterNTriplesSerializer};
 use oxttl::trig::TokioAsyncWriterTriGSerializer;
 use oxttl::trig::{TriGSerializer, WriterTriGSerializer};
 #[cfg(feature = "async-tokio")]
+use oxttl::n3::TokioAsyncWriterN3Serializer;
+use oxttl::n3::{N3Serializer, WriterN3Serializer};
+#[cfg(feature = "async-tokio")]
 use oxttl::turtle::TokioAsyncWriterTurtleSerializer;
 use oxttl::turtle::{TurtleSerializer, WriterTurtleSerializer};
 use std::io::{self, Write};
@@ -58,6 +61,7 @@ pub struct RdfSerializer {
 #[derive(Clone)]
 enum RdfSerializerKind {
     JsonLd(JsonLdSerializer),
+    N3(N3Serializer),
     NQuads(NQuadsSerializer),
     NTriples(NTriplesSerializer),
     RdfXml(RdfXmlSerializer),
@@ -72,13 +76,12 @@ impl RdfSerializer {
         Self {
             inner: match format {
                 RdfFormat::JsonLd { .. } => RdfSerializerKind::JsonLd(JsonLdSerializer::new()),
+                RdfFormat::N3 => RdfSerializerKind::N3(N3Serializer::new()),
                 RdfFormat::NQuads => RdfSerializerKind::NQuads(NQuadsSerializer::new()),
                 RdfFormat::NTriples => RdfSerializerKind::NTriples(NTriplesSerializer::new()),
                 RdfFormat::RdfXml => RdfSerializerKind::RdfXml(RdfXmlSerializer::new()),
                 RdfFormat::TriG => RdfSerializerKind::TriG(TriGSerializer::new()),
-                RdfFormat::Turtle | RdfFormat::N3 => {
-                    RdfSerializerKind::Turtle(TurtleSerializer::new())
-                }
+                RdfFormat::Turtle => RdfSerializerKind::Turtle(TurtleSerializer::new()),
             },
         }
     }
@@ -98,6 +101,7 @@ impl RdfSerializer {
             RdfSerializerKind::JsonLd(_) => RdfFormat::JsonLd {
                 profile: JsonLdProfile::Streaming.into(), // TODO: also expanded?
             },
+            RdfSerializerKind::N3(_) => RdfFormat::N3,
             RdfSerializerKind::NQuads(_) => RdfFormat::NQuads,
             RdfSerializerKind::NTriples(_) => RdfFormat::NTriples,
             RdfSerializerKind::RdfXml(_) => RdfFormat::RdfXml,
@@ -135,6 +139,9 @@ impl RdfSerializer {
     ) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfSerializerKind::JsonLd(s) => RdfSerializerKind::JsonLd(s),
+            RdfSerializerKind::N3(s) => {
+                RdfSerializerKind::N3(s.with_prefix(prefix_name, prefix_iri)?)
+            }
             RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
             RdfSerializerKind::NTriples(s) => RdfSerializerKind::NTriples(s),
             RdfSerializerKind::RdfXml(s) => {
@@ -176,6 +183,7 @@ impl RdfSerializer {
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfSerializerKind::JsonLd(s) => RdfSerializerKind::JsonLd(s),
+            RdfSerializerKind::N3(s) => RdfSerializerKind::N3(s.with_base_iri(base_iri)?),
             RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
             RdfSerializerKind::NTriples(s) => RdfSerializerKind::NTriples(s),
             RdfSerializerKind::RdfXml(s) => RdfSerializerKind::RdfXml(s.with_base_iri(base_iri)?),
@@ -215,6 +223,7 @@ impl RdfSerializer {
                 RdfSerializerKind::JsonLd(s) => {
                     WriterQuadSerializerKind::JsonLd(s.for_writer(writer))
                 }
+                RdfSerializerKind::N3(s) => WriterQuadSerializerKind::N3(s.for_writer(writer)),
                 RdfSerializerKind::NQuads(s) => {
                     WriterQuadSerializerKind::NQuads(s.for_writer(writer))
                 }
@@ -268,6 +277,9 @@ impl RdfSerializer {
             inner: match self.inner {
                 RdfSerializerKind::JsonLd(s) => {
                     TokioAsyncWriterQuadSerializerKind::JsonLd(s.for_tokio_async_writer(writer))
+                }
+                RdfSerializerKind::N3(s) => {
+                    TokioAsyncWriterQuadSerializerKind::N3(s.for_tokio_async_writer(writer))
                 }
                 RdfSerializerKind::NQuads(s) => {
                     TokioAsyncWriterQuadSerializerKind::NQuads(s.for_tokio_async_writer(writer))
@@ -328,6 +340,7 @@ pub struct WriterQuadSerializer<W: Write> {
 
 enum WriterQuadSerializerKind<W: Write> {
     JsonLd(WriterJsonLdSerializer<W>),
+    N3(WriterN3Serializer<W>),
     NQuads(WriterNQuadsSerializer<W>),
     NTriples(WriterNTriplesSerializer<W>),
     RdfXml(WriterRdfXmlSerializer<W>),
@@ -338,8 +351,12 @@ enum WriterQuadSerializerKind<W: Write> {
 impl<W: Write> WriterQuadSerializer<W> {
     /// Serializes a [`QuadRef`]
     pub fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        let quad = quad.into();
         match &mut self.inner {
             WriterQuadSerializerKind::JsonLd(serializer) => serializer.serialize_quad(quad),
+            WriterQuadSerializerKind::N3(serializer) => {
+                serializer.serialize_quad(&quad.into_owned().into())
+            }
             WriterQuadSerializerKind::NQuads(serializer) => serializer.serialize_quad(quad),
             WriterQuadSerializerKind::NTriples(serializer) => {
                 serializer.serialize_triple(to_triple(quad)?)
@@ -365,6 +382,7 @@ impl<W: Write> WriterQuadSerializer<W> {
     pub fn finish(self) -> io::Result<W> {
         Ok(match self.inner {
             WriterQuadSerializerKind::JsonLd(serializer) => serializer.finish()?,
+            WriterQuadSerializerKind::N3(serializer) => serializer.finish()?,
             WriterQuadSerializerKind::NQuads(serializer) => serializer.finish(),
             WriterQuadSerializerKind::NTriples(serializer) => serializer.finish(),
             WriterQuadSerializerKind::RdfXml(serializer) => serializer.finish()?,
@@ -412,6 +430,7 @@ pub struct TokioAsyncWriterQuadSerializer<W: AsyncWrite + Unpin> {
 #[cfg(feature = "async-tokio")]
 enum TokioAsyncWriterQuadSerializerKind<W: AsyncWrite + Unpin> {
     JsonLd(TokioAsyncWriterJsonLdSerializer<W>),
+    N3(TokioAsyncWriterN3Serializer<W>),
     NQuads(TokioAsyncWriterNQuadsSerializer<W>),
     NTriples(TokioAsyncWriterNTriplesSerializer<W>),
     RdfXml(TokioAsyncWriterRdfXmlSerializer<W>),
@@ -423,9 +442,13 @@ enum TokioAsyncWriterQuadSerializerKind<W: AsyncWrite + Unpin> {
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterQuadSerializer<W> {
     /// Serializes a [`QuadRef`]
     pub async fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        let quad = quad.into();
         match &mut self.inner {
             TokioAsyncWriterQuadSerializerKind::JsonLd(serializer) => {
                 serializer.serialize_quad(quad).await
+            }
+            TokioAsyncWriterQuadSerializerKind::N3(serializer) => {
+                serializer.serialize_quad(&quad.into_owned().into()).await
             }
             TokioAsyncWriterQuadSerializerKind::NQuads(serializer) => {
                 serializer.serialize_quad(quad).await
@@ -460,6 +483,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterQuadSerializer<W> {
     pub async fn finish(self) -> io::Result<W> {
         Ok(match self.inner {
             TokioAsyncWriterQuadSerializerKind::JsonLd(serializer) => serializer.finish().await?,
+            TokioAsyncWriterQuadSerializerKind::N3(serializer) => serializer.finish().await?,
             TokioAsyncWriterQuadSerializerKind::NQuads(serializer) => serializer.finish(),
             TokioAsyncWriterQuadSerializerKind::NTriples(serializer) => serializer.finish(),
             TokioAsyncWriterQuadSerializerKind::RdfXml(serializer) => serializer.finish().await?,

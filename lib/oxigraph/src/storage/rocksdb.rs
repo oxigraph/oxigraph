@@ -1329,6 +1329,14 @@ impl RocksDbStorageReadableTransaction<'_> {
     pub fn commit(self) -> Result<(), StorageError> {
         self.transaction.commit()
     }
+
+    /// Aborts the transaction without applying any changes.
+    ///
+    /// This method consumes the transaction and discards all pending changes.
+    /// After calling this method, the transaction cannot be used anymore.
+    pub fn rollback(self) {
+        self.transaction.rollback()
+    }
 }
 
 #[must_use]

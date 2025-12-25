@@ -37,6 +37,9 @@ pub mod pyoxigraph {
         PyQuerySolutions, PyQueryTriples, PyRdfFormat, PyStore, PyTriple, PyVariable, parse,
         parse_query_results, serialize,
     };
+    #[cfg(not(target_family = "wasm"))]
+    #[pymodule_export]
+    use super::PyBulkLoader;
     #[cfg(feature = "shacl")]
     #[pymodule_export]
     use super::{

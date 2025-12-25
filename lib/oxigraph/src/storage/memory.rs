@@ -694,6 +694,31 @@ impl MemoryStorageTransaction<'_> {
             .store(new_version_id, Ordering::Release);
         self.committed = true;
     }
+
+    /// Aborts the transaction without applying any changes.
+    ///
+    /// This method consumes the transaction and discards all pending changes.
+    /// After calling this method, the transaction cannot be used anymore.
+    pub fn rollback(mut self) {
+        // Explicitly roll back all operations
+        for operation in take(&mut self.log) {
+            match operation {
+                LogEntry::QuadNode(node) => {
+                    node.range
+                        .lock()
+                        .unwrap()
+                        .rollback_transaction(self.transaction_id);
+                }
+                LogEntry::Graph(graph_name) => {
+                    if let Some(mut entry) = self.storage.content.graphs.get_mut(&graph_name) {
+                        entry.value_mut().rollback_transaction(self.transaction_id)
+                    }
+                }
+            }
+        }
+        // Mark as committed to prevent double-rollback in Drop
+        self.committed = true;
+    }
 }
 
 impl Drop for MemoryStorageTransaction<'_> {

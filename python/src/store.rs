@@ -790,6 +790,43 @@ impl PyStore {
         py.detach(|| self.inner.optimize().map_err(map_storage_error))
     }
 
+    /// Validates the database integrity.
+    ///
+    /// Checks that all indexes are consistent and that the database is not corrupted.
+    ///
+    /// :rtype: None
+    /// :raises OSError: if the database is corrupted or if an error happens during validation.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.validate()
+    fn validate(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.inner.validate().map_err(map_storage_error))
+    }
+
+    /// Returns a bulk loader for efficient loading of large amounts of data.
+    ///
+    /// The bulk loader allows configuration of the number of threads, memory size, and progress callbacks.
+    /// This method is only available for on-disk stores (not WASM).
+    ///
+    /// :return: a bulk loader that can be configured and used to load data.
+    /// :rtype: BulkLoader
+    ///
+    /// >>> store = Store()
+    /// >>> loader = store.bulk_loader().with_num_threads(4).with_max_memory_size_in_megabytes(1024)
+    /// >>> loader.load_quads([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))])
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
+    #[cfg(not(target_family = "wasm"))]
+    fn bulk_loader(&self) -> PyBulkLoader {
+        PyBulkLoader {
+            store: self.clone(),
+            num_threads: None,
+            max_memory_size: None,
+            on_progress: None,
+        }
+    }
+
     /// Creates database backup into the `target_directory`.
     ///
     /// After its creation, the backup is usable using :py:class:`Store` constructor.
@@ -878,6 +915,290 @@ impl GraphNameIter {
             .next()
             .map(|q| Ok(q.map_err(map_storage_error)?.into()))
             .transpose()
+    }
+}
+
+/// Bulk loader for efficient loading of large amounts of RDF data.
+///
+/// The bulk loader allows configuration of the number of threads, memory size, and progress callbacks.
+/// Use :py:func:`Store.bulk_loader` to create a bulk loader instance.
+///
+/// :raises OSError: if an error happens during the bulk loading operation.
+#[cfg(not(target_family = "wasm"))]
+#[pyclass(name = "BulkLoader", module = "pyoxigraph")]
+pub struct PyBulkLoader {
+    store: PyStore,
+    num_threads: Option<usize>,
+    max_memory_size: Option<usize>,
+    on_progress: Option<Py<PyAny>>,
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[pymethods]
+impl PyBulkLoader {
+    /// Sets the number of threads to use for bulk loading.
+    ///
+    /// The default value is the number of logical CPUs on the machine.
+    ///
+    /// :param num: the number of threads to use.
+    /// :type num: int
+    /// :return: self for method chaining.
+    /// :rtype: BulkLoader
+    ///
+    /// >>> store = Store()
+    /// >>> loader = store.bulk_loader().with_num_threads(4)
+    fn with_num_threads(mut slf: PyRefMut<'_, Self>, num: usize) -> PyRefMut<'_, Self> {
+        slf.num_threads = Some(num);
+        slf
+    }
+
+    /// Sets the maximum memory size in megabytes to use for bulk loading.
+    ///
+    /// This number must be at least a few megabytes per thread.
+    /// Memory used by RocksDB and the system is not taken into account in this limit.
+    ///
+    /// By default, a target of 2GB per used thread is used.
+    ///
+    /// :param size: the maximum memory size in megabytes.
+    /// :type size: int
+    /// :return: self for method chaining.
+    /// :rtype: BulkLoader
+    ///
+    /// >>> store = Store()
+    /// >>> loader = store.bulk_loader().with_max_memory_size_in_megabytes(1024)
+    fn with_max_memory_size_in_megabytes(mut slf: PyRefMut<'_, Self>, size: usize) -> PyRefMut<'_, Self> {
+        slf.max_memory_size = Some(size);
+        slf
+    }
+
+    /// Sets a callback function to track loading progress.
+    ///
+    /// The callback is called regularly with the number of quads loaded so far.
+    ///
+    /// :param callback: a function that takes an integer (number of quads loaded) and returns None.
+    /// :type callback: typing.Callable[[int], None]
+    /// :return: self for method chaining.
+    /// :rtype: BulkLoader
+    ///
+    /// >>> store = Store()
+    /// >>> def progress(count):
+    /// ...     if count % 1000000 == 0:
+    /// ...         print(f"Loaded {count} quads")
+    /// >>> loader = store.bulk_loader().on_progress(progress)
+    fn on_progress(mut slf: PyRefMut<'_, Self>, callback: Py<PyAny>) -> PyRefMut<'_, Self> {
+        slf.on_progress = Some(callback);
+        slf
+    }
+
+    /// Loads an iterable of quads into the store.
+    ///
+    /// This method configures the bulk loader with the specified settings and loads the quads.
+    ///
+    /// :param quads: the quads to add.
+    /// :type quads: collections.abc.Iterable[Quad]
+    /// :rtype: None
+    /// :raises OSError: if an error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> loader = store.bulk_loader().with_num_threads(2)
+    /// >>> loader.load_quads([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))])
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
+    fn load_quads(&self, quads: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<()> {
+        let quads = quads
+            .try_iter()?
+            .map(|q| Ok(q?.extract()?))
+            .collect::<PyResult<Vec<PyQuad>>>()?;
+
+        let num_threads = self.num_threads;
+        let max_memory_size = self.max_memory_size;
+        let on_progress = self.on_progress.as_ref().map(|p| p.clone_ref(py));
+        let store = self.store.clone();
+
+        py.detach(|| {
+            // Create a fresh loader from the store inside detach
+            let mut loader = store.inner.bulk_loader();
+
+            // Apply configuration
+            if let Some(num_threads) = num_threads {
+                loader = loader.with_num_threads(num_threads);
+            }
+            if let Some(max_memory_size) = max_memory_size {
+                loader = loader.with_max_memory_size_in_megabytes(max_memory_size);
+            }
+            if let Some(on_progress) = on_progress {
+                loader = loader.on_progress(move |count| {
+                    Python::with_gil(|py| {
+                        if let Err(e) = on_progress.call1(py, (count,)) {
+                            eprintln!("Error in progress callback: {}", e);
+                        }
+                    });
+                });
+            }
+
+            loader.load_ok_quads::<PyErr, PythonOrStorageError>(
+                quads.into_iter().map(Ok),
+            )?;
+            loader.commit().map_err(map_storage_error)?;
+            Ok(())
+        })
+    }
+
+    /// Loads RDF data from a file or bytes.
+    ///
+    /// This method configures the bulk loader with the specified settings and loads the data.
+    ///
+    /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from.
+    /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
+    /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: RdfFormat or None, optional
+    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :type path: str or os.PathLike[str] or None, optional
+    /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
+    /// :type base_iri: str or None, optional
+    /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
+    /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param lenient: Skip some data validation during loading. This makes parsing faster at the cost of maybe ingesting invalid data.
+    /// :type lenient: bool, optional
+    /// :rtype: None
+    /// :raises ValueError: if the format is not supported.
+    /// :raises SyntaxError: if the provided data is invalid.
+    /// :raises OSError: if an error happens during loading.
+    ///
+    /// >>> store = Store()
+    /// >>> loader = store.bulk_loader().with_num_threads(2)
+    /// >>> loader.load_from_read(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/")
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
+    #[expect(clippy::needless_pass_by_value)]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None, lenient = false))]
+    fn load_from_read(
+        &self,
+        input: Option<PyReadableInput>,
+        format: Option<PyRdfFormatInput>,
+        path: Option<PathBuf>,
+        base_iri: Option<&str>,
+        to_graph: Option<PyGraphNameRef<'_>>,
+        lenient: bool,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
+        let format = lookup_rdf_format(format, path.as_deref())?;
+        let mut parser = RdfParser::from_format(format);
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(base_iri).map_err(|e| {
+                PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+            })?;
+        }
+        if let Some(to_graph_name) = to_graph_name {
+            parser = parser.with_default_graph(to_graph_name);
+        }
+        if lenient {
+            parser = parser.lenient();
+        }
+
+        let num_threads = self.num_threads;
+        let max_memory_size = self.max_memory_size;
+        let on_progress = self.on_progress.as_ref().map(|p| p.clone_ref(py));
+        let store = self.store.clone();
+
+        match (path, input) {
+            (Some(path), None) => py.detach(|| {
+                let mut loader = store.inner.bulk_loader();
+                if let Some(num_threads) = num_threads {
+                    loader = loader.with_num_threads(num_threads);
+                }
+                if let Some(max_memory_size) = max_memory_size {
+                    loader = loader.with_max_memory_size_in_megabytes(max_memory_size);
+                }
+                if let Some(on_progress) = on_progress {
+                    loader = loader.on_progress(move |count| {
+                        Python::with_gil(|py| {
+                            if let Err(e) = on_progress.call1(py, (count,)) {
+                                eprintln!("Error in progress callback: {}", e);
+                            }
+                        });
+                    });
+                }
+                loader
+                    .parallel_load_from_file(parser, &path)
+                    .map_err(|e| map_loader_error(e, Some(path)))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            (None, Some(PyReadableInput::Bytes(input))) => py.detach(|| {
+                let mut loader = store.inner.bulk_loader();
+                if let Some(num_threads) = num_threads {
+                    loader = loader.with_num_threads(num_threads);
+                }
+                if let Some(max_memory_size) = max_memory_size {
+                    loader = loader.with_max_memory_size_in_megabytes(max_memory_size);
+                }
+                if let Some(on_progress) = on_progress {
+                    loader = loader.on_progress(move |count| {
+                        Python::with_gil(|py| {
+                            if let Err(e) = on_progress.call1(py, (count,)) {
+                                eprintln!("Error in progress callback: {}", e);
+                            }
+                        });
+                    });
+                }
+                loader
+                    .parallel_load_from_slice(parser, &input)
+                    .map_err(|e| map_loader_error(e, None))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            (None, Some(PyReadableInput::String(input))) => py.detach(|| {
+                let mut loader = store.inner.bulk_loader();
+                if let Some(num_threads) = num_threads {
+                    loader = loader.with_num_threads(num_threads);
+                }
+                if let Some(max_memory_size) = max_memory_size {
+                    loader = loader.with_max_memory_size_in_megabytes(max_memory_size);
+                }
+                if let Some(on_progress) = on_progress {
+                    loader = loader.on_progress(move |count| {
+                        Python::with_gil(|py| {
+                            if let Err(e) = on_progress.call1(py, (count,)) {
+                                eprintln!("Error in progress callback: {}", e);
+                            }
+                        });
+                    });
+                }
+                loader
+                    .parallel_load_from_slice(parser, &input)
+                    .map_err(|e| map_loader_error(e, None))?;
+                loader.commit().map_err(map_storage_error)?;
+                Ok(())
+            }),
+            (path, input) => {
+                let input = PyReadable::from_args(&path, input, py)?;
+                py.detach(|| {
+                    let mut loader = store.inner.bulk_loader();
+                    if let Some(num_threads) = num_threads {
+                        loader = loader.with_num_threads(num_threads);
+                    }
+                    if let Some(max_memory_size) = max_memory_size {
+                        loader = loader.with_max_memory_size_in_megabytes(max_memory_size);
+                    }
+                    if let Some(on_progress) = on_progress {
+                        loader = loader.on_progress(move |count| {
+                            Python::with_gil(|py| {
+                                if let Err(e) = on_progress.call1(py, (count,)) {
+                                    eprintln!("Error in progress callback: {}", e);
+                                }
+                            });
+                        });
+                    }
+                    loader
+                        .load_from_reader(parser, input)
+                        .map_err(|e| map_loader_error(e, path))?;
+                    loader.commit().map_err(map_storage_error)?;
+                    Ok(())
+                })
+            }
+        }
     }
 }
 

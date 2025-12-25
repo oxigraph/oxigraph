@@ -1,4 +1,4 @@
-use crate::error::{RdfXmlParseError, RdfXmlSyntaxError};
+use crate::error::{RdfXmlParseError, RdfXmlSyntaxError, TextPosition};
 use crate::utils::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -216,6 +216,9 @@ impl RdfXmlParser {
             known_rdf_id: HashSet::default(),
             is_end: false,
             lenient: self.lenient,
+            current_line: 0,
+            current_column: 0,
+            current_offset: 0,
         }
     }
 }
@@ -770,20 +773,65 @@ struct InternalRdfXmlParser<R> {
     known_rdf_id: HashSet<String>,
     is_end: bool,
     lenient: bool,
+    current_line: u64,
+    current_column: u64,
+    current_offset: u64,
 }
 
 impl<R> InternalRdfXmlParser<R> {
+    fn current_position(&self) -> TextPosition {
+        TextPosition {
+            line: self.current_line,
+            column: self.current_column,
+            offset: self.current_offset,
+        }
+    }
+
+    fn with_position(&self, error: RdfXmlSyntaxError) -> RdfXmlSyntaxError {
+        let pos = self.current_position();
+        error.with_position(pos..pos)
+    }
+
+    fn update_position_from_bytes(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.current_offset += 1;
+            if byte == b'\n' {
+                self.current_line += 1;
+                self.current_column = 0;
+            } else if byte != b'\r' {
+                self.current_column += 1;
+            }
+        }
+    }
+
     fn parse_event(
         &mut self,
         event: Event<'_>,
         results: &mut Vec<Triple>,
     ) -> Result<(), RdfXmlParseError> {
+        // Track position by counting newlines in text content
+        match &event {
+            Event::Text(text) => {
+                self.update_position_from_bytes(text.as_ref());
+            }
+            Event::CData(cdata) => {
+                self.update_position_from_bytes(cdata.as_ref());
+            }
+            Event::Start(start) => {
+                self.update_position_from_bytes(start.name().as_ref());
+            }
+            Event::End(end) => {
+                self.update_position_from_bytes(end.name().as_ref());
+            }
+            _ => {}
+        }
+
         match event {
             Event::Start(event) => self.parse_start_event(&event, results),
             Event::End(event) => self.parse_end_event(&event, results),
-            Event::Empty(_) => Err(RdfXmlSyntaxError::msg(
+            Event::Empty(_) => Err(self.with_position(RdfXmlSyntaxError::msg(
                 "The expand_empty_elements option must be enabled",
-            )
+            ))
             .into()),
             Event::Text(event) => self.parse_text_event(&event),
             Event::CData(event) => self.parse_text_event(&event.escape()?),
@@ -791,9 +839,9 @@ impl<R> InternalRdfXmlParser<R> {
             Event::Decl(decl) => {
                 if let Some(encoding) = decl.encoding() {
                     if !is_utf8(&encoding?) {
-                        return Err(RdfXmlSyntaxError::msg(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(
                             "Only UTF-8 is supported by the RDF/XML parser",
-                        )
+                        ))
                         .into());
                     }
                 }
@@ -940,9 +988,9 @@ impl<R> InternalRdfXmlParser<R> {
                 if *attribute_url == *RDF_ID {
                     let mut id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "{id} is not a valid rdf:ID value"
-                        ))
+                        )))
                         .into());
                     }
                     id.insert(0, '#');
@@ -950,17 +998,17 @@ impl<R> InternalRdfXmlParser<R> {
                 } else if *attribute_url == *RDF_BAG_ID {
                     let bag_id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&bag_id) {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "{bag_id} is not a valid rdf:bagID value"
-                        ))
+                        )))
                         .into());
                     }
                 } else if *attribute_url == *RDF_NODE_ID {
                     let id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "{id} is not a valid rdf:nodeID value"
-                        ))
+                        )))
                         .into());
                     }
                     node_id_attr = Some(BlankNode::new_unchecked(id));
@@ -980,9 +1028,9 @@ impl<R> InternalRdfXmlParser<R> {
                 } else if attribute_url == rdf::TYPE.as_str() {
                     type_attr = Some(attribute);
                 } else if RESERVED_RDF_ATTRIBUTES.contains(&&*attribute_url) {
-                    return Err(RdfXmlSyntaxError::msg(format!(
+                    return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                         "{attribute_url} is not a valid attribute"
-                    ))
+                    )))
                     .into());
                 } else {
                     property_attrs.push((
@@ -999,9 +1047,9 @@ impl<R> InternalRdfXmlParser<R> {
                 let iri = self.resolve_iri(base_iri.as_ref(), iri)?;
                 if !self.lenient {
                     if self.known_rdf_id.contains(iri.as_str()) {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "{iri} has already been used as rdf:ID value"
-                        ))
+                        )))
                         .into());
                     }
                     self.known_rdf_id.insert(iri.as_str().into());
@@ -1039,13 +1087,13 @@ impl<R> InternalRdfXmlParser<R> {
             },
             Some(RdfXmlState::ParseTypeLiteralPropertyElt { .. }) => {
                 return Err(
-                    RdfXmlSyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content").into()
+                    self.with_position(RdfXmlSyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content")).into()
                 );
             }
             None => {
-                return Err(RdfXmlSyntaxError::msg(
+                return Err(self.with_position(RdfXmlSyntaxError::msg(
                     "No state in the stack: the XML is not balanced",
-                )
+                ))
                 .into());
             }
         };
@@ -1055,9 +1103,9 @@ impl<R> InternalRdfXmlParser<R> {
                 if *tag_name == *RDF_RDF {
                     RdfXmlState::Rdf { base_iri, language }
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
-                    return Err(RdfXmlSyntaxError::msg(format!(
+                    return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                         "Invalid node element tag name: {tag_name}"
-                    ))
+                    )))
                     .into());
                 } else {
                     self.build_node_elt(
@@ -1075,9 +1123,9 @@ impl<R> InternalRdfXmlParser<R> {
             }
             RdfXmlNextProduction::NodeElt => {
                 if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
-                    return Err(RdfXmlSyntaxError::msg(format!(
+                    return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                         "Invalid property element tag name: {tag_name}"
-                    ))
+                    )))
                     .into());
                 }
                 self.build_node_elt(
@@ -1096,9 +1144,9 @@ impl<R> InternalRdfXmlParser<R> {
                 let iri = if *tag_name == *RDF_LI {
                     let Some(RdfXmlState::NodeElt { li_counter, .. }) = self.state.last_mut()
                     else {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "Invalid property element tag name: {tag_name}"
-                        ))
+                        )))
                         .into());
                     };
                     *li_counter += 1;
@@ -1108,9 +1156,9 @@ impl<R> InternalRdfXmlParser<R> {
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name)
                     || *tag_name == *RDF_DESCRIPTION
                 {
-                    return Err(RdfXmlSyntaxError::msg(format!(
+                    return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                         "Invalid property element tag name: {tag_name}"
-                    ))
+                    )))
                     .into());
                 } else {
                     self.parse_iri(tag_name)?
@@ -1126,7 +1174,7 @@ impl<R> InternalRdfXmlParser<R> {
                                 (Some(resource_attr), None) => NamedOrBlankNode::from(resource_attr),
                                 (None, Some(node_id_attr)) => node_id_attr.into(),
                                 (None, None) => BlankNode::default().into(),
-                                (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
+                                (Some(_), Some(_)) => return Err(self.with_position(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time")).into())
                             };
                             self.emit_property_attrs(
                                 &object,
@@ -1244,7 +1292,7 @@ impl<R> InternalRdfXmlParser<R> {
                 if text.bytes().all(is_whitespace) {
                     Ok(())
                 } else {
-                    Err(RdfXmlSyntaxError::msg(format!("Unexpected text event: '{text}'")).into())
+                    Err(self.with_position(RdfXmlSyntaxError::msg(format!("Unexpected text event: '{text}'"))).into())
                 }
             }
         }
@@ -1277,12 +1325,12 @@ impl<R> InternalRdfXmlParser<R> {
                 .to_string())
             }
             ResolveResult::Unbound => {
-                Err(RdfXmlSyntaxError::msg("XML namespaces are required in RDF/XML").into())
+                Err(self.with_position(RdfXmlSyntaxError::msg("XML namespaces are required in RDF/XML")).into())
             }
-            ResolveResult::Unknown(v) => Err(RdfXmlSyntaxError::msg(format!(
+            ResolveResult::Unknown(v) => Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                 "Unknown prefix {}:",
                 self.reader.decoder().decode(&v)?
-            ))
+            )))
             .into()),
         }
     }
@@ -1305,19 +1353,19 @@ impl<R> InternalRdfXmlParser<R> {
             (None, None, Some(about_attr)) => about_attr.into(),
             (None, None, None) => BlankNode::default().into(),
             (Some(_), Some(_), _) => {
-                return Err(RdfXmlSyntaxError::msg(
+                return Err(self.with_position(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:nodeID could be set at the same time",
-                ));
+                )));
             }
             (_, Some(_), Some(_)) => {
-                return Err(RdfXmlSyntaxError::msg(
+                return Err(self.with_position(RdfXmlSyntaxError::msg(
                     "Not both rdf:nodeID and rdf:resource could be set at the same time",
-                ));
+                )));
             }
             (Some(_), _, Some(_)) => {
-                return Err(RdfXmlSyntaxError::msg(
+                return Err(self.with_position(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:resource could be set at the same time",
-                ));
+                )));
             }
         };
 
@@ -1421,18 +1469,18 @@ impl<R> InternalRdfXmlParser<R> {
                 if emit {
                     let object = writer.into_inner();
                     if object.is_empty() {
-                        return Err(RdfXmlSyntaxError::msg(format!(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(format!(
                             "No value found for rdf:XMLLiteral value of property {iri}"
-                        )));
+                        ))));
                     }
                     let triple = Triple::new(
                         subject,
                         iri,
                         Literal::new_typed_literal(
                             str::from_utf8(&object).map_err(|_| {
-                                RdfXmlSyntaxError::msg(
+                                self.with_position(RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
-                                )
+                                ))
                             })?,
                             rdf::XML_LITERAL,
                         ),
@@ -1446,9 +1494,9 @@ impl<R> InternalRdfXmlParser<R> {
             RdfXmlState::NodeElt { subject, .. } => match self.state.last_mut() {
                 Some(RdfXmlState::PropertyElt { object, .. }) => {
                     if is_object_defined(object) {
-                        return Err(RdfXmlSyntaxError::msg(
+                        return Err(self.with_position(RdfXmlSyntaxError::msg(
                             "Unexpected node, a text value is already present",
-                        ));
+                        )));
                     }
                     *object = Some(NodeOrText::Node(subject))
                 }
@@ -1622,4 +1670,71 @@ fn is_utf8(encoding: &[u8]) -> bool {
             | b"utf8"
             | b"x-unicode20utf8"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_location() {
+        // Test that errors include location information
+        let invalid_rdf = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:ID="invalid id with spaces">
+    <rdf:value>test</rdf:value>
+  </rdf:Description>
+</rdf:RDF>"#;
+
+        let mut parser = RdfXmlParser::new().for_slice(invalid_rdf);
+        let result = parser.next();
+
+        assert!(result.is_some());
+        if let Some(Err(e)) = result {
+            // Error should have location information
+            let location = e.location();
+            assert!(
+                location.is_some(),
+                "Error should have location information"
+            );
+            if let Some(loc) = location {
+                // Location should have valid line/column/offset
+                assert!(
+                    loc.start.offset > 0 || loc.start.line > 0,
+                    "Location should have non-zero offset or line"
+                );
+            }
+        } else {
+            panic!("Expected an error for invalid rdf:ID");
+        }
+    }
+
+    #[test]
+    fn test_error_location_unknown_prefix() {
+        // Test location reporting for unknown prefix error
+        let invalid_rdf = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="http://example.com/test">
+    <unknown:property>value</unknown:property>
+  </rdf:Description>
+</rdf:RDF>"#;
+
+        let mut parser = RdfXmlParser::new().for_slice(invalid_rdf);
+        // Parse until we hit the unknown prefix error
+        while let Some(result) = parser.next() {
+            if let Err(e) = result {
+                let location = e.location();
+                assert!(location.is_some(), "Unknown prefix error should have location");
+                // Verify the location has valid data
+                if let Some(loc) = location {
+                    assert!(
+                        loc.start.offset > 0 || loc.start.line > 0,
+                        "Location should have valid position data"
+                    );
+                }
+                return;
+            }
+        }
+        panic!("Expected an error for unknown prefix");
+    }
 }

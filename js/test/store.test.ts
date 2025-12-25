@@ -1389,3 +1389,81 @@ describe("serializeQuerySolutions()", () => {
         assert(result.includes('"value":"http://example.com"'));
     });
 });
+
+describe("StoreTransaction", () => {
+    describe("#add()", () => {
+        it("should add quads in a transaction", () => {
+            const store = new Store();
+            const transaction = store.beginTransaction();
+            const quad = dataModel.quad(ex, ex, ex);
+
+            transaction.add(quad);
+            transaction.commit();
+
+            assert(store.has(quad));
+        });
+
+        it("should not add quads if transaction is not committed", () => {
+            const store = new Store();
+            const transaction = store.beginTransaction();
+            const quad = dataModel.quad(ex, ex, ex);
+
+            transaction.add(quad);
+            // Not committing - transaction is dropped
+
+            assert(!store.has(quad));
+        });
+    });
+
+    describe("#delete()", () => {
+        it("should delete quads in a transaction", () => {
+            const quad = dataModel.quad(ex, ex, ex);
+            const store = new Store([quad]);
+            const transaction = store.beginTransaction();
+
+            transaction.delete(quad);
+            transaction.commit();
+
+            assert(!store.has(quad));
+        });
+    });
+
+    describe("#commit()", () => {
+        it("should commit multiple operations atomically", () => {
+            const quad1 = dataModel.quad(ex, ex, dataModel.literal("1"));
+            const quad2 = dataModel.quad(ex, ex, dataModel.literal("2"));
+            const store = new Store([quad1]);
+            const transaction = store.beginTransaction();
+
+            transaction.delete(quad1);
+            transaction.add(quad2);
+            transaction.commit();
+
+            assert(!store.has(quad1));
+            assert(store.has(quad2));
+        });
+
+        it("should throw if commit is called twice", () => {
+            const store = new Store();
+            const transaction = store.beginTransaction();
+
+            transaction.commit();
+
+            assert.throws(() => {
+                transaction.commit();
+            });
+        });
+
+        it("should throw if add is called after commit", () => {
+            const store = new Store();
+            const transaction = store.beginTransaction();
+            const quad = dataModel.quad(ex, ex, ex);
+
+            transaction.commit();
+
+            assert.throws(() => {
+                transaction.add(quad);
+            });
+        });
+    });
+});

@@ -1552,6 +1552,29 @@ impl<'a> Transaction<'a> {
         self.inner.commit()
     }
 
+    /// Aborts the transaction without applying any changes.
+    ///
+    /// This method discards all pending modifications made during the transaction
+    /// and releases any held locks. After calling this method, the transaction
+    /// cannot be used anymore.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(QuadRef::new(ex, ex, ex, ex));
+    /// transaction.rollback(); // Changes are discarded
+    /// assert!(!store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_,oxigraph::store::StorageError>::Ok(())
+    /// ```
+    pub fn rollback(self) {
+        self.inner.rollback()
+    }
+
     pub(super) fn inner(&self) -> &StorageReadableTransaction<'a> {
         &self.inner
     }
@@ -2348,6 +2371,46 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad]
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn transaction_rollback() -> Result<(), StorageError> {
+        use crate::model::*;
+
+        let store = Store::new()?;
+        let ex = NamedNodeRef::new_unchecked("http://example.com");
+        let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+
+        // Test 1: Rollback after insert - data should not be persisted
+        let mut transaction = store.start_transaction()?;
+        transaction.insert(quad);
+        assert!(transaction.contains(quad)?); // Should be visible in transaction
+        transaction.rollback();
+        assert!(!store.contains(quad)?); // Should not be in store after rollback
+
+        // Test 2: Rollback after remove - data should still be there
+        store.insert(quad)?;
+        assert!(store.contains(quad)?);
+        let mut transaction = store.start_transaction()?;
+        transaction.remove(quad);
+        assert!(!transaction.contains(quad)?); // Should not be visible in transaction
+        transaction.rollback();
+        assert!(store.contains(quad)?); // Should still be in store after rollback
+
+        // Test 3: Rollback after multiple operations
+        let lit = Literal::from(42);
+        let quad2 = QuadRef::new(ex, ex, &lit, GraphNameRef::DefaultGraph);
+        let mut transaction = store.start_transaction()?;
+        transaction.insert(quad2);
+        transaction.remove(quad);
+        assert!(transaction.contains(quad2)?);
+        assert!(!transaction.contains(quad)?);
+        transaction.rollback();
+        // After rollback, original state should be preserved
+        assert!(store.contains(quad)?);
+        assert!(!store.contains(quad2)?);
 
         Ok(())
     }

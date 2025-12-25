@@ -558,6 +558,14 @@ impl StorageReadableTransaction<'_> {
             }
         }
     }
+
+    pub fn rollback(self) {
+        match self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(transaction) => transaction.rollback(),
+            StorageReadableTransactionKind::Memory(transaction) => transaction.rollback(),
+        }
+    }
 }
 
 #[must_use]

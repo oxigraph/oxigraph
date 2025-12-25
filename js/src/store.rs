@@ -5,9 +5,10 @@ use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxigraph::store::Store;
+use oxigraph::store::{Store, Transaction};
 #[cfg(feature = "geosparql")]
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -154,6 +155,16 @@ export class Store {
     values(): IterableIterator<Quad>;
 
     [Symbol.iterator](): Iterator<Quad>;
+
+    beginTransaction(): StoreTransaction;
+}
+
+export class StoreTransaction {
+    add(quad: Quad): void;
+
+    delete(quad: Quad): void;
+
+    commit(): void;
 }
 "###;
 
@@ -1348,6 +1359,11 @@ impl JsStore {
             .map_err(JsError::from)?;
         Ok(Array::from_iter(quads).values().into())
     }
+
+    #[wasm_bindgen(js_name = beginTransaction)]
+    pub fn begin_transaction(&self) -> Result<JsTransaction, JsValue> {
+        Ok(JsTransaction::new(self.store.clone())?)
+    }
 }
 
 fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
@@ -1430,4 +1446,62 @@ fn extract_substitutions(substitutions_obj: &JsValue) -> Result<Vec<(Variable, T
         substitutions.push((variable, term));
     }
     Ok(substitutions)
+}
+
+#[wasm_bindgen(js_name = StoreTransaction, skip_typescript)]
+pub struct JsTransaction {
+    // We store the Store to keep it alive for the transaction's lifetime
+    // The transaction borrows from this store, but we use RefCell to work around
+    // the single ownership requirement of wasm_bindgen
+    store: Store,
+    inner: RefCell<Option<Transaction<'static>>>,
+}
+
+impl JsTransaction {
+    fn new(store: Store) -> Result<Self, JsValue> {
+        // SAFETY: We transmute the lifetime of the transaction to 'static.
+        // This is safe because:
+        // 1. The transaction is created from `store` which we own
+        // 2. The transaction is stored alongside the store in the same struct
+        // 3. The transaction will be dropped before the store (Rust drop order guarantees)
+        // 4. We prevent access after commit/drop via the Option wrapper
+        let transaction = unsafe {
+            let transaction = store.start_transaction().map_err(JsError::from)?;
+            std::mem::transmute::<Transaction<'_>, Transaction<'static>>(transaction)
+        };
+        Ok(Self {
+            store,
+            inner: RefCell::new(Some(transaction)),
+        })
+    }
+}
+
+#[wasm_bindgen(js_class = StoreTransaction)]
+impl JsTransaction {
+    pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .as_mut()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.insert(FROM_JS.with(|c| c.to_quad(quad))?.as_ref());
+        Ok(())
+    }
+
+    pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .as_mut()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.remove(FROM_JS.with(|c| c.to_quad(quad))?.as_ref());
+        Ok(())
+    }
+
+    pub fn commit(&self) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .take()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.commit().map_err(JsError::from)?;
+        Ok(())
+    }
 }

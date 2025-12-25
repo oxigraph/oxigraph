@@ -289,6 +289,9 @@ impl<'a> OntologyParser<'a> {
             TermRef::Literal(_) => {
                 Err(OwlParseError::invalid_value("Literal cannot be a class expression"))
             }
+            _ => {
+                Err(OwlParseError::invalid_value("Unsupported term type for class expression"))
+            }
         }
     }
 
