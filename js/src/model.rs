@@ -1528,9 +1528,12 @@ impl JsDataset {
             .iter()
             .filter(|quad| {
                 (subject.is_none() || subject.as_ref().map(|s| s.as_ref()) == Some(quad.subject))
-                    && (predicate.is_none() || predicate.as_ref().map(|p| p.as_ref()) == Some(quad.predicate))
-                    && (object.is_none() || object.as_ref().map(|o| o.as_ref()) == Some(quad.object))
-                    && (graph_name.is_none() || graph_name.as_ref().map(|g| g.as_ref()) == Some(quad.graph_name))
+                    && (predicate.is_none()
+                        || predicate.as_ref().map(|p| p.as_ref()) == Some(quad.predicate))
+                    && (object.is_none()
+                        || object.as_ref().map(|o| o.as_ref()) == Some(quad.object))
+                    && (graph_name.is_none()
+                        || graph_name.as_ref().map(|g| g.as_ref()) == Some(quad.graph_name))
             })
             .map(|quad| JsQuad::from(quad.into_owned()).into())
             .collect();
@@ -1634,7 +1637,11 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn filter(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<JsDataset, JsValue> {
+    pub fn filter(
+        &self,
+        callback: &js_sys::Function,
+        this_arg: &JsValue,
+    ) -> Result<JsDataset, JsValue> {
         let this = if this_arg.is_undefined() {
             JsValue::NULL
         } else {
@@ -1683,7 +1690,11 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn find(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<JsValue, JsValue> {
+    pub fn find(
+        &self,
+        callback: &js_sys::Function,
+        this_arg: &JsValue,
+    ) -> Result<JsValue, JsValue> {
         let this = if this_arg.is_undefined() {
             JsValue::NULL
         } else {
@@ -1708,7 +1719,11 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn map(&self, callback: &js_sys::Function, this_arg: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+    pub fn map(
+        &self,
+        callback: &js_sys::Function,
+        this_arg: &JsValue,
+    ) -> Result<Box<[JsValue]>, JsValue> {
         let this = if this_arg.is_undefined() {
             JsValue::NULL
         } else {
@@ -1724,7 +1739,11 @@ impl JsDataset {
     }
 
     #[wasm_bindgen]
-    pub fn reduce(&self, callback: &js_sys::Function, initial_value: JsValue) -> Result<JsValue, JsValue> {
+    pub fn reduce(
+        &self,
+        callback: &js_sys::Function,
+        initial_value: JsValue,
+    ) -> Result<JsValue, JsValue> {
         let mut accumulator = initial_value;
         for quad in self.inner.iter() {
             let quad_js: JsValue = JsQuad::from(quad.into_owned()).into();
@@ -1747,7 +1766,9 @@ impl JsDataset {
 
     #[wasm_bindgen]
     pub fn slice(&self, start: Option<i32>, end: Option<i32>) -> Box<[JsValue]> {
-        let quads: Vec<JsValue> = self.inner.iter()
+        let quads: Vec<JsValue> = self
+            .inner
+            .iter()
             .map(|quad| JsQuad::from(quad.into_owned()).into())
             .collect();
 
@@ -1755,8 +1776,16 @@ impl JsDataset {
         let start = start.unwrap_or(0);
         let end = end.unwrap_or(len);
 
-        let start = if start < 0 { (len + start).max(0) } else { start.min(len) } as usize;
-        let end = if end < 0 { (len + end).max(0) } else { end.min(len) } as usize;
+        let start = if start < 0 {
+            (len + start).max(0)
+        } else {
+            start.min(len)
+        } as usize;
+        let end = if end < 0 {
+            (len + end).max(0)
+        } else {
+            end.min(len)
+        } as usize;
 
         quads[start..end.max(start)].to_vec().into_boxed_slice()
     }

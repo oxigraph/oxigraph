@@ -31,7 +31,9 @@ pub enum ShaclParseError {
     },
 
     /// Invalid property value.
-    #[error("Invalid value for property {property} in shape {shape}: expected {expected}, got {actual}")]
+    #[error(
+        "Invalid value for property {property} in shape {shape}: expected {expected}, got {actual}"
+    )]
     InvalidPropertyValue {
         shape: Box<Term>,
         property: NamedNode,

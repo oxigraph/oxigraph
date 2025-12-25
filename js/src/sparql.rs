@@ -483,7 +483,8 @@ impl JsQueryTriples {
             let triple_js = self.triples.get(i);
             let quad = crate::model::FROM_JS.with(|c| c.to_quad(&triple_js))?;
             // try_from returns Result<Triple, Infallible> which never fails, so we can use expect
-            let triple = oxigraph::model::Triple::try_from(quad).expect("Triple conversion should not fail");
+            let triple =
+                oxigraph::model::Triple::try_from(quad).expect("Triple conversion should not fail");
             serializer
                 .serialize_triple(&triple)
                 .map_err(JsError::from)?;

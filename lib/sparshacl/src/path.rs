@@ -9,7 +9,7 @@
 //! - One-or-more path (sh:oneOrMorePath)
 //! - Zero-or-one path (sh:zeroOrOnePath)
 
-use oxrdf::{vocab::shacl, Graph, NamedNode, NamedNodeRef, Term, TermRef};
+use oxrdf::{Graph, NamedNode, NamedNodeRef, Term, TermRef, vocab::shacl};
 use rustc_hash::FxHashSet;
 use std::fmt;
 
@@ -143,13 +143,15 @@ impl PropertyPath {
     }
 
     /// Evaluates the property path starting from a focus node and returns all value nodes.
-    pub fn evaluate<'a>(
-        &self,
-        graph: &'a Graph,
-        focus_node: TermRef<'a>,
-    ) -> Vec<Term> {
+    pub fn evaluate<'a>(&self, graph: &'a Graph, focus_node: TermRef<'a>) -> Vec<Term> {
         let mut results = Vec::new();
-        self.evaluate_into(graph, focus_node, &mut results, &mut FxHashSet::default(), 0);
+        self.evaluate_into(
+            graph,
+            focus_node,
+            &mut results,
+            &mut FxHashSet::default(),
+            0,
+        );
         results
     }
 
@@ -192,7 +194,13 @@ impl PropertyPath {
                 for path in paths {
                     let mut next_nodes = Vec::new();
                     for node in &current_nodes {
-                        path.evaluate_into(graph, node.as_ref(), &mut next_nodes, visited, depth + 1);
+                        path.evaluate_into(
+                            graph,
+                            node.as_ref(),
+                            &mut next_nodes,
+                            visited,
+                            depth + 1,
+                        );
                     }
                     current_nodes = next_nodes;
                 }
@@ -262,7 +270,13 @@ impl PropertyPath {
                         results.push(node.clone());
                         // Continue with zero-or-more from here
                         let zero_or_more = Self::ZeroOrMore(inner.clone());
-                        zero_or_more.evaluate_into(graph, node.as_ref(), results, visited, depth + 1);
+                        zero_or_more.evaluate_into(
+                            graph,
+                            node.as_ref(),
+                            results,
+                            visited,
+                            depth + 1,
+                        );
                     }
                 }
             }
@@ -377,18 +391,16 @@ fn parse_path_list(
         }
 
         // Get first element
-        let first = get_object(graph, &current, rdf::FIRST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first")
-        })?;
+        let first = get_object(graph, &current, rdf::FIRST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:first"))?;
 
         // Parse the path element
         let path = PropertyPath::parse(graph, first.as_ref())?;
         paths.push(path);
 
         // Get rest of list
-        let rest = get_object(graph, &current, rdf::REST).ok_or_else(|| {
-            ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest")
-        })?;
+        let rest = get_object(graph, &current, rdf::REST)
+            .ok_or_else(|| ShaclParseError::invalid_rdf_list(shape.clone(), "Missing rdf:rest"))?;
 
         current = rest;
     }
@@ -476,7 +488,10 @@ mod tests {
         // Attempt to parse the circular list should fail
         let result = parse_path_list(&graph, Term::BlankNode(node1), &shape);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ShaclParseError::CircularList { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            ShaclParseError::CircularList { .. }
+        ));
     }
 
     #[test]
@@ -521,6 +536,9 @@ mod tests {
         // Attempt to parse the too-long list should fail
         let result = parse_path_list(&graph, Term::BlankNode(start_node), &shape);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ShaclParseError::ListTooLong { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            ShaclParseError::ListTooLong { .. }
+        ));
     }
 }

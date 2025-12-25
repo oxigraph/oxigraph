@@ -1,6 +1,10 @@
 //! Python bindings for SHACL validation.
 
+use crate::dataset::PyDataset;
 use crate::model::*;
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::model::{Graph, Term};
+use pyo3::Py;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use sparshacl::{ShaclError, ShaclValidator, ShapesGraph, ValidationReport, ValidationResult};
@@ -46,9 +50,6 @@ impl PyShaclShapesGraph {
     /// ...     ex:Shape a sh:NodeShape .
     /// ... ''')
     pub fn parse(&mut self, py: Python<'_>, data: &str) -> PyResult<()> {
-        use oxrdf::Graph;
-        use oxrdfio::{RdfFormat, RdfParser};
-
         let data_owned = data.to_string();
         let shapes_graph = py.allow_threads(|| -> PyResult<ShapesGraph> {
             let mut graph = Graph::new();
@@ -135,9 +136,6 @@ impl PyShaclValidator {
     /// >>> report.conforms
     /// True
     pub fn validate(&self, py: Python<'_>, data: &str) -> PyResult<PyShaclValidationReport> {
-        use oxrdf::Graph;
-        use oxrdfio::{RdfFormat, RdfParser};
-
         let data_owned = data.to_string();
         let validator_clone = self.inner.clone();
         let report = py.allow_threads(|| -> PyResult<ValidationReport> {
@@ -160,15 +158,20 @@ impl PyShaclValidator {
     /// :param graph: The oxrdf Graph to validate
     /// :return: A validation report
     /// :raises RuntimeError: If validation fails
-    pub fn validate_graph(&self, py: Python<'_>, graph: &PyDataset) -> PyResult<PyShaclValidationReport> {
+    pub fn validate_graph(
+        &self,
+        py: Python<'_>,
+        graph: &PyDataset,
+    ) -> PyResult<PyShaclValidationReport> {
         let validator_clone = self.inner.clone();
         let dataset_clone = graph.inner.clone();
 
         let report = py.allow_threads(|| -> PyResult<ValidationReport> {
-            // Convert PyDataset to oxrdf Graph (use default graph)
-            let oxrdf_graph = dataset_clone.iter().fold(oxrdf::Graph::new(), |mut g, q| {
+            // Convert PyDataset to Graph (use default graph)
+            use oxigraph::model::Triple;
+            let oxrdf_graph = dataset_clone.iter().fold(Graph::new(), |mut g, q| {
                 if q.graph_name.is_default_graph() {
-                    g.insert(&oxrdf::Triple::new(
+                    g.insert(&Triple::new(
                         q.subject.clone(),
                         q.predicate.clone(),
                         q.object.clone(),
@@ -177,7 +180,9 @@ impl PyShaclValidator {
                 g
             });
 
-            validator_clone.validate(&oxrdf_graph).map_err(map_shacl_error)
+            validator_clone
+                .validate(&oxrdf_graph)
+                .map_err(map_shacl_error)
         })?;
 
         Ok(PyShaclValidationReport { inner: report })
@@ -236,7 +241,6 @@ impl PyShaclValidationReport {
 
     /// Returns the report as a Turtle string.
     pub fn to_turtle(&self, py: Python<'_>) -> PyResult<String> {
-        use oxrdfio::{RdfFormat, RdfSerializer};
         use std::io::Cursor;
 
         let graph_clone = self.inner.to_graph();
@@ -257,14 +261,17 @@ impl PyShaclValidationReport {
                     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             }
 
-            String::from_utf8(buffer.into_inner()).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+            String::from_utf8(buffer.into_inner())
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))
         })
     }
 
     fn __repr__(&self) -> String {
-        format!("<ShaclValidationReport conforms={} violations={}>",
+        format!(
+            "<ShaclValidationReport conforms={} violations={}>",
             self.inner.conforms(),
-            self.inner.violation_count())
+            self.inner.violation_count()
+        )
     }
 }
 
@@ -279,13 +286,13 @@ pub struct PyShaclValidationResult {
 impl PyShaclValidationResult {
     /// The focus node that was validated.
     #[getter]
-    pub fn focus_node(&self) -> PyObject {
+    pub fn focus_node(&self) -> Py<PyAny> {
         Python::with_gil(|py| term_to_python(py, self.inner.focus_node.clone()))
     }
 
     /// The value that caused the violation (if any).
     #[getter]
-    pub fn value(&self) -> Option<PyObject> {
+    pub fn value(&self) -> Option<Py<PyAny>> {
         self.inner
             .value
             .clone()
@@ -309,9 +316,10 @@ impl PyShaclValidationResult {
     }
 
     fn __repr__(&self) -> String {
-        format!("<ShaclValidationResult focusNode={} severity={:?}>",
-            self.inner.focus_node,
-            self.inner.result_severity)
+        format!(
+            "<ShaclValidationResult focusNode={} severity={:?}>",
+            self.inner.focus_node, self.inner.result_severity
+        )
     }
 }
 
@@ -339,7 +347,11 @@ impl PyShaclValidationResult {
 /// >>> report.conforms
 /// True
 #[pyfunction]
-pub fn shacl_validate(py: Python<'_>, shapes_data: &str, data: &str) -> PyResult<PyShaclValidationReport> {
+pub fn shacl_validate(
+    py: Python<'_>,
+    shapes_data: &str,
+    data: &str,
+) -> PyResult<PyShaclValidationReport> {
     let mut shapes = PyShaclShapesGraph::new();
     shapes.parse(py, shapes_data)?;
 
@@ -351,28 +363,29 @@ fn map_shacl_error(error: ShaclError) -> PyErr {
     match error {
         ShaclError::Parse(e) => PyValueError::new_err(e.to_string()),
         ShaclError::Validation(e) => PyRuntimeError::new_err(e.to_string()),
+        _ => PyRuntimeError::new_err(error.to_string()),
     }
 }
 
-fn term_to_python(py: Python<'_>, term: oxrdf::Term) -> PyObject {
+fn term_to_python(py: Python<'_>, term: Term) -> Py<PyAny> {
     match term {
-        oxrdf::Term::NamedNode(n) => PyNamedNode::from(n)
+        Term::NamedNode(n) => PyNamedNode::from(n)
             .into_pyobject(py)
             .unwrap()
             .into_any()
             .unbind(),
-        oxrdf::Term::BlankNode(b) => PyBlankNode::from(b)
+        Term::BlankNode(b) => PyBlankNode::from(b)
             .into_pyobject(py)
             .unwrap()
             .into_any()
             .unbind(),
-        oxrdf::Term::Literal(l) => PyLiteral::from(l)
+        Term::Literal(l) => PyLiteral::from(l)
             .into_pyobject(py)
             .unwrap()
             .into_any()
             .unbind(),
         #[cfg(feature = "rdf-12")]
-        oxrdf::Term::Triple(t) => PyTriple::from(*t)
+        Term::Triple(t) => PyTriple::from(*t)
             .into_pyobject(py)
             .unwrap()
             .into_any()

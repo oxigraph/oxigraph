@@ -3,8 +3,8 @@
 //! This module implements the core SHACL validation algorithm.
 
 use oxrdf::{
-    vocab::{rdf, shacl},
     Graph, NamedNode, NamedNodeRef, Term, TermRef,
+    vocab::{rdf, shacl},
 };
 use regex::Regex;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -310,7 +310,10 @@ impl ShaclValidator {
                         )
                         .with_value(value.clone())
                         .with_severity(severity)
-                        .with_message(format!("Value does not have datatype <{}>", datatype.as_str()));
+                        .with_message(format!(
+                            "Value does not have datatype <{}>",
+                            datatype.as_str()
+                        ));
 
                         if let Some(p) = path {
                             result = result.with_path(p.clone());
@@ -331,7 +334,10 @@ impl ShaclValidator {
                         )
                         .with_value(value.clone())
                         .with_severity(severity)
-                        .with_message(format!("Value does not match node kind <{}>", node_kind.as_str()));
+                        .with_message(format!(
+                            "Value does not match node kind <{}>",
+                            node_kind.as_str()
+                        ));
 
                         if let Some(p) = path {
                             result = result.with_path(p.clone());
@@ -354,9 +360,7 @@ impl ShaclValidator {
                         )
                         .with_value(value.clone())
                         .with_severity(severity)
-                        .with_message(format!(
-                            "String length {len} is less than minimum {min}"
-                        ));
+                        .with_message(format!("String length {len} is less than minimum {min}"));
 
                         if let Some(p) = path {
                             result = result.with_path(p.clone());
@@ -378,9 +382,7 @@ impl ShaclValidator {
                         )
                         .with_value(value.clone())
                         .with_severity(severity)
-                        .with_message(format!(
-                            "String length {len} exceeds maximum {max}"
-                        ));
+                        .with_message(format!("String length {len} exceeds maximum {max}"));
 
                         if let Some(p) = path {
                             result = result.with_path(p.clone());
@@ -574,9 +576,10 @@ impl ShaclValidator {
 
             // === Property Pair Constraints ===
             Constraint::Equals(property) => {
-                let other_values: FxHashSet<_> = get_property_values(context.data_graph, focus_node, property)
-                    .into_iter()
-                    .collect();
+                let other_values: FxHashSet<_> =
+                    get_property_values(context.data_graph, focus_node, property)
+                        .into_iter()
+                        .collect();
                 let value_set: FxHashSet<_> = value_nodes.iter().cloned().collect();
 
                 if value_set != other_values {
@@ -600,9 +603,10 @@ impl ShaclValidator {
             }
 
             Constraint::Disjoint(property) => {
-                let other_values: FxHashSet<_> = get_property_values(context.data_graph, focus_node, property)
-                    .into_iter()
-                    .collect();
+                let other_values: FxHashSet<_> =
+                    get_property_values(context.data_graph, focus_node, property)
+                        .into_iter()
+                        .collect();
 
                 for value in value_nodes {
                     if other_values.contains(value) {
@@ -1158,7 +1162,7 @@ fn get_triples_for_subject(graph: &Graph, subject: &Term) -> Vec<SimpleTriple> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxrdf::{vocab::xsd, Literal, Triple};
+    use oxrdf::{Literal, Triple, vocab::xsd};
 
     #[test]
     fn test_empty_shapes_validation() {
@@ -1188,8 +1192,16 @@ mod tests {
             person.clone(),
         ));
         // Property shape
-        shapes_graph.insert(&Triple::new(shape.clone(), shacl::PROPERTY, prop_shape.clone()));
-        shapes_graph.insert(&Triple::new(prop_shape.clone(), shacl::PATH, name_prop.clone()));
+        shapes_graph.insert(&Triple::new(
+            shape.clone(),
+            shacl::PROPERTY,
+            prop_shape.clone(),
+        ));
+        shapes_graph.insert(&Triple::new(
+            prop_shape.clone(),
+            shacl::PATH,
+            name_prop.clone(),
+        ));
         shapes_graph.insert(&Triple::new(
             prop_shape.clone(),
             shacl::MIN_COUNT,
@@ -1224,9 +1236,21 @@ mod tests {
             shacl::TARGET_CLASS,
             person.clone(),
         ));
-        shapes_graph.insert(&Triple::new(shape.clone(), shacl::PROPERTY, prop_shape.clone()));
-        shapes_graph.insert(&Triple::new(prop_shape.clone(), shacl::PATH, age_prop.clone()));
-        shapes_graph.insert(&Triple::new(prop_shape.clone(), shacl::DATATYPE, xsd::INTEGER));
+        shapes_graph.insert(&Triple::new(
+            shape.clone(),
+            shacl::PROPERTY,
+            prop_shape.clone(),
+        ));
+        shapes_graph.insert(&Triple::new(
+            prop_shape.clone(),
+            shacl::PATH,
+            age_prop.clone(),
+        ));
+        shapes_graph.insert(&Triple::new(
+            prop_shape.clone(),
+            shacl::DATATYPE,
+            xsd::INTEGER,
+        ));
 
         let shapes = ShapesGraph::from_graph(&shapes_graph).unwrap();
         let validator = ShaclValidator::new(shapes);

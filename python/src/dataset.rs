@@ -23,7 +23,7 @@ use pyo3::prelude::*;
 #[pyclass(name = "Dataset", module = "pyoxigraph", eq)]
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct PyDataset {
-    inner: Dataset,
+    pub(crate) inner: Dataset,
 }
 
 #[pymethods]

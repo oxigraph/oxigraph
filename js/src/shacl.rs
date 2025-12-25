@@ -217,7 +217,10 @@ impl JsShaclValidator {
             graph.insert(quad.as_ref());
         }
 
-        let report = self.inner.validate(&graph).map_err(|e| format_err!("{}", e))?;
+        let report = self
+            .inner
+            .validate(&graph)
+            .map_err(|e| format_err!("{}", e))?;
 
         Ok(JsShaclValidationReport { inner: report })
     }
@@ -228,7 +231,9 @@ impl JsShaclValidator {
         use oxrdf::Graph;
 
         // Extract quads from the store and build a graph (using default graph)
-        let graph = store.store.iter()
+        let graph = store
+            .store
+            .iter()
             .filter_map(|quad_result| quad_result.ok())
             .fold(Graph::new(), |mut g, quad| {
                 if quad.graph_name.is_default_graph() {
@@ -241,7 +246,10 @@ impl JsShaclValidator {
                 g
             });
 
-        let report = self.inner.validate(&graph).map_err(|e| format_err!("{}", e))?;
+        let report = self
+            .inner
+            .validate(&graph)
+            .map_err(|e| format_err!("{}", e))?;
 
         Ok(JsShaclValidationReport { inner: report })
     }
@@ -297,7 +305,8 @@ impl JsShaclValidationReport {
         let mut buffer = Vec::new();
 
         {
-            let mut serializer = RdfSerializer::from_format(RdfFormat::Turtle).for_writer(&mut buffer);
+            let mut serializer =
+                RdfSerializer::from_format(RdfFormat::Turtle).for_writer(&mut buffer);
             for triple in graph.iter() {
                 serializer
                     .serialize_triple(triple)
@@ -328,10 +337,7 @@ impl JsShaclValidationResult {
     /// The value that caused the violation (if any).
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> Option<JsValue> {
-        self.inner
-            .value
-            .clone()
-            .map(|v| JsTerm::from(v).into())
+        self.inner.value.clone().map(|v| JsTerm::from(v).into())
     }
 
     /// The human-readable message (if any).
