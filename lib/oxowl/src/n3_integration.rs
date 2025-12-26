@@ -113,7 +113,6 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
         N3Term::BlankNode(b) => Subject::BlankNode(b),
         N3Term::Variable(_) => return None, // Skip variables
         N3Term::Literal(_) => return None,  // Invalid as subject in standard RDF
-        N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
     };
 
     // Convert predicate
@@ -128,7 +127,6 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
         N3Term::BlankNode(b) => Term::BlankNode(b),
         N3Term::Literal(l) => Term::Literal(l),
         N3Term::Variable(_) => return None, // Skip variables
-        N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
     };
 
     Some(Quad {
