@@ -419,6 +419,190 @@ impl Dataset {
         self.ospg.clear();
     }
 
+    /// Computes the union of two datasets (self ⊔ other).
+    ///
+    /// Returns a new dataset containing all quads from both datasets.
+    /// Uses deterministic BTreeSet iteration for reproducible results.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut ds1 = Dataset::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// ds1.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut ds2 = Dataset::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// ds2.insert(QuadRef::new(ex2, ex2, ex2, GraphNameRef::DefaultGraph));
+    ///
+    /// let union = ds1.union(&ds2);
+    /// assert_eq!(union.len(), 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn union(&self, other: &Self) -> Self {
+        let mut result = self.clone();
+        for quad in other.iter() {
+            result.insert(quad);
+        }
+        result
+    }
+
+    /// Computes the set difference (self \ other).
+    ///
+    /// Returns a new dataset containing quads in self but not in other.
+    /// Essential for computing Δ⁻ in ΔGate protocol.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut ds1 = Dataset::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// ds1.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut ds2 = Dataset::new();
+    /// ds2.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph));
+    ///
+    /// let diff = ds1.difference(&ds2);
+    /// assert!(diff.is_empty());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn difference(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        for quad in self.iter() {
+            if !other.contains(quad) {
+                result.insert(quad);
+            }
+        }
+        result
+    }
+
+    /// Computes the intersection of two datasets (self ∩ other).
+    ///
+    /// Returns a new dataset containing only quads present in both datasets.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut ds1 = Dataset::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// ds1.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut ds2 = Dataset::new();
+    /// ds2.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph));
+    ///
+    /// let intersection = ds1.intersection(&ds2);
+    /// assert_eq!(intersection.len(), 1);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn intersection(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        for quad in self.iter() {
+            if other.contains(quad) {
+                result.insert(quad);
+            }
+        }
+        result
+    }
+
+    /// Computes the symmetric difference (self Δ other).
+    ///
+    /// Returns a new dataset containing quads in either dataset but not in both.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut ds1 = Dataset::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// ds1.insert(QuadRef::new(ex1, ex1, ex1, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut ds2 = Dataset::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// ds2.insert(QuadRef::new(ex2, ex2, ex2, GraphNameRef::DefaultGraph));
+    ///
+    /// let sym_diff = ds1.symmetric_difference(&ds2);
+    /// assert_eq!(sym_diff.len(), 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn symmetric_difference(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        for quad in self.iter() {
+            if !other.contains(quad) {
+                result.insert(quad);
+            }
+        }
+        for quad in other.iter() {
+            if !self.contains(quad) {
+                result.insert(quad);
+            }
+        }
+        result
+    }
+
+    /// Computes the delta/diff between two datasets for ΔGate protocol.
+    ///
+    /// Returns (additions, removals) where:
+    /// - additions (Δ⁺) = quads in `target` but not in `self`
+    /// - removals (Δ⁻) = quads in `self` but not in `target`
+    ///
+    /// This is the core operation for ΔGate delta computation.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut before = Dataset::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// before.insert(QuadRef::new(ex1, ex1, ex1, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut after = Dataset::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// after.insert(QuadRef::new(ex2, ex2, ex2, GraphNameRef::DefaultGraph));
+    ///
+    /// let (additions, removals) = before.diff(&after);
+    /// assert_eq!(additions.len(), 1); // ex2 added
+    /// assert_eq!(removals.len(), 1);  // ex1 removed
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn diff(&self, target: &Self) -> (Self, Self) {
+        let additions = target.difference(self);
+        let removals = self.difference(target);
+        (additions, removals)
+    }
+
+    /// Applies a delta to this dataset for ΔGate protocol.
+    ///
+    /// Applies additions (Δ⁺) and removals (Δ⁻) to transform this dataset.
+    /// This is the inverse operation of `diff`.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut ds = Dataset::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// ds.insert(QuadRef::new(ex1, ex1, ex1, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut additions = Dataset::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// additions.insert(QuadRef::new(ex2, ex2, ex2, GraphNameRef::DefaultGraph));
+    ///
+    /// let mut removals = Dataset::new();
+    /// removals.insert(QuadRef::new(ex1, ex1, ex1, GraphNameRef::DefaultGraph));
+    ///
+    /// ds.apply_diff(&additions, &removals);
+    /// assert_eq!(ds.len(), 1);
+    /// assert!(ds.contains(QuadRef::new(ex2, ex2, ex2, GraphNameRef::DefaultGraph)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn apply_diff(&mut self, additions: &Self, removals: &Self) {
+        // First remove
+        for quad in removals.iter() {
+            self.remove(quad);
+        }
+        // Then add
+        for quad in additions.iter() {
+            self.insert(quad);
+        }
+    }
+
     fn encode_quad(
         &mut self,
         quad: QuadRef<'_>,
