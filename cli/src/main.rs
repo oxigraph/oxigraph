@@ -44,6 +44,7 @@ use std::{fmt, fs, str, thread};
 use url::{Url, form_urlencoded};
 
 mod cli;
+mod health;
 mod service_description;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1024 * 1024 * 128; // 128MB
@@ -55,6 +56,20 @@ const YASGUI_CSS: &str = include_str!("../templates/yasgui/yasgui.min.css");
 const LOGO: &str = include_str!("../logo.svg");
 
 pub fn main() -> anyhow::Result<()> {
+    // Initialize tracing with JSON formatting if RUST_LOG is set
+    if std::env::var("RUST_LOG").is_ok() {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .init();
+    }
+
+    // Initialize health check start time
+    health::init_start_time();
+
+    // Initialize metrics
+    health::init_metrics();
+
     let matches = Args::parse();
     match matches.command {
         Command::Serve {
@@ -775,7 +790,17 @@ fn serve(
     let server = server.spawn()?;
     #[cfg(target_os = "linux")]
     systemd_notify_ready()?;
+
+    // Log server startup
+    tracing::info!(
+        bind = %bind,
+        version = env!("CARGO_PKG_VERSION"),
+        read_only = read_only,
+        union_default_graph = union_default_graph,
+        "Server started and listening for requests"
+    );
     eprintln!("Listening for requests at http://{bind}");
+
     server.join()?;
     Ok(())
 }
@@ -854,6 +879,32 @@ fn handle_request(
             .header(CONTENT_TYPE, "image/svg+xml")
             .body(LOGO.into())
             .map_err(internal_server_error),
+        ("/health", "GET") => {
+            let health = health::HealthStatus::from_store(&store);
+            match health.to_json() {
+                Ok(json) => Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(json.into())
+                    .map_err(internal_server_error),
+                Err(e) => Err(internal_server_error(e)),
+            }
+        }
+        ("/metrics", "GET") => {
+            if let Some(metrics) = health::get_metrics() {
+                let prometheus = metrics.to_prometheus_format();
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "text/plain; version=0.0.4")
+                    .body(prometheus.into())
+                    .map_err(internal_server_error)
+            } else {
+                Response::builder()
+                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                    .body("Metrics not initialized".into())
+                    .map_err(internal_server_error)
+            }
+        }
         ("/query", "GET") => {
             let query = url_query(request);
             if query.is_empty() {
@@ -1731,8 +1782,13 @@ fn unsupported_media_type(content_type: &str) -> HttpError {
 }
 
 fn internal_server_error(message: impl fmt::Display) -> HttpError {
+    let error_message = message.to_string();
+    tracing::error!(
+        error = %error_message,
+        "Internal server error"
+    );
     eprintln!("Internal server error: {message}");
-    (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
+    (StatusCode::INTERNAL_SERVER_ERROR, error_message)
 }
 
 fn loader_to_http_error(e: LoaderError) -> HttpError {

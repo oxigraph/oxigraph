@@ -45,6 +45,21 @@ pub enum QueryEvaluationError {
     InvalidStorageTripleTerm,
     #[error("The SPARQL operation has been cancelled")]
     Cancelled,
+    /// Query execution exceeded the configured timeout limit
+    #[error("Query execution exceeded the timeout limit of {0:?}")]
+    Timeout(std::time::Duration),
+    /// Query result set exceeded the maximum allowed number of rows
+    #[error("Query result set exceeded the maximum allowed {0} rows")]
+    ResultLimitExceeded(usize),
+    /// Query GROUP BY exceeded the maximum number of groups
+    #[error("Query GROUP BY exceeded the maximum allowed {0} groups")]
+    GroupLimitExceeded(usize),
+    /// Property path evaluation exceeded the maximum depth
+    #[error("Property path evaluation exceeded the maximum depth of {0}")]
+    PropertyPathDepthExceeded(usize),
+    /// Query execution exceeded the maximum allowed memory
+    #[error("Query execution exceeded the maximum allowed memory of {0} bytes")]
+    MemoryLimitExceeded(usize),
     #[doc(hidden)]
     #[error(transparent)]
     Unexpected(Box<dyn Error + Send + Sync>),

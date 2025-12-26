@@ -38,6 +38,7 @@ sparesults.workspace = true
 spargebra = { workspace = true, features = ["sep-0002", "sep-0006"] }
 spareval = { workspace = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
 thiserror.workspace = true
+tracing = "0.1"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true

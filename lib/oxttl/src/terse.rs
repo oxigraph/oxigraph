@@ -20,6 +20,7 @@ pub struct TriGRecognizer {
     #[cfg(feature = "rdf-12")]
     cur_reifier: Vec<NamedOrBlankNode>,
     lenient: bool,
+    max_nesting_depth: usize,
 }
 
 #[expect(clippy::partial_pub_fields)]
@@ -408,6 +409,9 @@ impl RuleRecognizer for TriGRecognizer {
                     N3Token::Punctuation("(") => {
                         self.stack.push(TriGState::PredicateObjectList);
                         self.stack.push(TriGState::SubjectCollectionBeginning);
+                        if let Some(err) = self.check_nesting_depth() {
+                            return self.error(errors, err);
+                        }
                         self
                     }
                     #[cfg(feature = "rdf-12")]
@@ -741,6 +745,9 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(BlankNode::default().into());
                         self.stack.push(TriGState::ObjectBlankNodePropertyListEnd);
                         self.stack.push(TriGState::PredicateObjectList);
+                        if let Some(err) = self.check_nesting_depth() {
+                            return self.error(errors, err);
+                        }
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
@@ -766,6 +773,9 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(rdf::FIRST.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
+                        if let Some(err) = self.check_nesting_depth() {
+                            return self.error(errors, err);
+                        }
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
@@ -787,6 +797,9 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(new.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
+                        if let Some(err) = self.check_nesting_depth() {
+                            return self.error(errors, err);
+                        }
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
@@ -1246,6 +1259,26 @@ impl TriGRecognizer {
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
     ) -> Parser<B, Self> {
+        Self::new_parser_with_limits(
+            data,
+            is_ending,
+            with_graph_name,
+            lenient,
+            base_iri,
+            prefixes,
+            100, // Default max nesting depth
+        )
+    }
+
+    pub fn new_parser_with_limits<B>(
+        data: B,
+        is_ending: bool,
+        with_graph_name: bool,
+        lenient: bool,
+        base_iri: Option<Iri<String>>,
+        prefixes: HashMap<String, Iri<String>>,
+        max_nesting_depth: usize,
+    ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
                 N3Lexer::new(N3LexerMode::Turtle, lenient),
@@ -1264,6 +1297,7 @@ impl TriGRecognizer {
                 #[cfg(feature = "rdf-12")]
                 cur_reifier: Vec::new(),
                 lenient,
+                max_nesting_depth,
             },
             TriGRecognizerContext {
                 with_graph_name,
@@ -1286,6 +1320,22 @@ impl TriGRecognizer {
         self.cur_object.clear();
         self.cur_graph = GraphName::DefaultGraph;
         self
+    }
+
+    /// Check if current nesting depth exceeds the limit
+    fn check_nesting_depth(&self) -> Option<RuleRecognizerError> {
+        // Depth is the maximum of stack, subject, predicate, and object depths
+        let depth = self.stack.len().max(self.cur_subject.len()).max(self.cur_predicate.len()).max(self.cur_object.len());
+
+        if depth > self.max_nesting_depth {
+            Some(RuleRecognizerError::new(format!(
+                "Parser nesting depth limit exceeded: current depth {} exceeds maximum allowed depth of {}. \
+                Reduce the nesting depth of collections, blank nodes, or other nested structures.",
+                depth, self.max_nesting_depth
+            )))
+        } else {
+            None
+        }
     }
 
     fn emit_quad(&mut self, results: &mut Vec<Quad>) {

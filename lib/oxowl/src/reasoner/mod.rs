@@ -11,12 +11,17 @@ use crate::error::{InconsistencyError, OwlError};
 use crate::expression::ClassExpression;
 use crate::ontology::Ontology;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::time::{Duration, Instant};
 
 /// Configuration for the reasoner.
 #[derive(Debug, Clone)]
 pub struct ReasonerConfig {
     /// Maximum number of iterations for fixpoint computation.
     pub max_iterations: usize,
+    /// Maximum time allowed for reasoning (None = unlimited).
+    pub timeout: Option<Duration>,
+    /// Maximum number of inferred triples to materialize (None = unlimited).
+    pub max_inferred_triples: Option<usize>,
     /// Whether to check for inconsistencies.
     pub check_consistency: bool,
     /// Whether to materialize inferred axioms.
@@ -27,6 +32,8 @@ impl Default for ReasonerConfig {
     fn default() -> Self {
         Self {
             max_iterations: 100_000,
+            timeout: None,
+            max_inferred_triples: None,
             check_consistency: true,
             materialize: true,
         }
@@ -110,6 +117,9 @@ pub struct RlReasoner<'a> {
 
     /// Whether inconsistency was detected
     inconsistent: Option<InconsistencyError>,
+
+    /// Start time for reasoning (used for timeout enforcement)
+    start_time: Option<Instant>,
 }
 
 impl<'a> RlReasoner<'a> {
@@ -137,7 +147,34 @@ impl<'a> RlReasoner<'a> {
             inferred_axioms: Vec::new(),
             classified: false,
             inconsistent: None,
+            start_time: None,
         }
+    }
+
+    /// Checks if timeout has been exceeded.
+    fn check_timeout(&self) -> Result<(), OwlError> {
+        if let (Some(timeout), Some(start)) = (self.config.timeout, self.start_time) {
+            if start.elapsed() >= timeout {
+                return Err(OwlError::Other(format!(
+                    "Reasoning timeout exceeded ({:?})",
+                    timeout
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks if materialization limit has been exceeded.
+    fn check_materialization_limit(&self) -> Result<(), OwlError> {
+        if let Some(limit) = self.config.max_inferred_triples {
+            if self.inferred_axioms.len() >= limit {
+                return Err(OwlError::Other(format!(
+                    "Materialization limit exceeded ({} triples)",
+                    limit
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Initializes the reasoner state from ontology axioms.
@@ -625,17 +662,24 @@ impl<'a> Reasoner for RlReasoner<'a> {
             return Ok(());
         }
 
+        // Start timing for timeout enforcement
+        self.start_time = Some(Instant::now());
+
         // Step 1: Initialize from ontology axioms
         self.initialize();
+        self.check_timeout()?;
 
         // Step 2: Compute transitive closure of class hierarchy
         self.compute_transitive_closure();
+        self.check_timeout()?;
 
         // Step 3: Apply RDFS rules (property hierarchy, domain, range)
         self.apply_rdfs_rules();
+        self.check_timeout()?;
 
         // Step 4: Propagate types to individuals
         self.propagate_types();
+        self.check_timeout()?;
 
         // Step 5: Apply property reasoning rules with fixpoint iteration
         let mut changed = true;
@@ -643,6 +687,11 @@ impl<'a> Reasoner for RlReasoner<'a> {
         while changed && iterations < self.config.max_iterations {
             changed = false;
             iterations += 1;
+
+            // Check timeout periodically (every 10 iterations for responsiveness)
+            if iterations % 10 == 0 {
+                self.check_timeout()?;
+            }
 
             // Apply symmetric property rules
             if self.apply_symmetric_property_rules() {
@@ -668,8 +717,13 @@ impl<'a> Reasoner for RlReasoner<'a> {
             }
         }
 
+        self.check_timeout()?;
+
         // Step 7: Generate inferred axioms
         self.generate_inferred_axioms();
+
+        // Step 8: Check materialization limit
+        self.check_materialization_limit()?;
 
         self.classified = true;
         Ok(())

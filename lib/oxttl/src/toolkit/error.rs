@@ -103,6 +103,28 @@ impl TurtleSyntaxError {
         }
     }
 
+    /// Create an error for exceeding nesting depth limit.
+    pub(crate) fn nesting_limit_exceeded(
+        location: Range<TextPosition>,
+        current_depth: usize,
+        max_depth: usize,
+    ) -> Self {
+        Self {
+            location,
+            message: format!(
+                "Parser nesting depth limit exceeded: current depth {} exceeds maximum allowed depth of {}",
+                current_depth, max_depth
+            ),
+            expected: Some(format!("nesting depth ≤ {}", max_depth)),
+            found: Some(format!("nesting depth {}", current_depth)),
+            suggestion: Some(
+                "Reduce the nesting depth of collections, blank nodes, or other nested structures. \
+                If this is legitimate input, consider using a streaming approach or contact the administrator to increase the limit."
+                    .to_string(),
+            ),
+        }
+    }
+
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Range<TextPosition> {

@@ -113,6 +113,7 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
         N3Term::BlankNode(b) => Subject::BlankNode(b),
         N3Term::Variable(_) => return None, // Skip variables
         N3Term::Literal(_) => return None,  // Invalid as subject in standard RDF
+        #[cfg(feature = "rdf-12")]
         N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
     };
 
@@ -128,6 +129,7 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
         N3Term::BlankNode(b) => Term::BlankNode(b),
         N3Term::Literal(l) => Term::Literal(l),
         N3Term::Variable(_) => return None, // Skip variables
+        #[cfg(feature = "rdf-12")]
         N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
     };
 

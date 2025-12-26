@@ -28,9 +28,14 @@ spareval = { workspace = true, optional = true }
 
 [dev-dependencies]
 oxrdfio.workspace = true
+codspeed-criterion-compat.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "validation_scaling"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

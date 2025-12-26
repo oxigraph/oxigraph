@@ -50,6 +50,7 @@ pub struct TurtleParser {
     lenient: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
+    max_nesting_depth: Option<usize>,
 }
 
 impl TurtleParser {
@@ -91,6 +92,25 @@ impl TurtleParser {
         self.prefixes
             .insert(prefix_name.into(), Iri::parse(prefix_iri.into())?);
         Ok(self)
+    }
+
+    /// Sets the maximum nesting depth for parser structures.
+    ///
+    /// This helps prevent denial-of-service attacks from deeply nested RDF collections,
+    /// blank nodes, or other recursive structures.
+    ///
+    /// Default: 100 levels
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// let parser = TurtleParser::new()
+    ///     .with_max_nesting_depth(200); // Allow deeper nesting
+    /// ```
+    #[inline]
+    pub fn with_max_nesting_depth(mut self, max_depth: usize) -> Self {
+        self.max_nesting_depth = Some(max_depth);
+        self
     }
 
     /// Parses a Turtle file from a [`Read`] implementation.
@@ -192,14 +212,16 @@ impl TurtleParser {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTurtleParser<'_> {
+        let max_depth = self.max_nesting_depth.unwrap_or(100);
         SliceTurtleParser {
-            inner: TriGRecognizer::new_parser(
+            inner: TriGRecognizer::new_parser_with_limits(
                 slice.as_ref(),
                 true,
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
+                max_depth,
             )
             .into_iter(),
         }
@@ -307,14 +329,16 @@ impl TurtleParser {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTurtleParser {
+        let max_depth = self.max_nesting_depth.unwrap_or(100);
         LowLevelTurtleParser {
-            parser: TriGRecognizer::new_parser(
+            parser: TriGRecognizer::new_parser_with_limits(
                 Vec::new(),
                 false,
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
+                max_depth,
             ),
         }
     }

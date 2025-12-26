@@ -8,6 +8,7 @@ mod dataset;
 mod error;
 mod eval;
 mod expression;
+mod limits;
 mod model;
 mod n3_builtins;
 mod service;
@@ -18,6 +19,7 @@ pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::CancellationToken;
+pub use crate::limits::QueryExecutionLimits;
 pub use crate::n3_builtins::{get_all_n3_builtins, N3BuiltinFn};
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 use crate::expression::{
@@ -75,6 +77,7 @@ pub struct QueryEvaluator {
     without_optimizations: bool,
     run_stats: bool,
     cancellation_token: Option<CancellationToken>,
+    limits: Option<QueryExecutionLimits>,
 }
 
 impl QueryEvaluator {
@@ -372,6 +375,29 @@ impl QueryEvaluator {
     #[must_use]
     pub fn with_cancellation_token(mut self, cancellation_token: CancellationToken) -> Self {
         self.cancellation_token = Some(cancellation_token);
+        self
+    }
+
+    /// Set resource limits for query execution.
+    ///
+    /// Limits help prevent denial-of-service attacks from long-running or resource-intensive queries.
+    ///
+    /// ```
+    /// use oxrdf::Dataset;
+    /// use spareval::{QueryEvaluationError, QueryEvaluator, QueryExecutionLimits};
+    /// use spargebra::SparqlParser;
+    /// use std::time::Duration;
+    ///
+    /// let evaluator = QueryEvaluator::new()
+    ///     .with_limits(QueryExecutionLimits::strict());
+    ///
+    /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
+    /// let results = evaluator.prepare(&query).execute(&Dataset::new())?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn with_limits(mut self, limits: QueryExecutionLimits) -> Self {
+        self.limits = Some(limits);
         self
     }
 

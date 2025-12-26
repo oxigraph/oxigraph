@@ -1,4 +1,6 @@
-#![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
+// Platform-independent byte ordering: using to_le_bytes() for cross-platform compatibility
+// This ensures databases created on little-endian systems (x86_64, ARM) can be read on
+// big-endian systems (PowerPC, MIPS) and vice versa.
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -63,7 +65,7 @@ impl BlankNode {
     #[inline]
     pub fn new_from_unique_id(id: u128) -> Self {
         Self(BlankNodeContent::Anonymous {
-            id: id.to_ne_bytes(),
+            id: id.to_le_bytes(), // Use little-endian for platform-independent storage
             str: IdStr::new(id),
         })
     }
@@ -115,7 +117,7 @@ impl Default for BlankNode {
             let str = IdStr::new(id);
             if matches!(str.as_str().as_bytes().first(), Some(b'a'..=b'f')) {
                 return Self(BlankNodeContent::Anonymous {
-                    id: id.to_ne_bytes(),
+                    id: id.to_le_bytes(), // Use little-endian for platform-independent storage
                     str,
                 });
             }
@@ -168,7 +170,7 @@ impl<'a> BlankNodeRef<'a> {
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
             Self(BlankNodeRefContent::Anonymous {
-                id: numerical_id.to_ne_bytes(),
+                id: numerical_id.to_le_bytes(), // Use little-endian for platform-independent storage
                 str: id,
             })
         } else {
@@ -201,7 +203,7 @@ impl<'a> BlankNodeRef<'a> {
     pub const fn unique_id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
-            BlankNodeRefContent::Anonymous { id, .. } => Some(u128::from_ne_bytes(id)),
+            BlankNodeRefContent::Anonymous { id, .. } => Some(u128::from_le_bytes(id)), // Use little-endian for platform-independent storage
         }
     }
 
@@ -211,7 +213,7 @@ impl<'a> BlankNodeRef<'a> {
             BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
             BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
                 id,
-                str: IdStr::new(u128::from_ne_bytes(id)),
+                str: IdStr::new(u128::from_le_bytes(id)), // Use little-endian for platform-independent storage
             },
         })
     }

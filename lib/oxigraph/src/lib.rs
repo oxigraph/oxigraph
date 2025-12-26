@@ -6,6 +6,7 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 pub mod io;
+pub mod metrics;
 pub mod model;
 pub mod sparql;
 mod storage;
