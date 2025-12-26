@@ -108,13 +108,16 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
     use oxttl::n3::N3Term;
 
     // Convert subject
+    #[allow(unreachable_patterns)]
     let subject = match n3_quad.subject {
         N3Term::NamedNode(n) => Subject::NamedNode(n),
         N3Term::BlankNode(b) => Subject::BlankNode(b),
         N3Term::Variable(_) => return None, // Skip variables
         N3Term::Literal(_) => return None,  // Invalid as subject in standard RDF
         #[cfg(feature = "rdf-12")]
-        N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
+        N3Term::Triple(_) => return None,   // RDF-star triples require special handling
+        #[cfg(not(feature = "rdf-12"))]
+        _ => return None, // Catch-all for any other N3-specific terms
     };
 
     // Convert predicate
@@ -124,13 +127,16 @@ fn n3_quad_to_quad(n3_quad: N3Quad) -> Option<Quad> {
     };
 
     // Convert object
+    #[allow(unreachable_patterns)]
     let object = match n3_quad.object {
         N3Term::NamedNode(n) => Term::NamedNode(n),
         N3Term::BlankNode(b) => Term::BlankNode(b),
         N3Term::Literal(l) => Term::Literal(l),
         N3Term::Variable(_) => return None, // Skip variables
         #[cfg(feature = "rdf-12")]
-        N3Term::Triple(_) => return None,   // RDF-star triples not supported without rdf-12
+        N3Term::Triple(_) => return None,   // RDF-star triples require special handling
+        #[cfg(not(feature = "rdf-12"))]
+        _ => return None, // Catch-all for any other N3-specific terms
     };
 
     Some(Quad {

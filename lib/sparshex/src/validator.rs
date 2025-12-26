@@ -494,6 +494,7 @@ struct TriplePattern {
 // Helper functions
 
 /// Gets string value from any RDF term.
+#[allow(unreachable_patterns)]
 fn get_string_value(term: &Term) -> String {
     match term {
         Term::NamedNode(n) => n.as_str().to_owned(),
@@ -501,6 +502,8 @@ fn get_string_value(term: &Term) -> String {
         Term::Literal(l) => l.value().to_owned(),
         #[cfg(feature = "rdf-12")]
         Term::Triple(_) => String::new(),
+        #[cfg(not(feature = "rdf-12"))]
+        _ => String::new(), // Catch-all for any other term types
     }
 }
 
@@ -586,6 +589,7 @@ fn matches_value_set(term: &Term, value_set: &ValueSetValue) -> bool {
 }
 
 /// Gets all triples where the given term is the subject.
+#[allow(unreachable_patterns)]
 fn get_triples_for_subject(graph: &Graph, subject: &Term) -> Vec<TriplePattern> {
     match subject {
         Term::NamedNode(n) => graph
@@ -607,6 +611,8 @@ fn get_triples_for_subject(graph: &Graph, subject: &Term) -> Vec<TriplePattern> 
         Term::Literal(_) => Vec::new(),
         #[cfg(feature = "rdf-12")]
         Term::Triple(_) => Vec::new(),
+        #[cfg(not(feature = "rdf-12"))]
+        _ => Vec::new(), // Catch-all for any other term types
     }
 }
 
