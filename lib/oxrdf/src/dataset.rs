@@ -439,6 +439,7 @@ impl Dataset {
     /// assert_eq!(union.len(), 2);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn union(&self, other: &Self) -> Self {
         let mut result = self.clone();
         for quad in other.iter() {
@@ -466,6 +467,7 @@ impl Dataset {
     /// assert!(diff.is_empty());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn difference(&self, other: &Self) -> Self {
         let mut result = Self::new();
         for quad in self.iter() {
@@ -494,6 +496,7 @@ impl Dataset {
     /// assert_eq!(intersection.len(), 1);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn intersection(&self, other: &Self) -> Self {
         let mut result = Self::new();
         for quad in self.iter() {
@@ -523,6 +526,7 @@ impl Dataset {
     /// assert_eq!(sym_diff.len(), 2);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn symmetric_difference(&self, other: &Self) -> Self {
         let mut result = Self::new();
         for quad in self.iter() {
@@ -562,6 +566,7 @@ impl Dataset {
     /// assert_eq!(removals.len(), 1);  // ex1 removed
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn diff(&self, target: &Self) -> (Self, Self) {
         let additions = target.difference(self);
         let removals = self.difference(target);

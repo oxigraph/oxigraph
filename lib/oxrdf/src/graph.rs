@@ -204,6 +204,7 @@ impl Graph {
     /// assert_eq!(union.len(), 2);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn union(&self, other: &Self) -> Self {
         Self {
             dataset: self.dataset.union(&other.dataset),
@@ -229,6 +230,7 @@ impl Graph {
     /// assert!(diff.is_empty());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn difference(&self, other: &Self) -> Self {
         Self {
             dataset: self.dataset.difference(&other.dataset),
@@ -253,6 +255,7 @@ impl Graph {
     /// assert_eq!(intersection.len(), 1);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn intersection(&self, other: &Self) -> Self {
         Self {
             dataset: self.dataset.intersection(&other.dataset),
@@ -278,6 +281,7 @@ impl Graph {
     /// assert_eq!(sym_diff.len(), 2);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn symmetric_difference(&self, other: &Self) -> Self {
         Self {
             dataset: self.dataset.symmetric_difference(&other.dataset),
@@ -308,6 +312,7 @@ impl Graph {
     /// assert_eq!(removals.len(), 1);  // ex1 removed
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[must_use]
     pub fn diff(&self, target: &Self) -> (Self, Self) {
         let (additions, removals) = self.dataset.diff(&target.dataset);
         (
