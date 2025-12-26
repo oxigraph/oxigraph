@@ -2549,6 +2549,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sparshex"
+version = "0.1.0"
+dependencies = [
+ "codspeed-criterion-compat",
+ "nom",
+ "oxiri",
+ "oxrdf",
+ "oxrdfio",
+ "oxsdatatypes",
+ "regex",
+ "rustc-hash",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
