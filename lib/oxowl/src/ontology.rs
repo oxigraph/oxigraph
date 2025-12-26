@@ -257,6 +257,38 @@ impl Ontology {
             self.add_axiom(axiom);
         }
     }
+
+    /// Serializes this ontology to an RDF graph.
+    ///
+    /// This creates an RDF graph representation of all axioms in the ontology,
+    /// which can then be written to various RDF formats (Turtle, RDF/XML, etc.).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use oxowl::{Ontology, Axiom, ClassExpression, OwlClass};
+    /// use oxrdf::NamedNode;
+    ///
+    /// let mut ontology = Ontology::with_iri("http://example.org/test").unwrap();
+    /// let animal = OwlClass::new(NamedNode::new("http://example.org/Animal").unwrap());
+    /// let dog = OwlClass::new(NamedNode::new("http://example.org/Dog").unwrap());
+    ///
+    /// ontology.add_axiom(Axiom::subclass_of(
+    ///     ClassExpression::class(dog),
+    ///     ClassExpression::class(animal),
+    /// ));
+    ///
+    /// let graph = ontology.to_graph();
+    /// assert!(graph.len() > 0);
+    /// ```
+    pub fn to_graph(&self) -> oxrdf::Graph {
+        crate::serializer::serialize_ontology(self)
+    }
+
+    /// Serializes this ontology to an RDF graph with custom serializer configuration.
+    pub fn to_graph_with_config(&self, config: crate::serializer::SerializerConfig) -> oxrdf::Graph {
+        crate::serializer::serialize_ontology_with_config(self, config)
+    }
 }
 
 impl std::fmt::Display for Ontology {

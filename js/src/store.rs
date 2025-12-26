@@ -5,9 +5,10 @@ use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxigraph::store::Store;
+use oxigraph::store::{Store, Transaction};
 #[cfg(feature = "geosparql")]
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -17,18 +18,141 @@ use wasm_bindgen_futures::future_to_promise;
 // The Store type overlay hides deprecated parameters on methods like dump.
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
+/**
+ * A persistent RDF graph database that supports SPARQL queries and updates.
+ *
+ * Store provides an in-memory RDF quad store with full SPARQL 1.1 support.
+ * It implements RDF/JS-compatible interfaces for seamless integration with the JavaScript RDF ecosystem.
+ *
+ * @see {@link https://www.w3.org/TR/rdf11-concepts/ | RDF 1.1 Concepts}
+ * @see {@link https://www.w3.org/TR/sparql11-query/ | SPARQL 1.1 Query}
+ * @see {@link https://rdf.js.org/dataset-spec/ | RDF/JS Dataset Specification}
+ *
+ * @example
+ * ```typescript
+ * // Create a new store
+ * const store = new Store();
+ *
+ * // Add some quads
+ * store.add(quad(
+ *   namedNode('http://example.com/alice'),
+ *   namedNode('http://xmlns.com/foaf/0.1/name'),
+ *   literal('Alice'),
+ *   defaultGraph()
+ * ));
+ *
+ * // Query with SPARQL
+ * const results = store.query('SELECT * WHERE { ?s ?p ?o }');
+ * console.log(results.length); // 1
+ * ```
+ */
 export class Store {
+    /**
+     * The number of quads in the store.
+     * @readonly
+     */
     readonly size: number;
+
+    /**
+     * Alias for size (Array-like compatibility).
+     * @readonly
+     */
     readonly length: number;
 
+    /**
+     * Creates a new RDF Store.
+     *
+     * @param quads - Optional iterable of quads to initialize the store
+     *
+     * @example
+     * ```typescript
+     * // Empty store
+     * const store = new Store();
+     *
+     * // Initialize with quads
+     * const store = new Store([
+     *   quad(namedNode('http://example.com/s'), namedNode('http://example.com/p'), literal('o'))
+     * ]);
+     * ```
+     */
     constructor(quads?: Iterable<Quad>);
 
+    /**
+     * Checks whether the store contains any quads.
+     *
+     * @returns true if the store is empty, false otherwise
+     *
+     * @example
+     * ```typescript
+     * const store = new Store();
+     * console.log(store.isEmpty()); // true
+     * store.add(quad(namedNode('http://example.com/s'), namedNode('http://example.com/p'), literal('o')));
+     * console.log(store.isEmpty()); // false
+     * ```
+     */
     isEmpty(): boolean;
 
+    /**
+     * Adds a quad to the store.
+     *
+     * @param quad - The RDF quad to add
+     *
+     * @see {@link https://www.w3.org/TR/rdf11-concepts/#section-triples | RDF Triples}
+     *
+     * @example
+     * ```typescript
+     * store.add(quad(
+     *   namedNode('http://example.com/alice'),
+     *   namedNode('http://xmlns.com/foaf/0.1/knows'),
+     *   namedNode('http://example.com/bob')
+     * ));
+     * ```
+     */
     add(quad: Quad): void;
 
+    /**
+     * Removes a quad from the store.
+     *
+     * @param quad - The quad to remove
+     *
+     * @example
+     * ```typescript
+     * const q = quad(namedNode('http://example.com/s'), namedNode('http://example.com/p'), literal('o'));
+     * store.add(q);
+     * store.delete(q);
+     * console.log(store.has(q)); // false
+     * ```
+     */
     delete(quad: Quad): void;
 
+    /**
+     * Serializes the store (or a specific graph) to a string in the specified RDF format.
+     *
+     * @param options - Serialization options
+     * @param options.format - The RDF format (e.g., 'turtle', 'ntriples', 'rdfxml', 'jsonld')
+     * @param options.fromGraphName - Graph to serialize (default: all graphs)
+     * @param options.prefixes - Namespace prefix mappings for formats that support them
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @returns The serialized RDF data as a string
+     *
+     * @see {@link https://www.w3.org/TR/turtle/ | RDF 1.1 Turtle}
+     * @see {@link https://www.w3.org/TR/n-triples/ | RDF 1.1 N-Triples}
+     *
+     * @example
+     * ```typescript
+     * const turtle = store.dump({
+     *   format: 'turtle',
+     *   prefixes: {
+     *     'foaf': 'http://xmlns.com/foaf/0.1/',
+     *     'ex': 'http://example.com/'
+     *   }
+     * });
+     * console.log(turtle);
+     * // @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+     * // @prefix ex: <http://example.com/> .
+     * // ex:alice foaf:name "Alice" .
+     * ```
+     */
     dump(
         options: {
             format: string;
@@ -38,10 +162,53 @@ export class Store {
         }
     ): string;
 
+    /**
+     * Checks if the store contains a specific quad.
+     *
+     * @param quad - The quad to check for
+     * @returns true if the quad is in the store, false otherwise
+     *
+     * @example
+     * ```typescript
+     * const q = quad(namedNode('http://example.com/s'), namedNode('http://example.com/p'), literal('o'));
+     * console.log(store.has(q)); // false
+     * store.add(q);
+     * console.log(store.has(q)); // true
+     * ```
+     */
     has(quad: Quad): boolean;
 
+    /**
+     * Alias for has() (RDF/JS compatibility).
+     *
+     * @param quad - The quad to check for
+     * @returns true if the quad is in the store, false otherwise
+     */
     includes(quad: Quad): boolean;
 
+    /**
+     * Parses and loads RDF data into the store.
+     *
+     * @param data - The RDF data as a string
+     * @param options - Parsing options
+     * @param options.format - The RDF format (e.g., 'turtle', 'ntriples', 'rdfxml', 'jsonld')
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @param options.toGraphName - Target graph (default: default graph)
+     * @param options.noTransaction - If true, use bulk loader for better performance
+     * @param options.lenient - If true, continue parsing despite errors
+     *
+     * @see {@link https://www.w3.org/TR/turtle/ | RDF 1.1 Turtle}
+     *
+     * @example
+     * ```typescript
+     * const turtle = `
+     *   @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+     *   @prefix ex: <http://example.com/> .
+     *   ex:alice foaf:name "Alice" .
+     * `;
+     * store.load(turtle, { format: 'turtle' });
+     * ```
+     */
     load(
         data: string,
         options: {
@@ -54,8 +221,69 @@ export class Store {
         }
     ): void;
 
+    /**
+     * Returns all quads matching the given pattern.
+     * All parameters are optional - use null to match any term.
+     *
+     * @param subject - Subject to match (null matches any)
+     * @param predicate - Predicate to match (null matches any)
+     * @param object - Object to match (null matches any)
+     * @param graph - Graph to match (null matches any)
+     * @returns Array of matching quads
+     *
+     * @see {@link https://rdf.js.org/dataset-spec/#match | RDF/JS Dataset match}
+     *
+     * @example
+     * ```typescript
+     * // Find all quads with a specific subject
+     * const quads = store.match(namedNode('http://example.com/alice'), null, null, null);
+     *
+     * // Find all foaf:name triples
+     * const names = store.match(null, namedNode('http://xmlns.com/foaf/0.1/name'), null, null);
+     *
+     * // Find all quads in a specific graph
+     * const graphQuads = store.match(null, null, null, namedNode('http://example.com/graph1'));
+     * ```
+     */
     match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
 
+    /**
+     * Executes a SPARQL 1.1 query synchronously.
+     *
+     * @param query - The SPARQL query string
+     * @param options - Query options
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @param options.prefixes - Namespace prefix mappings
+     * @param options.resultsFormat - Serialization format for results (e.g., 'json', 'xml', 'csv')
+     * @param options.defaultGraph - Default graph(s) for the query
+     * @param options.namedGraphs - Named graphs accessible in the query
+     * @param options.useDefaultGraphAsUnion - Treat default graph as union of all graphs
+     * @param options.substitutions - Variable bindings to substitute in the query
+     * @returns Query results: boolean for ASK, Map array for SELECT, Quad array for CONSTRUCT/DESCRIBE, or string if resultsFormat specified
+     *
+     * @see {@link https://www.w3.org/TR/sparql11-query/ | SPARQL 1.1 Query Language}
+     *
+     * @example
+     * ```typescript
+     * // SELECT query
+     * const results = store.query('SELECT * WHERE { ?s ?p ?o }');
+     * for (const result of results) {
+     *   console.log(result.get('s'), result.get('p'), result.get('o'));
+     * }
+     *
+     * // ASK query
+     * const exists = store.query('ASK { ?s a <http://example.com/Person> }');
+     * console.log(exists); // true or false
+     *
+     * // CONSTRUCT query
+     * const graph = store.query('CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }');
+     *
+     * // With prefixes
+     * const results = store.query('SELECT * WHERE { ?s foaf:name ?name }', {
+     *   prefixes: { foaf: 'http://xmlns.com/foaf/0.1/' }
+     * });
+     * ```
+     */
     query(
         query: string,
         options?: {
@@ -69,6 +297,24 @@ export class Store {
         }
     ): boolean | Map<string, Term>[] | Quad[] | string;
 
+    /**
+     * Executes a SPARQL 1.1 query asynchronously.
+     * Yields to the event loop every 1000 results to keep UI responsive.
+     *
+     * @param query - The SPARQL query string
+     * @param options - Query options (same as query())
+     * @returns Promise resolving to query results
+     *
+     * @see {@link https://www.w3.org/TR/sparql11-query/ | SPARQL 1.1 Query Language}
+     *
+     * @example
+     * ```typescript
+     * const results = await store.queryAsync('SELECT * WHERE { ?s ?p ?o }');
+     * for (const result of results) {
+     *   console.log(result.get('s'));
+     * }
+     * ```
+     */
     queryAsync(
         query: string,
         options?: {
@@ -82,6 +328,34 @@ export class Store {
         }
     ): Promise<boolean | Map<string, Term>[] | Quad[] | string>;
 
+    /**
+     * Executes a SPARQL 1.1 update operation synchronously.
+     *
+     * @param update - The SPARQL update string
+     * @param options - Update options
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @param options.prefixes - Namespace prefix mappings
+     *
+     * @see {@link https://www.w3.org/TR/sparql11-update/ | SPARQL 1.1 Update}
+     *
+     * @example
+     * ```typescript
+     * // Insert data
+     * store.update('INSERT DATA { <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" }');
+     *
+     * // Delete data
+     * store.update('DELETE DATA { <http://example.com/alice> <http://xmlns.com/foaf/0.1/name> "Alice" }');
+     *
+     * // Delete/Insert pattern
+     * store.update(`
+     *   DELETE { ?s foaf:name ?oldName }
+     *   INSERT { ?s foaf:name "Updated Name" }
+     *   WHERE { ?s foaf:name ?oldName }
+     * `, {
+     *   prefixes: { foaf: 'http://xmlns.com/foaf/0.1/' }
+     * });
+     * ```
+     */
     update(
         update: string,
         options?: {
@@ -90,6 +364,15 @@ export class Store {
         }
     ): void;
 
+    /**
+     * Executes a SPARQL 1.1 update operation asynchronously.
+     *
+     * @param update - The SPARQL update string
+     * @param options - Update options (same as update())
+     * @returns Promise that resolves when update completes
+     *
+     * @see {@link https://www.w3.org/TR/sparql11-update/ | SPARQL 1.1 Update}
+     */
     updateAsync(
         update: string,
         options?: {
@@ -98,8 +381,38 @@ export class Store {
         }
     ): Promise<void>;
 
+    /**
+     * Adds multiple quads to the store.
+     *
+     * @param quads - Iterable of quads to add
+     *
+     * @example
+     * ```typescript
+     * store.extend([
+     *   quad(namedNode('http://example.com/s1'), namedNode('http://example.com/p'), literal('o1')),
+     *   quad(namedNode('http://example.com/s2'), namedNode('http://example.com/p'), literal('o2'))
+     * ]);
+     * ```
+     */
     extend(quads: Iterable<Quad>): void;
 
+    /**
+     * Optimized bulk loading of RDF data.
+     * Bypasses transactions for better performance on large datasets.
+     *
+     * @param data - The RDF data as a string
+     * @param options - Parsing options
+     * @param options.format - The RDF format
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @param options.toGraphName - Target graph
+     * @param options.lenient - Continue parsing despite errors
+     *
+     * @example
+     * ```typescript
+     * const largeDataset = '...'; // Large Turtle file
+     * store.bulkLoad(largeDataset, { format: 'turtle' });
+     * ```
+     */
     bulkLoad(
         data: string,
         options: {
@@ -110,50 +423,476 @@ export class Store {
         }
     ): void;
 
+    /**
+     * Returns all named graphs in the store.
+     *
+     * @returns Array of named graph identifiers (NamedNode or BlankNode)
+     *
+     * @example
+     * ```typescript
+     * const graphs = store.namedGraphs();
+     * for (const graph of graphs) {
+     *   console.log(graph.value);
+     * }
+     * ```
+     */
     namedGraphs(): (BlankNode | NamedNode)[];
 
+    /**
+     * Checks if a named graph exists in the store.
+     *
+     * @param graph_name - The graph name to check
+     * @returns true if the graph exists, false otherwise
+     *
+     * @example
+     * ```typescript
+     * const graphName = namedNode('http://example.com/graph1');
+     * console.log(store.containsNamedGraph(graphName)); // false
+     * store.addGraph(graphName);
+     * console.log(store.containsNamedGraph(graphName)); // true
+     * ```
+     */
     containsNamedGraph(graph_name: BlankNode | DefaultGraph | NamedNode): boolean;
 
+    /**
+     * Creates a new named graph in the store.
+     *
+     * @param graph_name - The graph name
+     *
+     * @example
+     * ```typescript
+     * store.addGraph(namedNode('http://example.com/graph1'));
+     * ```
+     */
     addGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
+    /**
+     * Removes all quads from a graph but keeps the graph.
+     *
+     * @param graph_name - The graph to clear
+     *
+     * @example
+     * ```typescript
+     * store.clearGraph(namedNode('http://example.com/graph1'));
+     * ```
+     */
     clearGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
+    /**
+     * Removes a graph and all its quads from the store.
+     *
+     * @param graph_name - The graph to remove
+     *
+     * @example
+     * ```typescript
+     * store.removeGraph(namedNode('http://example.com/graph1'));
+     * ```
+     */
     removeGraph(graph_name: BlankNode | DefaultGraph | NamedNode): void;
 
+    /**
+     * Removes all quads from the store.
+     *
+     * @example
+     * ```typescript
+     * store.clear();
+     * console.log(store.size); // 0
+     * ```
+     */
     clear(): void;
 
+    /**
+     * Executes a callback for each quad in the store.
+     * Note: Crosses WASM boundary for each quad - consider using match() or SPARQL for better performance.
+     *
+     * @param callback - Function to call for each quad
+     * @param thisArg - Value to use as 'this' when executing callback
+     *
+     * @example
+     * ```typescript
+     * store.forEach(quad => {
+     *   console.log(quad.subject.value, quad.predicate.value, quad.object.value);
+     * });
+     * ```
+     */
     forEach(callback: (quad: Quad) => void, thisArg?: any): void;
 
+    /**
+     * Returns an array of quads matching the predicate.
+     *
+     * @param predicate - Function to test each quad
+     * @param thisArg - Value to use as 'this' when executing predicate
+     * @returns Array of quads that pass the test
+     *
+     * @example
+     * ```typescript
+     * const literals = store.filter(quad => quad.object.termType === 'Literal');
+     * ```
+     */
     filter(predicate: (quad: Quad) => boolean, thisArg?: any): Quad[];
 
+    /**
+     * Tests whether at least one quad passes the predicate test.
+     *
+     * @param predicate - Function to test each quad
+     * @param thisArg - Value to use as 'this' when executing predicate
+     * @returns true if any quad passes the test
+     *
+     * @example
+     * ```typescript
+     * const hasLiterals = store.some(quad => quad.object.termType === 'Literal');
+     * ```
+     */
     some(predicate: (quad: Quad) => boolean, thisArg?: any): boolean;
 
+    /**
+     * Tests whether all quads pass the predicate test.
+     *
+     * @param predicate - Function to test each quad
+     * @param thisArg - Value to use as 'this' when executing predicate
+     * @returns true if all quads pass the test
+     *
+     * @example
+     * ```typescript
+     * const allHaveSubjects = store.every(quad => quad.subject !== null);
+     * ```
+     */
     every(predicate: (quad: Quad) => boolean, thisArg?: any): boolean;
 
+    /**
+     * Returns the first quad that passes the predicate test.
+     *
+     * @param predicate - Function to test each quad
+     * @param thisArg - Value to use as 'this' when executing predicate
+     * @returns The first matching quad, or undefined
+     *
+     * @example
+     * ```typescript
+     * const firstLiteral = store.find(quad => quad.object.termType === 'Literal');
+     * ```
+     */
     find(predicate: (quad: Quad) => boolean, thisArg?: any): Quad | undefined;
 
+    /**
+     * Returns the quad at the specified index.
+     * Supports negative indices (counting from the end).
+     *
+     * @param index - The index (negative indices count from end)
+     * @returns The quad at the index, or undefined
+     *
+     * @example
+     * ```typescript
+     * const first = store.at(0);
+     * const last = store.at(-1);
+     * ```
+     */
     at(index: number): Quad | undefined;
 
+    /**
+     * Returns a shallow copy of a portion of the store.
+     *
+     * @param start - Start index (inclusive)
+     * @param end - End index (exclusive)
+     * @returns Array of quads in the slice
+     *
+     * @example
+     * ```typescript
+     * const firstTen = store.slice(0, 10);
+     * ```
+     */
     slice(start?: number, end?: number): Quad[];
 
+    /**
+     * Concatenates the store with other quads/iterables.
+     *
+     * @param others - Quads or iterables to concatenate
+     * @returns New array with concatenated quads
+     *
+     * @example
+     * ```typescript
+     * const combined = store.concat([quad(...)], otherStore);
+     * ```
+     */
     concat(...others: (Quad | Iterable<Quad>)[]): Quad[];
 
+    /**
+     * Returns the first index of the quad in the store.
+     *
+     * @param quad - The quad to search for
+     * @returns The index, or -1 if not found
+     *
+     * @example
+     * ```typescript
+     * const index = store.indexOf(myQuad);
+     * ```
+     */
     indexOf(quad: Quad): number;
 
+    /**
+     * Returns the index of the first quad that passes the predicate test.
+     *
+     * @param predicate - Function to test each quad
+     * @param thisArg - Value to use as 'this' when executing predicate
+     * @returns The index, or -1 if not found
+     *
+     * @example
+     * ```typescript
+     * const index = store.findIndex(quad => quad.object.termType === 'Literal');
+     * ```
+     */
     findIndex(predicate: (quad: Quad) => boolean, thisArg?: any): number;
+
+    /**
+     * Joins all quads into a string.
+     *
+     * @param separator - String to separate quads (default: ',')
+     * @returns String representation of all quads
+     *
+     * @example
+     * ```typescript
+     * const str = store.join('\n');
+     * ```
+     */
     join(separator?: string): string;
 
+    /**
+     * Creates an array with the results of calling a function on every quad.
+     *
+     * @param callback - Function that produces an element of the new array
+     * @param thisArg - Value to use as 'this' when executing callback
+     * @returns Array of mapped values
+     *
+     * @example
+     * ```typescript
+     * const subjects = store.map(quad => quad.subject);
+     * ```
+     */
     map<T>(callback: (quad: Quad) => T, thisArg?: any): T[];
 
+    /**
+     * Reduces the store to a single value.
+     *
+     * @param callback - Function to execute on each quad
+     * @param initialValue - Initial value for the accumulator
+     * @returns The final accumulated value
+     *
+     * @example
+     * ```typescript
+     * const count = store.reduce((acc, quad) => acc + 1, 0);
+     * ```
+     */
     reduce<T>(callback: (accumulator: T, quad: Quad, index: number) => T, initialValue: T): T;
 
+    /**
+     * Returns an iterator of [index, quad] pairs.
+     *
+     * @returns Iterator of entries
+     *
+     * @example
+     * ```typescript
+     * for (const [index, quad] of store.entries()) {
+     *   console.log(index, quad);
+     * }
+     * ```
+     */
     entries(): IterableIterator<[number, Quad]>;
 
+    /**
+     * Returns an iterator of indices.
+     *
+     * @returns Iterator of keys
+     *
+     * @example
+     * ```typescript
+     * for (const index of store.keys()) {
+     *   console.log(index);
+     * }
+     * ```
+     */
     keys(): IterableIterator<number>;
 
+    /**
+     * Returns an iterator of quads.
+     *
+     * @returns Iterator of values
+     *
+     * @example
+     * ```typescript
+     * for (const quad of store.values()) {
+     *   console.log(quad);
+     * }
+     * ```
+     */
     values(): IterableIterator<Quad>;
 
+    /**
+     * Returns an iterator of quads (makes Store iterable).
+     *
+     * @returns Iterator of quads
+     *
+     * @example
+     * ```typescript
+     * for (const quad of store) {
+     *   console.log(quad);
+     * }
+     * ```
+     */
     [Symbol.iterator](): Iterator<Quad>;
+
+    /**
+     * Begins a new transaction for batch modifications.
+     * Transactions can improve performance when making many changes.
+     *
+     * @returns A transaction object
+     *
+     * @example
+     * ```typescript
+     * const tx = store.beginTransaction();
+     * tx.add(quad(...));
+     * tx.add(quad(...));
+     * tx.delete(quad(...));
+     * tx.commit();
+     * ```
+     */
+    beginTransaction(): StoreTransaction;
+
+    /**
+     * Convenience method to load Turtle data.
+     * Equivalent to load(data, { format: 'turtle', ...options })
+     *
+     * @param data - Turtle data as a string
+     * @param options - Parsing options
+     * @param options.baseIri - Base IRI for relative URI resolution
+     * @param options.toGraphName - Target graph
+     * @param options.lenient - Continue parsing despite errors
+     *
+     * @see {@link https://www.w3.org/TR/turtle/ | RDF 1.1 Turtle}
+     *
+     * @example
+     * ```typescript
+     * store.loadTurtle(`
+     *   @prefix ex: <http://example.com/> .
+     *   ex:alice a ex:Person .
+     * `);
+     * ```
+     */
+    loadTurtle(data: string, options?: {
+        baseIri?: NamedNode | string;
+        toGraphName?: BlankNode | DefaultGraph | NamedNode;
+        lenient?: boolean;
+    }): void;
+
+    /**
+     * Convenience method to load N-Triples data.
+     * Equivalent to load(data, { format: 'ntriples', ...options })
+     *
+     * @param data - N-Triples data as a string
+     * @param options - Parsing options
+     * @param options.toGraphName - Target graph
+     * @param options.lenient - Continue parsing despite errors
+     *
+     * @see {@link https://www.w3.org/TR/n-triples/ | RDF 1.1 N-Triples}
+     *
+     * @example
+     * ```typescript
+     * store.loadNTriples(`
+     *   <http://example.com/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.com/Person> .
+     * `);
+     * ```
+     */
+    loadNTriples(data: string, options?: {
+        toGraphName?: BlankNode | DefaultGraph | NamedNode;
+        lenient?: boolean;
+    }): void;
+
+    /**
+     * Convenience method to serialize to Turtle format.
+     * Equivalent to dump({ format: 'turtle', ...options })
+     *
+     * @param options - Serialization options
+     * @param options.fromGraphName - Graph to serialize
+     * @param options.prefixes - Namespace prefix mappings
+     * @param options.baseIri - Base IRI for relative URIs
+     * @returns Turtle-formatted string
+     *
+     * @see {@link https://www.w3.org/TR/turtle/ | RDF 1.1 Turtle}
+     *
+     * @example
+     * ```typescript
+     * const turtle = store.toTurtle({
+     *   prefixes: {
+     *     ex: 'http://example.com/',
+     *     foaf: 'http://xmlns.com/foaf/0.1/'
+     *   }
+     * });
+     * ```
+     */
+    toTurtle(options?: {
+        fromGraphName?: BlankNode | DefaultGraph | NamedNode;
+        prefixes?: Record<string, string>;
+        baseIri?: NamedNode | string;
+    }): string;
+
+    /**
+     * Convenience method to serialize to N-Triples format.
+     * Equivalent to dump({ format: 'ntriples', ...options })
+     *
+     * @param options - Serialization options
+     * @param options.fromGraphName - Graph to serialize
+     * @returns N-Triples-formatted string
+     *
+     * @see {@link https://www.w3.org/TR/n-triples/ | RDF 1.1 N-Triples}
+     *
+     * @example
+     * ```typescript
+     * const ntriples = store.toNTriples();
+     * ```
+     */
+    toNTriples(options?: {
+        fromGraphName?: BlankNode | DefaultGraph | NamedNode;
+    }): string;
+}
+
+/**
+ * A transaction for batch modifications to a Store.
+ * Provides better performance for multiple add/delete operations.
+ *
+ * @example
+ * ```typescript
+ * const tx = store.beginTransaction();
+ * try {
+ *   tx.add(quad(namedNode('http://example.com/s1'), namedNode('http://example.com/p'), literal('o1')));
+ *   tx.add(quad(namedNode('http://example.com/s2'), namedNode('http://example.com/p'), literal('o2')));
+ *   tx.delete(quad(namedNode('http://example.com/old'), namedNode('http://example.com/p'), literal('old')));
+ *   tx.commit();
+ * } catch (e) {
+ *   // Transaction will be rolled back if not committed
+ *   console.error('Transaction failed:', e);
+ * }
+ * ```
+ */
+export class StoreTransaction {
+    /**
+     * Adds a quad to the transaction.
+     * Changes are not visible until commit() is called.
+     *
+     * @param quad - The quad to add
+     */
+    add(quad: Quad): void;
+
+    /**
+     * Removes a quad in the transaction.
+     * Changes are not visible until commit() is called.
+     *
+     * @param quad - The quad to delete
+     */
+    delete(quad: Quad): void;
+
+    /**
+     * Commits the transaction, making all changes visible.
+     * After commit, the transaction cannot be reused.
+     */
+    commit(): void;
 }
 "###;
 
@@ -1348,6 +2087,108 @@ impl JsStore {
             .map_err(JsError::from)?;
         Ok(Array::from_iter(quads).values().into())
     }
+
+    #[wasm_bindgen(js_name = beginTransaction)]
+    pub fn begin_transaction(&self) -> Result<JsTransaction, JsValue> {
+        Ok(JsTransaction::new(self.store.clone())?)
+    }
+
+    /// Convenience method to load Turtle data
+    #[wasm_bindgen(js_name = loadTurtle)]
+    pub fn load_turtle(&self, data: &str, options: &JsValue) -> Result<(), JsValue> {
+        let opts = js_sys::Object::new();
+        Reflect::set(&opts, &JsValue::from_str("format"), &JsValue::from_str("ttl"))?;
+
+        // Copy over user-provided options (baseIri, toGraphName, lenient)
+        if !options.is_undefined() && !options.is_null() {
+            if let Ok(base_iri) = Reflect::get(options, &JsValue::from_str("baseIri")) {
+                if !base_iri.is_undefined() && !base_iri.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("baseIri"), &base_iri)?;
+                }
+            }
+            if let Ok(to_graph) = Reflect::get(options, &JsValue::from_str("toGraphName")) {
+                if !to_graph.is_undefined() && !to_graph.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("toGraphName"), &to_graph)?;
+                }
+            }
+            if let Ok(lenient) = Reflect::get(options, &JsValue::from_str("lenient")) {
+                if lenient.is_truthy() {
+                    Reflect::set(&opts, &JsValue::from_str("lenient"), &JsValue::TRUE)?;
+                }
+            }
+        }
+
+        self.load(data, &opts.into(), &JsValue::UNDEFINED, &JsValue::UNDEFINED)
+    }
+
+    /// Convenience method to load N-Triples data
+    #[wasm_bindgen(js_name = loadNTriples)]
+    pub fn load_ntriples(&self, data: &str, options: &JsValue) -> Result<(), JsValue> {
+        let opts = js_sys::Object::new();
+        Reflect::set(&opts, &JsValue::from_str("format"), &JsValue::from_str("nt"))?;
+
+        // Copy over user-provided options (toGraphName, lenient)
+        if !options.is_undefined() && !options.is_null() {
+            if let Ok(to_graph) = Reflect::get(options, &JsValue::from_str("toGraphName")) {
+                if !to_graph.is_undefined() && !to_graph.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("toGraphName"), &to_graph)?;
+                }
+            }
+            if let Ok(lenient) = Reflect::get(options, &JsValue::from_str("lenient")) {
+                if lenient.is_truthy() {
+                    Reflect::set(&opts, &JsValue::from_str("lenient"), &JsValue::TRUE)?;
+                }
+            }
+        }
+
+        self.load(data, &opts.into(), &JsValue::UNDEFINED, &JsValue::UNDEFINED)
+    }
+
+    /// Convenience method to serialize all quads to Turtle
+    #[wasm_bindgen(js_name = toTurtle)]
+    pub fn to_turtle(&self, options: &JsValue) -> Result<String, JsValue> {
+        let opts = js_sys::Object::new();
+        Reflect::set(&opts, &JsValue::from_str("format"), &JsValue::from_str("ttl"))?;
+
+        // Copy over user-provided options (fromGraphName, prefixes, baseIri)
+        if !options.is_undefined() && !options.is_null() {
+            if let Ok(from_graph) = Reflect::get(options, &JsValue::from_str("fromGraphName")) {
+                if !from_graph.is_undefined() && !from_graph.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("fromGraphName"), &from_graph)?;
+                }
+            }
+            if let Ok(prefixes) = Reflect::get(options, &JsValue::from_str("prefixes")) {
+                if !prefixes.is_undefined() && !prefixes.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("prefixes"), &prefixes)?;
+                }
+            }
+            if let Ok(base_iri) = Reflect::get(options, &JsValue::from_str("baseIri")) {
+                if !base_iri.is_undefined() && !base_iri.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("baseIri"), &base_iri)?;
+                }
+            }
+        }
+
+        self.dump(&opts.into(), &JsValue::UNDEFINED)
+    }
+
+    /// Convenience method to serialize all quads to N-Triples
+    #[wasm_bindgen(js_name = toNTriples)]
+    pub fn to_ntriples(&self, options: &JsValue) -> Result<String, JsValue> {
+        let opts = js_sys::Object::new();
+        Reflect::set(&opts, &JsValue::from_str("format"), &JsValue::from_str("nt"))?;
+
+        // Copy over user-provided options (fromGraphName)
+        if !options.is_undefined() && !options.is_null() {
+            if let Ok(from_graph) = Reflect::get(options, &JsValue::from_str("fromGraphName")) {
+                if !from_graph.is_undefined() && !from_graph.is_null() {
+                    Reflect::set(&opts, &JsValue::from_str("fromGraphName"), &from_graph)?;
+                }
+            }
+        }
+
+        self.dump(&opts.into(), &JsValue::UNDEFINED)
+    }
 }
 
 fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
@@ -1430,4 +2271,62 @@ fn extract_substitutions(substitutions_obj: &JsValue) -> Result<Vec<(Variable, T
         substitutions.push((variable, term));
     }
     Ok(substitutions)
+}
+
+#[wasm_bindgen(js_name = StoreTransaction, skip_typescript)]
+pub struct JsTransaction {
+    // We store the Store to keep it alive for the transaction's lifetime
+    // The transaction borrows from this store, but we use RefCell to work around
+    // the single ownership requirement of wasm_bindgen
+    store: Store,
+    inner: RefCell<Option<Transaction<'static>>>,
+}
+
+impl JsTransaction {
+    fn new(store: Store) -> Result<Self, JsValue> {
+        // SAFETY: We transmute the lifetime of the transaction to 'static.
+        // This is safe because:
+        // 1. The transaction is created from `store` which we own
+        // 2. The transaction is stored alongside the store in the same struct
+        // 3. The transaction will be dropped before the store (Rust drop order guarantees)
+        // 4. We prevent access after commit/drop via the Option wrapper
+        let transaction = unsafe {
+            let transaction = store.start_transaction().map_err(JsError::from)?;
+            std::mem::transmute::<Transaction<'_>, Transaction<'static>>(transaction)
+        };
+        Ok(Self {
+            store,
+            inner: RefCell::new(Some(transaction)),
+        })
+    }
+}
+
+#[wasm_bindgen(js_class = StoreTransaction)]
+impl JsTransaction {
+    pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .as_mut()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.insert(FROM_JS.with(|c| c.to_quad(quad))?.as_ref());
+        Ok(())
+    }
+
+    pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .as_mut()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.remove(FROM_JS.with(|c| c.to_quad(quad))?.as_ref());
+        Ok(())
+    }
+
+    pub fn commit(&self) -> Result<(), JsValue> {
+        let mut inner = self.inner.borrow_mut();
+        let transaction = inner
+            .take()
+            .ok_or_else(|| format_err!("Transaction has already been committed or rolled back"))?;
+        transaction.commit().map_err(JsError::from)?;
+        Ok(())
+    }
 }

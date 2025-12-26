@@ -289,6 +289,9 @@ impl<'a> OntologyParser<'a> {
             TermRef::Literal(_) => {
                 Err(OwlParseError::invalid_value("Literal cannot be a class expression"))
             }
+            _ => {
+                Err(OwlParseError::invalid_value("Unsupported term type for class expression"))
+            }
         }
     }
 
@@ -514,4 +517,34 @@ pub fn parse_ontology(graph: &Graph) -> Result<Ontology, OwlParseError> {
 /// Parses an ontology with custom configuration.
 pub fn parse_ontology_with_config(graph: &Graph, config: ParserConfig) -> Result<Ontology, OwlParseError> {
     OntologyParser::with_config(graph, config).parse()
+}
+
+/// Parses an ontology from N3 format.
+///
+/// This is a convenience wrapper around the N3 integration module.
+///
+/// # Example
+///
+/// ```
+/// use oxowl::parser::parse_ontology_from_n3;
+///
+/// let n3_data = r#"
+/// @prefix owl: <http://www.w3.org/2002/07/owl#> .
+/// @prefix ex: <http://example.org/> .
+///
+/// ex:Dog a owl:Class .
+/// "#;
+///
+/// let ontology = parse_ontology_from_n3(n3_data.as_bytes()).unwrap();
+/// ```
+pub fn parse_ontology_from_n3<R: std::io::Read>(reader: R) -> Result<Ontology, OwlParseError> {
+    crate::n3_integration::parse_n3_ontology(reader)
+}
+
+/// Parses an ontology from N3 format with custom configuration.
+pub fn parse_ontology_from_n3_with_config<R: std::io::Read>(
+    reader: R,
+    config: ParserConfig,
+) -> Result<Ontology, OwlParseError> {
+    crate::n3_integration::parse_n3_ontology_with_config(reader, config)
 }

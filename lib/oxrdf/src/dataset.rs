@@ -168,6 +168,36 @@ impl Dataset {
         }
     }
 
+    /// Extracts a named graph as a standalone Graph instance.
+    ///
+    /// This method creates a new Graph containing all triples from the specified
+    /// named graph. This is particularly useful for SHACL validation of N3 formulas,
+    /// where formulas are stored as named graphs with blank node identifiers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut dataset = Dataset::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let graph_name = NamedNodeRef::new("http://example.com/graph1")?;
+    ///
+    /// dataset.insert(QuadRef::new(ex, ex, ex, graph_name));
+    ///
+    /// let graph = dataset.named_graph_to_graph(graph_name);
+    /// assert_eq!(graph.len(), 1);
+    /// assert!(graph.contains(TripleRef::new(ex, ex, ex)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn named_graph_to_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Graph {
+        let mut graph = Graph::new();
+        for triple in self.graph(graph_name).iter() {
+            graph.insert(triple);
+        }
+        graph
+    }
+
     /// Returns all the quads contained by the dataset.
     pub fn iter(&self) -> Iter<'_> {
         let iter = self.spog.iter();

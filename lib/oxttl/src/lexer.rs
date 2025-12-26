@@ -115,7 +115,7 @@ impl TokenRecognizer for N3Lexer {
                 b':' => Self::recognize_blank_node_label(data, is_ending),
                 c => Some((
                     1,
-                    Err((0, format!("Unexpected character '{}'", char::from(*c))).into()),
+                    Err(TokenRecognizerError::unexpected_char(0..1, char::from(*c), "RDF syntax")),
                 )),
             },
             b'"' => {
@@ -306,7 +306,7 @@ impl N3Lexer {
                 return Some(if i == 0 {
                     (
                         1,
-                        Err((0..1, format!("Unexpected byte {}", data[0])).into()),
+                        Err(TokenRecognizerError::unexpected_byte(0..1, data[0], "keyword or identifier")),
                     )
                 } else {
                     (
@@ -357,7 +357,7 @@ impl N3Lexer {
             consumed + 1,
             result.and_then(|(name, _)| {
                 if name.is_empty() {
-                    Err((0..consumed, "A variable name is not allowed to be empty").into())
+                    Err(TokenRecognizerError::empty_value(0..consumed, "Variable name"))
                 } else {
                     Ok(N3Token::Variable(name))
                 }
@@ -535,7 +535,7 @@ impl N3Lexer {
                     {
                         // Ok
                     } else if i == 2 {
-                        return Some((i, Err((0..i, "A blank node ID cannot be empty").into())));
+                        return Some((i, Err(TokenRecognizerError::empty_value(0..i, "Blank node identifier"))));
                     } else if c == '.' {
                         if data[i - 1] == b'.' {
                             i -= 1;
@@ -570,7 +570,7 @@ impl N3Lexer {
                 if i > 2 {
                     str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel)
                 } else {
-                    Err((0..i, "A blank node ID cannot be empty").into())
+                    Err(TokenRecognizerError::empty_value(0..i, "Blank node identifier"))
                 },
             )
         })
@@ -901,12 +901,8 @@ impl N3Lexer {
             b'\\' if with_echar => Some((1, Ok('\\'))),
             c => Some((
                 1,
-                Err((
-                    position..position + 2,
-                    format!("Unexpected escape character '\\{}'", char::from(c)),
-                )
-                    .into()),
-            )), // TODO: read until end of string
+                Err(TokenRecognizerError::invalid_escape(position..position + 2, char::from(c))),
+            )),
         }
     }
 
@@ -1062,22 +1058,14 @@ impl N3Lexer {
                 code_point = u32::from(byte) & 0x7;
             }
             _ => {
-                return Some(Err((
-                    position..=position,
-                    "Invalid UTF-8 character encoding",
-                )
-                    .into()));
+                return Some(Err(TokenRecognizerError::invalid_utf8(position..position + 1)));
             }
         }
 
         for i in 1..=bytes_needed {
             let byte = *data.get(i)?;
             if byte < lower_boundary || upper_boundary < byte {
-                return Some(Err((
-                    position..=position + i,
-                    "Invalid UTF-8 character encoding",
-                )
-                    .into()));
+                return Some(Err(TokenRecognizerError::invalid_utf8(position..position + i + 1)));
             }
             lower_boundary = 0x80;
             upper_boundary = 0xBF;
@@ -1159,21 +1147,17 @@ pub fn resolve_local_name(
 
 fn str_from_utf8(data: &[u8], range: Range<usize>) -> Result<&str, TokenRecognizerError> {
     str::from_utf8(data).map_err(|e| {
-        (
+        TokenRecognizerError::invalid_utf8(
             range.start + e.valid_up_to()..min(range.end, range.start + e.valid_up_to() + 4),
-            format!("Invalid UTF-8: {e}"),
         )
-            .into()
     })
 }
 
 fn string_from_utf8(data: Vec<u8>, range: Range<usize>) -> Result<String, TokenRecognizerError> {
     String::from_utf8(data).map_err(|e| {
-        (
+        TokenRecognizerError::invalid_utf8(
             range.start + e.utf8_error().valid_up_to()
                 ..min(range.end, range.start + e.utf8_error().valid_up_to() + 4),
-            format!("Invalid UTF-8: {e}"),
         )
-            .into()
     })
 }

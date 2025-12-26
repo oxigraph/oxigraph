@@ -33,6 +33,74 @@ pub struct TokenRecognizerError {
     pub message: String,
 }
 
+impl TokenRecognizerError {
+    /// Create a new token error.
+    pub fn new(location: Range<usize>, message: impl Into<String>) -> Self {
+        Self {
+            location,
+            message: message.into(),
+        }
+    }
+
+    /// Create an error for an unexpected character.
+    pub fn unexpected_char(location: Range<usize>, ch: char, context: &str) -> Self {
+        Self {
+            location,
+            message: format!("Unexpected character '{}' in {}", ch, context),
+        }
+    }
+
+    /// Create an error for an unexpected byte.
+    pub fn unexpected_byte(location: Range<usize>, byte: u8, context: &str) -> Self {
+        if byte.is_ascii_graphic() {
+            Self {
+                location,
+                message: format!("Unexpected byte '{}' (0x{:02X}) in {}", char::from(byte), byte, context),
+            }
+        } else {
+            Self {
+                location,
+                message: format!("Unexpected byte 0x{:02X} in {}", byte, context),
+            }
+        }
+    }
+
+    /// Create an error for invalid UTF-8.
+    pub fn invalid_utf8(location: Range<usize>) -> Self {
+        Self {
+            location,
+            message: "Invalid UTF-8 encoding. Ensure the file is encoded as valid UTF-8.".to_string(),
+        }
+    }
+
+    /// Create an error for an invalid escape sequence.
+    pub fn invalid_escape(location: Range<usize>, escape: char) -> Self {
+        Self {
+            location,
+            message: format!(
+                "Invalid escape sequence '\\{}'. Valid escapes are: \\t, \\n, \\r, \\b, \\f, \\\", \\', \\\\, \\uXXXX, \\UXXXXXXXX",
+                escape
+            ),
+        }
+    }
+
+    /// Create an error for an empty value.
+    pub fn empty_value(location: Range<usize>, what: &str) -> Self {
+        Self {
+            location,
+            message: format!("{} cannot be empty", what),
+        }
+    }
+
+    /// Create an error for an incomplete value.
+    pub fn incomplete_value(location: Range<usize>, what: &str, missing: &str) -> Self {
+        Self {
+            location,
+            message: format!("{} is incomplete: missing {}", what, missing),
+        }
+    }
+}
+
 impl<S: Into<String>> From<(Range<usize>, S)> for TokenRecognizerError {
     fn from((location, message): (Range<usize>, S)) -> Self {
         Self {

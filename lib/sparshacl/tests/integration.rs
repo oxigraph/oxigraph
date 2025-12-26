@@ -1,6 +1,6 @@
 //! Integration tests for SHACL validation.
 
-use oxrdf::{Graph, Literal, NamedNode, Triple};
+use oxrdf::{Dataset, Formula, Graph, GraphName, Literal, NamedNode, Triple};
 use oxrdfio::{RdfFormat, RdfParser};
 use sparshacl::{Severity, ShaclValidator, ShapesGraph};
 
@@ -2011,4 +2011,379 @@ fn test_negative_max_length_rejected() {
         "Expected InvalidPropertyValue error, got: {:?}",
         error
     );
+}
+
+// =============================================================================
+// N3 Formula validation tests
+// =============================================================================
+
+/// Helper to parse N3 data into a Dataset.
+fn parse_n3(n3_data: &str) -> Dataset {
+    let mut dataset = Dataset::new();
+    let parser = RdfParser::from_format(RdfFormat::N3);
+    for quad_result in parser.for_reader(n3_data.as_bytes()) {
+        let quad = quad_result.expect("Failed to parse N3");
+        dataset.insert(quad.as_ref());
+    }
+    dataset
+}
+
+#[test]
+fn test_n3_formula_validation_basic() {
+    // SHACL shapes requiring names for Person instances
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:PersonShape a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1 ;
+                sh:datatype <http://www.w3.org/2001/XMLSchema#string>
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 data with a formula containing Person data
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+        # Formula containing valid Person data
+        ex:belief a ex:Belief ;
+            ex:content {
+                ex:alice a ex:Person ;
+                    ex:name "Alice"^^xsd:string .
+                ex:bob a ex:Person ;
+                    ex:name "Bob"^^xsd:string .
+            } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+
+    // Extract formulas from the dataset
+    let formulas = Formula::from_dataset(&dataset);
+    assert_eq!(formulas.len(), 1, "Should have exactly one formula");
+
+    // Convert formula to graph for validation
+    let formula_graph = formulas[0].to_graph();
+
+    // Validate the formula contents
+    let report = validator
+        .validate(&formula_graph)
+        .expect("Validation failed");
+    assert!(
+        report.conforms(),
+        "Formula contents should conform to shapes"
+    );
+    assert_eq!(report.violation_count(), 0);
+}
+
+#[test]
+fn test_n3_formula_validation_violation() {
+    // SHACL shapes requiring names for Person instances
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:PersonShape a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 data with a formula containing invalid Person data (missing name)
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+
+        # Formula with Person missing required name
+        ex:belief a ex:Belief ;
+            ex:content {
+                ex:alice a ex:Person .
+                ex:bob a ex:Person ;
+                    ex:name "Bob" .
+            } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+    let formulas = Formula::from_dataset(&dataset);
+    assert_eq!(formulas.len(), 1);
+
+    // Validate the formula contents
+    let formula_graph = formulas[0].to_graph();
+    let report = validator
+        .validate(&formula_graph)
+        .expect("Validation failed");
+
+    // Should have violation for alice missing name
+    assert!(!report.conforms());
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn test_n3_multiple_formulas_validation() {
+    // SHACL shapes for different entity types
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+        ex:PersonShape a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1
+            ] .
+
+        ex:OrganizationShape a sh:NodeShape ;
+            sh:targetClass ex:Organization ;
+            sh:property [
+                sh:path ex:orgName ;
+                sh:minCount 1
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 data with multiple formulas
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+
+        # First formula - valid Person data
+        ex:belief1 ex:content {
+            ex:alice a ex:Person ;
+                ex:name "Alice" .
+        } .
+
+        # Second formula - valid Organization data
+        ex:belief2 ex:content {
+            ex:acme a ex:Organization ;
+                ex:orgName "ACME Corp" .
+        } .
+
+        # Third formula - invalid Person (missing name)
+        ex:belief3 ex:content {
+            ex:charlie a ex:Person .
+        } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+    let formulas = Formula::from_dataset(&dataset);
+    assert_eq!(formulas.len(), 3, "Should have three formulas");
+
+    // Validate each formula
+    let mut valid_count = 0;
+    let mut invalid_count = 0;
+
+    for formula in &formulas {
+        let formula_graph = formula.to_graph();
+        let report = validator
+            .validate(&formula_graph)
+            .expect("Validation failed");
+
+        if report.conforms() {
+            valid_count += 1;
+        } else {
+            invalid_count += 1;
+        }
+    }
+
+    // Two formulas should be valid, one invalid
+    assert_eq!(valid_count, 2);
+    assert_eq!(invalid_count, 1);
+}
+
+#[test]
+fn test_n3_formula_with_dataset_method() {
+    // SHACL shapes
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:PersonShape a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:age ;
+                sh:minCount 1 ;
+                sh:datatype <http://www.w3.org/2001/XMLSchema#integer>
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 data with formula
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+        ex:data ex:formula {
+            ex:alice a ex:Person ;
+                ex:age 30 .
+        } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+
+    // Get the formula's blank node graph name
+    // In N3, formulas are represented as named graphs with blank node names
+    let formula_graph_name = dataset
+        .iter()
+        .find_map(|quad| match quad.graph_name {
+            oxrdf::GraphNameRef::BlankNode(bn) => Some(GraphName::BlankNode(bn.into_owned())),
+            _ => None,
+        })
+        .expect("Should have a formula graph");
+
+    // Extract the named graph directly using Dataset method
+    let graph = dataset.named_graph_to_graph(formula_graph_name.as_ref());
+
+    // Validate
+    let report = validator.validate(&graph).expect("Validation failed");
+    assert!(report.conforms());
+}
+
+#[test]
+fn test_n3_formula_validates_contents_not_structure() {
+    // This test ensures we validate the CONTENTS of formulas (the triples inside)
+    // not the formula structure itself (the fact that it's a formula)
+
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:StatementShape a sh:NodeShape ;
+            sh:targetClass ex:Statement ;
+            sh:property [
+                sh:path ex:subject ;
+                sh:minCount 1
+            ] ;
+            sh:property [
+                sh:path ex:predicate ;
+                sh:minCount 1
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 formula with Statement instances
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+
+        ex:quotation ex:contains {
+            ex:stmt1 a ex:Statement ;
+                ex:subject ex:alice ;
+                ex:predicate ex:knows .
+
+            ex:stmt2 a ex:Statement ;
+                ex:subject ex:bob ;
+                ex:predicate ex:likes .
+        } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+    let formulas = Formula::from_dataset(&dataset);
+    assert_eq!(formulas.len(), 1);
+
+    // Validate the formula's CONTENTS (the Statement instances)
+    let formula_graph = formulas[0].to_graph();
+    let report = validator
+        .validate(&formula_graph)
+        .expect("Validation failed");
+
+    // Both Statement instances should be valid
+    assert!(report.conforms());
+    assert_eq!(report.violation_count(), 0);
+}
+
+#[test]
+fn test_n3_nested_formulas_validation() {
+    // Test validation of nested formulas
+    let shapes = parse_shapes(
+        r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:FactShape a sh:NodeShape ;
+            sh:targetClass ex:Fact ;
+            sh:property [
+                sh:path ex:value ;
+                sh:minCount 1
+            ] .
+    "#,
+    );
+
+    let validator = ShaclValidator::new(shapes);
+
+    // N3 with nested formulas
+    let n3_data = r#"
+        @prefix ex: <http://example.org/> .
+
+        # Outer formula
+        ex:outerBelief ex:content {
+            ex:fact1 a ex:Fact ;
+                ex:value "outer" .
+
+            # Inner formula (nested)
+            ex:innerBelief ex:content {
+                ex:fact2 a ex:Fact ;
+                    ex:value "inner" .
+            } .
+        } .
+    "#;
+
+    let dataset = parse_n3(n3_data);
+    let formulas = Formula::from_dataset(&dataset);
+
+    // N3 parser should create separate named graphs for nested formulas
+    assert!(formulas.len() >= 1, "Should have at least one formula");
+
+    // Validate all formulas
+    for formula in &formulas {
+        let formula_graph = formula.to_graph();
+        let report = validator
+            .validate(&formula_graph)
+            .expect("Validation failed");
+
+        // All Fact instances in all formulas should be valid
+        // Note: Inner formula reference might appear as a blank node in outer formula
+        // We only validate Facts that exist, not structural elements
+        if formula_graph.len() > 0 {
+            // Only check if there are actual triples to validate
+            let has_violations = report.violation_count() > 0;
+
+            // Get all Facts in this formula
+            let fact_count = formula_graph
+                .iter()
+                .filter(|t| {
+                    t.predicate == oxrdf::vocab::rdf::TYPE
+                        && t.object.to_string().contains("Fact")
+                })
+                .count();
+
+            // If there are Facts, they should all be valid
+            if fact_count > 0 {
+                assert!(
+                    !has_violations,
+                    "Facts in formula should be valid, but got {} violations",
+                    report.violation_count()
+                );
+            }
+        }
+    }
 }

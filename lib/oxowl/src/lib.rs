@@ -75,13 +75,17 @@ mod expression;
 mod ontology;
 mod error;
 mod parser;
+mod serializer;
+pub mod n3_integration;
+pub mod n3_rules;
 
 pub use entity::{OwlClass, ObjectProperty, DataProperty, AnnotationProperty, Individual};
 pub use axiom::Axiom;
 pub use expression::{ClassExpression, ObjectPropertyExpression, DataRange};
 pub use ontology::Ontology;
 pub use error::{OwlError, OwlParseError};
-pub use parser::{parse_ontology, parse_ontology_with_config, OntologyParser, ParserConfig};
+pub use parser::{parse_ontology, parse_ontology_with_config, parse_ontology_from_n3, parse_ontology_from_n3_with_config, OntologyParser, ParserConfig};
+pub use serializer::{serialize_ontology, serialize_ontology_with_config, OntologySerializer, SerializerConfig};
 
 #[cfg(feature = "reasoner-rl")]
 mod reasoner;

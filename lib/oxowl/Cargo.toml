@@ -22,11 +22,12 @@ reasoner-rdfs = []
 [dependencies]
 oxrdf.workspace = true
 oxiri.workspace = true
+oxttl.workspace = true
+oxrdfio.workspace = true
 thiserror.workspace = true
 rustc-hash.workspace = true
 
 [dev-dependencies]
-oxrdfio.workspace = true
 
 [lints]
 workspace = true

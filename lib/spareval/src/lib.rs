@@ -9,6 +9,7 @@ mod error;
 mod eval;
 mod expression;
 mod model;
+mod n3_builtins;
 mod service;
 mod update;
 
@@ -17,6 +18,7 @@ pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::CancellationToken;
+pub use crate::n3_builtins::{get_all_n3_builtins, N3BuiltinFn};
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 use crate::expression::{
     CustomFunctionRegistry, ExpressionEvaluatorContext, build_expression_evaluator,
@@ -370,6 +372,42 @@ impl QueryEvaluator {
     #[must_use]
     pub fn with_cancellation_token(mut self, cancellation_token: CancellationToken) -> Self {
         self.cancellation_token = Some(cancellation_token);
+        self
+    }
+
+    /// Registers all N3 built-in functions with this evaluator.
+    ///
+    /// This includes:
+    /// - Math functions: sum, difference, product, quotient
+    /// - String functions: concatenation, contains, length
+    /// - Log functions: equalTo, notEqualTo
+    /// - List functions: first, rest, member
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use oxrdf::{Dataset, Literal};
+    /// use spareval::{QueryEvaluator, QueryResults};
+    /// use spargebra::SparqlParser;
+    ///
+    /// let evaluator = QueryEvaluator::new().with_all_n3_builtins();
+    /// let query = SparqlParser::new().parse_query(
+    ///     "SELECT (<http://www.w3.org/2000/10/swap/math#sum>(2, 3) AS ?result) WHERE {}"
+    /// )?;
+    /// if let QueryResults::Solutions(mut solutions) = evaluator.prepare(&query).execute(&Dataset::new())? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("result"),
+    ///         Some(&Literal::from(5).into())
+    ///     );
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn with_all_n3_builtins(mut self) -> Self {
+        for (name, func) in get_all_n3_builtins() {
+            self.custom_functions.insert(name, func);
+        }
         self
     }
 

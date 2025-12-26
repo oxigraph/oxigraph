@@ -1666,6 +1666,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxrdfio",
+ "oxttl",
  "rustc-hash",
  "thiserror 1.0.69",
 ]

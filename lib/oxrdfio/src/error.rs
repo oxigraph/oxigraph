@@ -54,8 +54,7 @@ impl From<RdfParseError> for io::Error {
 
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct RdfSyntaxError(#[from] SyntaxErrorKind);
+pub struct RdfSyntaxError(SyntaxErrorKind);
 
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
@@ -103,12 +102,59 @@ impl RdfSyntaxError {
                     },
                 )
             }
-            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) => None,
+            SyntaxErrorKind::RdfXml(e) => {
+                e.location().map(|location| {
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    }
+                })
+            }
+            SyntaxErrorKind::Msg(_) => None,
+        }
+    }
+
+    /// Get additional context about what was expected, if available.
+    #[inline]
+    pub fn expected(&self) -> Option<&str> {
+        match &self.0 {
+            SyntaxErrorKind::Turtle(e) => e.expected(),
+            _ => None,
+        }
+    }
+
+    /// Get additional context about what was found, if available.
+    #[inline]
+    pub fn found(&self) -> Option<&str> {
+        match &self.0 {
+            SyntaxErrorKind::Turtle(e) => e.found(),
+            _ => None,
+        }
+    }
+
+    /// Get a suggestion for fixing the error, if available.
+    #[inline]
+    pub fn suggestion(&self) -> Option<&str> {
+        match &self.0 {
+            SyntaxErrorKind::Turtle(e) => e.suggestion(),
+            _ => None,
         }
     }
 
     pub(crate) fn msg(msg: &'static str) -> Self {
         Self(SyntaxErrorKind::Msg(msg))
+    }
+}
+
+impl std::fmt::Display for RdfSyntaxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Delegate to the underlying error's Display
+        write!(f, "{}", self.0)
     }
 }
 

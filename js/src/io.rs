@@ -161,6 +161,83 @@ export function parseWithMetadata(
         lenient?: boolean;
     }
 ): QuadParser;
+
+/**
+ * Parses N3 data and returns an array of quads.
+ * This is a convenience function specifically for N3 format.
+ *
+ * @param data - The N3 data as a string
+ * @param options - Optional parsing options
+ * @param options.baseIri - Base IRI for relative URI resolution
+ * @param options.lenient - If true, continue parsing despite errors
+ * @returns Array of parsed quads
+ *
+ * @see {@link https://w3c.github.io/N3/spec/ | N3 Specification}
+ *
+ * @example
+ * ```typescript
+ * import { parseN3 } from 'oxigraph';
+ *
+ * const n3Data = `
+ *   @prefix ex: <http://example.com/> .
+ *   ex:alice ex:knows ex:bob .
+ *   { ex:alice ex:believes ex:bob } ex:certainty 0.9 .
+ * `;
+ *
+ * const quads = parseN3(n3Data, {
+ *   baseIri: 'http://example.com/'
+ * });
+ * ```
+ */
+export function parseN3(
+    data: string,
+    options?: {
+        baseIri?: NamedNode | string;
+        lenient?: boolean;
+    }
+): Quad[];
+
+/**
+ * Serializes an iterable of quads to N3 format.
+ * This is a convenience function specifically for N3 format.
+ *
+ * @param quads - An iterable of quads to serialize
+ * @param options - Optional serialization options
+ * @param options.prefixes - Namespace prefix mappings
+ * @param options.baseIri - Base IRI for relative URI resolution
+ * @returns The serialized N3 data as a string
+ *
+ * @see {@link https://w3c.github.io/N3/spec/ | N3 Specification}
+ *
+ * @example
+ * ```typescript
+ * import { serializeN3, quad, namedNode, literal, formula, triple } from 'oxigraph';
+ *
+ * const quads = [
+ *   quad(
+ *     namedNode('http://example.com/alice'),
+ *     namedNode('http://example.com/knows'),
+ *     namedNode('http://example.com/bob')
+ *   )
+ * ];
+ *
+ * const n3String = serializeN3(quads, {
+ *   prefixes: {
+ *     'ex': 'http://example.com/'
+ *   }
+ * });
+ * console.log(n3String);
+ * // @prefix ex: <http://example.com/> .
+ * // ex:alice ex:knows ex:bob .
+ * ```
+ */
+export function serializeN3(
+    quads: Iterable<Quad>,
+    options?: {
+        prefixes?: Record<string, string>;
+        baseIri?: NamedNode | string;
+    }
+): string;
 "###;
 
 /// RDF serialization formats.
@@ -1075,4 +1152,165 @@ pub fn parse_with_metadata(
         prefixes: prefixes_obj,
         base_iri: final_base_iri,
     })
+}
+
+/// Parses N3 data and returns an array of quads.
+///
+/// This is a convenience function specifically for N3 format, equivalent to calling
+/// `parse(data, RdfFormat.N3, options)`.
+///
+/// # Arguments
+///
+/// * `data` - The N3 data to parse as a string
+/// * `options` - Optional parsing options (base_iri, lenient)
+///
+/// # Returns
+///
+/// An array of quads parsed from the N3 data
+///
+/// # Example
+///
+/// ```javascript
+/// import { parseN3 } from 'oxigraph';
+///
+/// const n3Data = `
+///   @prefix ex: <http://example.com/> .
+///   ex:alice ex:knows ex:bob .
+/// `;
+///
+/// const quads = parseN3(n3Data, {
+///   baseIri: 'http://example.com/'
+/// });
+/// ```
+#[wasm_bindgen(js_name = parseN3, skip_typescript)]
+pub fn parse_n3(data: &str, options: &JsValue) -> Result<Box<[JsValue]>, JsValue> {
+    // Parse options
+    let mut base_iri = None;
+    let mut lenient = false;
+
+    if !options.is_undefined() && !options.is_null() {
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("baseIri"))?;
+        base_iri = convert_base_iri(&js_base_iri)?;
+
+        lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
+    }
+
+    // Configure parser for N3
+    let mut parser = RdfParser::from_format(RdfFormat::N3);
+    if let Some(base_iri) = base_iri {
+        parser = parser
+            .with_base_iri(base_iri)
+            .map_err(|e| format_err!("Invalid base IRI: {}", e))?;
+    }
+    if lenient {
+        parser = parser.lenient();
+    }
+
+    // Parse the data
+    let quads = parser
+        .for_reader(data.as_bytes())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(JsError::from)?;
+
+    // Convert to JS values
+    Ok(quads
+        .into_iter()
+        .map(|quad| JsQuad::from(quad).into())
+        .collect::<Vec<_>>()
+        .into_boxed_slice())
+}
+
+/// Serializes an iterable of quads to N3 format.
+///
+/// This is a convenience function specifically for N3 format, equivalent to calling
+/// `serialize(quads, RdfFormat.N3, options)`.
+///
+/// # Arguments
+///
+/// * `quads` - An iterable of quads to serialize
+/// * `options` - Optional serialization options (prefixes, base_iri)
+///
+/// # Returns
+///
+/// A string containing the serialized N3 data
+///
+/// # Example
+///
+/// ```javascript
+/// import { serializeN3, quad, namedNode, literal } from 'oxigraph';
+///
+/// const q = quad(
+///   namedNode('http://example.com/alice'),
+///   namedNode('http://example.com/knows'),
+///   namedNode('http://example.com/bob')
+/// );
+///
+/// const n3String = serializeN3([q], {
+///   prefixes: { 'ex': 'http://example.com/' }
+/// });
+/// ```
+#[wasm_bindgen(js_name = serializeN3, skip_typescript)]
+pub fn serialize_n3(quads: &JsValue, options: &JsValue) -> Result<String, JsValue> {
+    // Parse options
+    let mut prefixes = None;
+    let mut base_iri = None;
+
+    if !options.is_undefined() && !options.is_null() {
+        let js_prefixes = Reflect::get(options, &JsValue::from_str("prefixes"))?;
+        if !js_prefixes.is_undefined() && !js_prefixes.is_null() {
+            let mut prefix_map = BTreeMap::new();
+            let entries = js_sys::Object::entries(&js_sys::Object::from(js_prefixes));
+            for i in 0..entries.length() {
+                let entry = entries.get(i);
+                let key = Reflect::get(&entry, &0.into())?
+                    .as_string()
+                    .ok_or_else(|| format_err!("Prefix name must be a string"))?;
+                let value = Reflect::get(&entry, &1.into())?
+                    .as_string()
+                    .ok_or_else(|| format_err!("Prefix IRI must be a string"))?;
+                prefix_map.insert(key, value);
+            }
+            prefixes = Some(prefix_map);
+        }
+
+        let js_base_iri = Reflect::get(options, &JsValue::from_str("baseIri"))?;
+        base_iri = convert_base_iri(&js_base_iri)?;
+    }
+
+    // Configure serializer for N3
+    let mut serializer = RdfSerializer::from_format(RdfFormat::N3);
+    if let Some(prefixes) = prefixes {
+        for (prefix_name, prefix_iri) in &prefixes {
+            serializer = serializer
+                .with_prefix(prefix_name, prefix_iri)
+                .map_err(|e| {
+                    format_err!("Invalid prefix {} IRI '{}': {}", prefix_name, prefix_iri, e)
+                })?;
+        }
+    }
+    if let Some(base_iri) = base_iri {
+        serializer = serializer
+            .with_base_iri(base_iri)
+            .map_err(|e| format_err!("Invalid base IRI: {}", e))?;
+    }
+
+    // Serialize the quads
+    let mut writer = Vec::new();
+    let mut serializer = serializer.for_writer(&mut writer);
+
+    if let Some(iter) = try_iter(quads)? {
+        for item in iter {
+            let item = item?;
+            let quad = FROM_JS.with(|c| c.to_quad(&item))?;
+            serializer
+                .serialize_quad(quad.as_ref())
+                .map_err(JsError::from)?;
+        }
+    } else {
+        return Err(format_err!("The quads parameter must be iterable"));
+    }
+
+    serializer.finish().map_err(JsError::from)?;
+
+    Ok(String::from_utf8(writer).map_err(JsError::from)?)
 }

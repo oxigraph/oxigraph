@@ -18,6 +18,19 @@ use std::vec::IntoIter;
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
+///
+/// Create named nodes for common vocabularies:
+///
+/// >>> rdf_type = NamedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type')
+/// >>> rdfs_label = NamedNode('http://www.w3.org/2000/01/rdf-schema#label')
+/// >>> rdf_type.value
+/// 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
+///
+/// Access the IRI value:
+///
+/// >>> node = NamedNode('http://example.com/resource')
+/// >>> node.value
+/// 'http://example.com/resource'
 #[pyclass(frozen, name = "NamedNode", module = "pyoxigraph", eq, ord, hash)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct PyNamedNode {
@@ -116,6 +129,19 @@ impl PyNamedNode {
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
+///
+/// Create a blank node with a specific identifier:
+///
+/// >>> bn = BlankNode('node1')
+/// >>> bn.value
+/// 'node1'
+///
+/// Create a blank node with an auto-generated identifier:
+///
+/// >>> bn1 = BlankNode()
+/// >>> bn2 = BlankNode()
+/// >>> bn1.value != bn2.value
+/// True
 #[pyclass(frozen, name = "BlankNode", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
@@ -230,6 +256,38 @@ impl PyBlankNode {
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
 /// >>> str(Literal(11))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
+///
+/// Create simple string literals:
+///
+/// >>> lit = Literal('hello')
+/// >>> lit.value
+/// 'hello'
+/// >>> str(lit.datatype)
+/// '<http://www.w3.org/2001/XMLSchema#string>'
+///
+/// Create language-tagged strings:
+///
+/// >>> lit_en = Literal('hello', language='en')
+/// >>> lit_en.language
+/// 'en'
+/// >>> lit_fr = Literal('bonjour', language='fr')
+/// >>> lit_fr.language
+/// 'fr'
+///
+/// Create typed literals from Python values:
+///
+/// >>> Literal(42).value
+/// '42'
+/// >>> Literal(3.14).value
+/// '3.14'
+/// >>> Literal(True).value
+/// 'true'
+///
+/// Create custom datatype literals:
+///
+/// >>> lit = Literal('2023-01-01', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#date'))
+/// >>> lit.value
+/// '2023-01-01'
 #[pyclass(frozen, name = "Literal", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyLiteral {
@@ -672,6 +730,22 @@ impl From<Term> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
+///
+/// Create a simple triple:
+///
+/// >>> triple = Triple(NamedNode('http://example.com/alice'), NamedNode('http://xmlns.com/foaf/0.1/name'), Literal('Alice'))
+/// >>> triple.subject
+/// <NamedNode value=http://example.com/alice>
+/// >>> triple.predicate
+/// <NamedNode value=http://xmlns.com/foaf/0.1/name>
+/// >>> triple.object
+/// <Literal value=Alice datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>
+///
+/// Create a triple with a blank node:
+///
+/// >>> triple = Triple(BlankNode('b1'), NamedNode('http://example.com/p'), Literal('value'))
+/// >>> str(triple.subject)
+/// '_:b1'
 #[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyTriple {
@@ -847,6 +921,24 @@ impl From<GraphName> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
+///
+/// Create a quad in a named graph:
+///
+/// >>> quad = Quad(NamedNode('http://example.com/alice'), NamedNode('http://xmlns.com/foaf/0.1/knows'), NamedNode('http://example.com/bob'), NamedNode('http://example.com/social'))
+/// >>> quad.graph_name
+/// <NamedNode value=http://example.com/social>
+///
+/// Create a quad in the default graph:
+///
+/// >>> quad = Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o'))
+/// >>> quad.graph_name
+/// <DefaultGraph>
+///
+/// Access the underlying triple:
+///
+/// >>> quad = Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), Literal('o'), NamedNode('http://example.com/g'))
+/// >>> str(quad.triple)
+/// '<http://example.com/s> <http://example.com/p> "o"'
 #[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {

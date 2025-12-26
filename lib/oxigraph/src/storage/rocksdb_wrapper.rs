@@ -993,6 +993,15 @@ impl ReadableTransaction<'_> {
         }
         Ok(())
     }
+
+    /// Aborts the transaction without applying any changes.
+    ///
+    /// This method consumes the transaction and discards all pending changes.
+    /// After calling this method, the transaction cannot be used anymore.
+    pub fn rollback(self) {
+        // Simply drop the transaction without writing the batch.
+        // The Drop implementation will clean up resources.
+    }
 }
 
 pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
