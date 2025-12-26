@@ -184,6 +184,175 @@ impl Graph {
         self.dataset.clear()
     }
 
+    /// Computes the union of two graphs (self ⊔ other).
+    ///
+    /// Returns a new graph containing all triples from both graphs.
+    /// Uses deterministic BTreeSet iteration for reproducible results.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut g1 = Graph::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// g1.insert(TripleRef::new(ex, ex, ex));
+    ///
+    /// let mut g2 = Graph::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// g2.insert(TripleRef::new(ex2, ex2, ex2));
+    ///
+    /// let union = g1.union(&g2);
+    /// assert_eq!(union.len(), 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            dataset: self.dataset.union(&other.dataset),
+        }
+    }
+
+    /// Computes the set difference (self \ other).
+    ///
+    /// Returns a new graph containing triples in self but not in other.
+    /// Essential for computing Δ⁻ in ΔGate protocol.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut g1 = Graph::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// g1.insert(TripleRef::new(ex, ex, ex));
+    ///
+    /// let mut g2 = Graph::new();
+    /// g2.insert(TripleRef::new(ex, ex, ex));
+    ///
+    /// let diff = g1.difference(&g2);
+    /// assert!(diff.is_empty());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn difference(&self, other: &Self) -> Self {
+        Self {
+            dataset: self.dataset.difference(&other.dataset),
+        }
+    }
+
+    /// Computes the intersection of two graphs (self ∩ other).
+    ///
+    /// Returns a new graph containing only triples present in both graphs.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut g1 = Graph::new();
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// g1.insert(TripleRef::new(ex, ex, ex));
+    ///
+    /// let mut g2 = Graph::new();
+    /// g2.insert(TripleRef::new(ex, ex, ex));
+    ///
+    /// let intersection = g1.intersection(&g2);
+    /// assert_eq!(intersection.len(), 1);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn intersection(&self, other: &Self) -> Self {
+        Self {
+            dataset: self.dataset.intersection(&other.dataset),
+        }
+    }
+
+    /// Computes the symmetric difference (self Δ other).
+    ///
+    /// Returns a new graph containing triples in either graph but not in both.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut g1 = Graph::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// g1.insert(TripleRef::new(ex1, ex1, ex1));
+    ///
+    /// let mut g2 = Graph::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// g2.insert(TripleRef::new(ex2, ex2, ex2));
+    ///
+    /// let sym_diff = g1.symmetric_difference(&g2);
+    /// assert_eq!(sym_diff.len(), 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn symmetric_difference(&self, other: &Self) -> Self {
+        Self {
+            dataset: self.dataset.symmetric_difference(&other.dataset),
+        }
+    }
+
+    /// Computes the delta/diff between two graphs for ΔGate protocol.
+    ///
+    /// Returns (additions, removals) where:
+    /// - additions (Δ⁺) = triples in `target` but not in `self`
+    /// - removals (Δ⁻) = triples in `self` but not in `target`
+    ///
+    /// This is the core operation for ΔGate delta computation.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut before = Graph::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// before.insert(TripleRef::new(ex1, ex1, ex1));
+    ///
+    /// let mut after = Graph::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// after.insert(TripleRef::new(ex2, ex2, ex2));
+    ///
+    /// let (additions, removals) = before.diff(&after);
+    /// assert_eq!(additions.len(), 1); // ex2 added
+    /// assert_eq!(removals.len(), 1);  // ex1 removed
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn diff(&self, target: &Self) -> (Self, Self) {
+        let (additions, removals) = self.dataset.diff(&target.dataset);
+        (
+            Self {
+                dataset: additions,
+            },
+            Self {
+                dataset: removals,
+            },
+        )
+    }
+
+    /// Applies a delta to this graph for ΔGate protocol.
+    ///
+    /// Applies additions (Δ⁺) and removals (Δ⁻) to transform this graph.
+    /// This is the inverse operation of `diff`.
+    ///
+    /// ```
+    /// use oxrdf::*;
+    ///
+    /// let mut g = Graph::new();
+    /// let ex1 = NamedNodeRef::new("http://example.com/1")?;
+    /// g.insert(TripleRef::new(ex1, ex1, ex1));
+    ///
+    /// let mut additions = Graph::new();
+    /// let ex2 = NamedNodeRef::new("http://example.com/2")?;
+    /// additions.insert(TripleRef::new(ex2, ex2, ex2));
+    ///
+    /// let mut removals = Graph::new();
+    /// removals.insert(TripleRef::new(ex1, ex1, ex1));
+    ///
+    /// g.apply_diff(&additions, &removals);
+    /// assert_eq!(g.len(), 1);
+    /// assert!(g.contains(TripleRef::new(ex2, ex2, ex2)));
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn apply_diff(&mut self, additions: &Self, removals: &Self) {
+        self.dataset.apply_diff(&additions.dataset, &removals.dataset);
+    }
+
     /// Canonicalizes the dataset by renaming blank nodes.
     ///
     /// Usage example ([Graph isomorphism](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
