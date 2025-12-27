@@ -19,10 +19,10 @@ use std::{fmt, str};
 /// assert_eq!("_:a122", BlankNode::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Ord, PartialOrd)]
 pub struct BlankNode(BlankNodeContent);
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Ord, PartialOrd)]
 enum BlankNodeContent {
     Named(String),
     Anonymous { id: [u8; 16], str: IdStr },
@@ -252,7 +252,7 @@ impl PartialEq<BlankNodeRef<'_>> for BlankNode {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, PartialOrd, Ord)]
 struct IdStr([u8; 32]);
 
 impl IdStr {

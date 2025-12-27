@@ -4,10 +4,11 @@ use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, Serializer};
+use std::cmp::Ordering;
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 pub enum NamedOrBlankNode {
@@ -175,6 +176,42 @@ pub enum Term {
     Literal(Literal),
     #[cfg(feature = "rdf-12")]
     Triple(Box<Triple>),
+}
+
+impl Ord for Term {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Define ordering priority: BlankNode < NamedNode < Literal < Triple
+        fn discriminant(term: &Term) -> u8 {
+            match term {
+                Term::BlankNode(_) => 0,
+                Term::NamedNode(_) => 1,
+                Term::Literal(_) => 2,
+                #[cfg(feature = "rdf-12")]
+                Term::Triple(_) => 3,
+            }
+        }
+
+        match discriminant(self).cmp(&discriminant(other)) {
+            Ordering::Equal => {
+                // Same variant, compare within
+                match (self, other) {
+                    (Self::BlankNode(a), Self::BlankNode(b)) => a.cmp(b),
+                    (Self::NamedNode(a), Self::NamedNode(b)) => a.cmp(b),
+                    (Self::Literal(a), Self::Literal(b)) => a.cmp(b),
+                    #[cfg(feature = "rdf-12")]
+                    (Self::Triple(a), Self::Triple(b)) => a.cmp(b),
+                    _ => unreachable!(),
+                }
+            }
+            other_ordering => other_ordering,
+        }
+    }
+}
+
+impl PartialOrd for Term {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Term {
@@ -533,7 +570,7 @@ impl<'a> From<TermRef<'a>> for Term {
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.

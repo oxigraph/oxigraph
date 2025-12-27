@@ -33,10 +33,10 @@ use std::fmt::Write;
 /// );
 /// # Result::<_, LanguageTagParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Ord, PartialOrd)]
 pub struct Literal(LiteralContent);
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Ord, PartialOrd)]
 enum LiteralContent {
     String(String),
     LanguageTaggedString {
@@ -804,7 +804,7 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
 
 /// A [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string) [base-direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction)
 #[cfg(feature = "rdf-12")]
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum BaseDirection {
     /// the initial text direction is set to left-to-right
