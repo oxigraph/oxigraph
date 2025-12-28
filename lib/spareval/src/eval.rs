@@ -4,7 +4,7 @@ use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::expression::{
     CustomFunctionRegistry, ExpressionEvaluator, ExpressionEvaluatorContext, NumericBinaryOperands,
-    build_expression_evaluator, partial_cmp_literals, try_build_internal_expression_evaluator,
+    build_expression_evaluator, partial_cmp, try_build_internal_expression_evaluator,
 };
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
@@ -2706,7 +2706,7 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
                     #[cfg(feature = "sparql-12")]
                     ExpressionTerm::Triple(_) => Ordering::Less,
                     _ => {
-                        if let Some(ord) = partial_cmp_literals(a, b) {
+                        if let Some(ord) = partial_cmp(a, b) {
                             ord
                         } else if let (Term::Literal(a), Term::Literal(b)) =
                             (a.clone().into(), b.clone().into())

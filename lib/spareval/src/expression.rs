@@ -3,9 +3,9 @@ use crate::ExpressionTriple;
 use crate::dataset::ExpressionTerm;
 use md5::{Digest, Md5};
 use oxiri::Iri;
-use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "sparql-12")]
-use oxrdf::{BaseDirection, NamedOrBlankNode};
+use oxrdf::BaseDirection;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Term, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, TimezoneOffset, YearMonthDuration};
@@ -1952,22 +1952,10 @@ fn triple_equals(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<bool> {
 }
 
 /// Comparison for <, >, <= and >= operators
-fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
+pub(crate) fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
     if a == b {
         return Some(Ordering::Equal);
     }
-    #[cfg(feature = "sparql-12")]
-    if let ExpressionTerm::Triple(a) = a {
-        return if let ExpressionTerm::Triple(b) = b {
-            partial_cmp_triples(a, b)
-        } else {
-            None
-        };
-    }
-    partial_cmp_literals(a, b)
-}
-
-pub fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
     match a {
         ExpressionTerm::StringLiteral(a) => {
             if let ExpressionTerm::StringLiteral(b) = b {
@@ -2125,28 +2113,6 @@ pub fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Or
         },
         _ => None,
     }
-}
-
-#[cfg(feature = "sparql-12")]
-fn partial_cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<Ordering> {
-    // We compare subjects
-    match (&a.subject, &b.subject) {
-        (NamedOrBlankNode::NamedNode(a), NamedOrBlankNode::NamedNode(b)) => {
-            if a != b {
-                return None;
-            }
-        }
-        (NamedOrBlankNode::BlankNode(a), NamedOrBlankNode::BlankNode(b)) => {
-            if a != b {
-                return None;
-            }
-        }
-        _ => return None,
-    }
-    if a.predicate != b.predicate {
-        return None;
-    }
-    partial_cmp(&a.object, &b.object)
 }
 
 pub enum NumericBinaryOperands {
