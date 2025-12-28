@@ -19,7 +19,7 @@ use std::{fmt, str};
 /// assert_eq!("_:a122", BlankNode::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct BlankNode(BlankNodeContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash, Ord, PartialOrd)]
@@ -120,6 +120,20 @@ impl Default for BlankNode {
                 });
             }
         }
+    }
+}
+
+impl PartialOrd for BlankNode {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BlankNode {
+    #[inline]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
     }
 }
 
