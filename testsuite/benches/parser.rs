@@ -141,7 +141,7 @@ fn bench_parse_jsonld_with_jsonld(c: &mut Criterion) {
     parse_bench(
         c,
         "oxjsonld",
-        "jsond",
+        "jsonld",
         RdfFormat::JsonLd {
             profile: JsonLdProfileSet::empty(),
         },
@@ -153,7 +153,7 @@ fn bench_parse_streaming_jsonld_with_jsonld(c: &mut Criterion) {
     parse_bench(
         c,
         "oxjsonld",
-        "streaming jsond",
+        "streaming jsonld",
         RdfFormat::JsonLd {
             profile: JsonLdProfileSet::empty(),
         },
@@ -165,7 +165,7 @@ fn bench_parse_streaming_jsonld_with_streaming_jsonld(c: &mut Criterion) {
     parse_bench(
         c,
         "oxjsonld streaming",
-        "streaming jsond",
+        "streaming jsonld",
         RdfFormat::JsonLd {
             profile: JsonLdProfile::Streaming.into(),
         },
