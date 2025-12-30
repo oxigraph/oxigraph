@@ -871,12 +871,12 @@ impl InternalJsonLdParser {
     }
 
     fn base_iri(&self) -> Option<&str> {
-        Some(self.expansion.context().base_iri.as_ref()?.as_str())
+        Some(self.expansion.active_context().base_iri.as_ref()?.as_str())
     }
 
     fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
         JsonLdPrefixesIter {
-            term_definitions: self.expansion.context().term_definitions.iter(),
+            term_definitions: self.expansion.active_context().term_definitions.iter(),
             lenient: self.to_rdf.lenient,
         }
     }

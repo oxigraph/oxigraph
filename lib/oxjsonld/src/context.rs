@@ -1267,6 +1267,8 @@ impl JsonLdContextProcessor {
     }
 
     /// [IRI Expansion](https://www.w3.org/TR/json-ld-api/#iri-expansion)
+    ///
+    /// Warning: take care of synchronizing this implementation with the full one in [`JsonLdExpansionConverter`].
     pub fn expand_iri<'a>(
         &self,
         active_context: &mut JsonLdContext,
@@ -1437,7 +1439,7 @@ pub fn has_keyword_form(value: &str) -> bool {
         .is_some_and(|suffix| !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_alphabetic()))
 }
 
-fn is_keyword(value: &str) -> bool {
+pub fn is_keyword(value: &str) -> bool {
     matches!(
         value,
         "@base"
