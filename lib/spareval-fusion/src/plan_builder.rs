@@ -13,13 +13,13 @@ use datafusion::common::{
 use datafusion::datasource::cte_worktable::CteWorkTable;
 use datafusion::datasource::{DefaultTableSource, TableProvider};
 use datafusion::functions::core::named_struct;
-use datafusion::functions::expr_fn::coalesce;
+use datafusion::functions::expr_fn::{coalesce, r#struct};
 use datafusion::functions_aggregate::count::{count, count_all, count_distinct, count_udaf};
+use datafusion::functions_nested::expr_fn::make_array;
 use datafusion::logical_expr::expr::{AggregateFunction as DFAggregateFunction, Sort};
 use datafusion::logical_expr::{
     Case, Expr, LogicalPlanBuilder, TableSource, and, exists, lit, not, or,
 };
-use datafusion::prelude::make_array;
 use oxrdf::vocab::xsd;
 use oxrdf::{Literal, Term};
 use spargebra::Query;
@@ -528,17 +528,19 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                                     (
                                         Expr::AggregateFunction(DFAggregateFunction::new_udf(
                                             count_udaf(),
-                                            plan.schema()
-                                                .iter()
-                                                .filter_map(|c| {
-                                                    let expr = Column::from(c).into();
-                                                    if group_expr.contains(&expr) {
-                                                        None // Already in the group clause, no need to count again
-                                                    } else {
-                                                        Some(expr)
-                                                    }
-                                                })
-                                                .collect(),
+                                            vec![r#struct(
+                                                plan.schema()
+                                                    .iter()
+                                                    .filter_map(|c| {
+                                                        let expr = Column::from(c).into();
+                                                        if group_expr.contains(&expr) {
+                                                            None // Already in the group clause, no need to count again
+                                                        } else {
+                                                            Some(expr)
+                                                        }
+                                                    })
+                                                    .collect(),
+                                            )],
                                             true,
                                             None,
                                             Vec::new(),
@@ -1404,11 +1406,17 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                     None,
                 ))
             }
-            Expression::Coalesce(args) => coalesce(
-                args.iter()
-                    .map(|arg| self.expression(arg, schema, context))
-                    .collect::<Result<Vec<_>>>()?,
-            ),
+            Expression::Coalesce(args) => {
+                if args.is_empty() {
+                    Expr::default()
+                } else {
+                    coalesce(
+                        args.iter()
+                            .map(|arg| self.expression(arg, schema, context))
+                            .collect::<Result<Vec<_>>>()?,
+                    )
+                }
+            }
             Expression::Add(left, right) => add(
                 self.dataset.expression_term_encoder(),
                 self.expression(left, schema, context)?,
