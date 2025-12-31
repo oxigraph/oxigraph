@@ -37,7 +37,7 @@ pub struct JsonLdContext {
     pub default_language: Option<String>,
     pub default_direction: Option<&'static str>,
     pub term_definitions: HashMap<String, JsonLdTermDefinition>,
-    pub previous_context: Option<Box<JsonLdContext>>,
+    pub previous_context: Option<Arc<JsonLdContext>>,
 }
 
 impl JsonLdContext {
@@ -114,13 +114,16 @@ impl JsonLdContextProcessor {
                 if let JsonNode::Boolean(new) = propagate_node {
                     propagate = *new;
                 } else {
-                    errors.push(JsonLdSyntaxError::msg("@propagate value must be a boolean"))
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@propagate value must be a boolean",
+                        JsonLdErrorCode::InvalidPropagateValue,
+                    ))
                 }
             }
         }
         // 3)
         if !propagate && result.previous_context.is_none() {
-            result.previous_context = Some(Box::new(active_context.clone()));
+            result.previous_context = Some(Arc::new(active_context.clone()));
         }
         // 4)
         let local_context = if let JsonNode::Array(c) = local_context {
@@ -142,7 +145,12 @@ impl JsonLdContextProcessor {
                         }
                     }
                     // 5.1.2)
-                    result = JsonLdContext::new_empty(active_context.original_base_url.clone());
+                    let mut new_result =
+                        JsonLdContext::new_empty(active_context.original_base_url.clone());
+                    if !propagate {
+                        new_result.previous_context = Some(Arc::new(result));
+                    }
+                    result = new_result;
                     // 5.1.3)
                     continue;
                 }
