@@ -897,6 +897,7 @@ enum JsonLdToRdfState {
     },
     List(Option<NamedOrBlankNode>),
     Graph(Option<GraphName>),
+    Included,
 }
 
 struct JsonLdToRdfConverter {
@@ -992,6 +993,10 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::Object(id));
                     self.state.push(JsonLdToRdfState::Graph(graph_name));
                 }
+                JsonLdEvent::StartIncluded => {
+                    self.state.push(JsonLdToRdfState::Object(id));
+                    self.state.push(JsonLdToRdfState::Included);
+                }
                 JsonLdEvent::StartObject { .. }
                 | JsonLdEvent::Value { .. }
                 | JsonLdEvent::EndProperty
@@ -999,7 +1004,8 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::StartList
                 | JsonLdEvent::EndList
                 | JsonLdEvent::StartSet
-                | JsonLdEvent::EndSet => unreachable!(),
+                | JsonLdEvent::EndSet
+                | JsonLdEvent::EndIncluded => unreachable!(),
             },
             JsonLdToRdfState::Property { .. } => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -1037,7 +1043,9 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::EndObject
                 | JsonLdEvent::StartGraph
                 | JsonLdEvent::EndGraph
-                | JsonLdEvent::EndList => unreachable!(),
+                | JsonLdEvent::EndList
+                | JsonLdEvent::StartIncluded
+                | JsonLdEvent::EndIncluded => unreachable!(),
             },
             JsonLdToRdfState::List(current_node) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -1093,7 +1101,9 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::StartGraph
-                | JsonLdEvent::EndGraph => unreachable!(),
+                | JsonLdEvent::EndGraph
+                | JsonLdEvent::StartIncluded
+                | JsonLdEvent::EndIncluded => unreachable!(),
             },
             JsonLdToRdfState::Graph(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -1119,7 +1129,38 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::StartList
                 | JsonLdEvent::EndList
                 | JsonLdEvent::StartSet
-                | JsonLdEvent::EndSet => unreachable!(),
+                | JsonLdEvent::EndSet
+                | JsonLdEvent::StartIncluded
+                | JsonLdEvent::EndIncluded => unreachable!(),
+            },
+            JsonLdToRdfState::Included => match event {
+                JsonLdEvent::StartObject { types } => {
+                    self.state.push(JsonLdToRdfState::Included);
+                    self.state.push(JsonLdToRdfState::StartObject {
+                        types: types
+                            .into_iter()
+                            .filter_map(|t| self.convert_named_or_blank_node(t))
+                            .collect(),
+                        buffer: Vec::new(),
+                        nesting: 0,
+                    });
+                }
+                JsonLdEvent::Value { .. } => {
+                    // Illegal but might happen in "lenient" mode
+                    self.state.push(JsonLdToRdfState::Included);
+                }
+                JsonLdEvent::EndIncluded => (),
+                JsonLdEvent::StartGraph
+                | JsonLdEvent::EndGraph
+                | JsonLdEvent::StartProperty { .. }
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::Id(_)
+                | JsonLdEvent::EndObject
+                | JsonLdEvent::StartList
+                | JsonLdEvent::EndList
+                | JsonLdEvent::StartSet
+                | JsonLdEvent::EndSet
+                | JsonLdEvent::StartIncluded => unreachable!(),
             },
         }
     }
@@ -1288,7 +1329,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdToRdfState::Property { .. } => (),
                 JsonLdToRdfState::List(id) => return id.as_ref(),
-                JsonLdToRdfState::Graph(_) => {
+                JsonLdToRdfState::Graph(_) | JsonLdToRdfState::Included => {
                     return None;
                 }
             }
@@ -1304,7 +1345,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
                 JsonLdToRdfState::List(_) => return Some((rdf::FIRST, false)),
-                JsonLdToRdfState::Graph(_) => {
+                JsonLdToRdfState::Graph(_) | JsonLdToRdfState::Included => {
                     return None;
                 }
             }
@@ -1330,7 +1371,8 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::StartObject { .. }
                 | JsonLdToRdfState::Object(_)
                 | JsonLdToRdfState::Property { .. }
-                | JsonLdToRdfState::List(_) => (),
+                | JsonLdToRdfState::List(_)
+                | JsonLdToRdfState::Included => (),
             }
         }
         None
