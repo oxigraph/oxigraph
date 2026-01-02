@@ -190,16 +190,7 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ten06",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc037",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc038",
-            // @included
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin01",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin02",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin03",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin04",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin05",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin06",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin07",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin08",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin09",
             // @container @id
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm001",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm002",

@@ -97,7 +97,8 @@ fuzz_target!(|data: &[u8]| {
         );
     }
 
-    if bnodes_count <= 4 {
+    if bnodes_count <= 4 && !String::from_utf8_lossy(data).contains("\"@included\"") {
+        // @included is ignored when processing mode is json-ld-1.0, leading to silent different outputs...
         quads_lenient_1_1.canonicalize(CanonicalizationAlgorithm::Unstable);
         quads_lenient_1_0.canonicalize(CanonicalizationAlgorithm::Unstable);
         assert_eq!(
