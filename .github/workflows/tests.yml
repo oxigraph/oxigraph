@@ -481,9 +481,11 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        build_args:
-          - "-p oxigraph --features http-client-native-tls"
-          - "-p oxigraph-testsuite"
+        include:
+          - package: "oxigraph"
+            features: "http-client-native-tls"
+          - package: "oxigraph-testsuite"
+            features: ""
     steps:
       - uses: actions/checkout@v6
         with:
@@ -491,7 +493,9 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-codspeed }
-      - run: cargo codspeed build ${{ matrix.build_args }}
+      - run: cargo add --dev --package oxigraph --rename criterion codspeed-criterion-compat@4
+      - run: cargo add --dev --package oxigraph-testsuite --rename criterion codspeed-criterion-compat@4
+      - run: cargo codspeed build -p ${{ matrix.package }} ${{ matrix.features && '--features' || '' }} ${{ matrix.features }}
       - uses: CodSpeedHQ/action@v4
         with:
           run: cargo codspeed run

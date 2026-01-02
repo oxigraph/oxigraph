@@ -25,7 +25,7 @@ spareval.workspace = true
 time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
-codspeed-criterion-compat.workspace = true
+criterion.workspace = true
 
 [lints]
 workspace = true

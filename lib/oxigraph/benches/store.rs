@@ -1,7 +1,7 @@
 #![allow(clippy::panic)]
 
 use bzip2::read::MultiBzDecoder;
-use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use oxhttp::model::{Request, Uri};
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
