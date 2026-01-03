@@ -108,6 +108,7 @@ enum JsonLdExpansionState {
         from_start: bool,
         reverse: bool,
         in_included: bool,
+        nesting: usize,
     },
     ObjectId {
         active_context: Arc<JsonLdContext>,
@@ -115,11 +116,13 @@ enum JsonLdExpansionState {
         id: Option<String>,
         from_start: bool,
         reverse: bool,
+        nesting: usize,
     },
     Object {
         active_context: Arc<JsonLdContext>,
         in_property: bool,
         has_emitted_id: bool,
+        nesting: usize,
     },
     ReverseStart {
         active_context: Arc<JsonLdContext>,
@@ -170,6 +173,13 @@ enum JsonLdExpansionState {
         is_array: bool,
     },
     Included,
+    NestStart {
+        active_context: Arc<JsonLdContext>,
+        parent_active_context: Arc<JsonLdContext>,
+        has_emitted_id: bool,
+        nesting: usize,
+        array_count: usize,
+    },
     Skip {
         is_array: bool,
     },
@@ -862,6 +872,7 @@ impl JsonLdExpansionConverter {
                                     from_start: true,
                                     reverse,
                                     in_included,
+                                    nesting: 0,
                                 });
                             }
                             "@value" | "@language" => {
@@ -910,6 +921,7 @@ impl JsonLdExpansionConverter {
                                     id,
                                     from_start: true,
                                     reverse,
+                                    nesting: 0,
                                 });
                             }
                             "@graph"
@@ -959,6 +971,7 @@ impl JsonLdExpansionConverter {
                                     active_context,
                                     in_property: false,
                                     has_emitted_id,
+                                    nesting: 0,
                                 });
                                 self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
@@ -1009,6 +1022,7 @@ impl JsonLdExpansionConverter {
                 from_start,
                 reverse,
                 in_included,
+                nesting,
             } => {
                 match event {
                     JsonEvent::Null
@@ -1031,6 +1045,7 @@ impl JsonLdExpansionConverter {
                                 from_start,
                                 reverse,
                                 in_included,
+                                nesting,
                             });
                         } else {
                             self.state.push(if from_start {
@@ -1048,6 +1063,7 @@ impl JsonLdExpansionConverter {
                                     active_context,
                                     in_property: false,
                                     has_emitted_id: id.is_some(),
+                                    nesting,
                                 }
                             });
                         }
@@ -1069,6 +1085,7 @@ impl JsonLdExpansionConverter {
                                 from_start,
                                 reverse,
                                 in_included,
+                                nesting,
                             });
                         } else {
                             (active_context, new_types) =
@@ -1090,6 +1107,7 @@ impl JsonLdExpansionConverter {
                                     active_context,
                                     in_property: false,
                                     has_emitted_id: id.is_some(),
+                                    nesting,
                                 });
                             }
                         }
@@ -1105,6 +1123,7 @@ impl JsonLdExpansionConverter {
                             from_start,
                             reverse,
                             in_included,
+                            nesting,
                         });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1135,6 +1154,7 @@ impl JsonLdExpansionConverter {
                                 active_context,
                                 in_property: false,
                                 has_emitted_id: id.is_some(),
+                                nesting,
                             });
                         }
                     }
@@ -1149,6 +1169,7 @@ impl JsonLdExpansionConverter {
                 id,
                 from_start,
                 reverse,
+                nesting,
             } => {
                 if let JsonEvent::String(new_id) = event {
                     if from_start {
@@ -1176,6 +1197,7 @@ impl JsonLdExpansionConverter {
                             active_context,
                             in_property: false,
                             has_emitted_id: true,
+                            nesting,
                         })
                     }
                 } else {
@@ -1198,6 +1220,7 @@ impl JsonLdExpansionConverter {
                             active_context,
                             in_property: false,
                             has_emitted_id: true,
+                            nesting,
                         }
                     });
                     self.state
@@ -1209,13 +1232,16 @@ impl JsonLdExpansionConverter {
                 active_context,
                 in_property,
                 has_emitted_id,
+                nesting,
             } => {
                 if in_property {
                     results.push(JsonLdEvent::EndProperty);
                 }
                 match event {
                     JsonEvent::EndObject => {
-                        results.push(JsonLdEvent::EndObject);
+                        if nesting == 0 {
+                            results.push(JsonLdEvent::EndObject);
+                        }
                     }
                     JsonEvent::ObjectKey(key) => {
                         if let Some(iri) =
@@ -1229,6 +1255,7 @@ impl JsonLdExpansionConverter {
                                             active_context,
                                             in_property: false,
                                             has_emitted_id: true,
+                                            nesting,
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1239,6 +1266,7 @@ impl JsonLdExpansionConverter {
                                             id: None,
                                             from_start: false,
                                             reverse: false,
+                                            nesting,
                                         });
                                     }
                                 }
@@ -1247,6 +1275,7 @@ impl JsonLdExpansionConverter {
                                         active_context: Arc::clone(&active_context),
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state.push(JsonLdExpansionState::Graph);
                                     self.state.push(JsonLdExpansionState::Element {
@@ -1268,15 +1297,18 @@ impl JsonLdExpansionConverter {
                                         active_context,
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 "@type" => {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type must be the first key of an object or right after @context",
-                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    ));
+                                    if self.streaming || nesting == 0 {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "@type must be the first key of an object or right after @context",
+                                            JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                        ));
+                                    }
                                     self.state.push(JsonLdExpansionState::ObjectType {
                                         types: Vec::new(),
                                         new_types: Vec::new(),
@@ -1287,6 +1319,7 @@ impl JsonLdExpansionConverter {
                                         from_start: false,
                                         reverse: false,
                                         in_included: false,
+                                        nesting,
                                     });
                                 }
                                 "@index" => {
@@ -1294,6 +1327,7 @@ impl JsonLdExpansionConverter {
                                         active_context,
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state.push(JsonLdExpansionState::Index);
                                 }
@@ -1302,6 +1336,7 @@ impl JsonLdExpansionConverter {
                                         active_context: Arc::clone(&active_context),
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state.push(JsonLdExpansionState::ReverseStart {
                                         active_context,
@@ -1312,6 +1347,7 @@ impl JsonLdExpansionConverter {
                                         active_context: Arc::clone(&active_context),
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
 
                                     if self.context_processor.processing_mode
@@ -1332,6 +1368,29 @@ impl JsonLdExpansionConverter {
                                         });
                                     }
                                 }
+                                "@nest" => {
+                                    let mut nest_active_context = Arc::clone(&active_context);
+                                    if let Some(previous_context) = &active_context.previous_context
+                                    {
+                                        nest_active_context = Arc::clone(previous_context);
+                                    }
+                                    if let Some(property_scoped_context) = self.new_scoped_context(
+                                        &active_context,
+                                        &key,
+                                        true,
+                                        true,
+                                        errors,
+                                    ) {
+                                        nest_active_context = Arc::new(property_scoped_context);
+                                    }
+                                    self.state.push(JsonLdExpansionState::NestStart {
+                                        active_context: nest_active_context,
+                                        parent_active_context: active_context,
+                                        has_emitted_id,
+                                        nesting,
+                                        array_count: 0,
+                                    });
+                                }
                                 _ if has_keyword_form(&iri) => {
                                     errors.push(if iri == "@list" || iri == "@set" {
                                         JsonLdSyntaxError::msg_and_code(
@@ -1343,6 +1402,11 @@ impl JsonLdExpansionConverter {
                                             "@context must be the first key of an object",
                                             JsonLdErrorCode::InvalidStreamingKeyOrder,
                                         )
+                                    } else if iri == "@value" && nesting > 0 {
+                                        JsonLdSyntaxError::msg_and_code(
+                                            "@value is not allowed in @nest",
+                                            JsonLdErrorCode::InvalidNestValue,
+                                        )
                                     } else {
                                         JsonLdSyntaxError::msg(format!(
                                             "Unsupported JSON-LD keyword: {iri}"
@@ -1352,6 +1416,7 @@ impl JsonLdExpansionConverter {
                                         active_context,
                                         in_property: false,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1370,6 +1435,7 @@ impl JsonLdExpansionConverter {
                                         active_context: Arc::clone(&active_context),
                                         in_property: true,
                                         has_emitted_id,
+                                        nesting,
                                     });
                                     self.state.push(JsonLdExpansionState::Element {
                                         active_property: Some(key.clone().into()),
@@ -1390,6 +1456,7 @@ impl JsonLdExpansionConverter {
                                 active_context,
                                 in_property: false,
                                 has_emitted_id,
+                                nesting,
                             });
                             self.state
                                 .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1990,6 +2057,81 @@ impl JsonLdExpansionConverter {
                 results.push(JsonLdEvent::EndIncluded);
                 self.convert_event(event, results, errors)
             }
+            JsonLdExpansionState::NestStart {
+                active_context,
+                parent_active_context,
+                has_emitted_id,
+                nesting,
+                array_count,
+            } => match event {
+                JsonEvent::StartObject => {
+                    self.state.push(if array_count > 0 {
+                        JsonLdExpansionState::NestStart {
+                            active_context: Arc::clone(&active_context),
+                            parent_active_context,
+                            has_emitted_id,
+                            nesting,
+                            array_count,
+                        }
+                    } else {
+                        JsonLdExpansionState::Object {
+                            active_context: parent_active_context,
+                            in_property: false,
+                            has_emitted_id,
+                            nesting,
+                        }
+                    });
+                    self.state.push(JsonLdExpansionState::Object {
+                        active_context,
+                        in_property: false,
+                        has_emitted_id,
+                        nesting: nesting + 1,
+                    });
+                }
+                JsonEvent::StartArray => {
+                    self.state.push(JsonLdExpansionState::NestStart {
+                        active_context,
+                        parent_active_context,
+                        has_emitted_id,
+                        nesting,
+                        array_count: array_count + 1,
+                    });
+                }
+                JsonEvent::EndArray => {
+                    self.state.push(if array_count == 1 {
+                        JsonLdExpansionState::Object {
+                            active_context: parent_active_context,
+                            in_property: false,
+                            has_emitted_id,
+                            nesting,
+                        }
+                    } else {
+                        JsonLdExpansionState::NestStart {
+                            active_context,
+                            parent_active_context,
+                            has_emitted_id,
+                            nesting,
+                            array_count: array_count - 1,
+                        }
+                    });
+                }
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
+                JsonEvent::String(_)
+                | JsonEvent::Number(_)
+                | JsonEvent::Boolean(_)
+                | JsonEvent::Null => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@nest value must be a JSON object",
+                        JsonLdErrorCode::InvalidNestValue,
+                    ));
+                    self.state.push(JsonLdExpansionState::Object {
+                        active_context,
+                        in_property: false,
+                        has_emitted_id,
+                        nesting: 0,
+                    });
+                }
+            },
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -2337,7 +2479,8 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::ListOrSetContainer { active_context, .. }
                 | JsonLdExpansionState::IndexContainer { active_context, .. }
                 | JsonLdExpansionState::LanguageContainer { active_context, .. }
-                | JsonLdExpansionState::LanguageContainerValue { active_context, .. } => {
+                | JsonLdExpansionState::LanguageContainerValue { active_context, .. }
+                | JsonLdExpansionState::NestStart { active_context, .. } => {
                     return active_context;
                 }
                 JsonLdExpansionState::Index
