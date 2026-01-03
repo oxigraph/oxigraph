@@ -948,12 +948,7 @@ impl JsonLdToRdfConverter {
                             }
                         }
                     }
-                    JsonLdEvent::Type(_) => {
-                        buffer.push(event);
-                        self.state
-                            .push(JsonLdToRdfState::StartObject { buffer, nesting });
-                    }
-                    JsonLdEvent::StartObject { .. } => {
+                    JsonLdEvent::StartObject => {
                         buffer.push(event);
                         self.state.push(JsonLdToRdfState::StartObject {
                             buffer,
@@ -969,7 +964,8 @@ impl JsonLdToRdfConverter {
             }
             JsonLdToRdfState::Object(id) => match event {
                 JsonLdEvent::Id(_) => {
-                    unreachable!("Should have buffered before @id")
+                    // TODO: add a warning?
+                    self.state.push(JsonLdToRdfState::Object(id));
                 }
                 JsonLdEvent::Type(t) => {
                     if let (Some(s), Some(o), Some(g)) = (
@@ -1002,7 +998,7 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::Object(id));
                     self.state.push(JsonLdToRdfState::Included);
                 }
-                JsonLdEvent::StartObject { .. }
+                JsonLdEvent::StartObject
                 | JsonLdEvent::Value { .. }
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::EndGraph
