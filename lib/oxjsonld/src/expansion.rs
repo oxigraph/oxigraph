@@ -88,6 +88,8 @@ enum JsonLdExpansionState {
         active_context: Arc<JsonLdContext>,
         reverse: bool,
         in_included: bool,
+        is_array: bool,
+        container: &'static [&'static str],
     },
     ObjectStart {
         types: Vec<String>,
@@ -269,7 +271,7 @@ impl JsonLdExpansionConverter {
         match state {
             JsonLdExpansionState::Element {
                 active_property,
-                active_context,
+                mut active_context,
                 is_array,
                 container,
                 reverse,
@@ -387,26 +389,54 @@ impl JsonLdExpansionConverter {
                                 .push(JsonLdExpansionState::LanguageContainer { active_context });
                             return;
                         }
-                        self.state.push(if self.streaming {
-                            JsonLdExpansionState::ObjectOrContainerStartStreaming {
-                                active_property,
-                                active_context,
-                                container: if is_array { &[] } else { container },
-                                reverse,
-                                in_included,
-                            }
-                        } else {
-                            JsonLdExpansionState::ObjectOrContainerStart {
-                                buffer: Vec::new(),
-                                depth: 1,
-                                current_key: None,
-                                active_property,
-                                active_context,
-                                container: if is_array { &[] } else { container },
-                                reverse,
-                                in_included,
-                            }
-                        });
+                        self.state
+                            .push(if active_context.previous_context.is_some() {
+                                // We need to decide if we go back to the previous context or not
+                                JsonLdExpansionState::ObjectStartIsSingleIdOrValue {
+                                    buffer: Vec::new(),
+                                    depth: 1,
+                                    seen_type: false,
+                                    seen_id: false,
+                                    active_property,
+                                    active_context: Arc::clone(&active_context),
+                                    reverse,
+                                    in_included,
+                                    is_array,
+                                    container,
+                                }
+                            } else {
+                                if let Some(active_property) = &active_property {
+                                    if let Some(property_scoped_context) = self.new_scoped_context(
+                                        &active_context,
+                                        active_property,
+                                        true,
+                                        true,
+                                        errors,
+                                    ) {
+                                        active_context = Arc::new(property_scoped_context);
+                                    }
+                                }
+                                if self.streaming {
+                                    JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                                        active_property,
+                                        active_context,
+                                        container: if is_array { &[] } else { container },
+                                        reverse,
+                                        in_included,
+                                    }
+                                } else {
+                                    JsonLdExpansionState::ObjectOrContainerStart {
+                                        buffer: Vec::new(),
+                                        depth: 1,
+                                        current_key: None,
+                                        active_property,
+                                        active_context,
+                                        container: if is_array { &[] } else { container },
+                                        reverse,
+                                        in_included,
+                                    }
+                                }
+                            });
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
                         unreachable!()
@@ -539,7 +569,7 @@ impl JsonLdExpansionConverter {
             }
             JsonLdExpansionState::ObjectOrContainerStartStreaming {
                 active_property,
-                mut active_context,
+                active_context,
                 container,
                 reverse,
                 in_included,
@@ -647,43 +677,15 @@ impl JsonLdExpansionConverter {
                                     active_context: Arc::clone(&active_context),
                                 });
                             }
-                            self.state
-                                .push(if active_context.previous_context.is_some() {
-                                    // We need to decide if we go back to the previous context or not
-                                    JsonLdExpansionState::ObjectStartIsSingleIdOrValue {
-                                        buffer: Vec::new(),
-                                        depth: 1,
-                                        seen_type: false,
-                                        seen_id: false,
-                                        active_property,
-                                        active_context,
-                                        reverse,
-                                        in_included,
-                                    }
-                                } else {
-                                    if let Some(active_property) = &active_property {
-                                        if let Some(property_scoped_context) = self
-                                            .new_scoped_context(
-                                                &active_context,
-                                                active_property,
-                                                true,
-                                                true,
-                                                errors,
-                                            )
-                                        {
-                                            active_context = Arc::new(property_scoped_context);
-                                        }
-                                    }
-                                    JsonLdExpansionState::ObjectStart {
-                                        types: Vec::new(),
-                                        id: None,
-                                        seen_id: false,
-                                        active_property,
-                                        active_context,
-                                        reverse,
-                                        in_included,
-                                    }
-                                });
+                            self.state.push(JsonLdExpansionState::ObjectStart {
+                                types: Vec::new(),
+                                id: None,
+                                seen_id: false,
+                                active_property,
+                                active_context,
+                                reverse,
+                                in_included,
+                            });
                             self.convert_event(JsonEvent::ObjectKey(key), results, errors)
                         }
                     }
@@ -752,6 +754,8 @@ impl JsonLdExpansionConverter {
                 mut active_context,
                 reverse,
                 in_included,
+                is_array,
+                container,
                 mut seen_id,
                 mut seen_type,
             } => {
@@ -762,6 +766,7 @@ impl JsonLdExpansionConverter {
                             self.expand_iri(&active_context, key.as_ref().into(), false, true)
                         {
                             match iri.as_ref() {
+                                "@index" | "@context" => (),
                                 "@type" => {
                                     seen_type = true;
                                 }
@@ -815,14 +820,25 @@ impl JsonLdExpansionConverter {
                             active_context = Arc::new(property_scoped_context);
                         }
                     }
-                    self.state.push(JsonLdExpansionState::ObjectStart {
-                        types: Vec::new(),
-                        id: None,
-                        seen_id: false,
-                        active_property,
-                        active_context,
-                        reverse,
-                        in_included,
+                    self.state.push(if self.streaming {
+                        JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                            active_property,
+                            active_context,
+                            container: if is_array { &[] } else { container },
+                            reverse,
+                            in_included,
+                        }
+                    } else {
+                        JsonLdExpansionState::ObjectOrContainerStart {
+                            buffer: Vec::new(),
+                            depth: 1,
+                            current_key: None,
+                            active_property,
+                            active_context,
+                            container: if is_array { &[] } else { container },
+                            reverse,
+                            in_included,
+                        }
                     });
                     for event in buffer {
                         self.convert_event(event, results, errors);
@@ -838,6 +854,8 @@ impl JsonLdExpansionConverter {
                             active_context,
                             reverse,
                             in_included,
+                            is_array,
+                            container,
                         });
                 }
             }
