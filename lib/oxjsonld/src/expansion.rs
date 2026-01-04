@@ -14,9 +14,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::{Arc, Mutex};
 
 pub enum JsonLdEvent {
-    StartObject {
-        types: Vec<String>,
-    },
+    StartObject,
     EndObject,
     StartProperty {
         name: String,
@@ -24,6 +22,7 @@ pub enum JsonLdEvent {
     },
     EndProperty,
     Id(String),
+    Type(String),
     Value {
         value: JsonLdValue,
         r#type: Option<String>,
@@ -680,7 +679,7 @@ impl JsonLdExpansionConverter {
                 }
                 JsonEvent::EndObject => {
                     // Empty object
-                    results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                    results.push(JsonLdEvent::StartObject);
                     results.push(JsonLdEvent::EndObject);
                 }
                 _ => unreachable!("Inside of an object"),
@@ -938,7 +937,7 @@ impl JsonLdExpansionConverter {
                                 self.state.push(JsonLdExpansionState::Index);
                             }
                             _ => {
-                                results.push(JsonLdEvent::StartObject { types });
+                                results.push(JsonLdEvent::StartObject);
                                 let has_emitted_id = id.is_some();
                                 if let Some(id) = id {
                                     if let Some(id) =
@@ -953,6 +952,7 @@ impl JsonLdExpansionConverter {
                                         }
                                     }
                                 }
+                                results.extend(types.into_iter().map(JsonLdEvent::Type));
                                 self.state.push(JsonLdExpansionState::Object {
                                     active_context,
                                     in_property: false,
@@ -978,7 +978,7 @@ impl JsonLdExpansionConverter {
                 JsonEvent::EndObject => {
                     if let Some(id) = id {
                         if let Some(id) = self.expand_iri(&active_context, id.into(), true, false) {
-                            results.push(JsonLdEvent::StartObject { types });
+                            results.push(JsonLdEvent::StartObject);
                             if has_keyword_form(&id) {
                                 errors.push(JsonLdSyntaxError::msg(
                                     "@id value must be an IRI or a blank node",
@@ -986,10 +986,12 @@ impl JsonLdExpansionConverter {
                             } else {
                                 results.push(JsonLdEvent::Id(id.into()));
                             }
+                            results.extend(types.into_iter().map(JsonLdEvent::Type));
                             results.push(JsonLdEvent::EndObject);
                         }
                     } else {
-                        results.push(JsonLdEvent::StartObject { types });
+                        results.push(JsonLdEvent::StartObject);
+                        results.extend(types.into_iter().map(JsonLdEvent::Type));
                         results.push(JsonLdEvent::EndObject);
                     }
                 }
@@ -1157,24 +1159,22 @@ impl JsonLdExpansionConverter {
                             reverse,
                             in_included: false,
                         });
-                    } else if let Some(new_id) =
-                        self.expand_iri(&active_context, new_id, true, false)
-                    {
-                        if has_keyword_form(&new_id) {
-                            errors.push(JsonLdSyntaxError::msg(
-                                "@id value must be an IRI or a blank node",
-                            ));
-                        } else {
-                            results.push(JsonLdEvent::Id(new_id.into()));
+                    } else {
+                        if let Some(new_id) = self.expand_iri(&active_context, new_id, true, false)
+                        {
+                            if has_keyword_form(&new_id) {
+                                errors.push(JsonLdSyntaxError::msg(
+                                    "@id value must be an IRI or a blank node",
+                                ));
+                            } else {
+                                results.push(JsonLdEvent::Id(new_id.into()));
+                            }
                         }
                         self.state.push(JsonLdExpansionState::Object {
                             active_context,
                             in_property: false,
                             has_emitted_id: true,
                         })
-                    } else {
-                        self.state
-                            .push(JsonLdExpansionState::Skip { is_array: false });
                     }
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -2205,7 +2205,7 @@ impl JsonLdExpansionConverter {
                                         "@id value must be an IRI or a blank node",
                                     ));
                                 } else {
-                                    results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                                    results.push(JsonLdEvent::StartObject);
                                     results.push(JsonLdEvent::Id(id.into()));
                                     results.push(JsonLdEvent::EndObject);
                                 }
@@ -2225,7 +2225,7 @@ impl JsonLdExpansionConverter {
                                         "@id value must be an IRI or a blank node",
                                     ));
                                 } else {
-                                    results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                                    results.push(JsonLdEvent::StartObject);
                                     results.push(JsonLdEvent::Id(id.into()));
                                     results.push(JsonLdEvent::EndObject);
                                 }
