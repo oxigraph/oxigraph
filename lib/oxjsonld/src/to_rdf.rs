@@ -1409,7 +1409,7 @@ fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonN
 
     // We serialize
     let mut buffer = String::with_capacity(value.len());
-    if is_negative {
+    if is_negative && !(decimal_part.is_empty() && integer_part == "0") {
         buffer.push('-');
     }
     let digits_count = i64::try_from(integer_part.len() + decimal_part.len()).ok()?;
@@ -1524,7 +1524,7 @@ mod tests {
         );
         assert_eq!(
             canonicalize_json_number("-0", true),
-            Some(RdfJsonNumber::Double("-0.0E0".into()))
+            Some(RdfJsonNumber::Double("0.0E0".into()))
         );
         assert_eq!(
             canonicalize_json_number("0E-10", true),

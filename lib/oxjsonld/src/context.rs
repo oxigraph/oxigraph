@@ -4,7 +4,6 @@ use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::error::Error;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::slice;
@@ -224,7 +223,6 @@ impl JsonLdContextProcessor {
                 // 5.4)
                 JsonNode::Object(context) => context,
             };
-            let mut protected = false;
             // 5.5)
             if let Some(value) = context.remove("@version") {
                 // 5.5.1)
@@ -307,9 +305,7 @@ impl JsonLdContextProcessor {
                 }
                 // 5.6.8)
                 for (key, value) in loaded_context_content {
-                    if let Entry::Vacant(e) = context.entry(key) {
-                        e.insert(value);
-                    }
+                    context.entry(key).or_insert(value);
                 }
             }
             // 5.7)
@@ -447,6 +443,7 @@ impl JsonLdContextProcessor {
                 };
             }
             // 5.13)
+            let mut protected = false;
             if let Some(value) = context.remove("@protected") {
                 if self.processing_mode == JsonLdProcessingMode::JsonLd1_0 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -713,6 +710,10 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             };
+            // 13.3)
+            if has_keyword_form(key_value) {
+                return;
+            }
             // 13.4)
             if let Some(iri) = self.expand_iri(
                 active_context,
@@ -1256,7 +1257,6 @@ impl JsonLdContextProcessor {
                         || definition.nest_value != previous_definition.nest_value
                         || definition.type_mapping != previous_definition.type_mapping
                     {
-                        // TODO: make sure it's full
                         errors.push(JsonLdSyntaxError::msg_and_code(
                             format!("Overriding the protected term {term}"),
                             JsonLdErrorCode::ProtectedTermRedefinition,

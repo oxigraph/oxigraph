@@ -310,7 +310,12 @@ fn read_bz2_data(url: &str) -> Vec<u8> {
         let client = oxhttp::Client::new().with_redirection_limit(5);
         let request = Request::builder().uri(&url).body(()).unwrap();
         let response = client.request(request).unwrap();
-        assert!(response.status().is_success(), "{url}");
+        assert!(
+            response.status().is_success(),
+            "{url} returned {} with body:\n{}",
+            response.status(),
+            response.into_body().to_string().unwrap()
+        );
         std::io::copy(
             &mut response.into_body(),
             &mut File::create(&file_name).unwrap(),
