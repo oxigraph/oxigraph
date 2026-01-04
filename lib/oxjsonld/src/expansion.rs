@@ -105,6 +105,7 @@ enum JsonLdExpansionState {
         is_array: bool,
         active_property: Option<String>,
         active_context: Arc<JsonLdContext>,
+        from_start: bool,
         reverse: bool,
         in_included: bool,
     },
@@ -858,6 +859,7 @@ impl JsonLdExpansionConverter {
                                     is_array: false,
                                     active_property,
                                     active_context,
+                                    from_start: true,
                                     reverse,
                                     in_included,
                                 });
@@ -1004,11 +1006,15 @@ impl JsonLdExpansionConverter {
                 is_array,
                 active_property,
                 mut active_context,
+                from_start,
                 reverse,
                 in_included,
             } => {
                 match event {
-                    JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                    JsonEvent::Null
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::StartObject => {
                         // 13.4.4.1)
                         errors.push(JsonLdSyntaxError::msg_and_code(
                             "@type value must be a string",
@@ -1022,22 +1028,32 @@ impl JsonLdExpansionConverter {
                                 is_array,
                                 active_property,
                                 active_context,
+                                from_start,
                                 reverse,
                                 in_included,
                             });
                         } else {
-                            (active_context, new_types) =
-                                self.map_types(active_context, new_types, errors);
-                            types.extend(new_types);
-                            self.state.push(JsonLdExpansionState::ObjectStart {
-                                types,
-                                id,
-                                seen_id: false,
-                                active_property,
-                                active_context,
-                                reverse,
-                                in_included,
+                            self.state.push(if from_start {
+                                JsonLdExpansionState::ObjectStart {
+                                    types,
+                                    id,
+                                    seen_id: false,
+                                    active_property,
+                                    active_context,
+                                    reverse,
+                                    in_included,
+                                }
+                            } else {
+                                JsonLdExpansionState::Object {
+                                    active_context,
+                                    in_property: false,
+                                    has_emitted_id: id.is_some(),
+                                }
                             });
+                        }
+                        if matches!(event, JsonEvent::StartObject) {
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: false });
                         }
                     }
                     JsonEvent::String(value) => {
@@ -1050,22 +1066,32 @@ impl JsonLdExpansionConverter {
                                 is_array,
                                 active_property,
                                 active_context,
+                                from_start,
                                 reverse,
                                 in_included,
                             });
                         } else {
                             (active_context, new_types) =
                                 self.map_types(active_context, new_types, errors);
-                            types.extend(new_types);
-                            self.state.push(JsonLdExpansionState::ObjectStart {
-                                types,
-                                id,
-                                seen_id: false,
-                                active_property,
-                                active_context,
-                                reverse,
-                                in_included,
-                            });
+                            if from_start {
+                                types.extend(new_types);
+                                self.state.push(JsonLdExpansionState::ObjectStart {
+                                    types,
+                                    id,
+                                    seen_id: false,
+                                    active_property,
+                                    active_context,
+                                    reverse,
+                                    in_included,
+                                });
+                            } else {
+                                results.extend(new_types.into_iter().map(JsonLdEvent::Type));
+                                self.state.push(JsonLdExpansionState::Object {
+                                    active_context,
+                                    in_property: false,
+                                    has_emitted_id: id.is_some(),
+                                });
+                            }
                         }
                     }
                     JsonEvent::StartArray => {
@@ -1076,6 +1102,7 @@ impl JsonLdExpansionConverter {
                             is_array: true,
                             active_property,
                             active_context,
+                            from_start,
                             reverse,
                             in_included,
                         });
@@ -1091,37 +1118,7 @@ impl JsonLdExpansionConverter {
                     JsonEvent::EndArray => {
                         (active_context, new_types) =
                             self.map_types(active_context, new_types, errors);
-                        types.extend(new_types);
-                        self.state.push(JsonLdExpansionState::ObjectStart {
-                            types,
-                            id,
-                            seen_id: false,
-                            active_property,
-                            active_context,
-                            reverse,
-                            in_included,
-                        });
-                    }
-                    JsonEvent::StartObject => {
-                        // 13.4.4.1)
-                        errors.push(JsonLdSyntaxError::msg_and_code(
-                            "@type value must be a string",
-                            JsonLdErrorCode::InvalidTypeValue,
-                        ));
-                        if is_array {
-                            self.state.push(JsonLdExpansionState::ObjectType {
-                                types,
-                                new_types,
-                                id,
-                                is_array: true,
-                                active_property,
-                                active_context,
-                                reverse,
-                                in_included,
-                            });
-                        } else {
-                            (active_context, new_types) =
-                                self.map_types(active_context, new_types, errors);
+                        if from_start {
                             types.extend(new_types);
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
@@ -1132,9 +1129,14 @@ impl JsonLdExpansionConverter {
                                 reverse,
                                 in_included,
                             });
+                        } else {
+                            results.extend(new_types.into_iter().map(JsonLdEvent::Type));
+                            self.state.push(JsonLdExpansionState::Object {
+                                active_context,
+                                in_property: false,
+                                has_emitted_id: id.is_some(),
+                            });
                         }
-                        self.state
-                            .push(JsonLdExpansionState::Skip { is_array: false });
                     }
                     JsonEvent::ObjectKey(_) | JsonEvent::EndObject | JsonEvent::Eof => {
                         unreachable!()
@@ -1271,18 +1273,21 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 "@type" => {
-                                    // TODO: be nice and allow this if lenient
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "@type must be the first key of an object or right after @context",
                                         JsonLdErrorCode::InvalidStreamingKeyOrder,
                                     ));
-                                    self.state.push(JsonLdExpansionState::Object {
+                                    self.state.push(JsonLdExpansionState::ObjectType {
+                                        types: Vec::new(),
+                                        new_types: Vec::new(),
+                                        id: has_emitted_id.then(String::new),
+                                        is_array: false,
+                                        active_property: None,
                                         active_context,
-                                        in_property: false,
-                                        has_emitted_id,
+                                        from_start: false,
+                                        reverse: false,
+                                        in_included: false,
                                     });
-                                    self.state
-                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 "@index" => {
                                     self.state.push(JsonLdExpansionState::Object {
