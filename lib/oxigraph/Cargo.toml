@@ -24,20 +24,27 @@ http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
+datafusion = ["dep:datafusion", "dep:async-trait", "dep:futures", "dep:tokio", "dep:regex", "dep:spareval-fusion", "rdf-12", "spareval-fusion/sparql-12"]
 
 [dependencies]
+async-trait = { workspace = true, optional = true }
 dashmap.workspace = true
+datafusion = { workspace = true, features = ["backtrace", "array_expressions"], optional = true }
+futures = { workspace = true, optional = true }
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true
 oxsdatatypes.workspace = true
 rand.workspace = true
+regex = { workspace = true, optional = true }
 rustc-hash.workspace = true
 siphasher.workspace = true
 sparesults.workspace = true
 spargebra = { workspace = true, features = ["sep-0002", "sep-0006"] }
 spareval = { workspace = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
+spareval-fusion = { workspace = true, optional = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
 thiserror.workspace = true
+tokio = { workspace = true, optional = true, features = ["rt"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true

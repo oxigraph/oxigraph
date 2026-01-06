@@ -136,6 +136,17 @@ impl Integer {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 8] {
+        if self.value >= 0 {
+            (i64::MAX as u64) + 1 + self.value.cast_unsigned()
+        } else {
+            (i64::MAX as u64) - !u64::from_le_bytes(self.value.to_le_bytes())
+        }
+        .to_be_bytes()
+    }
 }
 
 impl From<bool> for Integer {
@@ -392,5 +403,17 @@ mod tests {
         assert_eq!(Integer::from(10).checked_rem(3), Some(Integer::from(1)));
         assert_eq!(Integer::from(6).checked_rem(-2), Some(Integer::from(0)));
         assert_eq!(Integer::from(1).checked_rem(0), None);
+    }
+
+    #[test]
+    fn bytes_collation() {
+        assert_eq!(Integer::MIN.bytes_collation(), [u8::MIN; 8]);
+        assert_eq!(Integer::MAX.bytes_collation(), [u8::MAX; 8]);
+        assert!(Integer::MIN.bytes_collation() < Integer::from(-100).bytes_collation());
+        assert!(Integer::from(-100).bytes_collation() < Integer::from(-1).bytes_collation());
+        assert!(Integer::from(-1).bytes_collation() < Integer::from(0).bytes_collation());
+        assert!(Integer::from(0).bytes_collation() < Integer::from(1).bytes_collation());
+        assert!(Integer::from(1).bytes_collation() < Integer::from(100).bytes_collation());
+        assert!(Integer::from(100).bytes_collation() < Integer::MAX.bytes_collation());
     }
 }
