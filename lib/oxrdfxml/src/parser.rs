@@ -7,7 +7,7 @@ use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
-use quick_xml::name::{LocalName, PrefixDeclaration, PrefixIter, QName, ResolveResult};
+use quick_xml::name::{LocalName, Namespace, PrefixDeclaration, PrefixIter, ResolveResult};
 use quick_xml::{Decoder, Error, NsReader, Writer};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -898,7 +898,8 @@ impl<R> InternalRdfXmlParser<R> {
             return Ok(());
         }
 
-        let tag_name = self.resolve_tag_name(event.name())?;
+        let (tag_namespace, tag_local_name) = self.reader.resolve_element(event.name());
+        let tag_name = self.resolve_ns_name(tag_namespace, tag_local_name)?;
 
         // We read attributes
         let mut language = None;
@@ -914,7 +915,11 @@ impl<R> InternalRdfXmlParser<R> {
 
         for attribute in event.attributes() {
             let attribute = attribute.map_err(Error::InvalidAttr)?;
-            if attribute.key.as_ref().starts_with(b"xml") {
+            let (attribute_namespace, attribute_local_name) =
+                self.reader.resolve_attribute(attribute.key);
+            if attribute_namespace
+                == ResolveResult::Bound(Namespace(b"http://www.w3.org/XML/1998/namespace"))
+            {
                 if attribute.key.as_ref() == b"xml:lang" {
                     let tag = self.convert_attribute(&attribute)?.to_ascii_lowercase();
                     language = Some(if self.lenient {
@@ -935,8 +940,11 @@ impl<R> InternalRdfXmlParser<R> {
                 } else {
                     // We ignore other xml attributes
                 }
+            } else if attribute.key.as_ref().starts_with(b"xml") {
+                // We ignore other xml attributes
             } else {
-                let attribute_url = self.resolve_attribute_name(attribute.key)?;
+                let attribute_url =
+                    self.resolve_ns_name(attribute_namespace.clone(), attribute_local_name)?;
                 if *attribute_url == *RDF_ID {
                     let mut id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
@@ -1248,16 +1256,6 @@ impl<R> InternalRdfXmlParser<R> {
                 }
             }
         }
-    }
-
-    fn resolve_tag_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
-        let (namespace, local_name) = self.reader.resolve_element(qname);
-        self.resolve_ns_name(namespace, local_name)
-    }
-
-    fn resolve_attribute_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
-        let (namespace, local_name) = self.reader.resolve_attribute(qname);
-        self.resolve_ns_name(namespace, local_name)
     }
 
     fn resolve_ns_name(
