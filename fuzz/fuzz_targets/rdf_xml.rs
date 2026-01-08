@@ -97,5 +97,11 @@ fuzz_target!(|data: &[u8]| {
         .unwrap();
 
     // We check the roundtrip has not changed anything
-    assert_eq!(new_triples, triples);
+    assert_eq!(
+        new_triples,
+        triples,
+        "Error on '{}' based on '{}'",
+        String::from_utf8_lossy(&new_serialization),
+        String::from_utf8_lossy(data)
+    );
 });

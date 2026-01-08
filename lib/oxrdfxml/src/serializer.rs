@@ -1,5 +1,7 @@
 use crate::utils::*;
 use oxiri::{Iri, IriParseError};
+#[cfg(feature = "rdf-12")]
+use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
 use quick_xml::Writer;
@@ -32,7 +34,7 @@ use tokio::io::AsyncWrite;
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -88,7 +90,7 @@ impl RdfXmlSerializer {
     ///     NamedNodeRef::new("http://example.com#other")?,
     /// ))?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -120,7 +122,7 @@ impl RdfXmlSerializer {
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// ))?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -155,7 +157,7 @@ impl RdfXmlSerializer {
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// )).await?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
     ///     serializer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -173,8 +175,9 @@ impl RdfXmlSerializer {
     }
 
     fn inner_writer(mut self) -> InnerRdfXmlWriter {
-        // Makes sure rdf is the proper prefix, by first removing it
+        // Makes sure 'rdf' and 'its' are the proper prefixes, by first removing them
         self.prefixes.remove("rdf");
+        self.prefixes.remove("its");
         let custom_default_prefix = self.prefixes.contains_key("");
         // The serializer want to have the URL first, we swap
         let mut prefixes = self
@@ -186,6 +189,7 @@ impl RdfXmlSerializer {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#".into(),
             "rdf".into(),
         );
+        prefixes.insert("http://www.w3.org/2005/11/its".into(), "its".into());
         InnerRdfXmlWriter {
             current_subject: None,
             current_resource_tag: None,
@@ -217,7 +221,7 @@ impl RdfXmlSerializer {
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -275,7 +279,7 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// )).await?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
 ///     serializer.finish().await?.as_slice()
 /// );
 /// # Ok(())
@@ -358,18 +362,18 @@ impl InnerRdfXmlWriter {
             }
             self.current_subject = Some(triple.subject.into_owned());
 
-            let (mut description_open, with_type_tag) = if triple.predicate == rdf::TYPE {
+            let (mut description_start, with_type_tag) = if triple.predicate == rdf::TYPE {
                 if let TermRef::NamedNode(t) = triple.object {
                     if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
                         (BytesStart::new("rdf:Description"), false)
                     } else {
                         let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
-                        let mut description_open = BytesStart::new(prop_qname.clone());
+                        let mut description_start = BytesStart::new(prop_qname.clone());
                         if let Some(prop_xmlns) = prop_xmlns {
-                            description_open.push_attribute(prop_xmlns);
+                            description_start.push_attribute(prop_xmlns);
                         }
                         self.current_resource_tag = Some(prop_qname.into_owned());
-                        (description_open, true)
+                        (description_start, true)
                     }
                 } else {
                     (BytesStart::new("rdf:Description"), false)
@@ -377,37 +381,34 @@ impl InnerRdfXmlWriter {
             } else {
                 (BytesStart::new("rdf:Description"), false)
             };
-            #[allow(
-                unreachable_patterns,
-                clippy::match_wildcard_for_single_variants,
-                clippy::allow_attributes
-            )]
-            match triple.subject {
-                NamedOrBlankNodeRef::NamedNode(node) => description_open
-                    .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
-                NamedOrBlankNodeRef::BlankNode(node) => {
-                    description_open.push_attribute(("rdf:nodeID", node.as_str()))
+            description_start.push_attribute(match triple.subject {
+                NamedOrBlankNodeRef::NamedNode(node) => {
+                    ("rdf:about", relative_iri(node.as_str(), &self.base_iri))
                 }
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "RDF/XML only supports named or blank subject",
-                    ));
-                }
-            }
-            output.push(Event::Start(description_open));
+                NamedOrBlankNodeRef::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
+            });
+            output.push(Event::Start(description_start));
             if with_type_tag {
                 return Ok(()); // No need for a value
             }
         }
+        self.write_predicate_object(triple.predicate, triple.object, output)
+    }
 
-        if RESERVED_SYNTAX_TERMS.contains(&triple.predicate.as_str()) {
+    fn write_predicate_object<'a>(
+        &mut self,
+        predicate: NamedNodeRef<'a>,
+        object: TermRef<'a>,
+        output: &mut Vec<Event<'a>>,
+    ) -> io::Result<()> {
+        if RESERVED_SYNTAX_TERMS.contains(&predicate.as_str()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "RDF/XML reserved syntax term is not allowed as a predicate",
             ));
         }
-        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(triple.predicate);
+
+        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(predicate);
         let mut property_open = BytesStart::new(prop_qname.clone());
         if let Some(prop_xmlns) = prop_xmlns {
             property_open.push_attribute(prop_xmlns);
@@ -417,15 +418,15 @@ impl InnerRdfXmlWriter {
             clippy::match_wildcard_for_single_variants,
             clippy::allow_attributes
         )]
-        let content = match triple.object {
+        match object {
             TermRef::NamedNode(node) => {
                 property_open
                     .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri)));
-                None
+                output.push(Event::Empty(property_open));
             }
             TermRef::BlankNode(node) => {
                 property_open.push_attribute(("rdf:nodeID", node.as_str()));
-                None
+                output.push(Event::Empty(property_open));
             }
             TermRef::Literal(literal) => {
                 if let Some(language) = literal.language() {
@@ -436,21 +437,43 @@ impl InnerRdfXmlWriter {
                         relative_iri(literal.datatype().as_str(), &self.base_iri),
                     ));
                 }
-                Some(literal.value())
+                #[cfg(feature = "rdf-12")]
+                if let Some(base_direction) = literal.direction() {
+                    property_open.push_attribute(("rdf:version", "1.2-basic"));
+                    property_open.push_attribute(("its:version", "2.0"));
+                    property_open.push_attribute((
+                        "its:dir",
+                        match base_direction {
+                            BaseDirection::Ltr => "ltr",
+                            BaseDirection::Rtl => "rtl",
+                        },
+                    ));
+                }
+                output.push(Event::Start(property_open));
+                output.push(Event::Text(BytesText::new(literal.value())));
+                output.push(Event::End(BytesEnd::new(prop_qname)));
             }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "RDF/XML only supports named, blank or literal object",
-                ));
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(triple) => {
+                property_open.push_attribute(("rdf:version", "1.2"));
+                property_open.push_attribute(("rdf:parseType", "Triple"));
+                output.push(Event::Start(property_open));
+                let mut subject_start = BytesStart::new("rdf:Description");
+                subject_start.push_attribute(match triple.subject.as_ref() {
+                    NamedOrBlankNodeRef::NamedNode(node) => {
+                        ("rdf:about", relative_iri(node.as_str(), &self.base_iri))
+                    }
+                    NamedOrBlankNodeRef::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
+                });
+                output.push(Event::Start(subject_start));
+                self.write_predicate_object(
+                    triple.predicate.as_ref(),
+                    triple.object.as_ref(),
+                    output,
+                )?;
+                output.push(Event::End(BytesEnd::new("rdf:Description")));
+                output.push(Event::End(BytesEnd::new(prop_qname)));
             }
-        };
-        if let Some(content) = content {
-            output.push(Event::Start(property_open));
-            output.push(Event::Text(BytesText::new(content)));
-            output.push(Event::End(BytesEnd::new(prop_qname)));
-        } else {
-            output.push(Event::Empty(property_open));
         }
         Ok(())
     }
@@ -576,7 +599,7 @@ mod tests {
             .with_prefix("rdf", "http://example.com/")?
             .for_writer(Vec::new())
             .finish()?;
-        assert_eq!(output, b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n</rdf:RDF>");
+        assert_eq!(output, b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n</rdf:RDF>");
         Ok(())
     }
 
@@ -598,7 +621,7 @@ mod tests {
         let output = serializer.finish()?;
         assert_eq!(
             String::from_utf8_lossy(&output),
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns=\"http://example.com/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<oxprefix:o xmlns:oxprefix=\"http://example.org/\" rdf:about=\"http://example.com/s\">\n\t\t<p rdf:resource=\"http://example.com/o2\"/>\n\t</oxprefix:o>\n</rdf:RDF>"
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns=\"http://example.com/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<oxprefix:o xmlns:oxprefix=\"http://example.org/\" rdf:about=\"http://example.com/s\">\n\t\t<p rdf:resource=\"http://example.com/o2\"/>\n\t</oxprefix:o>\n</rdf:RDF>"
         );
         Ok(())
     }

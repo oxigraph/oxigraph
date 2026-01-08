@@ -109,6 +109,14 @@ fn rdf11_xml_w3c_testsuite() -> Result<()> {
 }
 
 #[test]
+fn rdf12_xml_w3c_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-xml/manifest.ttl",
+        &[],
+    )
+}
+
+#[test]
 fn n3_parser_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/N3/tests/N3Tests/manifest-parser.ttl",
