@@ -2,6 +2,8 @@ use crate::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::utils::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
+#[cfg(feature = "rdf-12")]
+use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
@@ -691,6 +693,9 @@ const RDF_NODE_ID: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nodeID";
 const RDF_PARSE_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#parseType";
 const RDF_RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#RDF";
 const RDF_RESOURCE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#resource";
+const RDF_VERSION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#version";
+const RDF_ANNOTATION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotation";
+const RDF_ANNOTATION_NODE_ID: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotationNodeID";
 
 const RESERVED_RDF_ELEMENTS: [&str; 11] = [
     RDF_ABOUT,
@@ -705,6 +710,7 @@ const RESERVED_RDF_ELEMENTS: [&str; 11] = [
     RDF_RDF,
     RDF_RESOURCE,
 ];
+
 const RESERVED_RDF_ATTRIBUTES: [&str; 5] = [
     RDF_ABOUT_EACH,
     RDF_ABOUT_EACH_PREFIX,
@@ -726,39 +732,84 @@ enum RdfXmlState {
     Rdf {
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
+        #[cfg(feature = "rdf-12")]
+        rdf_version: Option<RdfVersion>,
     },
     NodeElt {
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
         li_counter: u64,
+        #[cfg(feature = "rdf-12")]
+        rdf_version: Option<RdfVersion>,
     },
     PropertyElt {
         // Resource, Literal or Empty property element
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
         object: Option<NodeOrText>,
         id_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_node_id_attr: Option<BlankNode>,
         datatype_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        rdf_version: Option<RdfVersion>,
     },
     ParseTypeCollectionPropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
         objects: Vec<NamedOrBlankNode>,
         id_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_node_id_attr: Option<BlankNode>,
+        #[cfg(feature = "rdf-12")]
+        rdf_version: Option<RdfVersion>,
     },
     ParseTypeLiteralPropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
         writer: Writer<Vec<u8>>,
         id_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")]
+        annotation_node_id_attr: Option<BlankNode>,
         emit: bool, // false for parseTypeOtherPropertyElt support
+        #[cfg(feature = "rdf-12")]
+        rdf_version: Option<RdfVersion>,
+    },
+    #[cfg(feature = "rdf-12")]
+    ParseTypeTriplePropertyElt {
+        iri: NamedNode,
+        base_iri: Option<Iri<String>>,
+        language: Option<String>,
+        base_direction: Option<BaseDirection>,
+        subject: NamedOrBlankNode,
+        id_attr: Option<NamedNode>,
+        annotation_attr: Option<NamedNode>,
+        annotation_node_id_attr: Option<BlankNode>,
+        rdf_version: Option<RdfVersion>,
+        triples: Vec<Triple>,
     },
 }
 
@@ -856,6 +907,8 @@ impl<R> InternalRdfXmlParser<R> {
             Collection,
             Literal,
             Resource,
+            #[cfg(feature = "rdf-12")]
+            Triple,
             Other,
         }
 
@@ -912,6 +965,14 @@ impl<R> InternalRdfXmlParser<R> {
         let mut datatype_attr = None;
         let mut parse_type = RdfXmlParseType::Default;
         let mut type_attr = None;
+        #[cfg(feature = "rdf-12")]
+        let mut base_direction_attr = None;
+        #[cfg(feature = "rdf-12")]
+        let mut rdf_version = None;
+        #[cfg(feature = "rdf-12")]
+        let mut annotation_attr = None;
+        #[cfg(feature = "rdf-12")]
+        let mut annotation_node_id_attr = None;
 
         for attribute in event.attributes() {
             let attribute = attribute.map_err(Error::InvalidAttr)?;
@@ -920,33 +981,53 @@ impl<R> InternalRdfXmlParser<R> {
             if attribute_namespace
                 == ResolveResult::Bound(Namespace(b"http://www.w3.org/XML/1998/namespace"))
             {
-                if attribute.key.as_ref() == b"xml:lang" {
-                    let tag = self.convert_attribute(&attribute)?.to_ascii_lowercase();
-                    language = Some(if self.lenient {
-                        tag
-                    } else {
-                        LanguageTag::parse(tag.to_ascii_lowercase())
-                            .map_err(|error| RdfXmlSyntaxError::invalid_language_tag(tag, error))?
-                            .into_inner()
-                    });
-                } else if attribute.key.as_ref() == b"xml:base" {
-                    let iri = self.convert_attribute(&attribute)?;
-                    base_iri = Some(if self.lenient {
-                        Iri::parse_unchecked(iri.clone())
-                    } else {
-                        Iri::parse(iri.clone())
-                            .map_err(|error| RdfXmlSyntaxError::invalid_iri(iri, error))?
-                    })
-                } else {
-                    // We ignore other xml attributes
+                match attribute.key.local_name().as_ref() {
+                    b"lang" => {
+                        let tag = self.convert_attribute(&attribute)?.to_ascii_lowercase();
+                        language = Some(if self.lenient {
+                            tag
+                        } else {
+                            LanguageTag::parse(tag.clone())
+                                .map_err(|error| {
+                                    RdfXmlSyntaxError::invalid_language_tag(tag, error)
+                                })?
+                                .into_inner()
+                        });
+                    }
+                    b"base" => {
+                        let iri = self.convert_attribute(&attribute)?;
+                        base_iri = Some(if self.lenient {
+                            Iri::parse_unchecked(iri.into_owned())
+                        } else {
+                            Iri::parse(iri.clone().into_owned()).map_err(|error| {
+                                RdfXmlSyntaxError::invalid_iri(iri.into(), error)
+                            })?
+                        })
+                    }
+                    _ => (), // We ignore other xml attributes
                 }
             } else if attribute.key.as_ref().starts_with(b"xml") {
                 // We ignore other xml attributes
+            } else if cfg!(feature = "rdf-12")
+                && attribute_namespace
+                    == ResolveResult::Bound(Namespace(b"http://www.w3.org/2005/11/its"))
+                && attribute.key.local_name().as_ref() == b"dir"
+            {
+                #[cfg(feature = "rdf-12")]
+                {
+                    base_direction_attr = Some(attribute);
+                }
+            } else if cfg!(feature = "rdf-12")
+                && attribute_namespace
+                    == ResolveResult::Bound(Namespace(b"http://www.w3.org/2005/11/its"))
+                && attribute.key.local_name().as_ref() == b"version"
+            {
+                // We ignore its:version
             } else {
                 let attribute_url =
                     self.resolve_ns_name(attribute_namespace.clone(), attribute_local_name)?;
                 if *attribute_url == *RDF_ID {
-                    let mut id = self.convert_attribute(&attribute)?;
+                    let mut id = self.convert_attribute(&attribute)?.into_owned();
                     if !is_nc_name(&id) {
                         return Err(RdfXmlSyntaxError::msg(format!(
                             "{id} is not a valid rdf:ID value"
@@ -979,12 +1060,30 @@ impl<R> InternalRdfXmlParser<R> {
                 } else if *attribute_url == *RDF_DATATYPE {
                     datatype_attr = Some(attribute);
                 } else if *attribute_url == *RDF_PARSE_TYPE {
-                    parse_type = match attribute.value.as_ref() {
-                        b"Collection" => RdfXmlParseType::Collection,
-                        b"Literal" => RdfXmlParseType::Literal,
-                        b"Resource" => RdfXmlParseType::Resource,
+                    parse_type = match self.convert_attribute(&attribute)?.as_ref() {
+                        "Collection" => RdfXmlParseType::Collection,
+                        "Literal" => RdfXmlParseType::Literal,
+                        "Resource" => RdfXmlParseType::Resource,
+                        #[cfg(feature = "rdf-12")]
+                        "Triple" => RdfXmlParseType::Triple,
                         _ => RdfXmlParseType::Other,
                     };
+                } else if cfg!(feature = "rdf-12") && *attribute_url == *RDF_VERSION {
+                    #[cfg(feature = "rdf-12")]
+                    {
+                        rdf_version =
+                            Some(RdfVersion::from_str(&self.convert_attribute(&attribute)?)?);
+                    }
+                } else if cfg!(feature = "rdf-12") && *attribute_url == *RDF_ANNOTATION {
+                    #[cfg(feature = "rdf-12")]
+                    {
+                        annotation_attr = Some(attribute);
+                    }
+                } else if cfg!(feature = "rdf-12") && *attribute_url == *RDF_ANNOTATION_NODE_ID {
+                    #[cfg(feature = "rdf-12")]
+                    {
+                        annotation_node_id_attr = Some(attribute);
+                    }
                 } else if attribute_url == rdf::TYPE.as_str() {
                     type_attr = Some(attribute);
                 } else if RESERVED_RDF_ATTRIBUTES.contains(&&*attribute_url) {
@@ -995,44 +1094,88 @@ impl<R> InternalRdfXmlParser<R> {
                 } else {
                     property_attrs.push((
                         self.parse_iri(attribute_url)?,
-                        self.convert_attribute(&attribute)?,
+                        self.convert_attribute(&attribute)?.into(),
                     ));
                 }
             }
         }
 
         // Parsing with the base URI
-        let id_attr = match id_attr {
-            Some(iri) => {
-                let iri = self.resolve_iri(base_iri.as_ref(), iri)?;
-                if !self.lenient {
-                    if self.known_rdf_id.contains(iri.as_str()) {
+        let id_attr = if let Some(iri) = id_attr {
+            let iri = self.resolve_iri(base_iri.as_ref(), iri.into())?;
+            if !self.lenient {
+                if self.known_rdf_id.contains(iri.as_str()) {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "{iri} has already been used as rdf:ID value"
+                    ))
+                    .into());
+                }
+                self.known_rdf_id.insert(iri.as_str().into());
+            }
+            Some(iri)
+        } else {
+            None
+        };
+        let about_attr = if let Some(attr) = about_attr {
+            Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?)
+        } else {
+            None
+        };
+        let resource_attr = if let Some(attr) = resource_attr {
+            Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?)
+        } else {
+            None
+        };
+        let datatype_attr = if let Some(attr) = datatype_attr {
+            Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?)
+        } else {
+            None
+        };
+        let type_attr = if let Some(attr) = type_attr {
+            Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?)
+        } else {
+            None
+        };
+        #[cfg(feature = "rdf-12")]
+        let base_direction = if rdf_version
+            .unwrap_or_else(|| self.current_rdf_version())
+            .supports_its_dir()
+        {
+            if let Some(attr) = base_direction_attr {
+                Some(match self.convert_attribute(&attr)?.as_ref() {
+                    "ltr" => BaseDirection::Ltr,
+                    "rtl" => BaseDirection::Rtl,
+                    base => {
                         return Err(RdfXmlSyntaxError::msg(format!(
-                            "{iri} has already been used as rdf:ID value"
+                            "Invalid base direction: '{base}'"
                         ))
                         .into());
                     }
-                    self.known_rdf_id.insert(iri.as_str().into());
-                }
-                Some(iri)
+                })
+            } else {
+                None
             }
-            None => None,
+        } else {
+            None
         };
-        let about_attr = match about_attr {
-            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
-            None => None,
+        #[cfg(feature = "rdf-12")]
+        let annotation_attr = if let Some(attr) = annotation_attr {
+            Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?)
+        } else {
+            None
         };
-        let resource_attr = match resource_attr {
-            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
-            None => None,
-        };
-        let datatype_attr = match datatype_attr {
-            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
-            None => None,
-        };
-        let type_attr = match type_attr {
-            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
-            None => None,
+        #[cfg(feature = "rdf-12")]
+        let annotation_node_id_attr = if let Some(attr) = annotation_node_id_attr {
+            let id = self.convert_attribute(&attr)?;
+            if !is_nc_name(&id) {
+                return Err(RdfXmlSyntaxError::msg(format!(
+                    "{id} is not a valid rdf:annotationNodeID value"
+                ))
+                .into());
+            }
+            Some(BlankNode::new_unchecked(id))
+        } else {
+            None
         };
 
         let expected_production = match self.state.last() {
@@ -1050,6 +1193,8 @@ impl<R> InternalRdfXmlParser<R> {
                     RdfXmlSyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content").into()
                 );
             }
+            #[cfg(feature = "rdf-12")]
+            Some(RdfXmlState::ParseTypeTriplePropertyElt { .. }) => RdfXmlNextProduction::NodeElt,
             None => {
                 return Err(RdfXmlSyntaxError::msg(
                     "No state in the stack: the XML is not balanced",
@@ -1061,7 +1206,14 @@ impl<R> InternalRdfXmlParser<R> {
         let new_state = match expected_production {
             RdfXmlNextProduction::Rdf => {
                 if *tag_name == *RDF_RDF {
-                    RdfXmlState::Rdf { base_iri, language }
+                    RdfXmlState::Rdf {
+                        base_iri,
+                        language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
+                    }
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
                     return Err(RdfXmlSyntaxError::msg(format!(
                         "Invalid node element tag name: {tag_name}"
@@ -1072,11 +1224,15 @@ impl<R> InternalRdfXmlParser<R> {
                         self.parse_iri(tag_name)?,
                         base_iri,
                         language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
                         id_attr,
                         node_id_attr,
                         about_attr,
                         type_attr,
                         property_attrs,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
                         results,
                     )?
                 }
@@ -1092,11 +1248,15 @@ impl<R> InternalRdfXmlParser<R> {
                     self.parse_iri(tag_name)?,
                     base_iri,
                     language,
+                    #[cfg(feature = "rdf-12")]
+                    base_direction,
                     id_attr,
                     node_id_attr,
                     about_attr,
                     type_attr,
                     property_attrs,
+                    #[cfg(feature = "rdf-12")]
+                    rdf_version,
                     results,
                 )?
             }
@@ -1140,29 +1300,50 @@ impl<R> InternalRdfXmlParser<R> {
                                 &object,
                                 property_attrs,
                                 language.as_deref(),
+                                #[cfg(feature = "rdf-12")]
+                                base_direction,
                                 results,
                             );
                             if let Some(type_attr) = type_attr {
-                                results.push(Triple::new(object.clone(), rdf::TYPE, type_attr));
+                                self.emit_triple(
+                                    results,
+                                    Triple::new(object.clone(), rdf::TYPE, type_attr),
+                                );
                             }
                             RdfXmlState::PropertyElt {
                                 iri,
                                 base_iri,
                                 language,
+                                #[cfg(feature = "rdf-12")]
+                                base_direction,
                                 subject,
                                 object: Some(NodeOrText::Node(object)),
                                 id_attr,
+                                #[cfg(feature = "rdf-12")]
+                                annotation_attr,
+                                #[cfg(feature = "rdf-12")]
+                                annotation_node_id_attr,
                                 datatype_attr,
+                                #[cfg(feature = "rdf-12")]
+                                rdf_version,
                             }
                         } else {
                             RdfXmlState::PropertyElt {
                                 iri,
                                 base_iri,
                                 language,
+                                #[cfg(feature = "rdf-12")]
+                                base_direction,
                                 subject,
                                 object: None,
                                 id_attr,
+                                #[cfg(feature = "rdf-12")]
+                                annotation_attr,
+                                #[cfg(feature = "rdf-12")]
+                                annotation_node_id_attr,
                                 datatype_attr,
+                                #[cfg(feature = "rdf-12")]
+                                rdf_version,
                             }
                         }
                     }
@@ -1170,30 +1351,83 @@ impl<R> InternalRdfXmlParser<R> {
                         iri,
                         base_iri,
                         language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
                         subject,
                         writer: Writer::new(Vec::default()),
                         id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
                         emit: true,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
                     },
-                    RdfXmlParseType::Resource => Self::build_parse_type_resource_property_elt(
-                        iri, base_iri, language, subject, id_attr, results,
+                    RdfXmlParseType::Resource => self.build_parse_type_resource_property_elt(
+                        iri,
+                        base_iri,
+                        language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
+                        subject,
+                        id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
+                        results,
                     ),
                     RdfXmlParseType::Collection => RdfXmlState::ParseTypeCollectionPropertyElt {
                         iri,
                         base_iri,
                         language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
                         subject,
                         objects: Vec::default(),
                         id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
+                    },
+                    #[cfg(feature = "rdf-12")]
+                    RdfXmlParseType::Triple => RdfXmlState::ParseTypeTriplePropertyElt {
+                        iri,
+                        base_iri,
+                        language,
+                        base_direction,
+                        subject,
+                        id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
+                        triples: Vec::new(),
                     },
                     RdfXmlParseType::Other => RdfXmlState::ParseTypeLiteralPropertyElt {
                         iri,
                         base_iri,
                         language,
+                        #[cfg(feature = "rdf-12")]
+                        base_direction,
                         subject,
                         writer: Writer::new(Vec::default()),
                         id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
                         emit: false,
+                        #[cfg(feature = "rdf-12")]
+                        rdf_version,
                     },
                 }
             }
@@ -1209,15 +1443,16 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Result<(), RdfXmlParseError> {
         // Literal case
         if self.in_literal_depth > 0 {
-            if let Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) =
+            let Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) =
                 self.state.last_mut()
-            {
-                writer.write_event(Event::End(BytesEnd::new(
-                    self.reader.decoder().decode(event.name().as_ref())?,
-                )))?;
-                self.in_literal_depth -= 1;
-                return Ok(());
-            }
+            else {
+                unreachable!()
+            };
+            writer.write_event(Event::End(BytesEnd::new(
+                self.reader.decoder().decode(event.name().as_ref())?,
+            )))?;
+            self.in_literal_depth -= 1;
+            return Ok(());
         }
 
         if let Some(current_state) = self.state.pop() {
@@ -1285,16 +1520,19 @@ impl<R> InternalRdfXmlParser<R> {
         }
     }
 
+    #[cfg_attr(feature = "rdf-12", expect(clippy::too_many_arguments))]
     fn build_node_elt(
-        &self,
+        &mut self,
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         id_attr: Option<NamedNode>,
         node_id_attr: Option<BlankNode>,
         about_attr: Option<NamedNode>,
         type_attr: Option<NamedNode>,
         property_attrs: Vec<(NamedNode, String)>,
+        #[cfg(feature = "rdf-12")] rdf_version: Option<RdfVersion>,
         results: &mut Vec<Triple>,
     ) -> Result<RdfXmlState, RdfXmlSyntaxError> {
         let subject = match (id_attr, node_id_attr, about_attr) {
@@ -1319,42 +1557,69 @@ impl<R> InternalRdfXmlParser<R> {
             }
         };
 
-        self.emit_property_attrs(&subject, property_attrs, language.as_deref(), results);
+        self.emit_property_attrs(
+            &subject,
+            property_attrs,
+            language.as_deref(),
+            #[cfg(feature = "rdf-12")]
+            base_direction,
+            results,
+        );
 
         if let Some(type_attr) = type_attr {
-            results.push(Triple::new(subject.clone(), rdf::TYPE, type_attr));
+            self.emit_triple(results, Triple::new(subject.clone(), rdf::TYPE, type_attr));
         }
 
         if iri != *RDF_DESCRIPTION {
-            results.push(Triple::new(subject.clone(), rdf::TYPE, iri));
+            self.emit_triple(results, Triple::new(subject.clone(), rdf::TYPE, iri));
         }
         Ok(RdfXmlState::NodeElt {
             base_iri,
             language,
+            #[cfg(feature = "rdf-12")]
+            base_direction,
             subject,
             li_counter: 0,
+            #[cfg(feature = "rdf-12")]
+            rdf_version,
         })
     }
 
+    #[cfg_attr(feature = "rdf-12", expect(clippy::too_many_arguments))]
     fn build_parse_type_resource_property_elt(
+        &mut self,
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
+        #[cfg(feature = "rdf-12")] rdf_version: Option<RdfVersion>,
         subject: NamedOrBlankNode,
         id_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")] annotation_attr: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")] annotation_node_id_attr: Option<BlankNode>,
         results: &mut Vec<Triple>,
     ) -> RdfXmlState {
         let object = BlankNode::default();
         let triple = Triple::new(subject, iri, object.clone());
-        if let Some(id_attr) = id_attr {
-            Self::reify(triple.clone(), id_attr, results);
-        }
-        results.push(triple);
+        self.reify_and_annotation(
+            &triple,
+            id_attr,
+            #[cfg(feature = "rdf-12")]
+            annotation_attr,
+            #[cfg(feature = "rdf-12")]
+            annotation_node_id_attr,
+            results,
+        );
+        self.emit_triple(results, triple);
         RdfXmlState::NodeElt {
             base_iri,
             language,
+            #[cfg(feature = "rdf-12")]
+            base_direction,
             subject: object.into(),
             li_counter: 0,
+            #[cfg(feature = "rdf-12")]
+            rdf_version,
         }
     }
 
@@ -1367,51 +1632,92 @@ impl<R> InternalRdfXmlParser<R> {
             RdfXmlState::PropertyElt {
                 iri,
                 language,
+                #[cfg(feature = "rdf-12")]
+                base_direction,
                 subject,
                 id_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_node_id_attr,
                 datatype_attr,
                 object,
                 ..
             } => {
                 let object = match object {
                     Some(NodeOrText::Node(node)) => Term::from(node),
-                    Some(NodeOrText::Text(text)) => {
-                        self.new_literal(text, language, datatype_attr).into()
-                    }
+                    Some(NodeOrText::Text(text)) => self
+                        .new_literal(
+                            text,
+                            language,
+                            #[cfg(feature = "rdf-12")]
+                            base_direction,
+                            datatype_attr,
+                        )
+                        .into(),
                     None => self
-                        .new_literal(String::new(), language, datatype_attr)
+                        .new_literal(
+                            String::new(),
+                            language,
+                            #[cfg(feature = "rdf-12")]
+                            base_direction,
+                            datatype_attr,
+                        )
                         .into(),
                 };
                 let triple = Triple::new(subject, iri, object);
-                if let Some(id_attr) = id_attr {
-                    Self::reify(triple.clone(), id_attr, results);
-                }
-                results.push(triple);
+                self.reify_and_annotation(
+                    &triple,
+                    id_attr,
+                    #[cfg(feature = "rdf-12")]
+                    annotation_attr,
+                    #[cfg(feature = "rdf-12")]
+                    annotation_node_id_attr,
+                    results,
+                );
+                self.emit_triple(results, triple);
             }
             RdfXmlState::ParseTypeCollectionPropertyElt {
                 iri,
                 subject,
                 id_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_node_id_attr,
                 objects,
                 ..
             } => {
                 let mut current_node = NamedOrBlankNode::from(rdf::NIL);
                 for object in objects.into_iter().rev() {
                     let subject = NamedOrBlankNode::from(BlankNode::default());
-                    results.push(Triple::new(subject.clone(), rdf::FIRST, object));
-                    results.push(Triple::new(subject.clone(), rdf::REST, current_node));
+                    self.emit_triple(results, Triple::new(subject.clone(), rdf::FIRST, object));
+                    self.emit_triple(
+                        results,
+                        Triple::new(subject.clone(), rdf::REST, current_node),
+                    );
                     current_node = subject;
                 }
                 let triple = Triple::new(subject, iri, current_node);
-                if let Some(id_attr) = id_attr {
-                    Self::reify(triple.clone(), id_attr, results);
-                }
-                results.push(triple);
+                self.reify_and_annotation(
+                    &triple,
+                    id_attr,
+                    #[cfg(feature = "rdf-12")]
+                    annotation_attr,
+                    #[cfg(feature = "rdf-12")]
+                    annotation_node_id_attr,
+                    results,
+                );
+                self.emit_triple(results, triple);
             }
             RdfXmlState::ParseTypeLiteralPropertyElt {
                 iri,
                 subject,
                 id_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_attr,
+                #[cfg(feature = "rdf-12")]
+                annotation_node_id_attr,
                 writer,
                 emit,
                 ..
@@ -1435,10 +1741,16 @@ impl<R> InternalRdfXmlParser<R> {
                             rdf::XML_LITERAL,
                         ),
                     );
-                    if let Some(id_attr) = id_attr {
-                        Self::reify(triple.clone(), id_attr, results);
-                    }
-                    results.push(triple);
+                    self.reify_and_annotation(
+                        &triple,
+                        id_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_attr,
+                        #[cfg(feature = "rdf-12")]
+                        annotation_node_id_attr,
+                        results,
+                    );
+                    self.emit_triple(results, triple);
                 }
             }
             RdfXmlState::NodeElt { subject, .. } => match self.state.last_mut() {
@@ -1455,7 +1767,38 @@ impl<R> InternalRdfXmlParser<R> {
                 }
                 _ => (),
             },
-            _ => (),
+            RdfXmlState::Doc { .. } | RdfXmlState::Rdf { .. } => (),
+            #[cfg(feature = "rdf-12")]
+            RdfXmlState::ParseTypeTriplePropertyElt {
+                iri,
+                subject,
+                id_attr,
+                annotation_attr,
+                annotation_node_id_attr,
+                triples,
+                rdf_version,
+                ..
+            } => {
+                if rdf_version
+                    .unwrap_or_else(|| self.current_rdf_version())
+                    .supports_triple_term()
+                {
+                    if triples.len() != 1 {
+                        return Err(RdfXmlSyntaxError::msg(
+                            "rdf:parseType=\"Triple\" can only include a single triple",
+                        ));
+                    }
+                    let triple = Triple::new(subject, iri, triples.into_iter().next().unwrap());
+                    self.reify_and_annotation(
+                        &triple,
+                        id_attr,
+                        annotation_attr,
+                        annotation_node_id_attr,
+                        results,
+                    );
+                    self.emit_triple(results, triple);
+                }
+            }
         }
         Ok(())
     }
@@ -1464,6 +1807,7 @@ impl<R> InternalRdfXmlParser<R> {
         &self,
         value: String,
         language: Option<String>,
+        #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         datatype: Option<NamedNode>,
     ) -> Literal {
         if let Some(datatype) = datatype {
@@ -1471,51 +1815,123 @@ impl<R> InternalRdfXmlParser<R> {
         } else if let Some(language) =
             language.or_else(|| self.current_language().map(ToOwned::to_owned))
         {
+            #[cfg(feature = "rdf-12")]
+            if let Some(base_direction) = base_direction {
+                return Literal::new_directional_language_tagged_literal_unchecked(
+                    value,
+                    language,
+                    base_direction,
+                );
+            }
             Literal::new_language_tagged_literal_unchecked(value, language)
         } else {
             Literal::new_simple_literal(value)
         }
     }
 
-    fn reify(triple: Triple, statement_id: NamedNode, results: &mut Vec<Triple>) {
-        results.push(Triple::new(statement_id.clone(), rdf::TYPE, rdf::STATEMENT));
-        results.push(Triple::new(
-            statement_id.clone(),
-            rdf::SUBJECT,
-            triple.subject,
-        ));
-        results.push(Triple::new(
-            statement_id.clone(),
-            rdf::PREDICATE,
-            triple.predicate,
-        ));
-        results.push(Triple::new(statement_id, rdf::OBJECT, triple.object));
-    }
-
-    fn emit_property_attrs(
-        &self,
-        subject: &NamedOrBlankNode,
-        literal_attributes: Vec<(NamedNode, String)>,
-        language: Option<&str>,
+    fn reify_and_annotation(
+        &mut self,
+        triple: &Triple,
+        statement_id: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")] annotation: Option<NamedNode>,
+        #[cfg(feature = "rdf-12")] annotation_node_id: Option<BlankNode>,
         results: &mut Vec<Triple>,
     ) {
-        for (literal_predicate, literal_value) in literal_attributes {
-            results.push(Triple::new(
-                subject.clone(),
-                literal_predicate,
-                if let Some(language) = language.or_else(|| self.current_language()) {
-                    Literal::new_language_tagged_literal_unchecked(literal_value, language)
-                } else {
-                    Literal::new_simple_literal(literal_value)
-                },
-            ));
+        if let Some(statement_id) = statement_id {
+            self.emit_triple(
+                results,
+                Triple::new(statement_id.clone(), rdf::TYPE, rdf::STATEMENT),
+            );
+            self.emit_triple(
+                results,
+                Triple::new(statement_id.clone(), rdf::SUBJECT, triple.subject.clone()),
+            );
+            self.emit_triple(
+                results,
+                Triple::new(
+                    statement_id.clone(),
+                    rdf::PREDICATE,
+                    triple.predicate.as_ref(),
+                ),
+            );
+            self.emit_triple(
+                results,
+                Triple::new(statement_id, rdf::OBJECT, triple.object.clone()),
+            );
+        }
+        #[cfg(feature = "rdf-12")]
+        if let Some(annotation) = annotation {
+            self.emit_triple(
+                results,
+                Triple::new(annotation, rdf::REIFIES, triple.clone()),
+            );
+        }
+        #[cfg(feature = "rdf-12")]
+        if let Some(annotation_node_id) = annotation_node_id {
+            self.emit_triple(
+                results,
+                Triple::new(annotation_node_id, rdf::REIFIES, triple.clone()),
+            );
         }
     }
 
-    fn convert_attribute(&self, attribute: &Attribute<'_>) -> Result<String, RdfXmlParseError> {
+    fn emit_property_attrs(
+        &mut self,
+        subject: &NamedOrBlankNode,
+        literal_attributes: Vec<(NamedNode, String)>,
+        language: Option<&str>,
+        #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
+        results: &mut Vec<Triple>,
+    ) {
+        for (literal_predicate, literal_value) in literal_attributes {
+            self.emit_triple(
+                results,
+                Triple::new(
+                    subject.clone(),
+                    literal_predicate,
+                    if let Some(language) = language.or_else(|| self.current_language()) {
+                        #[cfg(feature = "rdf-12")]
+                        if let Some(base_direction) =
+                            base_direction.or_else(|| self.current_base_direction())
+                        {
+                            Literal::new_directional_language_tagged_literal_unchecked(
+                                literal_value,
+                                language,
+                                base_direction,
+                            )
+                        } else {
+                            Literal::new_language_tagged_literal_unchecked(literal_value, language)
+                        }
+                        #[cfg(not(feature = "rdf-12"))]
+                        {
+                            Literal::new_language_tagged_literal_unchecked(literal_value, language)
+                        }
+                    } else {
+                        Literal::new_simple_literal(literal_value)
+                    },
+                ),
+            );
+        }
+    }
+
+    #[cfg_attr(not(feature = "rdf-12"), expect(clippy::unused_self))]
+    fn emit_triple(&mut self, results: &mut Vec<Triple>, triple: Triple) {
+        #[cfg(feature = "rdf-12")]
+        for state in self.state.iter_mut().rev() {
+            if let RdfXmlState::ParseTypeTriplePropertyElt { triples, .. } = state {
+                triples.push(triple);
+                return;
+            }
+        }
+        results.push(triple);
+    }
+
+    fn convert_attribute<'a>(
+        &self,
+        attribute: &Attribute<'a>,
+    ) -> Result<Cow<'a, str>, RdfXmlParseError> {
         Ok(attribute
-            .decode_and_unescape_value_with(self.reader.decoder(), |e| self.resolve_entity(e))?
-            .into_owned())
+            .decode_and_unescape_value_with(self.reader.decoder(), |e| self.resolve_entity(e))?)
     }
 
     fn convert_iri_attribute(
@@ -1529,21 +1945,21 @@ impl<R> InternalRdfXmlParser<R> {
     fn resolve_iri(
         &self,
         base_iri: Option<&Iri<String>>,
-        relative_iri: String,
+        relative_iri: Cow<'_, str>,
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
             Ok(NamedNode::new_unchecked(
                 if self.lenient {
                     base_iri.resolve_unchecked(&relative_iri)
                 } else {
-                    base_iri
-                        .resolve(&relative_iri)
-                        .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
+                    base_iri.resolve(&relative_iri).map_err(|error| {
+                        RdfXmlSyntaxError::invalid_iri(relative_iri.into(), error)
+                    })?
                 }
                 .into_inner(),
             ))
         } else {
-            self.parse_iri(relative_iri)
+            self.parse_iri(relative_iri.into())
         }
     }
 
@@ -1570,6 +1986,37 @@ impl<R> InternalRdfXmlParser<R> {
                         return Some(language);
                     }
                 }
+                #[cfg(feature = "rdf-12")]
+                RdfXmlState::ParseTypeTriplePropertyElt { language, .. } => {
+                    if let Some(language) = language {
+                        return Some(language);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(feature = "rdf-12")]
+    fn current_base_direction(&self) -> Option<BaseDirection> {
+        for state in self.state.iter().rev() {
+            match state {
+                RdfXmlState::Doc { .. } => (),
+                RdfXmlState::Rdf { base_direction, .. }
+                | RdfXmlState::NodeElt { base_direction, .. }
+                | RdfXmlState::PropertyElt { base_direction, .. }
+                | RdfXmlState::ParseTypeCollectionPropertyElt { base_direction, .. }
+                | RdfXmlState::ParseTypeLiteralPropertyElt { base_direction, .. } => {
+                    if let Some(base_direction) = base_direction {
+                        return Some(*base_direction);
+                    }
+                }
+                #[cfg(feature = "rdf-12")]
+                RdfXmlState::ParseTypeTriplePropertyElt { base_direction, .. } => {
+                    if let Some(base_direction) = base_direction {
+                        return Some(*base_direction);
+                    }
+                }
             }
         }
         None
@@ -1588,9 +2035,40 @@ impl<R> InternalRdfXmlParser<R> {
                         return Some(base_iri);
                     }
                 }
+                #[cfg(feature = "rdf-12")]
+                RdfXmlState::ParseTypeTriplePropertyElt { base_iri, .. } => {
+                    if let Some(base_iri) = base_iri {
+                        return Some(base_iri);
+                    }
+                }
             }
         }
         None
+    }
+
+    #[cfg(feature = "rdf-12")]
+    fn current_rdf_version(&self) -> RdfVersion {
+        for state in self.state.iter().rev() {
+            match state {
+                RdfXmlState::Doc { .. } => (),
+                RdfXmlState::Rdf { rdf_version, .. }
+                | RdfXmlState::NodeElt { rdf_version, .. }
+                | RdfXmlState::PropertyElt { rdf_version, .. }
+                | RdfXmlState::ParseTypeCollectionPropertyElt { rdf_version, .. }
+                | RdfXmlState::ParseTypeLiteralPropertyElt { rdf_version, .. } => {
+                    if let Some(rdf_version) = rdf_version {
+                        return *rdf_version;
+                    }
+                }
+                #[cfg(feature = "rdf-12")]
+                RdfXmlState::ParseTypeTriplePropertyElt { rdf_version, .. } => {
+                    if let Some(rdf_version) = rdf_version {
+                        return *rdf_version;
+                    }
+                }
+            }
+        }
+        RdfVersion::V11
     }
 
     fn resolve_entity(&self, e: &str) -> Option<&str> {
@@ -1620,4 +2098,34 @@ fn is_utf8(encoding: &[u8]) -> bool {
             | b"utf8"
             | b"x-unicode20utf8"
     )
+}
+
+#[cfg(feature = "rdf-12")]
+#[derive(Copy, Clone)]
+enum RdfVersion {
+    V11,
+    V12,
+    V12Basic,
+}
+
+#[cfg(feature = "rdf-12")]
+impl RdfVersion {
+    fn supports_its_dir(self) -> bool {
+        matches!(self, Self::V12 | Self::V12Basic)
+    }
+
+    fn supports_triple_term(self) -> bool {
+        matches!(self, Self::V12)
+    }
+
+    fn from_str(value: &str) -> Result<RdfVersion, RdfXmlSyntaxError> {
+        match value {
+            "1.1" => Ok(RdfVersion::V11),
+            "1.2" => Ok(RdfVersion::V12),
+            "1.2-basic" => Ok(RdfVersion::V12Basic),
+            _ => Err(RdfXmlSyntaxError::msg(format!(
+                "The rdf:version value '{value}' is not supported, allowed values are '1.1' and '1.2'"
+            ))),
+        }
+    }
 }
