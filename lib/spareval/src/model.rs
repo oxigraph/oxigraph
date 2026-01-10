@@ -189,7 +189,7 @@ pub struct QueryTripleIter<'a> {
 }
 
 impl<'a> QueryTripleIter<'a> {
-    pub(crate) fn new(
+    pub fn new(
         iter: impl Iterator<Item = Result<Triple, QueryEvaluationError>> + 'a,
     ) -> Self {
         Self {
