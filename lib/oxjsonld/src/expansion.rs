@@ -573,50 +573,86 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
-            } => match event {
-                JsonEvent::ObjectKey(key) => {
-                    match self
-                        .expand_iri(&active_context, key.as_ref().into(), false, true)
-                        .as_deref()
-                    {
-                        Some("@context") => self.state.push(JsonLdExpansionState::Context {
-                            buffer: Vec::new(),
-                            depth: 0,
-                            active_property,
-                            active_context,
-                            container,
-                            reverse,
-                            in_included,
-                        }),
-                        Some("@index") => {
-                            self.state.push(
-                                JsonLdExpansionState::ObjectOrContainerStartStreaming {
+            } => {
+                let event = match event {
+                    JsonEvent::ObjectKey(key) => {
+                        match self
+                            .expand_iri(&active_context, key.as_ref().into(), false, true)
+                            .as_deref()
+                        {
+                            Some("@context") => {
+                                self.state.push(JsonLdExpansionState::Context {
+                                    buffer: Vec::new(),
+                                    depth: 0,
                                     active_property,
                                     active_context,
                                     container,
                                     reverse,
                                     in_included,
-                                },
-                            );
-                            self.state.push(JsonLdExpansionState::Index);
-                        }
-                        Some("@list") => {
-                            if in_included {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "Lists are not allowed inside of @included",
-                                    JsonLdErrorCode::InvalidIncludedValue,
-                                ));
+                                });
+                                return;
                             }
-                            if active_property.is_some() {
-                                if reverse {
+                            Some("@index") => {
+                                self.state.push(
+                                    JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                                        active_property,
+                                        active_context,
+                                        container,
+                                        reverse,
+                                        in_included,
+                                    },
+                                );
+                                self.state.push(JsonLdExpansionState::Index);
+                                return;
+                            }
+                            Some("@list") => {
+                                if in_included {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "Lists are not allowed inside of reverse properties",
-                                        JsonLdErrorCode::InvalidReversePropertyValue,
-                                    ))
+                                        "Lists are not allowed inside of @included",
+                                        JsonLdErrorCode::InvalidIncludedValue,
+                                    ));
                                 }
+                                if active_property.is_some() {
+                                    if reverse {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "Lists are not allowed inside of reverse properties",
+                                            JsonLdErrorCode::InvalidReversePropertyValue,
+                                        ))
+                                    }
+                                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
+                                        needs_end_object: true,
+                                        end_event: Some(JsonLdEvent::EndList),
+                                        active_context: Arc::clone(&active_context),
+                                    });
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        is_array: false,
+                                        active_property,
+                                        active_context,
+                                        container: &[],
+                                        reverse: false,
+                                        in_included: false,
+                                    });
+                                    results.push(JsonLdEvent::StartList);
+                                } else {
+                                    // We don't have an active property, we skip the list
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                                return;
+                            }
+                            Some("@set") => {
+                                if in_included {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "Sets are not allowed inside of @included",
+                                        JsonLdErrorCode::InvalidIncludedValue,
+                                    ));
+                                }
+                                let has_property = active_property.is_some();
                                 self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                     needs_end_object: true,
-                                    end_event: Some(JsonLdEvent::EndList),
+                                    end_event: has_property.then_some(JsonLdEvent::EndSet),
                                     active_context: Arc::clone(&active_context),
                                 });
                                 self.state.push(JsonLdExpansionState::Element {
@@ -627,76 +663,43 @@ impl JsonLdExpansionConverter {
                                     reverse: false,
                                     in_included: false,
                                 });
-                                results.push(JsonLdEvent::StartList);
-                            } else {
-                                // We don't have an active property, we skip the list
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
+                                if has_property {
+                                    results.push(JsonLdEvent::StartSet);
+                                }
+                                return;
                             }
-                        }
-                        Some("@set") => {
-                            if in_included {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "Sets are not allowed inside of @included",
-                                    JsonLdErrorCode::InvalidIncludedValue,
-                                ));
-                            }
-                            let has_property = active_property.is_some();
-                            self.state.push(JsonLdExpansionState::ListOrSetContainer {
-                                needs_end_object: true,
-                                end_event: has_property.then_some(JsonLdEvent::EndSet),
-                                active_context: Arc::clone(&active_context),
-                            });
-                            self.state.push(JsonLdExpansionState::Element {
-                                is_array: false,
-                                active_property,
-                                active_context,
-                                container: &[],
-                                reverse: false,
-                                in_included: false,
-                            });
-                            if has_property {
-                                results.push(JsonLdEvent::StartSet);
-                            }
-                        }
-                        _ => {
-                            if container.contains(&"@list") {
-                                results.push(JsonLdEvent::StartList);
-                                self.state.push(JsonLdExpansionState::ListOrSetContainer {
-                                    needs_end_object: false,
-                                    end_event: Some(JsonLdEvent::EndList),
-                                    active_context: Arc::clone(&active_context),
-                                });
-                            } else if container.contains(&"@set") {
-                                results.push(JsonLdEvent::StartSet);
-                                self.state.push(JsonLdExpansionState::ListOrSetContainer {
-                                    needs_end_object: false,
-                                    end_event: Some(JsonLdEvent::EndSet),
-                                    active_context: Arc::clone(&active_context),
-                                });
-                            }
-                            self.state.push(JsonLdExpansionState::ObjectStart {
-                                types: Vec::new(),
-                                id: None,
-                                seen_id: false,
-                                active_property,
-                                active_context,
-                                reverse,
-                                in_included,
-                            });
-                            self.convert_event(JsonEvent::ObjectKey(key), results, errors)
+                            _ => JsonEvent::ObjectKey(key),
                         }
                     }
+                    JsonEvent::EndObject => JsonEvent::EndObject,
+                    _ => unreachable!("Inside of an object"),
+                };
+                if container.contains(&"@list") {
+                    results.push(JsonLdEvent::StartList);
+                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
+                        needs_end_object: false,
+                        end_event: Some(JsonLdEvent::EndList),
+                        active_context: Arc::clone(&active_context),
+                    });
+                } else if container.contains(&"@set") {
+                    results.push(JsonLdEvent::StartSet);
+                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
+                        needs_end_object: false,
+                        end_event: Some(JsonLdEvent::EndSet),
+                        active_context: Arc::clone(&active_context),
+                    });
                 }
-                JsonEvent::EndObject => {
-                    // Empty object
-                    results.push(JsonLdEvent::StartObject);
-                    results.push(JsonLdEvent::EndObject);
-                }
-                _ => unreachable!("Inside of an object"),
-            },
+                self.state.push(JsonLdExpansionState::ObjectStart {
+                    types: Vec::new(),
+                    id: None,
+                    seen_id: false,
+                    active_property,
+                    active_context,
+                    reverse,
+                    in_included,
+                });
+                self.convert_event(event, results, errors)
+            }
             JsonLdExpansionState::Context {
                 mut buffer,
                 mut depth,
@@ -1766,14 +1769,7 @@ impl JsonLdExpansionConverter {
                             }
                         }
                     }
-                    JsonEvent::Null
-                    | JsonEvent::String(_)
-                    | JsonEvent::Number(_)
-                    | JsonEvent::Boolean(_)
-                    | JsonEvent::StartArray
-                    | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::Eof => unreachable!(),
+                    _ => unreachable!(),
                 }
             }
             JsonLdExpansionState::ValueValue {

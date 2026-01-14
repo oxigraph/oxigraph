@@ -937,18 +937,19 @@ impl JsonLdContextProcessor {
         if let Some(key_value) = value.get("@container") {
             const ALLOWED_CONTAINER_MAPPINGS: &[&[&str]] = &[
                 &["@index"],
-                &["@language"],
-                &["@list"],
-                &["@set"],
                 &["@index", "@set"],
+                &["@language"],
                 &["@language", "@set"],
                 &["@graph"],
+                &["@graph", "@set"],
                 &["@graph", "@id"],
-                &["@graph", "@index"],
                 &["@graph", "@id", "@set"],
+                &["@graph", "@index"],
                 &["@graph", "@index", "@set"],
                 &["@id"],
                 &["@id", "@set"],
+                &["@list"],
+                &["@set"],
                 &["@type"],
                 &["@type", "@set"],
             ];
