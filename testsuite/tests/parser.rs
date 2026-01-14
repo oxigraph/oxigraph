@@ -228,17 +228,10 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             // @container @graph @index
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm013",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm014",
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi11",
             // @container @graph @id
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm015",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm016",
-            // @container @index
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi05",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi06",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi07",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi08",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi09",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi10",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi11",
             // useJCS
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tjs01",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tjs02",

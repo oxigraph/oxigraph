@@ -1038,7 +1038,7 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             };
-            let Some(index) = self.expand_iri(
+            let Some(expanded_index) = self.expand_iri(
                 active_context,
                 index.into(),
                 false,
@@ -1053,8 +1053,9 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             };
-            if self.lenient && (has_keyword_form(&index) || index.starts_with("_:"))
-                || !self.lenient && Iri::parse(index.as_ref()).is_err()
+            if self.lenient
+                && (has_keyword_form(&expanded_index) || expanded_index.starts_with("_:"))
+                || !self.lenient && Iri::parse(expanded_index.as_ref()).is_err()
             {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     "@index value must be a valid IRI",
