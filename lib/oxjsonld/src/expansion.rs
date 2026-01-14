@@ -64,6 +64,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_nodes: Vec<(String, Vec<JsonEvent<'static>>)>,
     },
     ObjectOrContainerStartStreaming {
         active_property: Option<String>,
@@ -182,6 +183,7 @@ enum JsonLdExpansionState {
     IndexContainer {
         active_context: Arc<JsonLdContext>,
         active_property: Option<String>,
+        container: &'static [&'static str],
     },
     LanguageContainer {
         active_context: Arc<JsonLdContext>,
@@ -406,10 +408,14 @@ impl JsonLdExpansionConverter {
                                 in_included,
                                 extra_nodes: extra_nodes.clone(),
                             });
-                        } else if container.contains(&"@index") {
+                        } else if container.contains(&"@index")
+                            || container.contains(&"@id")
+                            || container.contains(&"@type")
+                        {
                             self.state.push(JsonLdExpansionState::IndexContainer {
                                 active_context,
                                 active_property,
+                                container,
                             });
                             return;
                         } else if container.contains(&"@language") {
@@ -433,7 +439,7 @@ impl JsonLdExpansionConverter {
                             });
                             return;
                         }
-                        if active_context.previous_context.is_some() {
+                        if active_context.previous_context.is_some() && extra_nodes.is_empty() {
                             // We need to decide if we go back to the previous context or not
                             self.state
                                 .push(JsonLdExpansionState::ObjectStartIsSingleIdOrValue {
@@ -448,16 +454,15 @@ impl JsonLdExpansionConverter {
                                     is_array,
                                     container,
                                 });
-                            for (k, v) in extra_nodes {
-                                self.convert_event(JsonEvent::ObjectKey(k.into()), results, errors);
-                                for e in v {
-                                    self.convert_event(e, results, errors);
-                                }
-                            }
                         } else {
+                            let active_context_for_property_scoped_context =
+                                Arc::clone(&active_context);
+                            if let Some(previous_context) = &active_context.previous_context {
+                                active_context = Arc::clone(previous_context);
+                            }
                             if let Some(active_property) = &active_property {
                                 if let Some(property_scoped_context) = self.new_scoped_context(
-                                    &active_context,
+                                    &active_context_for_property_scoped_context,
                                     active_property,
                                     true,
                                     true,
@@ -477,7 +482,7 @@ impl JsonLdExpansionConverter {
                                 }
                             } else {
                                 JsonLdExpansionState::ObjectOrContainerStart {
-                                    buffer: extra_nodes,
+                                    buffer: Vec::new(),
                                     depth: 1,
                                     current_key: None,
                                     active_property,
@@ -485,6 +490,7 @@ impl JsonLdExpansionConverter {
                                     container: if is_array { &[] } else { container },
                                     reverse,
                                     in_included,
+                                    extra_nodes,
                                 }
                             });
                         }
@@ -503,6 +509,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
+                mut extra_nodes,
             } => {
                 // We have to buffer everything to make sure we get the @context key even if it's at the end
                 match event {
@@ -573,6 +580,7 @@ impl JsonLdExpansionConverter {
                                     ))
                                 }
                                 id_data = Some((key, value));
+                                extra_nodes.retain(|(k, _)| k != "@id"); // It overrides the extra id
                             }
                             Some("@graph") => {
                                 graph_data.push((key, value));
@@ -582,7 +590,7 @@ impl JsonLdExpansionConverter {
                     }
                     self.state
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
-                            extra_nodes: Vec::new(),
+                            extra_nodes,
                             active_property,
                             active_context,
                             container,
@@ -616,6 +624,7 @@ impl JsonLdExpansionConverter {
                             container,
                             reverse,
                             in_included,
+                            extra_nodes,
                         });
                 }
             }
@@ -903,6 +912,7 @@ impl JsonLdExpansionConverter {
                             container: if is_array { &[] } else { container },
                             reverse,
                             in_included,
+                            extra_nodes: Vec::new(),
                         }
                     });
                     for event in buffer {
@@ -974,7 +984,7 @@ impl JsonLdExpansionConverter {
                                 });
                             }
                             "@id" => {
-                                if id.is_some() {
+                                if seen_id {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "Only a single @id is allowed",
                                         JsonLdErrorCode::CollidingKeywords,
@@ -2204,19 +2214,36 @@ impl JsonLdExpansionConverter {
             JsonLdExpansionState::IndexContainer {
                 active_property,
                 active_context,
+                container,
             } => match event {
                 JsonEvent::EndObject => (),
                 JsonEvent::ObjectKey(key) => {
                     // Events for the @index
-                    #[expect(clippy::if_not_else)]
-                    let extra_nodes = if key != "@none" {
-                        if let Some(index_key) = active_property
+                    let mut map_context = Arc::clone(&active_context);
+                    let extra_nodes = if self
+                        .expand_iri(&active_context, key.as_ref().into(), false, true)
+                        .is_none_or(|k| k != "@none")
+                    {
+                        if container.contains(&"@id") {
+                            if let Some(parent_context) = &map_context.previous_context {
+                                map_context = Arc::clone(parent_context);
+                            }
+                            vec![(
+                                "@id".into(),
+                                vec![JsonEvent::String(key.into_owned().into())],
+                            )]
+                        } else if container.contains(&"@type") {
+                            vec![(
+                                "@type".into(),
+                                vec![JsonEvent::String(key.into_owned().into())],
+                            )]
+                        } else if let Some(index_key) = active_property
                             .as_ref()
                             .and_then(|p| active_context.term_definitions.get(p))
                             .and_then(|d| d.index_mapping.as_ref())
                         {
                             vec![(
-                                index_key.clone(),
+                                index_key.into(),
                                 vec![JsonEvent::String(key.into_owned().into())],
                             )]
                         } else {
@@ -2226,12 +2253,13 @@ impl JsonLdExpansionConverter {
                         Vec::new()
                     };
                     self.state.push(JsonLdExpansionState::IndexContainer {
-                        active_context: Arc::clone(&active_context),
+                        active_context,
                         active_property: active_property.clone(),
+                        container,
                     });
                     self.state.push(JsonLdExpansionState::Element {
                         active_property,
-                        active_context,
+                        active_context: map_context,
                         is_array: false,
                         container: &[],
                         reverse: false,
@@ -2609,7 +2637,7 @@ impl JsonLdExpansionConverter {
                 self.new_scoped_context(&active_context, &active_property, false, true, errors);
             self.expand_value(
                 active_property,
-                property_scoped_context.map_or_else(|| active_context, Arc::new),
+                property_scoped_context.map_or(active_context, Arc::new),
                 value,
                 reverse,
                 extra_nodes,

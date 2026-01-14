@@ -179,6 +179,8 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi10",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi11",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi12",
+            // Scoped contexts somehow propagate to elements inside of containers?
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc013",
             // @graph @container
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te079",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te080",
@@ -208,23 +210,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpr25",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpr26",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpr43",
-            // @container @id
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm001",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm002",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm003",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm005",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm011",
-            // @container @type
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm004",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm006",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm007",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm008",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm012",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm017",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm018",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm019",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm020",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc013",
             // @container @graph @index
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm013",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm014",

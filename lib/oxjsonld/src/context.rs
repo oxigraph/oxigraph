@@ -1007,7 +1007,7 @@ impl JsonLdContextProcessor {
                     if !["@id", "@vocab"].contains(&type_mapping.as_str()) {
                         errors.push(JsonLdSyntaxError::msg_and_code(
                                     format!("Type mapping must be @id or @vocab, not {type_mapping} when used with @type container"),
-                                    JsonLdErrorCode::InvalidContainerMapping,
+                                    JsonLdErrorCode::InvalidTypeMapping,
                                 ));
                     }
                 } else {
