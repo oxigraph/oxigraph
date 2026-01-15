@@ -6,6 +6,8 @@ use crate::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 use oxiri::{Iri, IriParseError};
+#[cfg(feature = "rdf-12")]
+use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
 use std::error::Error;
@@ -1020,10 +1022,11 @@ impl JsonLdToRdfConverter {
                     value,
                     r#type,
                     language,
+                    direction,
                 } => {
                     self.state.push(state);
                     self.emit_quad_for_new_literal(
-                        self.convert_literal(value, language, r#type),
+                        self.convert_literal(value, language, direction, r#type),
                         results,
                     )
                 }
@@ -1057,10 +1060,11 @@ impl JsonLdToRdfConverter {
                     value,
                     r#type,
                     language,
+                    direction,
                 } => {
                     self.add_new_list_node_state(current_node, results);
                     self.emit_quad_for_new_literal(
-                        self.convert_literal(value, language, r#type),
+                        self.convert_literal(value, language, direction, r#type),
                         results,
                     )
                 }
@@ -1235,10 +1239,12 @@ impl JsonLdToRdfConverter {
         }
     }
 
+    #[cfg_attr(not(feature = "rdf-12"), expect(unused_variables))]
     fn convert_literal(
         &self,
         value: JsonLdValue,
         language: Option<String>,
+        direction: Option<&'static str>,
         r#type: Option<String>,
     ) -> Option<Literal> {
         let r#type = if let Some(t) = r#type {
@@ -1249,6 +1255,27 @@ impl JsonLdToRdfConverter {
         Some(match value {
             JsonLdValue::String(value) => {
                 if let Some(language) = language {
+                    #[cfg(feature = "rdf-12")]
+                    if let Some(direction) = direction {
+                        if r#type.is_some_and(|t| t != rdf::DIR_LANG_STRING) {
+                            return None; // Expansion already returns an error
+                        }
+                        let direction = match direction {
+                            "ltr" => BaseDirection::Ltr,
+                            "rtl" => BaseDirection::Rtl,
+                            _ => return None, // Expansion already returns an error
+                        };
+                        return if self.lenient {
+                            Some(Literal::new_directional_language_tagged_literal_unchecked(
+                                value, language, direction,
+                            ))
+                        } else {
+                            Literal::new_directional_language_tagged_literal(
+                                value, &language, direction,
+                            )
+                            .ok()
+                        };
+                    }
                     if r#type.is_some_and(|t| t != rdf::LANG_STRING) {
                         return None; // Expansion already returns an error
                     }

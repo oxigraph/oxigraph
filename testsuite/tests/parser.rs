@@ -158,6 +158,11 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             // produceGeneralizedRdf
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0118",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te075",
+            // we always emit base direction when targeting RDF 1.2
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi02",
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi04",
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi05",
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi06",
             // non-normative - rdfDirection
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi09",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi10",
@@ -209,7 +214,7 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm019",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm020",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc013",
-            // @container @ŋraph @index
+            // @container @graph @index
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm013",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm014",
             // @container @graph @id

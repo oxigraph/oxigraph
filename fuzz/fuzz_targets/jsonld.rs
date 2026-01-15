@@ -97,8 +97,12 @@ fuzz_target!(|data: &[u8]| {
         );
     }
 
-    if bnodes_count <= 4 && !String::from_utf8_lossy(data).contains("\"@included\"") {
-        // @included is ignored when processing mode is json-ld-1.0, leading to silent different outputs...
+    let data_str = String::from_utf8_lossy(data);
+    if bnodes_count <= 4
+        && !data_str.contains("\"@included\"")
+        && !data_str.contains("\"@direction\"")
+    {
+        // @included and @direction are ignored when processing mode is json-ld-1.0, leading to silent different outputs...
         quads_lenient_1_1.canonicalize(CanonicalizationAlgorithm::Unstable);
         quads_lenient_1_0.canonicalize(CanonicalizationAlgorithm::Unstable);
         assert_eq!(
@@ -115,6 +119,7 @@ fuzz_target!(|data: &[u8]| {
 
     // We parse the serialization
     let new_quads = JsonLdParser::new()
+        .with_processing_mode(JsonLdProcessingMode::JsonLd1_1)
         .with_profile(JsonLdProfile::Streaming)
         .for_slice(&new_serialization)
         .collect::<Result<Dataset, _>>()

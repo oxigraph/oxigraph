@@ -10,6 +10,72 @@
       "name": "type aliased in the same level context",
       "input": "aliased_type.jsonld",
       "expect": "aliased_type.nq"
+    },
+    {
+      "@id": "#tdi02",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "Expand string using default and term directions and languages",
+      "purpose": "Strings are coerced to have @direction based on default and term direction.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "input": "di02-in.jsonld",
+      "expect": "di02-out.nq"
+    },
+    {
+      "@id": "#tdi04",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "simple language map with term direction",
+      "purpose": "Term selection with language maps and @direction.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "input": "di04-in.jsonld",
+      "expect": "di04-out.nq"
+    },
+    {
+      "@id": "#tdi05",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "simple language mapwith overriding term direction",
+      "purpose": "Term selection with language maps and @direction.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "input": "di05-in.jsonld",
+      "expect": "di05-out.nq"
+    },
+    {
+      "@id": "#tdi06",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "simple language mapwith overriding null direction",
+      "purpose": "Term selection with language maps and @direction.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "input": "di06-in.jsonld",
+      "expect": "di06-out.nq"
+    },
+    {
+      "@id": "#tdi09",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "rdfDirection: i18n-datatype with direction and no language",
+      "purpose": "Generates i18n datatype from literal with direction with option.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "requires": "I18nDatatype",
+      "input": "di09-in.jsonld",
+      "expect": "di09-out.nq"
+    }, 
+    {
+      "@id": "#tdi10",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "rdfDirection: literal direction and language",
+      "purpose": "Generates dirLangString from literal with direction with option.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "requires": "I18nDatatype",
+      "input": "di10-in.jsonld",
+      "expect": "di10-out.nq"
+    },
+    {
+      "@id": "#tdi11",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "rdfDirection: compound-literal with direction and no language",
+      "purpose": "Generates i18n datatype from literal with direction with option.",
+      "option": {"specVersion": "json-ld-1.1"},
+      "requires": "CompoundLiteral",
+      "input": "di11-in.jsonld",
+      "expect": "di11-out.nq"
     }
   ]
 }
