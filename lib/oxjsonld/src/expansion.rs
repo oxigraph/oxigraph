@@ -27,6 +27,7 @@ pub enum JsonLdEvent {
         value: JsonLdValue,
         r#type: Option<String>,
         language: Option<String>,
+        direction: Option<&'static str>,
     },
     StartGraph,
     EndGraph,
@@ -138,21 +139,31 @@ enum JsonLdExpansionState {
         r#type: Option<String>,
         value: Option<JsonLdValue>,
         language: Option<String>,
+        direction: Option<&'static str>,
     },
     ValueValue {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
         language: Option<String>,
+        direction: Option<&'static str>,
     },
     ValueLanguage {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
         value: Option<JsonLdValue>,
+        direction: Option<&'static str>,
+    },
+    ValueDirection {
+        active_context: Arc<JsonLdContext>,
+        r#type: Option<String>,
+        value: Option<JsonLdValue>,
+        language: Option<String>,
     },
     ValueType {
         active_context: Arc<JsonLdContext>,
         value: Option<JsonLdValue>,
         language: Option<String>,
+        direction: Option<&'static str>,
     },
     Index,
     Graph,
@@ -168,10 +179,12 @@ enum JsonLdExpansionState {
     },
     LanguageContainer {
         active_context: Arc<JsonLdContext>,
+        direction: Option<&'static str>,
     },
     LanguageContainerValue {
         active_context: Arc<JsonLdContext>,
         language: String,
+        direction: Option<&'static str>,
         is_array: bool,
     },
     Included,
@@ -385,8 +398,24 @@ impl JsonLdExpansionConverter {
                             });
                             return;
                         } else if container.contains(&"@language") {
-                            self.state
-                                .push(JsonLdExpansionState::LanguageContainer { active_context });
+                            // 13.7.2)
+                            let mut direction = active_context.default_direction;
+                            // 13.7.3)
+                            if let Some(active_property) = &active_property {
+                                if let Some(term_definition) =
+                                    active_context.term_definitions.get(active_property)
+                                {
+                                    if let Some(direction_mapping) =
+                                        term_definition.direction_mapping
+                                    {
+                                        direction = direction_mapping;
+                                    }
+                                }
+                            }
+                            self.state.push(JsonLdExpansionState::LanguageContainer {
+                                active_context,
+                                direction,
+                            });
                             return;
                         }
                         self.state
@@ -896,7 +925,7 @@ impl JsonLdExpansionConverter {
                                     nesting: 0,
                                 });
                             }
-                            "@value" | "@language" => {
+                            "@value" | "@language" | "@direction" => {
                                 if types.len() > 1 {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "Only a single @type is allowed when @value is present",
@@ -926,6 +955,7 @@ impl JsonLdExpansionConverter {
                                     r#type: types.into_iter().next(),
                                     value: None,
                                     language: None,
+                                    direction: None,
                                 });
                                 self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
@@ -1587,6 +1617,7 @@ impl JsonLdExpansionConverter {
                 r#type,
                 value,
                 language,
+                direction,
             } => {
                 match event {
                     JsonEvent::ObjectKey(key) => {
@@ -1603,6 +1634,7 @@ impl JsonLdExpansionConverter {
                                             r#type,
                                             value,
                                             language,
+                                            direction,
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1611,6 +1643,7 @@ impl JsonLdExpansionConverter {
                                             active_context,
                                             r#type,
                                             language,
+                                            direction,
                                         });
                                     }
                                 }
@@ -1625,6 +1658,7 @@ impl JsonLdExpansionConverter {
                                             r#type,
                                             value,
                                             language,
+                                            direction,
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1633,6 +1667,36 @@ impl JsonLdExpansionConverter {
                                             active_context,
                                             r#type,
                                             value,
+                                            direction,
+                                        });
+                                    }
+                                }
+                                "@direction" => {
+                                    if direction.is_some()
+                                        || self.context_processor.processing_mode
+                                            == JsonLdProcessingMode::JsonLd1_0
+                                    {
+                                        if direction.is_some() {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "@direction cannot be set multiple times",
+                                                JsonLdErrorCode::CollidingKeywords,
+                                            ));
+                                        }
+                                        self.state.push(JsonLdExpansionState::Value {
+                                            active_context,
+                                            r#type,
+                                            value,
+                                            language,
+                                            direction,
+                                        });
+                                        self.state
+                                            .push(JsonLdExpansionState::Skip { is_array: false });
+                                    } else {
+                                        self.state.push(JsonLdExpansionState::ValueDirection {
+                                            active_context,
+                                            r#type,
+                                            value,
+                                            language,
                                         });
                                     }
                                 }
@@ -1653,6 +1717,7 @@ impl JsonLdExpansionConverter {
                                             r#type,
                                             value,
                                             language,
+                                            direction,
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1661,6 +1726,7 @@ impl JsonLdExpansionConverter {
                                             active_context,
                                             value,
                                             language,
+                                            direction,
                                         });
                                     }
                                 }
@@ -1674,6 +1740,7 @@ impl JsonLdExpansionConverter {
                                         r#type,
                                         value,
                                         language,
+                                        direction,
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1684,6 +1751,7 @@ impl JsonLdExpansionConverter {
                                         r#type,
                                         value,
                                         language,
+                                        direction,
                                     });
                                     self.state.push(JsonLdExpansionState::Index);
                                 }
@@ -1699,6 +1767,7 @@ impl JsonLdExpansionConverter {
                                         r#type,
                                         value,
                                         language,
+                                        direction,
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1710,6 +1779,7 @@ impl JsonLdExpansionConverter {
                                         r#type,
                                         value,
                                         language,
+                                        direction,
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1721,6 +1791,7 @@ impl JsonLdExpansionConverter {
                                 r#type,
                                 value,
                                 language,
+                                direction,
                             });
                             self.state
                                 .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1765,6 +1836,7 @@ impl JsonLdExpansionConverter {
                                     value,
                                     r#type,
                                     language,
+                                    direction,
                                 })
                             }
                         }
@@ -1776,30 +1848,35 @@ impl JsonLdExpansionConverter {
                 active_context,
                 r#type,
                 language,
+                direction,
             } => match event {
                 JsonEvent::Null => self.state.push(JsonLdExpansionState::Value {
                     active_context,
                     r#type,
                     value: None,
                     language,
+                    direction,
                 }),
                 JsonEvent::Number(value) => self.state.push(JsonLdExpansionState::Value {
                     active_context,
                     r#type,
                     value: Some(JsonLdValue::Number(value.into())),
                     language,
+                    direction,
                 }),
                 JsonEvent::Boolean(value) => self.state.push(JsonLdExpansionState::Value {
                     active_context,
                     r#type,
                     value: Some(JsonLdValue::Boolean(value)),
                     language,
+                    direction,
                 }),
                 JsonEvent::String(value) => self.state.push(JsonLdExpansionState::Value {
                     active_context,
                     r#type,
                     value: Some(JsonLdValue::String(value.into())),
                     language,
+                    direction,
                 }),
                 _ => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1811,6 +1888,7 @@ impl JsonLdExpansionConverter {
                         r#type,
                         value: None,
                         language,
+                        direction,
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1821,6 +1899,7 @@ impl JsonLdExpansionConverter {
                 active_context,
                 value,
                 r#type,
+                direction,
             } => {
                 if let JsonEvent::String(language) = event {
                     self.state.push(JsonLdExpansionState::Value {
@@ -1828,10 +1907,11 @@ impl JsonLdExpansionConverter {
                         r#type,
                         value,
                         language: Some(language.into()),
+                        direction,
                     })
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@value value must be a string",
+                        "@language value must be a string",
                         JsonLdErrorCode::InvalidLanguageTaggedString,
                     ));
                     self.state.push(JsonLdExpansionState::Value {
@@ -1839,6 +1919,48 @@ impl JsonLdExpansionConverter {
                         r#type,
                         value,
                         language: None,
+                        direction,
+                    });
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
+                }
+            }
+            JsonLdExpansionState::ValueDirection {
+                active_context,
+                value,
+                r#type,
+                language,
+            } => {
+                if let JsonEvent::String(direction) = event {
+                    self.state.push(JsonLdExpansionState::Value {
+                        active_context,
+                        r#type,
+                        value,
+                        language,
+                        direction: match direction.as_ref() {
+                            "ltr" => Some("ltr"),
+                            "rtl" => Some("rtl"),
+                            _ => {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("The allowed @direction values are 'rtl' and 'ltr', found '{direction}'"),
+                                    JsonLdErrorCode::InvalidBaseDirection
+                                ));
+                                None
+                            }
+                        },
+                    })
+                } else {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@direction value must be a string",
+                        JsonLdErrorCode::InvalidLanguageTaggedString,
+                    ));
+                    self.state.push(JsonLdExpansionState::Value {
+                        active_context,
+                        r#type,
+                        value,
+                        language,
+                        direction: None,
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1849,6 +1971,7 @@ impl JsonLdExpansionConverter {
                 active_context,
                 value,
                 language,
+                direction,
             } => {
                 if let JsonEvent::String(t) = event {
                     let mut r#type = self.expand_iri(&active_context, t, true, true);
@@ -1866,6 +1989,7 @@ impl JsonLdExpansionConverter {
                         r#type: r#type.map(Into::into),
                         value,
                         language,
+                        direction,
                     })
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1877,6 +2001,7 @@ impl JsonLdExpansionConverter {
                         r#type: None,
                         value,
                         language,
+                        direction,
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -1980,17 +2105,22 @@ impl JsonLdExpansionConverter {
                 }
                 _ => unreachable!(),
             },
-            JsonLdExpansionState::LanguageContainer { active_context } => match event {
+            JsonLdExpansionState::LanguageContainer {
+                active_context,
+                direction,
+            } => match event {
                 JsonEvent::EndObject => (),
                 JsonEvent::ObjectKey(language) => {
                     self.state.push(JsonLdExpansionState::LanguageContainer {
                         active_context: Arc::clone(&active_context),
+                        direction,
                     });
                     self.state
                         .push(JsonLdExpansionState::LanguageContainerValue {
                             active_context,
                             language: language.into(),
                             is_array: false,
+                            direction,
                         })
                 }
                 _ => unreachable!(),
@@ -1999,6 +2129,7 @@ impl JsonLdExpansionConverter {
                 active_context,
                 language,
                 is_array,
+                direction,
             } => match event {
                 JsonEvent::Null => {
                     if is_array {
@@ -2007,6 +2138,7 @@ impl JsonLdExpansionConverter {
                                 active_context,
                                 language,
                                 is_array,
+                                direction,
                             });
                     }
                 }
@@ -2017,6 +2149,7 @@ impl JsonLdExpansionConverter {
                                 active_context: Arc::clone(&active_context),
                                 language: language.clone(),
                                 is_array,
+                                direction,
                             });
                     }
                     results.push(JsonLdEvent::Value {
@@ -2030,6 +2163,7 @@ impl JsonLdExpansionConverter {
                                 false,
                             ) != Some("@none".into()))
                         .then_some(language),
+                        direction,
                     })
                 }
                 JsonEvent::StartArray => {
@@ -2038,6 +2172,7 @@ impl JsonLdExpansionConverter {
                             active_context,
                             language,
                             is_array: true,
+                            direction,
                         });
                     if is_array {
                         errors.push(JsonLdSyntaxError::msg_and_code(
@@ -2056,6 +2191,7 @@ impl JsonLdExpansionConverter {
                                 active_context,
                                 language,
                                 is_array,
+                                direction,
                             });
                     }
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -2352,6 +2488,7 @@ impl JsonLdExpansionConverter {
     ) {
         let mut r#type = None;
         let mut language = None;
+        let mut direction = None;
         if let Some(term_definition) = active_context.term_definitions.get(active_property) {
             if let Some(type_mapping) = &term_definition.type_mapping {
                 match type_mapping.as_ref() {
@@ -2407,11 +2544,19 @@ impl JsonLdExpansionConverter {
                     .language_mapping
                     .clone()
                     .unwrap_or_else(|| active_context.default_language.clone());
+                direction = term_definition
+                    .direction_mapping
+                    .unwrap_or(active_context.default_direction);
             }
         } else {
             // 5)
-            if matches!(value, JsonLdValue::String(_)) && language.is_none() {
-                language.clone_from(&active_context.default_language);
+            if matches!(value, JsonLdValue::String(_)) {
+                if language.is_none() {
+                    language.clone_from(&active_context.default_language);
+                }
+                if direction.is_none() {
+                    direction.clone_from(&active_context.default_direction);
+                }
             }
         }
         if reverse {
@@ -2424,6 +2569,7 @@ impl JsonLdExpansionConverter {
             value,
             r#type,
             language,
+            direction,
         });
     }
 
@@ -2489,6 +2635,7 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::Value { active_context, .. }
                 | JsonLdExpansionState::ValueValue { active_context, .. }
                 | JsonLdExpansionState::ValueLanguage { active_context, .. }
+                | JsonLdExpansionState::ValueDirection { active_context, .. }
                 | JsonLdExpansionState::ValueType { active_context, .. }
                 | JsonLdExpansionState::ListOrSetContainer { active_context, .. }
                 | JsonLdExpansionState::IndexContainer { active_context, .. }
