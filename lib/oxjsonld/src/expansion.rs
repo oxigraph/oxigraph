@@ -2274,11 +2274,21 @@ impl JsonLdExpansionConverter {
                         "@nest value must be a JSON object",
                         JsonLdErrorCode::InvalidNestValue,
                     ));
-                    self.state.push(JsonLdExpansionState::Object {
-                        active_context,
-                        in_property: false,
-                        has_emitted_id,
-                        nesting: 0,
+                    self.state.push(if array_count > 0 {
+                        JsonLdExpansionState::NestStart {
+                            active_context,
+                            parent_active_context,
+                            has_emitted_id,
+                            nesting,
+                            array_count,
+                        }
+                    } else {
+                        JsonLdExpansionState::Object {
+                            active_context: parent_active_context,
+                            in_property: false,
+                            has_emitted_id,
+                            nesting,
+                        }
                     });
                 }
             },
