@@ -10,8 +10,8 @@ use spargebra::{Query, Update};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::str;
 use std::str::FromStr;
+use std::{fs, str};
 use tempfile::TempDir;
 
 fn parse_bsbm(c: &mut Criterion) {
@@ -305,9 +305,14 @@ criterion_main!(parse, store);
 
 fn read_bz2_data(url: &str) -> Vec<u8> {
     let url = Uri::from_str(url).unwrap();
-    let file_name = url.path().split('/').next_back().unwrap().to_owned();
-    if !Path::new(&file_name).exists() {
-        let client = oxhttp::Client::new().with_redirection_limit(5);
+    let target_data_dir = Path::new("benches").join("data");
+    fs::create_dir_all(&target_data_dir).unwrap();
+    let file_path = target_data_dir.join(url.path().split('/').next_back().unwrap());
+    if !file_path.exists() {
+        let client = oxhttp::Client::new()
+            .with_redirection_limit(5)
+            .with_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
+            .unwrap();
         let request = Request::builder().uri(&url).body(()).unwrap();
         let response = client.request(request).unwrap();
         assert!(
@@ -318,12 +323,12 @@ fn read_bz2_data(url: &str) -> Vec<u8> {
         );
         std::io::copy(
             &mut response.into_body(),
-            &mut File::create(&file_name).unwrap(),
+            &mut File::create(&file_path).unwrap(),
         )
         .unwrap();
     }
     let mut buf = Vec::new();
-    MultiBzDecoder::new(File::open(&file_name).unwrap())
+    MultiBzDecoder::new(File::open(&file_path).unwrap())
         .read_to_end(&mut buf)
         .unwrap();
     buf
