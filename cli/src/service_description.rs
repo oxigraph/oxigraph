@@ -61,21 +61,29 @@ pub fn generate_service_description(
     format: RdfFormat,
     kind: EndpointKind,
     union_default_graph: bool,
+    endpoint_base_url: &str,
 ) -> Vec<u8> {
     let mut graph = Vec::new();
     let root = BlankNode::default();
     graph.push(TripleRef::new(&root, rdf::TYPE, sd::SERVICE));
-    if matches!(
-        format,
-        RdfFormat::Turtle | RdfFormat::TriG | RdfFormat::N3 | RdfFormat::RdfXml
-    ) {
-        // Hack: we use the default base IRI ie. the IRI from which the file is served
-        graph.push(TripleRef::new(
-            &root,
-            sd::ENDPOINT,
-            NamedNodeRef::new_unchecked(""),
-        ));
-    }
+    graph.push(TripleRef::new(
+        &root,
+        sd::ENDPOINT,
+        NamedNodeRef::new_unchecked(match format {
+            RdfFormat::Turtle
+            | RdfFormat::TriG
+            | RdfFormat::N3
+            | RdfFormat::JsonLd { .. }
+            | RdfFormat::RdfXml => {
+                // The document base URL is also the endpoint URL, so we can just use it
+                ""
+            }
+            RdfFormat::NTriples | RdfFormat::NQuads | _ => {
+                // We need to return an absolute URL, we use the request target url
+                endpoint_base_url
+            }
+        }),
+    ));
     for language in match kind {
         EndpointKind::Query => [sd::SPARQL_10_QUERY, sd::SPARQL_11_QUERY].as_slice(),
         EndpointKind::Update => [sd::SPARQL_11_UPDATE].as_slice(),
@@ -122,9 +130,7 @@ pub fn generate_service_description(
             sd::BASIC_FEDERATED_QUERY,
         ));
     }
-    if kind == EndpointKind::Update {
-        graph.push(TripleRef::new(&root, sd::FEATURE, sd::EMPTY_GRAPHS));
-    }
+    graph.push(TripleRef::new(&root, sd::FEATURE, sd::EMPTY_GRAPHS));
     if union_default_graph {
         graph.push(TripleRef::new(&root, sd::FEATURE, sd::UNION_DEFAULT_GRAPH));
     }
