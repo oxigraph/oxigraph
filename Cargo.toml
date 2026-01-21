@@ -81,19 +81,19 @@ wasm-bindgen = "0.2.100"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.3", path = "lib/oxigraph" }
-oxjsonld = { version = "=0.2.1", path = "lib/oxjsonld" }
-oxrdf = { version = "=0.3.1", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.2.1", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.2.1", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.5.3", path = "./oxrocksdb-sys" }
-oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.2.1", path = "lib/oxttl" }
-spargebra = { version = "=0.4.3", path = "lib/spargebra" }
-spargeo = { version = "=0.5.2", path = "lib/spargeo" }
-sparesults = { version = "=0.3.1", path = "lib/sparesults" }
-sparopt = { version = "=0.3.3", path = "lib/sparopt" }
-spareval = { version = "=0.2.3", path = "lib/spareval" }
+oxigraph = { version = "=0.5.3", path = "lib/oxigraph", package = "oxigraph_elevont" }
+oxjsonld = { version = "=0.2.1", path = "lib/oxjsonld", package = "oxjsonld_elevont" }
+oxrdf = { version = "=0.3.1", path = "lib/oxrdf", package = "oxrdf_elevont" }
+oxrdfio = { version = "=0.2.1", path = "lib/oxrdfio", package = "oxrdfio_elevont" }
+oxrdfxml = { version = "=0.2.1", path = "lib/oxrdfxml", package = "oxrdfxml_elevont" }
+oxrocksdb-sys = { version = "=0.5.3", path = "./oxrocksdb-sys", package = "oxrocksdb-sys_elevont" }
+oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes", package = "oxsdatatypes_elevont" }
+oxttl = { version = "=0.2.1", path = "lib/oxttl", package = "oxttl_elevont" }
+spargebra = { version = "=0.4.3", path = "lib/spargebra", package = "spargebra_elevont" }
+spargeo = { version = "=0.5.2", path = "lib/spargeo", package = "spargeo_elevont" }
+sparesults = { version = "=0.3.1", path = "lib/sparesults", package = "sparesults_elevont" }
+sparopt = { version = "=0.3.3", path = "lib/sparopt", package = "sparopt_elevont" }
+spareval = { version = "=0.2.3", path = "lib/spareval", package = "spareval_elevont" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"

@@ -1,12 +1,12 @@
 [package]
-name = "oxrocksdb-sys"
+name = "oxrocksdb-sys_elevont"
 version.workspace = true
 authors.workspace = true
 license = "GPL-2.0 OR Apache-2.0"
-repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
+repository = "https://github.com/elevont/oxigraph/tree/main/oxrocksdb-sys"
 readme = "README.md"
 description = "Rust bindings for RocksDB for Oxigraph usage."
-documentation = "https://docs.rs/oxrocksdb-sys"
+documentation = "https://docs.rs/oxrocksdb-sys_elevont"
 edition.workspace = true
 rust-version.workspace = true
 build = "build.rs"

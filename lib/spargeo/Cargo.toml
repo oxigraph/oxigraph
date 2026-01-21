@@ -1,12 +1,12 @@
 [package]
-name = "spargeo"
+name = "spargeo_elevont"
 version = "0.5.2"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["GeoSPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargeo"
-documentation = "https://docs.rs/spargeo"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/spargeo"
+documentation = "https://docs.rs/spargeo_elevont"
 description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true

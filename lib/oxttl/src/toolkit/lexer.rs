@@ -63,6 +63,11 @@ pub struct Lexer<B, R: TokenRecognizer> {
     min_buffer_size: usize,
     max_buffer_size: usize,
     line_comment_start: Option<&'static [u8]>,
+    /// Whether a (syntax) comment has been seen in the input yet.
+    ///
+    /// This concerns syntax comments (e.g. `# foo`),
+    /// not RDF comments (e.g. `<s> rdfs::comment "A random subject"@en .`).
+    seen_comment: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -101,7 +106,16 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
             min_buffer_size,
             max_buffer_size,
             line_comment_start,
+            seen_comment: false,
         }
+    }
+
+    /// Whether a (syntax) comment has been seen in the input yet.
+    ///
+    /// This concerns syntax comments (e.g. `# foo`),
+    /// not RDF comments (e.g. `<s> rdfs::comment "A random subject"@en .`).
+    pub fn seen_comment(&self) -> bool {
+        self.seen_comment
     }
 }
 
@@ -328,6 +342,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         if let Some(line_comment_start) = self.line_comment_start {
             if buf.starts_with(line_comment_start) {
                 // Comment
+                self.seen_comment = true;
                 if let Some(end) = memchr2(b'\r', b'\n', &buf[line_comment_start.len()..]) {
                     let mut end_position = line_comment_start.len() + end;
                     if buf.get(end_position).copied() == Some(b'\r') {

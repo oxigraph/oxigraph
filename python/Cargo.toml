@@ -1,5 +1,5 @@
 [package]
-name = "pyoxigraph"
+name = "pyoxigraph_elevont"
 version.workspace = true
 authors.workspace = true
 license.workspace = true

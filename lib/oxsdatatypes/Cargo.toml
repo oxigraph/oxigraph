@@ -1,13 +1,13 @@
 [package]
-name = "oxsdatatypes"
+name = "oxsdatatypes_elevont"
 version = "0.2.2"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["XSD"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxsdatatypes"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/oxsdatatypes"
 description = "Some XSD datatypes for SPARQL implementations"
-documentation = "https://docs.rs/oxsdatatypes"
+documentation = "https://docs.rs/oxsdatatypes_elevont"
 edition.workspace = true
 rust-version.workspace = true
 

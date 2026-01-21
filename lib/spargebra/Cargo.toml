@@ -1,12 +1,12 @@
 [package]
-name = "spargebra"
+name = "spargebra_elevont"
 version = "0.4.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
-documentation = "https://docs.rs/spargebra"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/spargebra"
+documentation = "https://docs.rs/spargebra_elevont"
 description = "SPARQL parser"
 edition.workspace = true
 rust-version.workspace = true

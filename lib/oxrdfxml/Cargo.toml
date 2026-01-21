@@ -1,13 +1,13 @@
 [package]
-name = "oxrdfxml"
+name = "oxrdfxml_elevont"
 version = "0.2.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["RDFXML", "XML", "RDF"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
+repository = "https://github.com/elevont/oxigraph/tree/master/lib/oxrdfxml"
 description = "Parser and serializer for the RDF/XML format"
-documentation = "https://docs.rs/oxrdfxml"
+documentation = "https://docs.rs/oxrdfxml_elevont"
 edition.workspace = true
 rust-version.workspace = true
 

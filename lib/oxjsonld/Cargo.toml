@@ -1,13 +1,13 @@
 [package]
-name = "oxjsonld"
+name = "oxjsonld_elevont"
 version = "0.2.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["JSON-LD", "RDF"]
-repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxjsonld"
+repository = "https://github.com/elevont/oxigraph/tree/master/lib/oxjsonld"
 description = "Parser and serializer for the JSON-LD 1.0 format"
-documentation = "https://docs.rs/oxjsonld"
+documentation = "https://docs.rs/oxjsonld_elevont"
 edition.workspace = true
 rust-version.workspace = true
 

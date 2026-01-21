@@ -1,14 +1,14 @@
 [package]
-name = "oxigraph"
+name = "oxigraph_elevont"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxigraph"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/oxigraph"
 homepage = "https://oxigraph.org/"
-documentation = "https://docs.rs/oxigraph"
+documentation = "https://docs.rs/oxigraph_elevont"
 description = "SPARQL database and RDF toolkit"
 edition.workspace = true
 rust-version.workspace = true

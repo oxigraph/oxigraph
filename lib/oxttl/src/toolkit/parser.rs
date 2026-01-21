@@ -71,6 +71,14 @@ impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
         self.state.is_none() && self.results.is_empty() && self.errors.is_empty()
     }
 
+    /// Whether a (syntax) comment has been seen in the input yet.
+    ///
+    /// This concerns syntax comments (e.g. `# foo`),
+    /// not RDF comments (e.g. `<s> rdfs::comment "A random subject"@en .`).
+    pub fn seen_comment(&self) -> bool {
+        self.lexer.seen_comment()
+    }
+
     pub fn parse_next(&mut self) -> Option<Result<RR::Output, TurtleSyntaxError>> {
         loop {
             if let Some(error) = self.errors.pop() {

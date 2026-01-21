@@ -1,12 +1,12 @@
 [package]
-name = "oxigraph-cli"
+name = "oxigraph-cli_elevont"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["command-line-utilities", "database"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/cli"
+repository = "https://github.com/elevont/oxigraph/tree/main/cli"
 homepage = "https://oxigraph.org/cli/"
 description = "Oxigraph CLI tool and SPARQL HTTP server"
 edition.workspace = true

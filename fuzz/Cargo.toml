@@ -1,5 +1,5 @@
 [package]
-name = "oxigraph-fuzz"
+name = "oxigraph-fuzz_elevont"
 version = "0.0.0"
 publish = false
 edition = "2024"

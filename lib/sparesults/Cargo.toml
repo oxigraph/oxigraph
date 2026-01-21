@@ -1,13 +1,13 @@
 [package]
-name = "sparesults"
+name = "sparesults_elevont"
 version = "0.3.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/sparesults"
 description = "SPARQL query results formats parsers and serializers"
-documentation = "https://docs.rs/sparesults"
+documentation = "https://docs.rs/sparesults_elevont"
 edition.workspace = true
 rust-version.workspace = true
 
