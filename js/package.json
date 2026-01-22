@@ -13,7 +13,7 @@
         "fzstd": "^0.1.1",
         "typescript": "~5.9",
         "vitest": "^4.0.0",
-        "wasm-pack": "^0.13.0"
+        "wasm-pack": "^0.14.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
