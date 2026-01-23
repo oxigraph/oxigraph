@@ -21,6 +21,8 @@ pub enum RdfFormat {
     Turtle,
     /// [JSON-LD](https://www.w3.org/TR/json-ld/)
     JsonLd { profile: JsonLdProfileSet },
+    /// [Jelly](https://jelly-rdf.github.io/dev/)
+    Jelly,
 }
 
 impl RdfFormat {
@@ -37,6 +39,7 @@ impl RdfFormat {
     #[inline]
     pub const fn iri(self) -> &'static str {
         match self {
+            Self::Jelly => "https://jelly-rdf.github.io/dev/",
             Self::JsonLd { .. } => "https://www.w3.org/ns/formats/data/JSON-LD",
             Self::N3 => "http://www.w3.org/ns/formats/N3",
             Self::NQuads => "http://www.w3.org/ns/formats/N-Quads",
@@ -57,6 +60,7 @@ impl RdfFormat {
     #[inline]
     pub const fn media_type(self) -> &'static str {
         match self {
+            Self::Jelly => "application/x-jelly-rdf",
             Self::JsonLd { profile } => {
                 // TODO: more combinations
                 if profile.contains(JsonLdProfile::Streaming) {
@@ -84,6 +88,7 @@ impl RdfFormat {
     #[inline]
     pub const fn file_extension(self) -> &'static str {
         match self {
+            Self::Jelly => "jelly",
             Self::JsonLd { .. } => "jsonld",
             Self::N3 => "n3",
             Self::NQuads => "nq",
@@ -104,6 +109,7 @@ impl RdfFormat {
     #[inline]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::Jelly => "Jelly",
             Self::JsonLd { profile } => {
                 // TODO: more combinations
                 if profile.contains(JsonLdProfile::Streaming) {
@@ -131,7 +137,7 @@ impl RdfFormat {
     /// ```
     #[inline]
     pub const fn supports_datasets(self) -> bool {
-        matches!(self, Self::JsonLd { .. } | Self::NQuads | Self::TriG)
+        matches!(self, Self::Jelly | Self::JsonLd { .. } | Self::NQuads | Self::TriG)
     }
 
     #[deprecated(note = "All format will soon support RDF 1.2", since = "0.2.0")]
@@ -274,7 +280,8 @@ impl RdfFormat {
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
-        const EXTENSIONS: [(&str, RdfFormat); 10] = [
+        const EXTENSIONS: [(&str, RdfFormat); 11] = [
+            ("jelly", RdfFormat::Jelly),
             (
                 "json",
                 RdfFormat::JsonLd {

@@ -3,6 +3,7 @@ members = [
     "cli",
     "js",
     "lib/oxigraph",
+    "lib/oxjelly",
     "lib/oxjsonld",
     "lib/oxrdf",
     "lib/oxrdfio",
@@ -82,6 +83,7 @@ wkt = "0.14"
 
 # Internal dependencies
 oxigraph = { version = "=0.5.4", path = "lib/oxigraph", default-features = false }
+oxjelly = { version = "=0.0.0", path = "lib/oxjelly" }
 oxjsonld = { version = "=0.2.2", path = "lib/oxjsonld" }
 oxrdf = { version = "=0.3.2", path = "lib/oxrdf" }
 oxrdfio = { version = "=0.2.2", path = "lib/oxrdfio" }

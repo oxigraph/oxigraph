@@ -1,0 +1,32 @@
+[package]
+name = "oxjelly"
+version = "0.0.0"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["RDF", "Jelly"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxjelly"
+description = "Parser and serializer for Jelly"
+documentation = "https://docs.rs/oxjelly"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+rdf-12 = ["oxrdf/rdf-12"]
+
+[dependencies]
+oxiri.workspace = true
+oxrdf.workspace = true
+protobuf = "3.7"
+thiserror = "2.0"
+
+[build-dependencies]
+protobuf-codegen = "3.7"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

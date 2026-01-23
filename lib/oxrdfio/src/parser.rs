@@ -37,6 +37,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::Path;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
+use oxjelly::{JellyParser, JellyPrefixesIter, ReaderJellyParser, SliceJellyParser};
 
 /// Parsers for RDF serialization formats.
 ///
@@ -79,6 +80,7 @@ pub struct RdfParser {
 
 #[derive(Clone)]
 enum RdfParserKind {
+    Jelly(JellyParser),
     JsonLd(JsonLdParser, JsonLdProfileSet),
     N3(N3Parser),
     NQuads(NQuadsParser),
@@ -94,6 +96,7 @@ impl RdfParser {
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
+                RdfFormat::Jelly => RdfParserKind::Jelly(JellyParser::new()),
                 RdfFormat::JsonLd { profile } => {
                     RdfParserKind::JsonLd(JsonLdParser::new().with_profile(profile), profile)
                 }
@@ -122,6 +125,7 @@ impl RdfParser {
     /// ```
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
+            RdfParserKind::Jelly(_) => RdfFormat::Jelly,
             RdfParserKind::JsonLd(_, profile) => RdfFormat::JsonLd { profile: *profile },
             RdfParserKind::N3(_) => RdfFormat::N3,
             RdfParserKind::NQuads(_) => RdfFormat::NQuads,
@@ -151,6 +155,7 @@ impl RdfParser {
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
+            RdfParserKind::Jelly(p) => RdfParserKind::Jelly(p),
             RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?, f),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
@@ -237,6 +242,7 @@ impl RdfParser {
     #[inline]
     pub fn lenient(mut self) -> Self {
         self.inner = match self.inner {
+            RdfParserKind::Jelly(p) => RdfParserKind::Jelly(p),
             RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.lenient(), f),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.lenient()),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.lenient()),
@@ -274,6 +280,7 @@ impl RdfParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderQuadParser<R> {
         ReaderQuadParser {
             inner: match self.inner {
+                RdfParserKind::Jelly(p) => ReaderQuadParserKind::Jelly(p.for_reader(reader)),
                 RdfParserKind::JsonLd(p, _) => ReaderQuadParserKind::JsonLd(p.for_reader(reader)),
                 RdfParserKind::N3(p) => ReaderQuadParserKind::N3(p.for_reader(reader)),
                 RdfParserKind::NQuads(p) => ReaderQuadParserKind::NQuads(p.for_reader(reader)),
@@ -364,6 +371,7 @@ impl RdfParser {
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceQuadParser<'_> {
         SliceQuadParser {
             inner: match self.inner {
+                RdfParserKind::Jelly(p) => SliceQuadParserKind::Jelly(p.for_slice(slice)),
                 RdfParserKind::JsonLd(p, _) => SliceQuadParserKind::JsonLd(p.for_slice(slice)),
                 RdfParserKind::N3(p) => SliceQuadParserKind::N3(p.for_slice(slice)),
                 RdfParserKind::NQuads(p) => SliceQuadParserKind::NQuads(p.for_slice(slice)),
@@ -522,6 +530,7 @@ pub struct ReaderQuadParser<R: Read> {
 }
 
 enum ReaderQuadParserKind<R: Read> {
+    Jelly(ReaderJellyParser<R>),
     JsonLd(ReaderJsonLdParser<R>),
     N3(ReaderN3Parser<R>),
     NQuads(ReaderNQuadsParser<R>),
@@ -536,6 +545,10 @@ impl<R: Read> Iterator for ReaderQuadParser<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.inner {
+            ReaderQuadParserKind::Jelly(parser) => match parser.next()? {
+                Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
+                Err(e) => Err(e.into()),
+            }
             ReaderQuadParserKind::JsonLd(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
@@ -599,6 +612,7 @@ impl<R: Read> ReaderQuadParser<R> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
+                ReaderQuadParserKind::Jelly(p) => PrefixesIterKind::Jelly(p.prefixes()),
                 ReaderQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 ReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 ReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
@@ -637,7 +651,8 @@ impl<R: Read> ReaderQuadParser<R> {
             ReaderQuadParserKind::TriG(p) => p.base_iri(),
             ReaderQuadParserKind::Turtle(p) => p.base_iri(),
             ReaderQuadParserKind::RdfXml(p) => p.base_iri(),
-            ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) => None,
+            ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_)
+            | ReaderQuadParserKind::Jelly(_) => None,
         }
     }
 
@@ -891,6 +906,7 @@ pub struct SliceQuadParser<'a> {
 }
 
 enum SliceQuadParserKind<'a> {
+    Jelly(SliceJellyParser<'a>),
     JsonLd(SliceJsonLdParser<'a>),
     N3(SliceN3Parser<'a>),
     NQuads(SliceNQuadsParser<'a>),
@@ -905,6 +921,10 @@ impl Iterator for SliceQuadParser<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.inner {
+            SliceQuadParserKind::Jelly(parser) => match parser.next()? {
+                Ok(quad) => self.mapper.map_quad(quad),
+                Err(e) => Err(e.into()),
+            }
             SliceQuadParserKind::JsonLd(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad),
                 Err(e) => Err(e.into()),
@@ -1037,6 +1057,7 @@ impl SliceQuadParser<'_> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
+                SliceQuadParserKind::Jelly(p) => PrefixesIterKind::Jelly(p.prefixes()),
                 SliceQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 SliceQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 SliceQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
@@ -1075,7 +1096,8 @@ impl SliceQuadParser<'_> {
             SliceQuadParserKind::TriG(p) => p.base_iri(),
             SliceQuadParserKind::Turtle(p) => p.base_iri(),
             SliceQuadParserKind::RdfXml(p) => p.base_iri(),
-            SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_) => None,
+            SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_)
+            | SliceQuadParserKind::Jelly(_) => None,
         }
     }
 }
@@ -1088,6 +1110,7 @@ pub struct PrefixesIter<'a> {
 }
 
 enum PrefixesIterKind<'a> {
+    Jelly(JellyPrefixesIter<'a>),
     JsonLd(JsonLdPrefixesIter<'a>),
     Turtle(TurtlePrefixesIter<'a>),
     TriG(TriGPrefixesIter<'a>),
@@ -1102,6 +1125,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
+            PrefixesIterKind::Jelly(iter) => iter.next(),
             PrefixesIterKind::JsonLd(iter) => iter.next(),
             PrefixesIterKind::Turtle(iter) => iter.next(),
             PrefixesIterKind::TriG(iter) => iter.next(),
@@ -1114,6 +1138,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.inner {
+            PrefixesIterKind::Jelly(iter) => iter.size_hint(),
             PrefixesIterKind::JsonLd(iter) => iter.size_hint(),
             PrefixesIterKind::Turtle(iter) => iter.size_hint(),
             PrefixesIterKind::TriG(iter) => iter.size_hint(),

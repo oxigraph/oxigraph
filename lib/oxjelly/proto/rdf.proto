@@ -1,0 +1,384 @@
+syntax = "proto3";
+package eu.ostrzyciel.jelly.core.proto.v1;
+
+// Jelly RDF serialization with Protocol Buffers.
+// Specification document: 
+// https://w3id.org/jelly/1.1.1/specification/serialization
+// Protocol version: 1.1.1
+
+// RDF IRIs
+// The IRIs are reconstructed by the consumer using the prefix and name
+// lookup tables.
+message RdfIri {
+  // 1-based, refers to an entry in the prefix lookup.
+  //
+  // 0 signifies "use the same prefix_id as in the previous IRI".
+  // For this to work, IRIs must be processed strictly in order: firstly by
+  // stream row, then by term (subject, predicate, object, graph). This also
+  // applies recursively to RDF-star quoted triples.
+  //
+  // If 0 appears in the first IRI of the stream (and in any subsequent IRI),
+  // this should be interpreted as an empty ("") prefix. This is for example
+  // used when the prefix lookup table is disabled.
+  uint32 prefix_id = 1;
+
+  // 1-based, refers to an entry in the name lookup.
+  //
+  // 0 signifies "use the previous name_id + 1". This requires the same order
+  // guarantees as prefixes.
+  //
+  // If 0 appears in the first IRI of the stream, it should be interpreted as
+  // name_id = 1.
+  uint32 name_id = 2;
+}
+
+// RDF literals
+message RdfLiteral {
+  // The lexical form of the literal (required).
+  string lex = 1;
+
+  // Literal kind – at most one of these field may be set.
+  // If none is set, then it's a simple literal.
+  oneof literalKind {
+    // Language-tagged string.
+    string langtag = 2;
+    // Typed literal. The datatype is a reference to an entry in the
+    // datatype lookup. This value is 1-based and the value of 0
+    // is invalid (in contrast to prefix_id and name_id in RdfIri).
+    uint32 datatype = 3;
+  }
+}
+
+// Empty message indicating the default RDF graph.
+message RdfDefaultGraph {
+}
+
+// RDF triple
+//
+// For each term (subject, predicate, object), the fields are repeated for
+// performance reasons. This is to avoid the need for boxing each term in a
+// separate message.
+//
+// Note: this message allows for representing generalized RDF triples (for
+// example, with literals as predicates). Whether this is used in the stream
+// is determined by the stream options (see RdfStreamOptions).
+//
+// If no field in a given oneof is set, the term is interpreted as a repeated
+// term – the same as the term in the same position in the previous triple.
+// In the first triple of the stream, all terms must be set.
+// All terms must also be set in quoted triples (RDF-star).
+message RdfTriple {
+  // Triple subject
+  oneof subject {
+    // IRI
+    RdfIri        s_iri = 1;
+    // Blank node
+    string        s_bnode = 2;
+    // Literal
+    // Only valid in a generalized RDF stream.
+    RdfLiteral    s_literal = 3;
+    // RDF-star quoted triple
+    RdfTriple     s_triple_term = 4;
+  }
+
+  // Triple predicate
+  oneof predicate {
+    // IRI
+    RdfIri        p_iri = 5;
+    // Blank node
+    // Only valid in a generalized RDF stream.
+    string        p_bnode = 6;
+    // Literal
+    // Only valid in a generalized RDF stream.
+    RdfLiteral    p_literal = 7;
+    // RDF-star quoted triple
+    RdfTriple     p_triple_term = 8;
+  }
+
+  // Triple object
+  oneof object {
+    // IRI
+    RdfIri        o_iri = 9;
+    // Blank node
+    string        o_bnode = 10;
+    // Literal
+    RdfLiteral    o_literal = 11;
+    // RDF-star quoted triple
+    RdfTriple     o_triple_term = 12;
+  }
+}
+
+// RDF quad
+//
+// Fields 1–12 are repeated from RdfTriple for performance reasons.
+//
+// Similarly to RdfTriple, this message allows for representing generalized
+// RDF quads (for example, with literals as predicates). Whether this is used
+// in the stream is determined by the stream options (see RdfStreamOptions).
+//
+// If no field in a given oneof is set, the term is interpreted as a repeated
+// term – the same as the term in the same position in the previous quad.
+// In the first quad of the stream, all terms must be set.
+message RdfQuad {
+  // Quad subject
+  oneof subject {
+    // IRI
+    RdfIri        s_iri = 1;
+    // Blank node
+    string        s_bnode = 2;
+    // Literal
+    // Only valid in a generalized RDF stream.
+    RdfLiteral    s_literal = 3;
+    // RDF-star quoted triple
+    RdfTriple     s_triple_term = 4;
+  }
+
+  // Quad predicate
+  oneof predicate {
+    // IRI
+    RdfIri        p_iri = 5;
+    // Blank node
+    // Only valid in a generalized RDF stream.
+    string        p_bnode = 6;
+    // Literal
+    // Only valid in a generalized RDF stream.
+    RdfLiteral    p_literal = 7;
+    // RDF-star quoted triple
+    RdfTriple     p_triple_term = 8;
+  }
+
+  // Quad object
+  oneof object {
+    // IRI
+    RdfIri        o_iri = 9;
+    // Blank node
+    string        o_bnode = 10;
+    // Literal
+    RdfLiteral    o_literal = 11;
+    // RDF-star quoted triple
+    RdfTriple     o_triple_term = 12;
+  }
+
+  // Quad graph
+  oneof graph {
+    // IRI
+    RdfIri           g_iri = 13;
+    // Blank node
+    string           g_bnode = 14;
+    // Default graph
+    RdfDefaultGraph  g_default_graph = 15;
+    // Literal – only valid for generalized RDF streams
+    RdfLiteral       g_literal = 16;
+  }
+}
+
+// Start of a graph in a GRAPHS stream
+//
+// In contrast to RdfQuad, setting the graph oneof to some value
+// is always required. No repeated terms are allowed.
+message RdfGraphStart {
+  oneof graph {
+    // IRI
+    RdfIri           g_iri = 1;
+    // Blank node
+    string           g_bnode = 2;
+    // Default graph
+    RdfDefaultGraph  g_default_graph = 3;
+    // Literal – only valid for generalized RDF streams
+    RdfLiteral       g_literal = 4;
+  }
+}
+
+// End of a graph in a GRAPHS stream
+message RdfGraphEnd {
+}
+
+// Explicit namespace declaration
+//
+// This does not correspond to any construct in the RDF Abstract Syntax.
+// Rather, it is a hint to the consumer that the given IRI prefix (namespace)
+// may be associated with a shorter name, like in Turtle syntax:
+// PREFIX ex: <http://example.org/>
+//
+// These short names (here "ex:") are NOT used in the RDF statement encoding.
+// This is a purely cosmetic feature useful in cases where you want to
+// preserve the namespace declarations from the original RDF document.
+// These declarations have nothing in common with the prefix lookup table.
+message RdfNamespaceDeclaration {
+  // Short name of the namespace (e.g., "ex")
+  // Do NOT include the colon.
+  string name = 1;
+  // IRI of the namespace (e.g., "http://example.org/")
+  RdfIri value = 2;
+}
+
+// Entry in the name lookup table
+message RdfNameEntry {
+  // 1-based identifier
+  // If id=0, it should be interpreted as previous_id + 1.
+  // If id=0 appears in the first RdfNameEntry of the stream, it should be
+  // interpreted as 1.
+  uint32 id = 1;
+  // Value of the name (UTF-8 encoded)
+  string value = 2;
+}
+
+// Entry in the prefix lookup table
+//
+// Note: the prefixes in the lookup table can be arbitrary strings, and are
+// NOT meant to be user-facing. They are only used for IRI compression.
+// To transmit user-facing namespace declarations for cosmetic purposes, use
+// RdfNamespaceDeclaration.
+message RdfPrefixEntry {
+  // 1-based identifier
+  // If id=0, it should be interpreted as previous_id + 1.
+  // If id=0 appears in the first RdfPrefixEntry of the stream, it should be
+  // interpreted as 1.
+  uint32 id = 1;
+  // Value of the prefix (UTF-8 encoded)
+  string value = 2;
+}
+
+// Entry in the datatype lookup table
+message RdfDatatypeEntry {
+  // 1-based identifier
+  // If id=0, it should be interpreted as previous_id + 1.
+  // If id=0 appears in the first RdfDatatypeEntry of the stream, it should be
+  // interpreted as 1.
+  uint32 id = 1;
+  // Value of the datatype (UTF-8 encoded)
+  string value = 2;
+}
+
+// RDF stream options
+message RdfStreamOptions {
+  // Name of the stream (completely optional).
+  // This may be used for, e.g., topic names in a pub/sub system.
+  string stream_name = 1;
+  // Type of the stream (required)
+  PhysicalStreamType physical_type = 2;
+  // Whether the stream may contain generalized triples, quads, or datasets
+  bool generalized_statements = 3;
+  // Whether the stream may contain RDF-star statements
+  bool rdf_star = 4;
+  // Maximum size of the name lookup table
+  // (required, must be >= 8)
+  uint32 max_name_table_size = 9;
+  // Maximum size of the prefix lookup table
+  // (required if the prefix lookup is used)
+  uint32 max_prefix_table_size = 10;
+  // Maximum size of the datatype lookup table 
+  // (required if datatype literals are used)
+  uint32 max_datatype_table_size = 11;
+  // Logical (RDF-STaX-based) stream type
+  // In contrast to the physical type, this field is entirely optional.
+  LogicalStreamType logical_type = 14;
+  // Protocol version (required)
+  // For Jelly 1.0.x value must be 1.
+  // For Jelly 1.1.x value must be 2.
+  // For custom extensions, the value must be 10000 or higher.
+  uint32 version = 15;
+}
+
+// Physical stream type
+// This determines how the data is encoded in the stream, not the logical
+// structure of the data. See LogicalStreamType for the latter.
+enum PhysicalStreamType {
+  // Unspecified stream type – invalid
+  PHYSICAL_STREAM_TYPE_UNSPECIFIED = 0;
+  // RDF triples
+  PHYSICAL_STREAM_TYPE_TRIPLES = 1;
+  // RDF quads
+  PHYSICAL_STREAM_TYPE_QUADS = 2;
+  // RDF triples grouped in graphs
+  PHYSICAL_STREAM_TYPE_GRAPHS = 3;
+}
+
+// Logical stream type, according to the RDF Stream Taxonomy (RDF-STaX).
+// Type 0 is reserved for the unspecified stream type.
+// The rest of the type numbers follow the taxonomical structure of RDF-STaX.
+// For example: 1 is a subtype of 0, 13 and 23 are subtypes of 3, 
+// 114 is a subtype of 14, etc.
+// 
+// Types 1–4 correspond to the four base concrete stream types. Their 
+// subtypes can be in most cases simply processed in the same way as 
+// the base types.
+// Therefore, implementations can take the modulo 10 of the stream 
+// type to determine the base type of the stream and use this information 
+// to select the appropriate processing logic.
+//
+// RDF-STaX version: 1.1.2
+// https://w3id.org/stax/1.1.2
+//
+// ^ The above URL is used to automatically determine the version of RDF-STaX
+// in the Jelly protocol specification. Please keep it up-to-date and in the
+// same format.
+enum LogicalStreamType {
+  // Unspecified stream type – invalid
+  LOGICAL_STREAM_TYPE_UNSPECIFIED = 0;
+  // Flat RDF triple stream
+  // https://w3id.org/stax/ontology#flatTripleStream
+  LOGICAL_STREAM_TYPE_FLAT_TRIPLES = 1;
+  // Flat RDF quad stream
+  // https://w3id.org/stax/ontology#flatQuadStream
+  LOGICAL_STREAM_TYPE_FLAT_QUADS = 2;
+  // RDF graph stream
+  // https://w3id.org/stax/ontology#graphStream
+  LOGICAL_STREAM_TYPE_GRAPHS = 3;
+  // RDF dataset stream
+  // https://w3id.org/stax/ontology#datasetStream
+  LOGICAL_STREAM_TYPE_DATASETS = 4;
+
+  // RDF subject graph stream (subtype of RDF graph stream)
+  // https://w3id.org/stax/ontology#subjectGraphStream
+  LOGICAL_STREAM_TYPE_SUBJECT_GRAPHS = 13;
+
+  // RDF named graph stream (subtype of RDF dataset stream)
+  // https://w3id.org/stax/ontology#namedGraphStream
+  LOGICAL_STREAM_TYPE_NAMED_GRAPHS = 14;
+  // RDF timestamped named graph stream (subtype of RDF dataset stream)
+  // https://w3id.org/stax/ontology#timestampedNamedGraphStream
+  LOGICAL_STREAM_TYPE_TIMESTAMPED_NAMED_GRAPHS = 114;
+}
+
+// RDF stream row
+message RdfStreamRow {
+  // Exactly one of these fields must be set.
+  oneof row {
+    // Stream options. Must occur at the start of the stream.
+    RdfStreamOptions options = 1;
+    // RDF triple statement.
+    // Valid in streams of physical type TRIPLES or GRAPHS.
+    RdfTriple triple = 2;
+    // RDF quad statement.
+    // Only valid in streams of physical type QUADS.
+    RdfQuad quad = 3;
+    // Graph boundary: ends the currently transmitted graph and starts a new one
+    // Only valid in streams of physical type GRAPHS.
+    RdfGraphStart graph_start = 4;
+    // Explicit end of a graph.
+    // Signals the consumer that the transmitted graph is complete.
+    // Only valid in streams of physical type GRAPHS.
+    RdfGraphEnd graph_end = 5;
+    // Explicit namespace declaration.
+    RdfNamespaceDeclaration namespace = 6;
+    // Entry in the name lookup table.
+    RdfNameEntry name = 9;
+    // Entry in the prefix lookup table.
+    RdfPrefixEntry prefix = 10;
+    // Entry in the datatype lookup table.
+    RdfDatatypeEntry datatype = 11;
+  }
+}
+
+// RDF stream frame – base message for RDF streams.
+message RdfStreamFrame {
+  // Stream rows
+  repeated RdfStreamRow rows = 1;
+  // Arbitrary metadata
+  // The keys are UTF-8 encoded strings, the values are byte arrays.
+  // This may be used by implementations in any way they see fit.
+  // The metadata does not affect the RDF data in any way, treat it
+  // as comments in a text file.
+  map<string, bytes> metadata = 15;
+}

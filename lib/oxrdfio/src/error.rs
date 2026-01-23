@@ -12,6 +12,15 @@ pub enum RdfParseError {
     Syntax(#[from] RdfSyntaxError),
 }
 
+impl From<oxjelly::JellyParseError> for RdfParseError {
+    fn from(error: oxjelly::JellyParseError) -> Self {
+        match error {
+            oxjelly::JellyParseError::Io(e) => Self::Io(e),
+            oxjelly::JellyParseError::Syntax(e) => Self::Syntax(e.into()),
+        }
+    }
+}
+
 impl From<oxjsonld::JsonLdParseError> for RdfParseError {
     #[inline]
     fn from(error: oxjsonld::JsonLdParseError) -> Self {
@@ -61,6 +70,8 @@ pub struct RdfSyntaxError(#[from] SyntaxErrorKind);
 #[derive(Debug, thiserror::Error)]
 enum SyntaxErrorKind {
     #[error(transparent)]
+    Jelly(#[from] oxjelly::JellySyntaxError),
+    #[error(transparent)]
     JsonLd(#[from] oxjsonld::JsonLdSyntaxError),
     #[error(transparent)]
     Turtle(#[from] oxttl::TurtleSyntaxError),
@@ -103,12 +114,19 @@ impl RdfSyntaxError {
                     },
                 )
             }
-            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) => None,
+            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) | SyntaxErrorKind::Jelly(_) => None,
         }
     }
 
     pub(crate) fn msg(msg: &'static str) -> Self {
         Self(SyntaxErrorKind::Msg(msg))
+    }
+}
+
+impl From<oxjelly::JellySyntaxError> for RdfSyntaxError {
+    #[inline]
+    fn from(error: oxjelly::JellySyntaxError) -> Self {
+        Self(SyntaxErrorKind::Jelly(error))
     }
 }
 
@@ -137,6 +155,7 @@ impl From<RdfSyntaxError> for io::Error {
     #[inline]
     fn from(error: RdfSyntaxError) -> Self {
         match error.0 {
+            SyntaxErrorKind::Jelly(error) => error.into(),
             SyntaxErrorKind::JsonLd(error) => error.into(),
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
