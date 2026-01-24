@@ -30,13 +30,13 @@ pyo3 = { workspace = true, features = ["extension-module"] } # TODO: remove the 
 spargeo = { workspace = true, optional = true }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
-oxigraph = { workspace = true, features = ["http-client-native-tls"] }
+oxigraph = { workspace = true, default-features = true, features = ["http-client-native-tls"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-oxigraph.workspace = true
+oxigraph = { workspace = true, default-features = true }
 
 [target.'cfg(not(any(target_family = "windows", target_os = "macos", target_os = "ios", target_family = "wasm")))'.dependencies]
-oxigraph = { workspace = true, features = ["http-client-rustls-native"] }
+oxigraph = { workspace = true, default-features = true, features = ["http-client-rustls-native"] }
 
 [lints]
 workspace = true

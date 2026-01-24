@@ -76,7 +76,11 @@ jobs:
         working-directory: ./python
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./cli
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./cli
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./testsuite
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
         working-directory: ./testsuite
 
   clippy_wasm_js:

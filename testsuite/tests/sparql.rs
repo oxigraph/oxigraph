@@ -102,6 +102,7 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn sparql12_w3c_testsuite() -> Result<()> {
     check_testsuite(

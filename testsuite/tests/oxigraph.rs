@@ -1,4 +1,5 @@
 #![cfg(test)]
+#![cfg(feature = "rdf-12")]
 
 use anyhow::Result;
 use oxigraph_testsuite::check_testsuite;

@@ -11,6 +11,7 @@ fn rdf11_n_triples_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -18,7 +19,7 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
         &[],
     )
 }
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
+#[cfg(all(feature = "rdf-12", not(windows)))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -35,6 +36,7 @@ fn rdf11_n_quads_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -43,7 +45,7 @@ fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
+#[cfg(all(feature = "rdf-12", not(windows)))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf12_n_quads_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -60,6 +62,7 @@ fn rdf11_turtle_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_turtle_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -68,6 +71,7 @@ fn rdf12_turtle_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_turtle_eval_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -84,6 +88,7 @@ fn rdf11_trig_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_trig_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -92,6 +97,7 @@ fn rdf12_trig_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_trig_eval_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -108,6 +114,7 @@ fn rdf11_xml_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_xml_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -159,9 +166,13 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0118",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te075",
             // we always emit base direction when targeting RDF 1.2
+            #[cfg(feature = "rdf-12")]
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi02",
+            #[cfg(feature = "rdf-12")]
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi04",
+            #[cfg(feature = "rdf-12")]
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi05",
+            #[cfg(feature = "rdf-12")]
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi06",
             // non-normative - rdfDirection
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi09",

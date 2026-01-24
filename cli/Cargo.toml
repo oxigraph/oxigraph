@@ -31,7 +31,7 @@ anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 flate2.workspace = true
 oxhttp = { workspace = true, features = ["flate2"] }
-oxigraph.workspace = true
+oxigraph = { workspace = true, default-features = true }
 oxiri.workspace = true
 rand.workspace = true
 rayon-core.workspace = true
