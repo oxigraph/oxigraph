@@ -17,6 +17,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::CString;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -995,6 +996,19 @@ impl ReadableTransaction<'_> {
     }
 }
 
+pub struct Slice<'a> {
+    value: rocksdb_slice_t,
+    _lifetime: PhantomData<&'a ()>,
+}
+
+impl Deref for Slice<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.value.data.cast(), self.value.size) }
+    }
+}
+
 pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
 
 impl Drop for PinnableSlice {
@@ -1008,30 +1022,12 @@ impl Drop for PinnableSlice {
 impl Deref for PinnableSlice {
     type Target = [u8];
 
-    fn deref(&self) -> &Self::Target {
+    fn deref(&self) -> &[u8] {
         unsafe {
             let mut len = 0;
             let val = rocksdb_pinnableslice_value(self.0, &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
-    }
-}
-
-impl AsRef<[u8]> for PinnableSlice {
-    fn as_ref(&self) -> &[u8] {
-        self
-    }
-}
-
-impl Borrow<[u8]> for PinnableSlice {
-    fn borrow(&self) -> &[u8] {
-        self
-    }
-}
-
-impl From<PinnableSlice> for Vec<u8> {
-    fn from(value: PinnableSlice) -> Self {
-        value.to_vec()
     }
 }
 
@@ -1114,12 +1110,13 @@ impl Iter<'_> {
         }
     }
 
-    pub fn key(&self) -> Option<&[u8]> {
+    pub fn key(&self) -> Option<Slice<'_>> {
         if self.is_valid() {
             unsafe {
-                let mut len = 0;
-                let val = rocksdb_iter_key(self.inner, &raw mut len);
-                Some(slice::from_raw_parts(val.cast(), len))
+                Some(Slice {
+                    value: rocksdb_iter_key_slice(self.inner),
+                    _lifetime: PhantomData,
+                })
             }
         } else {
             None
