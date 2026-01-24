@@ -1,4 +1,4 @@
-use crate::{DateTime, Decimal};
+use crate::{DateTime, Decimal, Integer};
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
@@ -168,6 +168,17 @@ impl Duration {
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 24] {
+        let mut bytes = [0; 24];
+        bytes[0..8].copy_from_slice(&self.year_month.bytes_collation());
+        bytes[8..24].copy_from_slice(&self.day_time.bytes_collation());
+        bytes
     }
 }
 
@@ -377,6 +388,12 @@ impl YearMonthDuration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 8] {
+        Integer::from(self.months).bytes_collation()
+    }
 }
 
 impl From<YearMonthDuration> for Duration {
@@ -561,6 +578,12 @@ impl DayTimeDuration {
     #[inline]
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
+    }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 16] {
+        self.seconds.bytes_collation()
     }
 }
 

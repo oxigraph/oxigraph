@@ -87,6 +87,20 @@ impl Double {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value.to_bits() == other.value.to_bits()
     }
+
+    /// Returns bytes that which lexicographic ordering is similar to the one of the original value.
+    ///
+    /// Note that opposite to the base ordering, the produced ordering is a total order.
+    #[inline]
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 8] {
+        if self.value >= 0. {
+            self.value.to_bits() ^ 0x8000_0000_0000_0000
+        } else {
+            self.value.to_bits() ^ 0xffff_ffff_ffff_ffff
+        }
+        .to_be_bytes()
+    }
 }
 
 impl From<Double> for f64 {
@@ -315,5 +329,17 @@ mod tests {
         assert_eq!(Double::from_str(&f64::MIN.to_string())?, Double::MIN);
         assert_eq!(Double::from_str(&f64::MAX.to_string())?, Double::MAX);
         Ok(())
+    }
+
+    #[test]
+    fn bytes_collation() {
+        assert!(Double::NEG_INFINITY.bytes_collation() < Double::MIN.bytes_collation());
+        assert!(Double::MIN.bytes_collation() < Double::from(-100).bytes_collation());
+        assert!(Double::from(-100).bytes_collation() < Double::from(-1).bytes_collation());
+        assert!(Double::from(-1).bytes_collation() < Double::from(0).bytes_collation());
+        assert!(Double::from(0).bytes_collation() < Double::from(1).bytes_collation());
+        assert!(Double::from(1).bytes_collation() < Double::from(100).bytes_collation());
+        assert!(Double::from(100).bytes_collation() < Double::MAX.bytes_collation());
+        assert!(Double::MAX.bytes_collation() < Double::INFINITY.bytes_collation());
     }
 }

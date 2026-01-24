@@ -241,8 +241,17 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: rm Cargo.lock && cargo update
+      - run: cargo update
       - run: cargo test
+
+  test_linux_datafusion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: cargo test --features datafusion
 
   test_linux_address_sanitizer:
     runs-on: ubuntu-latest
@@ -482,7 +491,7 @@ jobs:
     strategy:
       matrix:
         build_args:
-          - "-p oxigraph --features http-client-native-tls"
+          - "-p oxigraph --features http-client-native-tls,datafusion"
           - "-p oxigraph-testsuite"
     continue-on-error: true
     steps:

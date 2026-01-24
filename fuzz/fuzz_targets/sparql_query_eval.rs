@@ -42,29 +42,55 @@ fuzz_target!(|data: sparql_smith::Query| {
             })
             .for_query(query.clone())
             .on_store(store)
-            .execute();
+            .execute()
+            .map(|r| query_results_key(r, query_str.contains(" REDUCED ")));
         let without_opt = QueryEvaluator::new()
             .without_optimizations()
             .with_default_service_handler(DatasetServiceHandler {
                 dataset: dataset.clone(),
             })
-            .execute(dataset, &query);
-        match (with_opt, without_opt) {
+            .execute(dataset, &query)
+            .map(|r| query_results_key(r, query_str.contains(" REDUCED ")));
+        match (&with_opt, &without_opt) {
             (Ok(with_opt), Ok(without_opt)) => {
-                assert_eq!(
-                    query_results_key(with_opt, query_str.contains(" REDUCED ")),
-                    query_results_key(without_opt, query_str.contains(" REDUCED "))
-                )
+                assert_eq!(with_opt, without_opt)
             }
             (Err(_), Err(_)) => (),
             (Ok(r), Err(e)) => {
-                if !matches!(r, QueryResults::Boolean(false)) {
+                if r != "false" {
                     panic!("with optimizations passed whereas without optimizations failed: {e}")
                 }
             }
             (Err(e), Ok(r)) => {
-                if !matches!(r, QueryResults::Boolean(false)) {
+                if r != "false" {
                     panic!("without optimizations passed whereas with optimizations failed: {e}")
+                }
+            }
+        }
+
+        if let Some(datafusion) = SparqlEvaluator::new()
+            .for_query(query.clone())
+            .datafusion(store)
+            .transpose()
+        {
+            let datafusion =
+                datafusion.map(|r| query_results_key(r, query_str.contains(" REDUCED ")));
+            match (&datafusion, &without_opt) {
+                (Ok(datafusion), Ok(without_opt)) => {
+                    assert_eq!(datafusion, without_opt)
+                }
+                (Err(_), Err(_)) => (),
+                (Ok(r), Err(e)) => {
+                    if r != "false" {
+                        panic!(
+                            "with optimizations passed whereas without optimizations failed: {e}"
+                        )
+                    }
+                }
+                (Err(e), Ok(r)) => {
+                    if r != "false" {
+                        panic!("without optimizations passed whereas datafusion failed: {e}")
+                    }
                 }
             }
         }
@@ -103,7 +129,7 @@ fn query_results_key(results: QueryResults, is_reduced: bool) -> String {
             triples.sort_unstable();
             triples.join("\n")
         }
-        QueryResults::Boolean(bool) => if bool { "true" } else { "false" }.into(),
+        QueryResults::Boolean(bool) => bool.to_string(),
     }
 }
 

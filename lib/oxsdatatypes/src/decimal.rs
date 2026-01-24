@@ -265,6 +265,17 @@ impl Decimal {
     pub(super) const fn as_i128(self) -> i128 {
         self.value / DECIMAL_PART_POW
     }
+
+    /// Returns bytes that which lexicographic ordering is the same as the one of the original value.
+    #[must_use]
+    pub fn bytes_collation(self) -> [u8; 16] {
+        if self.value >= 0 {
+            (i128::MAX as u128) + 1 + self.value.cast_unsigned()
+        } else {
+            (i128::MAX as u128) - !u128::from_le_bytes(self.value.to_le_bytes())
+        }
+        .to_be_bytes()
+    }
 }
 
 impl From<bool> for Decimal {
@@ -1093,5 +1104,17 @@ mod tests {
             "-0.1234567890123456"
         );
         Ok(())
+    }
+
+    #[test]
+    fn bytes_collation() {
+        assert_eq!(Decimal::MIN.bytes_collation(), [u8::MIN; 16]);
+        assert_eq!(Decimal::MAX.bytes_collation(), [u8::MAX; 16]);
+        assert!(Decimal::MIN.bytes_collation() < Decimal::from(-100).bytes_collation());
+        assert!(Decimal::from(-100).bytes_collation() < Decimal::from(-1).bytes_collation());
+        assert!(Decimal::from(-1).bytes_collation() < Decimal::from(0).bytes_collation());
+        assert!(Decimal::from(0).bytes_collation() < Decimal::from(1).bytes_collation());
+        assert!(Decimal::from(1).bytes_collation() < Decimal::from(100).bytes_collation());
+        assert!(Decimal::from(100).bytes_collation() < Decimal::MAX.bytes_collation());
     }
 }
