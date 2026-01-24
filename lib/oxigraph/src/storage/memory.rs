@@ -56,7 +56,6 @@ impl MemoryStorage {
             }),
             id2str: Arc::new(DashMap::default()),
             version_counter: Arc::new(AtomicUsize::new(0)),
-            #[expect(clippy::mutex_atomic)]
             transaction_counter: Arc::new(Mutex::new(usize::MAX >> 1)),
         }
     }
