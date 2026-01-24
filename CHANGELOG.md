@@ -1,3 +1,16 @@
+# [0.5.4] - 2026-01-24
+
+### Added
+- RDF/XML: support of the current 1.2 draft behind the `rdf-12` cargo feature (directional language strings and triple terms).
+- RDFC 1.0 canonicalization algorithm on the `Graph` and `Dataset` containers.
+
+### Changed
+- `oxrdf`: the default `Unstable` canonicalization algorithm has been changed for a variant of RDFC 1.0. It seems much faster in a lot of cases.
+- HTTP: always set `sd:endpoint` in the served service description (the value is guessed from the incoming request values).
+- `spareval`: make `QueryTripleIter::new` public.
+- JSON-LD: lots of internal changes in preparation of JSON-LD 1.1 support (might affect some edge cases of 1.0 parsing).
+
+
 # [0.5.3] - 2025-12-19
 
 ### Added
@@ -6,6 +19,7 @@
 ### Changed
 - SPARQL: fixes parsing of `HAVING` when there are multiple conditions.
 - SPARQL: compute ordering values for `ORDER BY` only once (allows `ORDER BY RAND()` to work properly).
+
 
 # [0.5.2] - 2025-10-25
 
