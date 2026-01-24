@@ -879,7 +879,7 @@ fn handle_request(
                 )
             }
         }
-        ("/query", "POST") => {
+        ("/query", "POST" | "QUERY") => {
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-query" {
