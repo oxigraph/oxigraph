@@ -194,7 +194,9 @@ impl TestManifest {
                                     None
                                 }
                             }
-                            _ => None,
+                            TermRef::Literal(_) => None,
+                            #[cfg(feature = "rdf-12")]
+                            TermRef::Triple(_) => None,
                         })
                         .collect::<Result<_, _>>()?;
                     let service_data = self
@@ -203,7 +205,9 @@ impl TestManifest {
                         .filter_map(|g| match g {
                             TermRef::NamedNode(g) => Some(g.into()),
                             TermRef::BlankNode(g) => Some(g.into()),
-                            _ => None,
+                            TermRef::Literal(_) => None,
+                            #[cfg(feature = "rdf-12")]
+                            TermRef::Triple(_) => None,
                         })
                         .filter_map(|g: NamedOrBlankNodeRef<'_>| {
                             if let (
@@ -269,12 +273,15 @@ impl TestManifest {
                                     None
                                 }
                             }
-                            _ => None,
+                            TermRef::Literal(_) => None,
+                            #[cfg(feature = "rdf-12")]
+                            TermRef::Triple(_) => None,
                         })
                         .collect::<Result<_, _>>()?,
                 ),
                 Some(TermRef::Literal(l)) => (Some(l.value().to_owned()), Vec::new()),
-                Some(_) => bail!("invalid result"),
+                #[cfg(feature = "rdf-12")]
+                Some(TermRef::Triple(_)) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
             let mut option = match self

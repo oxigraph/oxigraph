@@ -81,7 +81,7 @@ wasm-bindgen = "0.2.100"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.3", path = "lib/oxigraph" }
+oxigraph = { version = "=0.5.3", path = "lib/oxigraph", default-features = false }
 oxjsonld = { version = "=0.2.1", path = "lib/oxjsonld" }
 oxrdf = { version = "=0.3.1", path = "lib/oxrdf" }
 oxrdfio = { version = "=0.2.1", path = "lib/oxrdfio" }
@@ -138,7 +138,7 @@ deref_by_slicing = "warn"
 disallowed_script_idents = "warn"
 doc_link_with_quotes = "warn"
 empty_drop = "warn"
-empty_enum = "warn"
+empty_enums = "warn"
 empty_enum_variants_with_brackets = "warn"
 empty_structs_with_brackets = "warn"
 enum_glob_use = "warn"
@@ -268,7 +268,7 @@ todo = "warn"
 transmute_ptr_to_ptr = "warn"
 trivially_copy_pass_by_ref = "warn"
 try_err = "warn"
-unchecked_duration_subtraction = "warn"
+unchecked_time_subtraction = "warn"
 undocumented_unsafe_blocks = "warn"
 unicode_not_nfc = "warn"
 unimplemented = "warn"

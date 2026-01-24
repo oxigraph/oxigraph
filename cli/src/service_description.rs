@@ -16,6 +16,7 @@ mod sd {
     );
     pub const ENDPOINT: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#endpoint");
+    #[cfg(feature = "geosparql")]
     pub const EXTENSION_FUNCTION: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/ns/sparql-service-description#extensionFunction",
     );

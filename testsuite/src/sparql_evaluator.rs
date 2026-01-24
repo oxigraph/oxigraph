@@ -491,6 +491,7 @@ fn compare_terms<'a>(
         (TermRef::BlankNode(expected), TermRef::BlankNode(actual)) => {
             expected == *bnode_map.entry(actual).or_insert(expected)
         }
+        #[cfg(feature = "rdf-12")]
         (TermRef::Triple(expected), TermRef::Triple(actual)) => {
             compare_terms(
                 expected.subject.as_ref().into(),

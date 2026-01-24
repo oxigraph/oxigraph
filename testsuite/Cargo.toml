@@ -8,12 +8,16 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+default = ["rdf-12"]
+rdf-12 = ["oxigraph/rdf-12"]
+
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 dissimilar.workspace = true
 json-event-parser.workspace = true
-oxigraph = { workspace = true, features = ["rdf-12"] }
+oxigraph.workspace = true
 oxrdf = { workspace = true, features = ["rdfc-10"] }
 oxiri.workspace = true
 oxjsonld.workspace = true
