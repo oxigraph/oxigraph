@@ -37,7 +37,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::Path;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
-use oxjelly::{JellyParser, JellyPrefixesIter, ReaderJellyParser, SliceJellyParser};
+use oxjelly::{JellyParser, ReaderJellyParser, SliceJellyParser};
 
 /// Parsers for RDF serialization formats.
 ///
@@ -612,13 +612,12 @@ impl<R: Read> ReaderQuadParser<R> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
-                ReaderQuadParserKind::Jelly(p) => PrefixesIterKind::Jelly(p.prefixes()),
                 ReaderQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 ReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 ReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 ReaderQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
                 ReaderQuadParserKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
-                ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) => {
+                ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) | ReaderQuadParserKind::Jelly(_) => {
                     PrefixesIterKind::None
                 }
             },
@@ -1057,13 +1056,12 @@ impl SliceQuadParser<'_> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
-                SliceQuadParserKind::Jelly(p) => PrefixesIterKind::Jelly(p.prefixes()),
                 SliceQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 SliceQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 SliceQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 SliceQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
                 SliceQuadParserKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
-                SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_) => {
+                SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_) | SliceQuadParserKind::Jelly(_) => {
                     PrefixesIterKind::None
                 }
             },
@@ -1110,7 +1108,6 @@ pub struct PrefixesIter<'a> {
 }
 
 enum PrefixesIterKind<'a> {
-    Jelly(JellyPrefixesIter<'a>),
     JsonLd(JsonLdPrefixesIter<'a>),
     Turtle(TurtlePrefixesIter<'a>),
     TriG(TriGPrefixesIter<'a>),
@@ -1125,7 +1122,6 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
-            PrefixesIterKind::Jelly(iter) => iter.next(),
             PrefixesIterKind::JsonLd(iter) => iter.next(),
             PrefixesIterKind::Turtle(iter) => iter.next(),
             PrefixesIterKind::TriG(iter) => iter.next(),
@@ -1138,7 +1134,6 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.inner {
-            PrefixesIterKind::Jelly(iter) => iter.size_hint(),
             PrefixesIterKind::JsonLd(iter) => iter.size_hint(),
             PrefixesIterKind::Turtle(iter) => iter.size_hint(),
             PrefixesIterKind::TriG(iter) => iter.size_hint(),

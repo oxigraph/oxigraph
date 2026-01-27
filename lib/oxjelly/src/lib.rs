@@ -12,7 +12,8 @@ mod from_rdf;
 mod to_rdf;
 mod error;
 mod sorted;
+mod lookup_table;
 
 pub use error::{JellyParseError, JellySyntaxError};
-pub use to_rdf::{JellyParser, JellyPrefixesIter, ReaderJellyParser, SliceJellyParser};
+pub use to_rdf::{JellyParser, ReaderJellyParser, SliceJellyParser};
 pub use from_rdf::{JellySerializer, WriterJellySerializer};

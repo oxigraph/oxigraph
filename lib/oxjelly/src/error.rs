@@ -17,14 +17,20 @@ pub enum JellySyntaxError {
     #[error(transparent)]
     IriParseError(#[from] oxrdf::IriParseError),
 
-    #[error("Prefix ID not found: prefix_id = {0}, name_id = {1}")]
-    PrefixIdNotFound(u32, u32),
+    #[error(transparent)]
+    BlankNodeIdParseError(#[from] oxrdf::BlankNodeIdParseError),
 
-    #[error("Name ID not found: prefix_id = {0}, name_id = {1}")]
-    NameIdNotFound(u32, u32),
+    #[error("Prefix ID not found: {0}")]
+    PrefixIdNotFound(u32),
+
+    #[error("Name ID not found: {0}")]
+    NameIdNotFound(u32),
 
     #[error("Datatype ID not found: datatype_id = {0}")]
     DatatypeIdNotFound(u32),
+
+    #[error("ID out of bounds: provided = {0}, maximum = {1}")]
+    IdOutOfBounds(u32, u32),
 
     #[error("No previous subject")]
     NoPreviousSubject,
