@@ -1,36 +1,146 @@
-use std::cmp;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::io;
 use std::io::Write;
-use protobuf::{EnumOrUnknown, Message, MessageField};
-use oxiri::{Iri, IriParseError};
-use oxrdf::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
-use crate::jelly::rdf::{PhysicalStreamType, RdfDatatypeEntry, RdfDefaultGraph, RdfIri, RdfLiteral, RdfNameEntry, RdfNamespaceDeclaration, RdfPrefixEntry, RdfQuad, RdfStreamFrame, RdfStreamOptions, RdfStreamRow};
+use protobuf::{EnumOrUnknown, Message};
+use oxiri::IriParseError;
+use oxrdf::{GraphName, GraphNameRef, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, Term, TermRef};
+use crate::jelly::rdf::{PhysicalStreamType, RdfDatatypeEntry, RdfDefaultGraph, RdfIri, RdfLiteral, RdfNameEntry, RdfPrefixEntry, RdfQuad, RdfStreamFrame, RdfStreamOptions, RdfStreamRow};
 use crate::jelly::rdf::rdf_literal::LiteralKind;
 use crate::jelly::rdf::rdf_quad::{Graph, Object, Predicate, Subject};
-use crate::sorted::{SortableGraphName, SortableObject, SortablePredicate, SortableRdfQuad, SortableSubject};
+use crate::lookup_table::{InverseLookupTable, LookupResult};
+use crate::sorted::SortableQuad;
+
+#[derive(Default)]
+struct JellyIriConverter {
+    prefixes: InverseLookupTable,
+    names: InverseLookupTable,
+    datatypes: InverseLookupTable,
+}
+
+impl JellyIriConverter {
+    fn split_iri<'a>(&self, iri: &'a str) -> (&'a str, &'a str) {
+        iri.rfind(['#', '/'])
+            .map(|index| iri.split_at(index + 1))
+            .unwrap_or((iri, ""))
+    }
+
+    fn encode_iri(&mut self, iri: &str) -> (RdfIri, Vec<RdfStreamRow>) {
+        let mut rows = vec![];
+
+        let (prefix, name) = self.split_iri(iri);
+
+        let prefix_result = self.prefixes.get_or_push(prefix.to_string());
+        if let LookupResult::CacheMiss(id) = prefix_result {
+            let mut row = RdfStreamRow::default();
+            row.set_prefix(RdfPrefixEntry {
+                id,
+                value: prefix.to_string(),
+                ..Default::default()
+            });
+            rows.push(row);
+        }
+
+        let name_result = self.names.get_or_push(name.to_string());
+        if let LookupResult::CacheMiss(id) = name_result {
+            let mut row = RdfStreamRow::default();
+            row.set_name(RdfNameEntry {
+                id,
+                value: name.to_string(),
+                ..Default::default()
+            });
+            rows.push(row);
+        }
+
+        let rdf_iri = RdfIri {
+            prefix_id: prefix_result.into(),
+            name_id: name_result.into(),
+            ..Default::default()
+        };
+
+        (rdf_iri, rows)
+    }
+
+    fn encode_datatype(&mut self, datatype: &str) -> (LiteralKind, Vec<RdfStreamRow>) {
+        let mut rows = vec![];
+
+        let result = self.datatypes.get_or_push(datatype.to_string());
+        if let LookupResult::CacheMiss(id) = result {
+            let mut row = RdfStreamRow::default();
+            row.set_datatype(RdfDatatypeEntry {
+                id,
+                value: datatype.to_string(),
+                ..Default::default()
+            });
+            rows.push(row);
+        }
+
+        (LiteralKind::Datatype(result.into()), rows)
+    }
+
+    fn jelly_subject(&mut self, oxi_subject: NamedOrBlankNodeRef<'_>) -> (Subject, Vec<RdfStreamRow>) {
+        match oxi_subject {
+            NamedOrBlankNodeRef::NamedNode(node) => {
+                let (iri, rows) = self.encode_iri(node.as_str());
+                (Subject::SIri(iri), rows)
+            },
+            NamedOrBlankNodeRef::BlankNode(node) => (Subject::SBnode(node.to_string()), vec![]),
+        }
+    }
+
+    fn jelly_predicate(&mut self, oxi_predicate: NamedNodeRef<'_>) -> (Predicate, Vec<RdfStreamRow>) {
+        let (iri, rows) = self.encode_iri(oxi_predicate.as_str());
+        (Predicate::PIri(iri), rows)
+    }
+
+    fn jelly_object(&mut self, oxi_object: TermRef<'_>) -> (Object, Vec<RdfStreamRow>) {
+        match oxi_object {
+            TermRef::NamedNode(node) => {
+                let (iri, rows) = self.encode_iri(node.as_str());
+                (Object::OIri(iri), rows)
+            },
+            TermRef::BlankNode(node) => (Object::OBnode(node.to_string()), vec![]),
+            TermRef::Literal(literal) => {
+                let (literal_kind, rows) = literal.language()
+                    .map(|lang| (LiteralKind::Langtag(lang.to_string()), vec![]))
+                    .unwrap_or(
+                        self.encode_datatype(literal.datatype().as_str())
+                    );
+
+                let object = Object::OLiteral(RdfLiteral {
+                    lex: literal.value().to_string(),
+                    literalKind: Some(literal_kind),
+                    ..Default::default()
+                });
+
+                (object, rows)
+            },
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => todo!(),
+        }
+    }
+
+    fn jelly_graph(&mut self, oxi_graph_name: GraphNameRef<'_>) -> (Graph, Vec<RdfStreamRow>) {
+        match oxi_graph_name {
+            GraphNameRef::NamedNode(node) => {
+                let (iri, rows) = self.encode_iri(node.as_str());
+                (Graph::GIri(iri), rows)
+            },
+            GraphNameRef::BlankNode(node) => (Graph::GBnode(node.to_string()), vec![]),
+            GraphNameRef::DefaultGraph => (Graph::GDefaultGraph(RdfDefaultGraph::default()), vec![]),
+        }
+    }
+}
 
 #[derive(Default, Clone)]
 #[must_use]
 pub struct JellySerializer {
     stream_name: String,
-    namespace_map: BTreeMap<String, RdfIri>,
-    prefix_map: BTreeMap<String, u32>,
-    next_prefix_id: u32,
-    name_map: BTreeMap<String, u32>,
-    next_name_id: u32,
-    datatype_map: BTreeMap<String, u32>,
-    next_datatype_id: u32,
-    quads: BTreeSet<SortableRdfQuad>,
 }
 
 impl JellySerializer {
     pub fn new(stream_name: impl Into<String>) -> Self {
         Self {
             stream_name: stream_name.into(),
-            next_prefix_id: 1,
-            next_name_id: 1,
-            next_datatype_id: 1,
             ..Default::default()
         }
     }
@@ -41,7 +151,7 @@ impl JellySerializer {
         prefix_name: impl Into<String>,
         prefix_iri: impl Into<String>,
     ) -> Result<Self, IriParseError> {
-        let prefix_iri = Iri::parse(prefix_iri.into())?.into_inner();
+        /*let prefix_iri = Iri::parse(prefix_iri.into())?.into_inner();
 
         if !self.namespace_map.contains_key(&prefix_iri) {
             self.namespace_map.insert(prefix_name.into(), RdfIri {
@@ -49,7 +159,7 @@ impl JellySerializer {
                 name_id: 0,
                 ..Default::default()
             });
-        }
+        }*/
 
         Ok(self)
     }
@@ -57,6 +167,10 @@ impl JellySerializer {
     pub fn for_writer<W: Write>(self, writer: W) -> WriterJellySerializer<W> {
         WriterJellySerializer {
             writer,
+            options_written: false,
+            current_frame: Default::default(),
+            converter: Default::default(),
+            quads: Default::default(),
             inner: self,
         }
     }
@@ -65,216 +179,99 @@ impl JellySerializer {
 #[must_use]
 pub struct WriterJellySerializer<W: Write> {
     writer: W,
+    options_written: bool,
+    current_frame: RdfStreamFrame,
+    converter: JellyIriConverter,
+    quads: BTreeSet<SortableQuad>,
     inner: JellySerializer,
 }
 
 impl<W: Write> WriterJellySerializer<W> {
-    fn find_or_create_prefix_id(&mut self, prefix: &str) -> u32 {
-        match self.inner.prefix_map.get(prefix) {
-            Some(id) => *id,
-            None => {
-                let id = self.inner.next_prefix_id;
-                self.inner.prefix_map.insert(prefix.to_string(), id);
-                self.inner.next_prefix_id += 1;
-                id
-            }
-        }
+    fn options(&self) -> RdfStreamRow {
+        let mut row = RdfStreamRow::default();
+        row.set_options(RdfStreamOptions {
+            stream_name: self.inner.stream_name.clone(),
+            physical_type: EnumOrUnknown::new(PhysicalStreamType::PHYSICAL_STREAM_TYPE_QUADS),
+            max_prefix_table_size: self.converter.prefixes.capacity(),
+            max_name_table_size: self.converter.names.capacity(),
+            max_datatype_table_size: self.converter.datatypes.capacity(),
+            version: 2,
+            ..Default::default()
+        });
+        row
     }
 
-    fn find_or_create_name_id(&mut self, name: &str) -> u32 {
-        match self.inner.name_map.get(name) {
-            Some(id) => *id,
-            None => {
-                let id = self.inner.next_name_id;
-                self.inner.name_map.insert(name.to_string(), id);
-                self.inner.next_name_id += 1;
-                id
+    fn flush_quads_to_current_frame(&mut self) {
+        let mut previous_subject: Option<NamedOrBlankNode> = None;
+        let mut previous_predicate: Option<NamedNode> = None;
+        let mut previous_object: Option<Term> = None;
+        let mut previous_graph_name: Option<GraphName> = None;
+
+        for current_quad in &self.quads {
+            let mut new_jelly_quad = RdfQuad::default();
+
+            let current_subject = &current_quad.0.subject;
+            if previous_subject.as_ref() != Some(current_subject) {
+                let (subject, mut rows) = self.converter.jelly_subject(current_subject.as_ref());
+                self.current_frame.rows.append(&mut rows);
+                new_jelly_quad.subject = Some(subject);
+                previous_subject = Some(current_subject.clone());
             }
+
+            let current_predicate = &current_quad.0.predicate;
+            if previous_predicate.as_ref() != Some(current_predicate) {
+                let (predicate, mut rows) = self.converter.jelly_predicate(current_predicate.as_ref());
+                self.current_frame.rows.append(&mut rows);
+                new_jelly_quad.predicate = Some(predicate);
+                previous_predicate = Some(current_predicate.clone());
+            }
+
+            let current_object = &current_quad.0.object;
+            if previous_object.as_ref() != Some(current_object) {
+                let (object, mut rows) = self.converter.jelly_object(current_object.as_ref());
+                self.current_frame.rows.append(&mut rows);
+                new_jelly_quad.object = Some(object);
+                previous_object = Some(current_object.clone());
+            }
+
+            let current_graph_name = &current_quad.0.graph_name;
+            if previous_graph_name.as_ref() != Some(current_graph_name) {
+                let (graph_name, mut rows) = self.converter.jelly_graph(current_graph_name.as_ref());
+                self.current_frame.rows.append(&mut rows);
+                new_jelly_quad.graph = Some(graph_name);
+                previous_graph_name = Some(current_graph_name.clone());
+            }
+
+            let mut row = RdfStreamRow::default();
+            row.set_quad(new_jelly_quad);
+            self.current_frame.rows.push(row);
         }
+        self.quads.clear();
     }
 
-    fn find_or_create_datatype_id(&mut self, type_: &str) -> u32 {
-        match self.inner.datatype_map.get(type_) {
-            Some(id) => *id,
-            None => {
-                let id = self.inner.next_datatype_id;
-                self.inner.datatype_map.insert(type_.to_string(), id);
-                self.inner.next_datatype_id += 1;
-                id
-            }
-        }
-    }
-
-    fn split_iri(&mut self, iri: &str) -> Option<(u32, u32)> {
-        iri.rfind(['#', '/'])
-            .map(|index| iri.split_at(index + 1))
-            .map(|(prefix, name)| (self.find_or_create_prefix_id(prefix), self.find_or_create_name_id(name)))
+    fn flush_current_frame(&mut self) -> io::Result<()> {
+        self.flush_quads_to_current_frame();
+        self.current_frame.write_length_delimited_to_writer(&mut self.writer)?;
+        self.current_frame = RdfStreamFrame::default();
+        Ok(())
     }
 
     pub fn serialize_quad<'a>(&mut self, t: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        let oxigraph_quad = t.into();
+        if !self.options_written {
+            self.current_frame.rows.push(self.options());
+            self.options_written = true;
+        }
 
-        let subject = match oxigraph_quad.subject {
-            NamedOrBlankNodeRef::NamedNode(node) => {
-                let (prefix_id, name_id) = self.split_iri(node.as_str()).unwrap_or((0,0));
-                Subject::SIri(RdfIri {
-                    prefix_id,
-                    name_id,
-                    ..Default::default()
-                })
-            },
-            NamedOrBlankNodeRef::BlankNode(node) => Subject::SBnode(node.to_string()),
-        };
-
-        let (prefix_id, name_id) = self.split_iri(oxigraph_quad.predicate.as_str()).unwrap_or((0,0));
-        let predicate = Predicate::PIri(RdfIri {
-            prefix_id,
-            name_id,
-            ..Default::default()
-        });
-
-        let object = match oxigraph_quad.object {
-            TermRef::NamedNode(node) => {
-                let (prefix_id, name_id) = self.split_iri(node.as_str()).unwrap_or((0,0));
-                Object::OIri(RdfIri {
-                    prefix_id,
-                    name_id,
-                    ..Default::default()
-                })
-            },
-            TermRef::BlankNode(node) => Object::OBnode(node.to_string()),
-            TermRef::Literal(literal) => {
-                let literal_kind = literal.language()
-                    .map(|lang| LiteralKind::Langtag(lang.to_string()))
-                    .unwrap_or(
-                        LiteralKind::Datatype(
-                            self.find_or_create_datatype_id(
-                                literal.datatype().as_str()
-                            )
-                        )
-                    );
-
-                Object::OLiteral(RdfLiteral {
-                    lex: literal.value().to_string(),
-                    literalKind: Some(literal_kind),
-                    ..Default::default()
-                })
-            },
-            #[cfg(feature = "rdf-12")]
-            TermRef::Triple(_) => todo!(),
-        };
-
-        let graph = match oxigraph_quad.graph_name {
-            GraphNameRef::NamedNode(node) => {
-                let (prefix_id, name_id) = self.split_iri(node.as_str()).unwrap_or((0,0));
-                Graph::GIri(RdfIri {
-                    prefix_id,
-                    name_id,
-                    ..Default::default()
-                })
-            },
-            GraphNameRef::BlankNode(node) => Graph::GBnode(node.to_string()),
-            GraphNameRef::DefaultGraph => Graph::GDefaultGraph(RdfDefaultGraph::default())
-        };
-
-        let jelly_quad = SortableRdfQuad {
-            subject: SortableSubject(subject),
-            predicate: SortablePredicate(predicate),
-            object: SortableObject(object),
-            graph_name: SortableGraphName(graph),
-        };
-
-        self.inner.quads.insert(jelly_quad);
+        self.quads.insert(SortableQuad(t.into().into_owned()));
+        if self.quads.len() >= 3 {
+            self.flush_current_frame()?;
+        }
 
         Ok(())
     }
 
     pub fn finish(mut self) -> io::Result<W> {
-        let mut frame = RdfStreamFrame::default();
-
-        let mut options_row = RdfStreamRow::default();
-        options_row.set_options(RdfStreamOptions {
-            stream_name: self.inner.stream_name,
-            physical_type: EnumOrUnknown::new(PhysicalStreamType::PHYSICAL_STREAM_TYPE_QUADS),
-            max_prefix_table_size: cmp::min(self.inner.prefix_map.len(), u32::MAX as usize) as u32,
-            max_name_table_size: cmp::min(self.inner.name_map.len(), u32::MAX as usize) as u32,
-            max_datatype_table_size: cmp::min(self.inner.datatype_map.len(), u32::MAX as usize) as u32,
-            version: 2,
-            ..Default::default()
-        });
-        frame.rows.push(options_row);
-
-        for (value, id) in self.inner.prefix_map {
-            let mut row = RdfStreamRow::default();
-            row.set_prefix(RdfPrefixEntry {
-                id,
-                value,
-                ..Default::default()
-            });
-            frame.rows.push(row);
-        }
-
-        for (name, value) in self.inner.namespace_map {
-            let mut row = RdfStreamRow::default();
-            row.set_namespace(RdfNamespaceDeclaration {
-                name,
-                value: MessageField::some(value),
-                ..Default::default()
-            })
-        }
-
-        for (value, id) in self.inner.name_map {
-            let mut row = RdfStreamRow::default();
-            row.set_name(RdfNameEntry {
-                id,
-                value,
-                ..Default::default()
-            });
-            frame.rows.push(row);
-        }
-
-        for (value, id) in self.inner.datatype_map {
-            let mut row = RdfStreamRow::default();
-            row.set_datatype(RdfDatatypeEntry {
-                id,
-                value,
-                ..Default::default()
-            });
-            frame.rows.push(row);
-        }
-
-        let mut previous_quad: Option<SortableRdfQuad> = None;
-        for current_quad in self.inner.quads {
-            let mut new_quad = RdfQuad::default();
-
-            if let Some(previous_quad) = previous_quad {
-                if previous_quad.subject != current_quad.subject {
-                    new_quad.subject = Some(current_quad.subject.0.clone());
-                }
-                if previous_quad.predicate != current_quad.predicate {
-                    new_quad.predicate = Some(current_quad.predicate.0.clone());
-                }
-                if previous_quad.object != current_quad.object {
-                    new_quad.object = Some(current_quad.object.0.clone());
-                }
-                if previous_quad.graph_name != current_quad.graph_name {
-                    new_quad.graph = Some(current_quad.graph_name.0.clone());
-                }
-            } else {
-                new_quad.subject = Some(current_quad.subject.0.clone());
-                new_quad.predicate = Some(current_quad.predicate.0.clone());
-                new_quad.object = Some(current_quad.object.0.clone());
-                new_quad.graph = Some(current_quad.graph_name.0.clone());
-            }
-
-            let mut row = RdfStreamRow::default();
-            row.set_quad(new_quad);
-            frame.rows.push(row);
-
-            previous_quad = Some(current_quad);
-        }
-
-        frame.write_to_writer(&mut self.writer)?;
+        self.flush_current_frame()?;
         Ok(self.writer)
     }
 }
