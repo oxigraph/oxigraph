@@ -871,7 +871,7 @@ impl Iterator for RocksDbDecodingQuadIterator<'_> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
-        let term = self.encoding.decode(self.iter.key()?);
+        let term = self.encoding.decode(&self.iter.key()?);
         self.iter.next();
         Some(term)
     }
@@ -889,7 +889,7 @@ impl Iterator for RocksDbDecodingGraphIterator<'_> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
-        let term = decode_term(self.iter.key()?);
+        let term = decode_term(&self.iter.key()?);
         self.iter.next();
         Some(term)
     }
@@ -901,7 +901,7 @@ impl StrLookup for RocksDbStorageReader<'_> {
             .storage
             .db
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .map(|v| String::from_utf8(v.into()))
+            .map(|v| String::from_utf8(v.to_vec()))
             .transpose()
             .map_err(CorruptionError::new)?)
     }
