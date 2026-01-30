@@ -120,6 +120,11 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
+            if !lenient {
+                eprintln!(
+                    "Some files like Wikidata dumps contain invalid IRIs or language tags. If you want to load them anyway use the `--lenient` option."
+                );
+            }
             #[expect(clippy::cast_precision_loss)]
             if file.is_empty() {
                 // We read from stdin
