@@ -4,7 +4,7 @@ use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
 use crate::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
-use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
+use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
@@ -15,6 +15,7 @@ use std::fmt::Write;
 use std::io::Read;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::str;
+use std::str::FromStr;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
@@ -1002,6 +1003,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdEvent::StartObject
                 | JsonLdEvent::Value { .. }
+                | JsonLdEvent::Json(_)
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::EndGraph
                 | JsonLdEvent::StartList
@@ -1029,6 +1031,10 @@ impl JsonLdToRdfConverter {
                         self.convert_literal(value, language, direction, r#type),
                         results,
                     )
+                }
+                JsonLdEvent::Json(value) => {
+                    self.state.push(state);
+                    self.emit_quad_for_new_literal(Some(Self::convert_json(value)), results)
                 }
                 JsonLdEvent::EndProperty => (),
                 JsonLdEvent::StartList => {
@@ -1067,6 +1073,10 @@ impl JsonLdToRdfConverter {
                         self.convert_literal(value, language, direction, r#type),
                         results,
                     )
+                }
+                JsonLdEvent::Json(value) => {
+                    self.add_new_list_node_state(current_node, results);
+                    self.emit_quad_for_new_literal(Some(Self::convert_json(value)), results)
                 }
                 JsonLdEvent::StartList => {
                     self.add_new_list_node_state(current_node, results);
@@ -1108,7 +1118,7 @@ impl JsonLdToRdfConverter {
                         nesting: 0,
                     });
                 }
-                JsonLdEvent::Value { .. } => {
+                JsonLdEvent::Value { .. } | JsonLdEvent::Json(_) => {
                     self.state.push(state);
                 }
                 JsonLdEvent::EndGraph => (),
@@ -1133,7 +1143,7 @@ impl JsonLdToRdfConverter {
                         nesting: 0,
                     });
                 }
-                JsonLdEvent::Value { .. } => {
+                JsonLdEvent::Value { .. } | JsonLdEvent::Json(_) => {
                     // Illegal but might happen in "lenient" mode
                     self.state.push(JsonLdToRdfState::Included);
                 }
@@ -1322,6 +1332,18 @@ impl JsonLdToRdfConverter {
         })
     }
 
+    fn convert_json(value: Vec<JsonEvent<'static>>) -> Literal {
+        let mut writer = WriterJsonSerializer::new(Vec::new());
+        serialize_canonical_json(value, &mut writer);
+        Literal::new_typed_literal(
+            String::from_utf8(writer.finish().unwrap()).unwrap(),
+            #[cfg(feature = "rdf-12")]
+            rdf::JSON,
+            #[cfg(not(feature = "rdf-12"))]
+            NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON"),
+        )
+    }
+
     fn last_subject(&self) -> Option<&NamedOrBlankNode> {
         for state in self.state.iter().rev() {
             match state {
@@ -1457,6 +1479,59 @@ fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonN
         write!(&mut buffer, "E{}", exp.checked_sub(1)?).ok()?;
         RdfJsonNumber::Double(buffer)
     })
+}
+
+fn serialize_canonical_json(
+    events: Vec<JsonEvent<'static>>,
+    writer: &mut WriterJsonSerializer<Vec<u8>>,
+) {
+    let mut iter = events.into_iter();
+    while let Some(event) = iter.next() {
+        match event {
+            JsonEvent::StartObject => {
+                writer.serialize_event(JsonEvent::StartObject).unwrap();
+                let mut key_values = Vec::new();
+                let mut nesting = 1;
+                for event in iter.by_ref() {
+                    match event {
+                        JsonEvent::ObjectKey(k) if nesting == 1 => {
+                            key_values.push((k, Vec::new()));
+                        }
+                        JsonEvent::StartObject => {
+                            nesting += 1;
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                        JsonEvent::EndObject => {
+                            nesting -= 1;
+                            if nesting == 0 {
+                                break;
+                            }
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                        _ => {
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                    }
+                }
+                key_values.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+                for (k, v) in key_values {
+                    writer.serialize_event(JsonEvent::ObjectKey(k)).unwrap();
+                    serialize_canonical_json(v, writer);
+                }
+                writer.serialize_event(JsonEvent::EndObject).unwrap();
+            }
+            JsonEvent::Number(value) => {
+                writer
+                    .serialize_event(JsonEvent::Number(
+                        f64::from_str(&value).unwrap().to_string().into(),
+                    ))
+                    .unwrap();
+            }
+            _ => {
+                writer.serialize_event(event).unwrap();
+            }
+        }
+    }
 }
 
 #[cfg(test)]

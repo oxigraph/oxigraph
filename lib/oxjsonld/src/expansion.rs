@@ -30,6 +30,7 @@ pub enum JsonLdEvent {
         language: Option<String>,
         direction: Option<&'static str>,
     },
+    Json(Vec<JsonEvent<'static>>),
     StartGraph,
     EndGraph,
     StartList,
@@ -145,31 +146,33 @@ enum JsonLdExpansionState {
     Value {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
     },
     ValueValue {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
+        nesting: usize,
     },
     ValueLanguage {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         direction: Option<&'static str>,
     },
     ValueDirection {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
     },
     ValueType {
         active_context: Arc<JsonLdContext>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
     },
@@ -216,6 +219,10 @@ enum JsonLdExpansionState {
         has_emitted_id: bool,
         nesting: usize,
         array_count: usize,
+    },
+    Json {
+        value: Vec<JsonEvent<'static>>,
+        nesting: usize,
     },
     Skip {
         is_array: bool,
@@ -293,10 +300,6 @@ impl JsonLdExpansionConverter {
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
-        if self.state.len() > 4096 {
-            errors.push(JsonLdSyntaxError::msg("Too large state stack"));
-            return;
-        }
         if event == JsonEvent::Eof {
             self.is_end = true;
             if self.state.is_empty() {
@@ -332,7 +335,7 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::String(value) => self.on_literal_value(
-                        JsonLdValue::String(value.into()),
+                        JsonEvent::String(value.into_owned().into()),
                         active_context,
                         active_property,
                         is_array,
@@ -344,7 +347,7 @@ impl JsonLdExpansionConverter {
                         errors,
                     ),
                     JsonEvent::Number(value) => self.on_literal_value(
-                        JsonLdValue::Number(value.into()),
+                        JsonEvent::Number(value.into_owned().into()),
                         active_context,
                         active_property,
                         is_array,
@@ -356,7 +359,7 @@ impl JsonLdExpansionConverter {
                         errors,
                     ),
                     JsonEvent::Boolean(value) => self.on_literal_value(
-                        JsonLdValue::Boolean(value),
+                        JsonEvent::Boolean(value),
                         active_context,
                         active_property,
                         is_array,
@@ -1073,7 +1076,7 @@ impl JsonLdExpansionConverter {
                                         self.state.push(JsonLdExpansionState::Value {
                                             active_context,
                                             r#type: types.into_iter().next(),
-                                            value: None,
+                                            value: Vec::new(),
                                             language: None,
                                             direction: None,
                                         });
@@ -1110,13 +1113,7 @@ impl JsonLdExpansionConverter {
                                                 true,
                                                 false,
                                             ) {
-                                                if has_keyword_form(&id) {
-                                                    errors.push(JsonLdSyntaxError::msg(
-                                                        "@id value must be an IRI or a blank node",
-                                                    ));
-                                                } else {
-                                                    results.push(JsonLdEvent::Id(id.into()));
-                                                }
+                                                results.push(JsonLdEvent::Id(id.into()));
                                             }
                                         }
                                         results.extend(types.into_iter().map(JsonLdEvent::Type));
@@ -1171,13 +1168,7 @@ impl JsonLdExpansionConverter {
                     if let Some(id) = id {
                         if let Some(id) = self.expand_iri(&active_context, id.into(), true, false) {
                             results.push(JsonLdEvent::StartObject);
-                            if has_keyword_form(&id) {
-                                errors.push(JsonLdSyntaxError::msg(
-                                    "@id value must be an IRI or a blank node",
-                                ));
-                            } else {
-                                results.push(JsonLdEvent::Id(id.into()));
-                            }
+                            results.push(JsonLdEvent::Id(id.into()));
                             results.extend(types.into_iter().map(JsonLdEvent::Type));
                             results.push(JsonLdEvent::EndObject);
                         }
@@ -1371,13 +1362,7 @@ impl JsonLdExpansionConverter {
                     } else {
                         if let Some(new_id) = self.expand_iri(&active_context, new_id, true, false)
                         {
-                            if has_keyword_form(&new_id) {
-                                errors.push(JsonLdSyntaxError::msg(
-                                    "@id value must be an IRI or a blank node",
-                                ));
-                            } else {
-                                results.push(JsonLdEvent::Id(new_id.into()));
-                            }
+                            results.push(JsonLdEvent::Id(new_id.into()));
                         }
                         self.state.push(JsonLdExpansionState::Object {
                             active_context,
@@ -1437,7 +1422,10 @@ impl JsonLdExpansionConverter {
                             match iri.as_ref() {
                                 "@id" => {
                                     if has_emitted_id {
-                                        errors.push(JsonLdSyntaxError::msg("Duplicated @id key"));
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "Duplicated @id key",
+                                            JsonLdErrorCode::CollidingKeywords,
+                                        ));
                                         self.state.push(JsonLdExpansionState::Object {
                                             active_context,
                                             in_property: false,
@@ -1583,26 +1571,22 @@ impl JsonLdExpansionConverter {
                                     });
                                 }
                                 _ if has_keyword_form(&iri) => {
-                                    errors.push(if iri == "@list" || iri == "@set" {
-                                        JsonLdSyntaxError::msg_and_code(
+                                    if iri == "@list" || iri == "@set" {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@list and @set must be the only keys of an object",
                                             JsonLdErrorCode::InvalidSetOrListObject,
-                                        )
+                                        ));
                                     } else if iri == "@context" {
-                                        JsonLdSyntaxError::msg_and_code(
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@context must be the first key of an object",
                                             JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                        )
+                                        ));
                                     } else if iri == "@value" && nesting > 0 {
-                                        JsonLdSyntaxError::msg_and_code(
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@value is not allowed in @nest",
                                             JsonLdErrorCode::InvalidNestValue,
-                                        )
-                                    } else {
-                                        JsonLdSyntaxError::msg(format!(
-                                            "Unsupported JSON-LD keyword: {iri}"
-                                        ))
-                                    });
+                                        ));
+                                    }
                                     self.state.push(JsonLdExpansionState::Object {
                                         active_context,
                                         in_property: false,
@@ -1613,13 +1597,15 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 _ => {
-                                    let (container, reverse) = active_context
+                                    let (container, reverse, is_json) = active_context
                                         .term_definitions
                                         .get(key.as_ref())
-                                        .map_or(([].as_slice(), false), |term_definition| {
+                                        .map_or(([].as_slice(), false, false), |term_definition| {
                                             (
                                                 term_definition.container_mapping,
                                                 term_definition.reverse_property,
+                                                term_definition.type_mapping.as_deref()
+                                                    == Some("@json"),
                                             )
                                         });
                                     results.push(JsonLdEvent::StartProperty {
@@ -1632,14 +1618,21 @@ impl JsonLdExpansionConverter {
                                         has_emitted_id,
                                         nesting,
                                     });
-                                    self.state.push(JsonLdExpansionState::Element {
-                                        active_property: Some(key.clone().into()),
-                                        active_context,
-                                        is_array: false,
-                                        container,
-                                        reverse,
-                                        in_included: false,
-                                        extra_node: None,
+                                    self.state.push(if is_json {
+                                        JsonLdExpansionState::Json {
+                                            value: Vec::new(),
+                                            nesting: 0,
+                                        }
+                                    } else {
+                                        JsonLdExpansionState::Element {
+                                            active_property: Some(key.clone().into()),
+                                            active_context,
+                                            is_array: false,
+                                            container,
+                                            reverse,
+                                            in_included: false,
+                                            extra_node: None,
+                                        }
                                     });
                                 }
                             }
@@ -1766,7 +1759,16 @@ impl JsonLdExpansionConverter {
                         if let Some(iri) = self.expand_iri(&active_context, key, false, true) {
                             match iri.as_ref() {
                                 "@value" => {
-                                    if value.is_some() {
+                                    if value.is_empty() {
+                                        self.state.push(JsonLdExpansionState::ValueValue {
+                                            active_context,
+                                            r#type,
+                                            value: Vec::new(),
+                                            language,
+                                            direction,
+                                            nesting: 0,
+                                        });
+                                    } else {
                                         errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@value cannot be set multiple times",
                                             JsonLdErrorCode::InvalidValueObject,
@@ -1780,13 +1782,6 @@ impl JsonLdExpansionConverter {
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
-                                    } else {
-                                        self.state.push(JsonLdExpansionState::ValueValue {
-                                            active_context,
-                                            r#type,
-                                            language,
-                                            direction,
-                                        });
                                     }
                                 }
                                 "@language" => {
@@ -1940,48 +1935,65 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::EndObject => {
-                        if let Some(value) = value {
-                            let mut is_valid = true;
-                            if language.is_some() && r#type.is_some() {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@type and @language cannot be used together",
-                                    JsonLdErrorCode::InvalidValueObject,
-                                ));
-                                is_valid = false;
+                        if value.is_empty() {
+                            return;
+                        }
+                        if language.is_some() && r#type.is_some() {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@type and @language cannot be used together",
+                                JsonLdErrorCode::InvalidValueObject,
+                            ));
+                            return;
+                        }
+                        if language.is_some() && !matches!(value.as_slice(), [JsonEvent::String(_)])
+                        {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@language can be used only on a string @value",
+                                JsonLdErrorCode::InvalidLanguageTaggedValue,
+                            ));
+                            return;
+                        }
+                        if let Some(r#type) = &r#type {
+                            if r#type == "@json" {
+                                results.push(JsonLdEvent::Json(value));
+                                return;
                             }
-                            if language.is_some() && !matches!(value, JsonLdValue::String(_)) {
+                            if r#type.starts_with("_:") {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@language can be used only on a string @value",
-                                    JsonLdErrorCode::InvalidLanguageTaggedValue,
+                                    "@type cannot be a blank node",
+                                    JsonLdErrorCode::InvalidTypedValue,
                                 ));
-                                is_valid = false;
-                            }
-                            if let Some(r#type) = &r#type {
-                                if r#type.starts_with("_:") {
+                                return;
+                            } else if !self.lenient {
+                                if let Err(e) = Iri::parse(r#type.as_str()) {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type cannot be a blank node",
+                                        format!("@type value '{type}' must be an IRI: {e}"),
                                         JsonLdErrorCode::InvalidTypedValue,
                                     ));
-                                    is_valid = false;
-                                } else if !self.lenient {
-                                    if let Err(e) = Iri::parse(r#type.as_str()) {
-                                        errors.push(JsonLdSyntaxError::msg_and_code(
-                                            format!("@type value '{type}' must be an IRI: {e}"),
-                                            JsonLdErrorCode::InvalidTypedValue,
-                                        ));
-                                        is_valid = false;
-                                    }
+                                    return;
                                 }
                             }
-                            if is_valid {
-                                results.push(JsonLdEvent::Value {
-                                    value,
-                                    r#type,
-                                    language,
-                                    direction,
-                                })
-                            }
                         }
+                        if value.len() != 1 {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@value value must be a string, number, boolean or null",
+                                JsonLdErrorCode::InvalidValueObjectValue,
+                            ));
+                            return;
+                        }
+                        let value = match value.into_iter().next().unwrap() {
+                            JsonEvent::String(value) => JsonLdValue::String(value.into_owned()),
+                            JsonEvent::Number(value) => JsonLdValue::Number(value.into_owned()),
+                            JsonEvent::Boolean(value) => JsonLdValue::Boolean(value),
+                            JsonEvent::Null => return,
+                            _ => unreachable!(),
+                        };
+                        results.push(JsonLdEvent::Value {
+                            value,
+                            r#type,
+                            language,
+                            direction,
+                        })
                     }
                     _ => unreachable!(),
                 }
@@ -1989,54 +2001,56 @@ impl JsonLdExpansionConverter {
             JsonLdExpansionState::ValueValue {
                 active_context,
                 r#type,
+                mut value,
                 language,
                 direction,
-            } => match event {
-                JsonEvent::Null => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: None,
-                    language,
-                    direction,
-                }),
-                JsonEvent::Number(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::Number(value.into())),
-                    language,
-                    direction,
-                }),
-                JsonEvent::Boolean(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::Boolean(value)),
-                    language,
-                    direction,
-                }),
-                JsonEvent::String(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::String(value.into())),
-                    language,
-                    direction,
-                }),
-                _ => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@value value must be a string, number, boolean or null",
-                        JsonLdErrorCode::InvalidValueObjectValue,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
+                mut nesting,
+            } => {
+                match event {
+                    JsonEvent::Null => value.push(JsonEvent::Null),
+                    JsonEvent::Number(v) => value.push(JsonEvent::Number(v.into_owned().into())),
+                    JsonEvent::Boolean(v) => value.push(JsonEvent::Boolean(v)),
+                    JsonEvent::String(v) => value.push(JsonEvent::String(v.into_owned().into())),
+                    JsonEvent::ObjectKey(v) => {
+                        value.push(JsonEvent::ObjectKey(v.into_owned().into()))
+                    }
+                    JsonEvent::StartArray => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartArray)
+                    }
+                    JsonEvent::StartObject => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartObject)
+                    }
+                    JsonEvent::EndArray => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndArray)
+                    }
+                    JsonEvent::EndObject => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndObject)
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                self.state.push(if nesting == 0 {
+                    JsonLdExpansionState::Value {
                         active_context,
                         r#type,
-                        value: None,
+                        value,
                         language,
                         direction,
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: false });
-                    self.convert_event(event, results, errors);
-                }
-            },
+                    }
+                } else {
+                    JsonLdExpansionState::ValueValue {
+                        active_context,
+                        r#type,
+                        value,
+                        language,
+                        direction,
+                        nesting,
+                    }
+                });
+            }
             JsonLdExpansionState::ValueLanguage {
                 active_context,
                 value,
@@ -2116,16 +2130,7 @@ impl JsonLdExpansionConverter {
                 direction,
             } => {
                 if let JsonEvent::String(t) = event {
-                    let mut r#type = self.expand_iri(&active_context, t, true, true);
-                    if let Some(iri) = &r#type {
-                        if has_keyword_form(iri) {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                format!("{iri} is not a valid value for @type"),
-                                JsonLdErrorCode::InvalidTypedValue,
-                            ));
-                            r#type = None
-                        }
-                    }
+                    let r#type = self.expand_iri(&active_context, t, true, true);
                     self.state.push(JsonLdExpansionState::Value {
                         active_context,
                         r#type: r#type.map(Into::into),
@@ -2602,6 +2607,43 @@ impl JsonLdExpansionConverter {
                     });
                 }
             },
+            JsonLdExpansionState::Json {
+                mut value,
+                mut nesting,
+            } => {
+                match event {
+                    JsonEvent::Null => value.push(JsonEvent::Null),
+                    JsonEvent::Number(v) => value.push(JsonEvent::Number(v.into_owned().into())),
+                    JsonEvent::Boolean(v) => value.push(JsonEvent::Boolean(v)),
+                    JsonEvent::String(v) => value.push(JsonEvent::String(v.into_owned().into())),
+                    JsonEvent::ObjectKey(v) => {
+                        value.push(JsonEvent::ObjectKey(v.into_owned().into()))
+                    }
+                    JsonEvent::StartArray => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartArray)
+                    }
+                    JsonEvent::StartObject => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartObject)
+                    }
+                    JsonEvent::EndArray => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndArray)
+                    }
+                    JsonEvent::EndObject => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndObject)
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                if nesting > 0 {
+                    self.state
+                        .push(JsonLdExpansionState::Json { value, nesting });
+                } else {
+                    results.push(JsonLdEvent::Json(value));
+                }
+            }
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -2723,15 +2765,10 @@ impl JsonLdExpansionConverter {
                     active_context = Arc::new(scoped_context);
                 }
                 // 13.4.4.4)
-                let iri = self.expand_iri(&typed_scoped_context, value.into(), true, true)?;
-                if has_keyword_form(&iri) {
-                    errors.push(JsonLdSyntaxError::msg(format!(
-                        "{iri} is not a valid value for @type"
-                    )));
-                    None
-                } else {
-                    Some(iri.into())
-                }
+                Some(
+                    self.expand_iri(&typed_scoped_context, value.into(), true, true)?
+                        .into(),
+                )
             })
             .collect();
         (active_context, types_to_emit)
@@ -2740,7 +2777,7 @@ impl JsonLdExpansionConverter {
     #[expect(clippy::too_many_arguments)]
     fn on_literal_value(
         &mut self,
-        value: JsonLdValue,
+        value: JsonEvent<'static>,
         active_context: Arc<JsonLdContext>,
         active_property: Option<String>,
         is_array: bool,
@@ -2805,7 +2842,7 @@ impl JsonLdExpansionConverter {
         &mut self,
         active_property: String,
         active_context: Arc<JsonLdContext>,
-        value: JsonLdValue,
+        value: JsonEvent<'static>,
         reverse: bool,
         extra_node: Option<(String, JsonEvent<'static>)>,
         results: &mut Vec<JsonLdEvent>,
@@ -2819,10 +2856,10 @@ impl JsonLdExpansionConverter {
                 match type_mapping.as_ref() {
                     // 1)
                     "@id" => {
-                        if let JsonLdValue::String(value) = value {
+                        if let JsonEvent::String(value) = value {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types: Vec::new(),
-                                id: Some(value),
+                                id: Some(value.into_owned()),
                                 seen_id: false,
                                 active_property: Some(active_property),
                                 active_context,
@@ -2836,11 +2873,11 @@ impl JsonLdExpansionConverter {
                     }
                     // 2)
                     "@vocab" => {
-                        if let JsonLdValue::String(value) = value {
+                        if let JsonEvent::String(value) = value {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types: Vec::new(),
                                 id: self
-                                    .expand_iri(&active_context, value.into(), true, true)
+                                    .expand_iri(&active_context, value, true, true)
                                     .map(Cow::into_owned),
                                 seen_id: false,
                                 active_property: Some(active_property),
@@ -2864,7 +2901,7 @@ impl JsonLdExpansionConverter {
                 }
             }
             // 5)
-            if matches!(value, JsonLdValue::String(_)) {
+            if matches!(value, JsonEvent::String(_)) {
                 language = term_definition
                     .language_mapping
                     .clone()
@@ -2875,7 +2912,7 @@ impl JsonLdExpansionConverter {
             }
         } else {
             // 5)
-            if matches!(value, JsonLdValue::String(_)) {
+            if matches!(value, JsonEvent::String(_)) {
                 if language.is_none() {
                     language.clone_from(&active_context.default_language);
                 }
@@ -2893,7 +2930,7 @@ impl JsonLdExpansionConverter {
         self.state.push(JsonLdExpansionState::Value {
             active_context,
             r#type,
-            value: Some(value),
+            value: vec![value],
             language,
             direction,
         });
@@ -2985,6 +3022,7 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::RootGraph
                 | JsonLdExpansionState::Included
                 | JsonLdExpansionState::EndOfGraphContainer
+                | JsonLdExpansionState::Json { .. }
                 | JsonLdExpansionState::Skip { .. } => (),
             }
         }

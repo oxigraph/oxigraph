@@ -893,10 +893,6 @@ impl JsonLdContextProcessor {
                 // 15.2)
                 if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
                     definition.iri_mapping = Some(Some(format!("{iri_mapping}{suffix}")));
-                } else {
-                    errors.push(JsonLdSyntaxError::msg(format!(
-                        "The prefix '{prefix}' is not associated with an IRI in the context"
-                    )));
                 }
             } else {
                 // 15.3)
@@ -1383,10 +1379,8 @@ impl JsonLdContextProcessor {
         &self,
         url: &str,
     ) -> Result<(Option<Iri<String>>, JsonNode), JsonLdSyntaxError> {
-        let mut remote_context_cache = self
-            .remote_context_cache
-            .lock()
-            .map_err(|_| JsonLdSyntaxError::msg("Poisoned mutex"))?;
+        #[expect(clippy::unwrap_in_result)]
+        let mut remote_context_cache = self.remote_context_cache.lock().unwrap();
         if let Some(loaded_context) = remote_context_cache.get(url) {
             // 5.2.4)
             return Ok(loaded_context.clone());
