@@ -509,10 +509,6 @@ jobs:
         with:
           run: cargo codspeed run
           mode: simulation
-      - uses: CodSpeedHQ/action@v4
-        with:
-          run: cargo codspeed run
-          mode: memory
 
   codecov:
     runs-on: ubuntu-latest
