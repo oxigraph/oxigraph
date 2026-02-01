@@ -21,9 +21,6 @@ use tokio::io::AsyncRead;
 
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
-/// The parser is a work in progress.
-/// Only JSON-LD 1.0 is supported at the moment. JSON-LD 1.1 is not supported yet.
-///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
 /// - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
@@ -131,7 +128,6 @@ impl JsonLdParser {
 
     /// Set the [processing mode](https://www.w3.org/TR/json-ld11/#dfn-processing-mode) of the parser.
     #[inline]
-    #[doc(hidden)] // TODO: expose after implementing JSON-LD 1.1
     pub fn with_processing_mode(mut self, processing_mode: JsonLdProcessingMode) -> Self {
         self.processing_mode = processing_mode;
         self

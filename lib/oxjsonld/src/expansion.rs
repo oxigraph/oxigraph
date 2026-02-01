@@ -532,7 +532,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
-                mut extra_node,
+                extra_node,
             } => {
                 // We have to buffer everything to make sure we get the @context key even if it's at the end
                 match event {
@@ -603,9 +603,6 @@ impl JsonLdExpansionConverter {
                                     ))
                                 }
                                 id_data = Some((key, value));
-                                if extra_node.as_ref().is_some_and(|(k, _)| k == "@id") {
-                                    extra_node = None; // It overrides the extra id
-                                }
                             }
                             Some("@graph") => {
                                 graph_data.push((key, value));
@@ -967,7 +964,7 @@ impl JsonLdExpansionConverter {
                 active_context,
                 reverse,
                 in_included,
-                extra_node,
+                mut extra_node,
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) =
@@ -1009,6 +1006,9 @@ impl JsonLdExpansionConverter {
                                 });
                             }
                             "@id" => {
+                                if extra_node.as_ref().is_some_and(|(k, _)| k == "@id") {
+                                    extra_node = None; // It overrides the extra id
+                                }
                                 if seen_id {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "Only a single @id is allowed",
