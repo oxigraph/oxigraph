@@ -11,9 +11,6 @@ OxJSON-LD is a parser and serializer for [JSON-LD](https://www.w3.org/TR/json-ld
 
 The entry points of this library are the two [`JsonLdParser`] and [`JsonLdSerializer`] structs.
 
-The parser is a work in progress.
-Only JSON-LD 1.0 is supported at the moment, JSON-LD 1.1 is not supported yet.
-
 The parser supports two modes:
 - regular JSON-LD parsing that needs to buffer the full file into memory.
 - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
