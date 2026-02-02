@@ -1,7 +1,8 @@
+use crate::io::{BytesInput, buffer_from_js_value, convert_base_iri, rdf_format};
 use crate::model::*;
 use crate::{console_warn, format_err};
 use js_sys::{Array, Map, Reflect, try_iter};
-use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
@@ -35,7 +36,7 @@ export class Store {
     has(quad: Quad): boolean;
 
     load(
-        data: string,
+        input: string | UInt8Array | Iterable<string | UInt8Array>,
         options: {
             base_iri?: NamedNode | string;
             format: string;
@@ -125,7 +126,7 @@ impl JsStore {
         predicate: &JsValue,
         object: &JsValue,
         graph_name: &JsValue,
-    ) -> Result<Box<[JsValue]>, JsValue> {
+    ) -> Result<Vec<JsQuad>, JsValue> {
         Ok(self
             .store
             .quads_for_pattern(
@@ -158,10 +159,9 @@ impl JsStore {
                 .as_ref()
                 .map(<&GraphName>::into),
             )
-            .map(|v| v.map(|v| JsQuad::from(v).into()))
+            .map(|v| v.map(JsQuad::from))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(JsError::from)?
-            .into_boxed_slice())
+            .map_err(JsError::from)?)
     }
 
     pub fn query(&self, query: &str, options: &JsValue) -> Result<JsValue, JsValue> {
@@ -347,7 +347,7 @@ impl JsStore {
 
     pub fn load(
         &self,
-        data: &str,
+        data: &JsValue,
         options: &JsValue,
         base_iri: &JsValue,
         to_graph_name: &JsValue,
@@ -410,16 +410,34 @@ impl JsStore {
         } else if lenient {
             parser = parser.lenient();
         }
-        if no_transaction {
-            let mut loader = self.store.bulk_loader();
-            loader
-                .load_from_slice(parser, data.as_bytes())
-                .map_err(JsError::from)?;
-            loader.commit().map_err(JsError::from)?;
+        if let Some(buffer) = buffer_from_js_value(data) {
+            if no_transaction {
+                let mut loader = self.store.bulk_loader();
+                loader
+                    .load_from_slice(parser, &buffer)
+                    .map_err(JsError::from)?;
+                loader.commit().map_err(JsError::from)?;
+            } else {
+                self.store
+                    .load_from_slice(parser, &buffer)
+                    .map_err(JsError::from)?;
+            }
+        } else if let Some(iterator) = try_iter(data)? {
+            if no_transaction {
+                let mut loader = self.store.bulk_loader();
+                loader
+                    .load_from_reader(parser, BytesInput::from(iterator))
+                    .map_err(JsError::from)?;
+                loader.commit().map_err(JsError::from)?;
+            } else {
+                self.store
+                    .load_from_reader(parser, BytesInput::from(iterator))
+                    .map_err(JsError::from)?;
+            }
         } else {
-            self.store
-                .load_from_slice(parser, data)
-                .map_err(JsError::from)?;
+            return Err(format_err!(
+                "The input must be a string, Uint8Array or an iterator of string or Uint8Array"
+            ));
         }
         Ok(())
     }
@@ -466,16 +484,6 @@ impl JsStore {
     }
 }
 
-fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
-    if format.contains('/') {
-        RdfFormat::from_media_type(format)
-            .ok_or_else(|| format_err!("Not supported RDF format media type: {}", format))
-    } else {
-        RdfFormat::from_extension(format)
-            .ok_or_else(|| format_err!("Not supported RDF format extension: {}", format))
-    }
-}
-
 fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
     if format.contains('/') {
         QueryResultsFormat::from_media_type(format).ok_or_else(|| {
@@ -491,19 +499,5 @@ fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
                 format
             )
         })
-    }
-}
-
-fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
-    if value.is_null() || value.is_undefined() {
-        Ok(None)
-    } else if let Some(value) = value.as_string() {
-        Ok(Some(value))
-    } else if let JsTerm::NamedNode(value) = FROM_JS.with(|c| c.to_term(value))? {
-        Ok(Some(value.value()))
-    } else {
-        Err(format_err!(
-            "If provided, the base IRI must be a NamedNode or a string"
-        ))
     }
 }

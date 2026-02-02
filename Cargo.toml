@@ -49,7 +49,7 @@ geo = ">=0.28, <0.32"  # TODO: upgrade when the dependency on old getrandom will
 geojson = "0.24"
 getrandom = "0.3.4"
 hex = "0.4"
-js-sys = "0.3.77"
+js-sys = "0.3.85"
 json-event-parser = "0.2.3"
 libc = "0.2.155"
 md-5 = "0.10"
@@ -78,7 +78,8 @@ thiserror = ">=1.0.50, <3.0"
 time = "0.3"
 tokio = "1.29"
 url = "2.4"
-wasm-bindgen = "0.2.100"
+wasm-bindgen = "0.2.108"
+wasm-bindgen-futures = "0.4.58"
 wkt = "0.14"
 
 # Internal dependencies
