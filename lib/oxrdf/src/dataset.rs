@@ -1612,20 +1612,27 @@ impl<'a> GraphView<'a> {
         predicate: Option<NamedNodeRef<'a>>,
         object: Option<TermRef<'a>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
-        let iter: Box<dyn Iterator<Item = _>> = if let Some(subject) = subject {
-            Box::new(self.triples_for_subject(subject).filter(move |q| {
-                predicate.as_ref().is_none_or(|p| *p == q.predicate)
-                    && object.as_ref().is_none_or(|o| *o == q.object)
-            }))
-        } else if let Some(object) = object {
-            Box::new(
-                self.triples_for_object(object)
-                    .filter(move |q| predicate.as_ref().is_none_or(|p| *p == q.predicate)),
-            )
-        } else if let Some(predicate) = predicate {
-            Box::new(self.triples_for_predicate(predicate))
-        } else {
-            Box::new(self.iter())
+        let iter: Box<dyn Iterator<Item = _>> = match (subject, predicate, object) {
+            (Some(subject), Some(predicate), Some(object)) => {
+                let triple = TripleRef::new(subject, predicate, object);
+                Box::new(self.contains(triple).then_some(triple).into_iter())
+            }
+            (Some(subject), Some(predicate), None) => Box::new(
+                self.objects_for_subject_predicate(subject, predicate)
+                    .map(move |object| TripleRef::new(subject, predicate, object)),
+            ),
+            (Some(subject), None, Some(object)) => Box::new(
+                self.predicates_for_subject_object(subject, object)
+                    .map(move |predicate| TripleRef::new(subject, predicate, object)),
+            ),
+            (Some(subject), None, None) => Box::new(self.triples_for_subject(subject)),
+            (None, Some(predicate), Some(object)) => Box::new(
+                self.subjects_for_predicate_object(predicate, object)
+                    .map(move |subject| TripleRef::new(subject, predicate, object)),
+            ),
+            (None, Some(predicate), None) => Box::new(self.triples_for_predicate(predicate)),
+            (None, None, Some(object)) => Box::new(self.triples_for_object(object)),
+            (None, None, None) => Box::new(self.iter()),
         };
         iter
     }
