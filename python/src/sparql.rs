@@ -435,7 +435,7 @@ impl PyQuerySolutions {
 /// >>> bool(store.query('ASK { ?s ?p ?o }'))
 /// True
 #[pyclass(frozen, name = "QueryBoolean", module = "pyoxigraph", eq, ord, hash)]
-#[derive(Eq, Ord, PartialOrd, PartialEq, Hash, Clone, Copy)]
+#[derive(Eq, Ord, PartialOrd, PartialEq, Hash)]
 pub struct PyQueryBoolean {
     inner: bool,
 }
@@ -633,7 +633,14 @@ pub fn parse_query_results(
 /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
 /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
 /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
-#[pyclass(frozen, name = "QueryResultsFormat", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "QueryResultsFormat",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyQueryResultsFormat {
     inner: QueryResultsFormat,

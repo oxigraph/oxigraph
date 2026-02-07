@@ -256,7 +256,14 @@ impl PyQuadParser {
 ///
 /// >>> RdfFormat.N3.media_type
 /// 'text/n3'
-#[pyclass(frozen, name = "RdfFormat", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "RdfFormat",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyRdfFormat {
     inner: RdfFormat,
