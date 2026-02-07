@@ -17,9 +17,9 @@
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
-        "build": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target web --out-name web --weak-refs --reference-types && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
-        "build-node": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --weak-refs --reference-types",
+        "test": "wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
+        "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
+        "build-node": "wasm-pack build --release --target nodejs --weak-refs --reference-types",
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
         "bench": "npm run build-node && vitest bench"
