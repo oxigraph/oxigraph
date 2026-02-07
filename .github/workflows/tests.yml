@@ -96,12 +96,8 @@ jobs:
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --no-default-features -- -D warnings -D clippy::all
         working-directory: ./js
-        env:
-          RUSTFLAGS: --cfg getrandom_backend="wasm_js"
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
         working-directory: ./js
-        env:
-          RUSTFLAGS: --cfg getrandom_backend="wasm_js"
 
   clippy_wasip1:
     runs-on: ubuntu-latest
