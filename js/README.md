@@ -105,6 +105,43 @@ const quad = oxigraph.quad(blank, ex, foo);
 
 All terms overrides the the `toString()` method to return a N-Quads/SPARQL-like representation of the terms.
 
+### I/O
+
+#### `parse(input, object options)`
+
+Parse some content and return `Quad`s.
+
+The method arguments are:
+1. `input`: the serialized RDF triples or quads. It allows different types:
+    - `string | UInt8Array`. In this case the output is returned as a plain `Quad[]`.
+    - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
+    - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
+2. `options`: an object containing various options (all optional except `format`):
+    - `format`: the format of the serialization as a `string`. See below for the supported formats.
+    - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
+    - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
+    - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
+
+The available formats are:
+* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
+
+Example of parsing a Turtle file with the base IRI `http://example.com`:
+```js
+parse(
+    "<http://example.com> <http://example.com> <> .",
+    {
+        format: "text/turtle",
+        base_iri: "http://example.com",
+    }
+)
+```
+
 ### `Store`
 
 Oxigraph API is centered around the `Store` class.
@@ -217,11 +254,11 @@ store.update("DELETE WHERE { <s> ?p ?o }", {
 })
 ```
 
-#### `Store.prototype.load(String data, object options)`
+#### `Store.prototype.load(string | UInt8Array | Iterable<string | UInt8Array> data, object options)`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
-1. `data`: the serialized RDF triples or quads.
+1. `data`: the serialized RDF triples or quads as a single buffer or an iterable of buffers.
 2. `options`: an object containing various options (all optional except `format`):
    - `format`: the format of the serialization as a `string`. See below for the supported formats.
    - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.

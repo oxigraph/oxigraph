@@ -25,8 +25,11 @@ rdf-12 = ["oxigraph/rdf-12"]
 console_error_panic_hook.workspace = true
 js-sys.workspace = true
 oxigraph = { workspace = true, features = ["js"] }
+oxrdfio = { workspace = true, features = ["async-tokio"] }
 spargeo = { workspace = true, optional = true }
+tokio.workspace = true
 wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
 
 [lints]
 workspace = true

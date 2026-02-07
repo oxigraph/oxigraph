@@ -1,4 +1,4 @@
-#![allow(clippy::inherent_to_string, clippy::unused_self)]
+#![expect(clippy::inherent_to_string, clippy::unused_self)]
 
 use crate::format_err;
 use js_sys::{Reflect, UriError};
