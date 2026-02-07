@@ -18,7 +18,15 @@ use std::vec::IntoIter;
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
-#[pyclass(frozen, name = "NamedNode", module = "pyoxigraph", eq, ord, hash)]
+#[pyclass(
+    frozen,
+    name = "NamedNode",
+    module = "pyoxigraph",
+    eq,
+    ord,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct PyNamedNode {
     inner: NamedNode,
@@ -116,7 +124,14 @@ impl PyNamedNode {
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
-#[pyclass(frozen, name = "BlankNode", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "BlankNode",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
     inner: BlankNode,
@@ -230,7 +245,14 @@ impl PyBlankNode {
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
 /// >>> str(Literal(11))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
-#[pyclass(frozen, name = "Literal", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "Literal",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyLiteral {
     inner: Literal,
@@ -456,8 +478,15 @@ impl PyLiteral {
 /// >>> str(BaseDirection("ltr"))
 /// 'ltr'
 #[cfg(feature = "rdf-12")]
-#[pyclass(frozen, name = "BaseDirection", module = "pyoxigraph", eq, hash)]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[pyclass(
+    frozen,
+    name = "BaseDirection",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyBaseDirection {
     inner: BaseDirection,
 }
@@ -555,7 +584,14 @@ impl PyBaseDirection {
 }
 
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
-#[pyclass(frozen, name = "DefaultGraph", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "DefaultGraph",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyDefaultGraph;
 
@@ -672,7 +708,15 @@ impl From<Term> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    sequence,
+    name = "Triple",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyTriple {
     inner: Triple,
@@ -847,7 +891,15 @@ impl From<GraphName> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    sequence,
+    name = "Quad",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
     inner: Quad,
@@ -1026,7 +1078,14 @@ impl PyQuad {
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
-#[pyclass(frozen, name = "Variable", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "Variable",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyVariable {
     inner: Variable,

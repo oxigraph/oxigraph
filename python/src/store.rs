@@ -38,7 +38,6 @@ use std::path::PathBuf;
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
 #[pyclass(frozen, name = "Store", module = "pyoxigraph")]
-#[derive(Clone)]
 pub struct PyStore {
     inner: Store,
 }
