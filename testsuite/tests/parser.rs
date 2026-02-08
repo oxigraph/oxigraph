@@ -181,8 +181,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi12",
             // Scoped contexts somehow propagate to elements inside of containers?
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc013",
-            // useJCS
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tjs12",
             // specVersion json-ld-1.0
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te026",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te071",
@@ -246,8 +244,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter32",
             // Scoped contexts somehow propagate to elements inside of containers?
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tc013",
-            // useJCS
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tjs12",
             // something is before @type
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te038",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te014",
