@@ -1300,7 +1300,7 @@ impl JsonLdToRdfConverter {
                 if language.is_some() {
                     return None; // Expansion already returns an error
                 }
-                let value = canonicalize_json_number(
+                let value = canonicalize_xsd_number(
                     &value,
                     r#type.as_ref().is_some_and(|t| *t == xsd::DOUBLE),
                 )
@@ -1407,8 +1407,8 @@ enum RdfJsonNumber {
     Double(String),
 }
 
-/// Canonicalizes the JSON number to xsd:double canonical form.
-fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonNumber> {
+/// Canonicalizes the JSON number to a xsd:integer, xsd:decimal or xsd:double.
+fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNumber> {
     // We parse
     let (value, is_negative) = if let Some(value) = value.strip_prefix('-') {
         (value, true)
@@ -1517,10 +1517,10 @@ fn serialize_canonical_json(
                 writer.serialize_event(JsonEvent::EndObject).unwrap();
             }
             JsonEvent::Number(value) => {
+                let value = f64::from_str(&value).unwrap();
+                let mut buffer = ryu_js::Buffer::new();
                 writer
-                    .serialize_event(JsonEvent::Number(
-                        f64::from_str(&value).unwrap().to_string().into(),
-                    ))
+                    .serialize_event(JsonEvent::Number(buffer.format(value).into()))
                     .unwrap();
             }
             _ => {
@@ -1535,97 +1535,97 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_canonicalize_json_number() {
+    fn test_canonicalize_xsd_number() {
         assert_eq!(
-            canonicalize_json_number("12", false),
+            canonicalize_xsd_number("12", false),
             Some(RdfJsonNumber::Integer("12".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12", false),
+            canonicalize_xsd_number("-12", false),
             Some(RdfJsonNumber::Integer("-12".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1", true),
+            canonicalize_xsd_number("1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1", true),
+            canonicalize_xsd_number("1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("+1", true),
+            canonicalize_xsd_number("+1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-1", true),
+            canonicalize_xsd_number("-1", true),
             Some(RdfJsonNumber::Double("-1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12", true),
+            canonicalize_xsd_number("12", true),
             Some(RdfJsonNumber::Double("1.2E1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12", true),
+            canonicalize_xsd_number("-12", true),
             Some(RdfJsonNumber::Double("-1.2E1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.3456E3", false),
+            canonicalize_xsd_number("12.3456E3", false),
             Some(RdfJsonNumber::Double("1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.3456e3", false),
+            canonicalize_xsd_number("12.3456e3", false),
             Some(RdfJsonNumber::Double("1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12.3456E3", false),
+            canonicalize_xsd_number("-12.3456E3", false),
             Some(RdfJsonNumber::Double("-1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.34E-3", false),
+            canonicalize_xsd_number("12.34E-3", false),
             Some(RdfJsonNumber::Double("1.234E-2".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.340E-3", false),
+            canonicalize_xsd_number("12.340E-3", false),
             Some(RdfJsonNumber::Double("1.234E-2".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0.01234E-1", false),
+            canonicalize_xsd_number("0.01234E-1", false),
             Some(RdfJsonNumber::Double("1.234E-3".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1.0", false),
+            canonicalize_xsd_number("1.0", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1.0E0", false),
+            canonicalize_xsd_number("1.0E0", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0.01E2", false),
+            canonicalize_xsd_number("0.01E2", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1E2", false),
+            canonicalize_xsd_number("1E2", false),
             Some(RdfJsonNumber::Integer("100".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1E21", false),
+            canonicalize_xsd_number("1E21", false),
             Some(RdfJsonNumber::Double("1.0E21".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0", false),
+            canonicalize_xsd_number("0", false),
             Some(RdfJsonNumber::Integer("0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0", true),
+            canonicalize_xsd_number("0", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-0", true),
+            canonicalize_xsd_number("-0", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0E-10", true),
+            canonicalize_xsd_number("0E-10", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
     }
