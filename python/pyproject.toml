@@ -37,7 +37,7 @@ Tracker = "https://github.com/oxigraph/oxigraph/issues"
 [dependency-groups]
 build = [
     "maturin~=1.0",
-    "ruff~=0.14.0"
+    "ruff~=0.15.0"
 ]
 dev = [
     { include-group = "build" },
