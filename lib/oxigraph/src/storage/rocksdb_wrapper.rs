@@ -131,7 +131,7 @@ impl Db {
     ) -> Result<Self, StorageError> {
         let c_path = path_to_cstring(path)?;
         unsafe {
-            let options = Self::db_options(true)?;
+            let options = Self::db_options()?;
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
             rocksdb_options_set_compression(options, rocksdb_lz4_compression.try_into().unwrap());
@@ -250,7 +250,7 @@ impl Db {
     ) -> Result<Self, StorageError> {
         unsafe {
             let c_path = path_to_cstring(path)?;
-            let options = Self::db_options(true)?;
+            let options = Self::db_options()?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
@@ -306,7 +306,7 @@ impl Db {
         }
     }
 
-    fn db_options(limit_max_open_files: bool) -> Result<*mut rocksdb_options_t, StorageError> {
+    fn db_options() -> Result<*mut rocksdb_options_t, StorageError> {
         static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
         unsafe {
             let options = rocksdb_options_create();
@@ -316,24 +316,19 @@ impl Db {
                 options,
                 available_parallelism()?.get().try_into().unwrap(),
             );
-            if limit_max_open_files {
-                if let Some(available_fd) = available_file_descriptors()? {
-                    if available_fd < 96 {
-                        rocksdb_options_destroy(options);
-                        return Err(io::Error::other(format!(
-                            "Oxigraph needs at least 96 file descriptors, \
+            if let Some(available_fd) = available_file_descriptors()? {
+                if available_fd < 96 {
+                    rocksdb_options_destroy(options);
+                    return Err(io::Error::other(format!(
+                        "Oxigraph needs at least 96 file descriptors, \
                                     only {available_fd} allowed. \
                                     Run e.g. `ulimit -n 512` to allow 512 opened files"
-                        ))
-                        .into());
-                    }
-                    rocksdb_options_set_max_open_files(
-                        options,
-                        (available_fd - 48).try_into().unwrap(),
-                    )
+                    ))
+                    .into());
                 }
-            } else {
-                rocksdb_options_set_max_open_files(options, -1);
+                if let Ok(max_open_files) = (available_fd - 48).try_into() {
+                    rocksdb_options_set_max_open_files(options, max_open_files)
+                } // We rely on the default of -1 if the maximum value is too large
             }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
