@@ -37,13 +37,13 @@ Tracker = "https://github.com/oxigraph/oxigraph/issues"
 [dependency-groups]
 build = [
     "maturin~=1.0",
-    "ruff~=0.14.0"
+    "ruff~=0.15.0"
 ]
 dev = [
     { include-group = "build" },
     "furo",
     "mypy~=1.0",
-    "ty~=0.0.2",
+    "ty~=0.0.17",
     "sphinx>=7.0,<10.0",
     "sphinx-lint~=1.0"
 ]

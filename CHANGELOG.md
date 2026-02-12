@@ -1,3 +1,15 @@
+# [0.5.5] - 2026-02-14
+
+### Added
+- JSON-LD: JSON-LD 1.1 is now implemented and enabled by default.
+- JavaScript: the `parse` method that allows to parse a RDF file from a buffer, an iterator of buffers or and async iterator of buffers (including streams). 
+- `oxrdf`: the `Dataset.quads_for_pattern` method allowing to iterate only on quads matching a given pattern.
+- `oxjsonld`: The `JsonLdParser.with_processing_mode` method to select the JSON-LD 1.0 or 1.1 processing mode.
+
+### Changed
+- RocksDB fixes a panic when `ulimit -n` is set to a very large number.
+
+
 # [0.5.4] - 2026-01-24
 
 ### Added
