@@ -326,9 +326,10 @@ impl Db {
                     ))
                     .into());
                 }
-                if let Ok(max_open_files) = (available_fd - 48).try_into() {
-                    rocksdb_options_set_max_open_files(options, max_open_files)
-                } // We rely on the default of -1 if the maximum value is too large
+                // macOS sometime set the number of available file descriptors as "unlimited" ie. INT_MAX
+                // We use 8192 in this case because the hard limit is 10240
+                let max_open_files = (available_fd - 48).try_into().unwrap_or(8192);
+                rocksdb_options_set_max_open_files(options, max_open_files);
             }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
