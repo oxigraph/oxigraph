@@ -1,3 +1,4 @@
+use crate::context::has_keyword_form;
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
@@ -526,10 +527,11 @@ impl InnerJsonLdWriter {
                 if let Some(base_iri) = &self.base_iri {
                     if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
                         let relative = relative.into_inner();
-                        // We check the relative IRI is not considered as absolute by IRI expansion
+                        // We check the relative IRI is not considered as absolute or a keyword by IRI expansion
                         if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
                             prefix == "_" || suffix.starts_with("//")
-                        }) {
+                        }) && !has_keyword_form(&relative)
+                        {
                             return relative.into();
                         }
                     }
