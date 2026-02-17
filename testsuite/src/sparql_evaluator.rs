@@ -11,10 +11,10 @@ use oxigraph::model::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
     NamedNode, Term, TermRef, Triple, TripleRef, Variable,
 };
-use oxigraph::sparql::QueryResults;
 use oxigraph::sparql::results::{
     QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
 };
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
@@ -275,8 +275,10 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         .parse_update(&update.to_string())
         .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
-    store
-        .update(update.clone())
+    SparqlEvaluator::new()
+        .for_update(update.clone())
+        .on_store(&store)
+        .execute()
         .context("Failure to execute update")?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
     store_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);

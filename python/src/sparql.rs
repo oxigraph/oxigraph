@@ -365,7 +365,7 @@ impl PyQuerySolutions {
     fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
-        format: Option<PyQueryResultsFormatInput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -468,7 +468,7 @@ impl PyQueryBoolean {
     fn serialize(
         &self,
         output: Option<PyWritableOutput>,
-        format: Option<PyQueryResultsFormatInput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -541,7 +541,7 @@ impl PyQueryTriples {
     fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -602,7 +602,7 @@ impl PyQueryTriples {
 #[pyo3(signature = (input = None, format = None, *, path = None))]
 pub fn parse_query_results(
     input: Option<PyReadableInput>,
-    format: Option<PyQueryResultsFormatInput>,
+    format: Option<PyQueryResultsFormat>,
     path: Option<PathBuf>,
     py: Python<'_>,
 ) -> PyResult<Bound<'_, PyAny>> {
@@ -768,23 +768,11 @@ impl PyQueryResultsFormat {
 }
 
 fn lookup_query_results_format(
-    format: Option<PyQueryResultsFormatInput>,
+    format: Option<PyQueryResultsFormat>,
     path: Option<&Path>,
 ) -> PyResult<QueryResultsFormat> {
     if let Some(format) = format {
-        return match format {
-            PyQueryResultsFormatInput::Object(format) => Ok(format.inner),
-            PyQueryResultsFormatInput::MediaType(media_type) => {
-                deprecation_warning(
-                    "Using a string to specify a query results format is deprecated, please use a QueryResultsFormat object instead.",
-                )?;
-                QueryResultsFormat::from_media_type(&media_type).ok_or_else(|| {
-                    PyValueError::new_err(format!(
-                        "The media type {media_type} is not supported by pyoxigraph"
-                    ))
-                })
-            }
-        };
+        return Ok(format.inner);
     }
     let Some(path) = path else {
         return Err(PyValueError::new_err(
@@ -799,12 +787,6 @@ fn lookup_query_results_format(
     };
     QueryResultsFormat::from_extension(ext)
         .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
-}
-
-#[derive(FromPyObject)]
-pub enum PyQueryResultsFormatInput {
-    Object(PyQueryResultsFormat),
-    MediaType(String),
 }
 
 pub fn map_evaluation_error(error: QueryEvaluationError) -> PyErr {

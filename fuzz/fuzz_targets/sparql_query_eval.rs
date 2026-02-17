@@ -48,7 +48,8 @@ fuzz_target!(|data: sparql_smith::Query| {
             .with_default_service_handler(DatasetServiceHandler {
                 dataset: dataset.clone(),
             })
-            .execute(dataset, &query);
+            .prepare(&query)
+            .execute(dataset);
         match (with_opt, without_opt) {
             (Ok(with_opt), Ok(without_opt)) => {
                 assert_eq!(
@@ -189,14 +190,13 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
             dataset: dataset.clone(),
         });
-        let QueryResults::Solutions(iter) = evaluator.execute(
-            &dataset,
-            &Query::Select {
+        let QueryResults::Solutions(iter) = evaluator
+            .prepare(&Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
                 base_iri: base_iri.cloned(),
-            },
-        )?
+            })
+            .execute(&dataset)?
         else {
             panic!()
         };
