@@ -842,7 +842,10 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
     }
 }
 
-fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> GraphUpdateOperation {
+fn copy_graph(
+    from: impl Into<GraphName>,
+    to: impl Into<GraphNamePattern>,
+) -> DeleteInsertOperation {
     let bgp = GraphPattern::Bgp {
         patterns: vec![TriplePattern::new(
             Variable::new_unchecked("s"),
@@ -850,7 +853,7 @@ fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> Gr
             Variable::new_unchecked("o"),
         )],
     };
-    GraphUpdateOperation::DeleteInsert {
+    DeleteInsertOperation {
         delete: Vec::new(),
         insert: vec![QuadPattern::new(
             Variable::new_unchecked("s"),
@@ -896,7 +899,7 @@ fn check_if_insert_data_are_sharing_blank_nodes(
 
     let mut existing_blank_nodes = HashSet::new();
     for operation in update {
-        if let GraphUpdateOperation::InsertData { data } = operation {
+        if let GraphUpdateOperation::InsertData(InsertDataOperation { data }) = operation {
             let mut new_blank_nodes = HashSet::new();
             for quad in data {
                 if let NamedOrBlankNode::BlankNode(bnode) = &quad.subject {
@@ -1043,9 +1046,14 @@ parser! {
     grammar parser(state: &mut ParserState) for str {
         pub rule QueryUnit() -> Query = Query()
 
-        rule Query() -> Query = _ Prologue() _ q:(SelectQuery() / ConstructQuery() / DescribeQuery() / AskQuery()) _ {
+        rule Query() -> Query = _ Prologue() _ q:Query_Variant() _ {
             q
         }
+        rule Query_Variant() -> Query =
+            q:SelectQuery() { q.into() } /
+            q:ConstructQuery() { q.into() } /
+            q:DescribeQuery() { q.into() } /
+            q:AskQuery() { q.into() }
 
         pub rule UpdateInit() -> Vec<GraphUpdateOperation> = Update()
 
@@ -1069,8 +1077,8 @@ parser! {
 
         rule VersionSpecifier() = STRING_LITERAL1() / STRING_LITERAL2() {}
 
-        rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-            Ok(Query::Select {
+        rule SelectQuery() -> SelectQuery = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+            Ok(SelectQuery {
                 dataset: d,
                 pattern: build_select(s, w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
@@ -1101,9 +1109,9 @@ parser! {
             v:Var() _ { SelectionMember::Variable(v) } /
             "(" _ e:Expression() _ i("AS") _ v:Var() _ ")" _ { SelectionMember::Expression(e, v) }
 
-        rule ConstructQuery() -> Query =
+        rule ConstructQuery() -> ConstructQuery =
             i("CONSTRUCT") _ c:ConstructTemplate() ConstructQuery_clear() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-                Ok(Query::Construct {
+                Ok(ConstructQuery {
                     template: c,
                     dataset: d,
                     pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
@@ -1111,7 +1119,7 @@ parser! {
                 })
             } /
             i("CONSTRUCT") _ d:DatasetClauses() _ i("WHERE") _ "{" _ c:ConstructQuery_optional_triple_template() _ "}" _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-                Ok(Query::Construct {
+                Ok(ConstructQuery {
                     template: c.clone(),
                     dataset: d,
                     pattern: build_select(
@@ -1128,16 +1136,16 @@ parser! {
 
         rule ConstructQuery_optional_triple_template() -> Vec<TriplePattern> = TriplesTemplate() / { Vec::new() }
 
-        rule DescribeQuery() -> Query =
+        rule DescribeQuery() -> DescribeQuery =
             i("DESCRIBE") _ "*" _ d:DatasetClauses() _ w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-                Ok(Query::Describe {
+                Ok(DescribeQuery {
                     dataset: d,
                     pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
             i("DESCRIBE") _ p:DescribeQuery_item()+ _ d:DatasetClauses() _ w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-                Ok(Query::Describe {
+                Ok(DescribeQuery {
                     dataset: d,
                     pattern: build_select(Selection {
                         option: SelectionOption::Default,
@@ -1151,8 +1159,8 @@ parser! {
             }
         rule DescribeQuery_item() -> NamedNodePattern = i:VarOrIri() _ { i }
 
-        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-            Ok(Query::Ask {
+        rule AskQuery() -> AskQuery = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+            Ok(AskQuery {
                 dataset: d,
                 pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
@@ -1257,20 +1265,20 @@ parser! {
         rule Update1_silent() -> bool = i("SILENT") { true } / { false }
 
         rule Load() -> Vec<GraphUpdateOperation> = i("LOAD") _ silent:Update1_silent() _ source:iri() _ destination:Load_to()? {
-            vec![GraphUpdateOperation::Load { silent, source, destination: destination.map_or(GraphName::DefaultGraph, GraphName::NamedNode) }]
+            vec![LoadOperation { silent, source, destination: destination.map_or(GraphName::DefaultGraph, GraphName::NamedNode) }.into()]
         }
         rule Load_to() -> NamedNode = i("INTO") _ g: GraphRef() { g }
 
         rule Clear() -> Vec<GraphUpdateOperation> = i("CLEAR") _ silent:Update1_silent() _ graph:GraphRefAll() {
-            vec![GraphUpdateOperation::Clear { silent, graph }]
+            vec![ClearOperation { silent, graph }.into()]
         }
 
         rule Drop() -> Vec<GraphUpdateOperation> = i("DROP") _ silent:Update1_silent() _ graph:GraphRefAll() {
-            vec![GraphUpdateOperation::Drop { silent, graph }]
+            vec![DropOperation { silent, graph }.into()]
         }
 
         rule Create() -> Vec<GraphUpdateOperation> = i("CREATE") _ silent:Update1_silent() _ graph:GraphRef() {
-            vec![GraphUpdateOperation::Create { silent, graph }]
+            vec![CreateOperation { silent, graph }.into()]
         }
 
         rule Add() -> Vec<GraphUpdateOperation> = i("ADD") _ silent:Update1_silent() _ from:GraphOrDefault() _ i("TO") _ to:GraphOrDefault() {
@@ -1279,7 +1287,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
-                vec![copy_graph(from, to)]
+                vec![copy_graph(from, to).into()]
             }
         }
 
@@ -1289,7 +1297,7 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
-                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from.clone(), to), GraphUpdateOperation::Drop { silent, graph: from.into() }]
+                vec![DropOperation { silent: true, graph: to.clone().into() }.into(), copy_graph(from.clone(), to).into(), DropOperation { silent, graph: from.into() }.into()]
             }
         }
 
@@ -1299,16 +1307,16 @@ parser! {
                 Vec::new() // identity case
             } else {
                 let bgp = GraphPattern::Bgp { patterns: vec![TriplePattern::new(Variable::new_unchecked("s"), Variable::new_unchecked("p"), Variable::new_unchecked("o"))] };
-                vec![GraphUpdateOperation::Drop { silent: true, graph: to.clone().into() }, copy_graph(from, to)]
+                vec![DropOperation { silent: true, graph: to.clone().into() }.into(), copy_graph(from, to).into()]
             }
         }
 
         rule InsertData() -> Vec<GraphUpdateOperation> = i("INSERT") _ i("DATA") _ data:QuadData() {
-            vec![GraphUpdateOperation::InsertData { data }]
+            vec![InsertDataOperation { data }.into()]
         }
 
         rule DeleteData() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("DATA") _ data:GroundQuadData() {
-            vec![GraphUpdateOperation::DeleteData { data }]
+            vec![DeleteDataOperation { data }.into()]
         }
 
         rule DeleteWhere() -> Vec<GraphUpdateOperation> = i("DELETE") _ i("WHERE") _ d:QuadPattern() {?
@@ -1321,12 +1329,12 @@ parser! {
                 }
             }).reduce(new_join).unwrap_or_default();
             let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|()| "Blank nodes are not allowed in DELETE WHERE")?;
-            Ok(vec![GraphUpdateOperation::DeleteInsert {
+            Ok(vec![DeleteInsertOperation {
                 delete,
                 insert: Vec::new(),
                 using: None,
                 pattern: Box::new(pattern)
-            }])
+            }.into()])
         }
 
         rule Modify() -> Vec<GraphUpdateOperation> = with:Modify_with()? _ c:Modify_clauses() _ u:(UsingClause() ** (_)) _ i("WHERE") _ pattern:GroupGraphPattern() {
@@ -1379,12 +1387,12 @@ parser! {
                 }
             }
 
-            vec![GraphUpdateOperation::DeleteInsert {
+            vec![DeleteInsertOperation {
                 delete,
                 insert,
                 using,
                 pattern: Box::new(pattern)
-            }]
+            }.into()]
         }
         rule Modify_with() -> NamedNode = i("WITH") _ i:iri() _ { i }
         rule Modify_clauses() -> (Option<Vec<GroundQuadPattern>>, Option<Vec<QuadPattern>>) = d:DeleteClause() Modify_clear() _ i:InsertClause()? Modify_clear() {

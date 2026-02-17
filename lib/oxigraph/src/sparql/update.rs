@@ -12,14 +12,14 @@ use oxiri::Iri;
 use oxrdfio::LoadedDocument;
 use rustc_hash::FxHashMap;
 use spareval::{DeleteInsertQuad, QueryDatasetSpecification, QueryEvaluator};
-use spargebra::algebra::{GraphPattern, GraphTarget};
-use spargebra::term::{
-    BlankNode, GraphName, GroundQuad, GroundQuadPattern, GroundTerm, NamedNode, NamedOrBlankNode,
-    Quad, QuadPattern, Term,
-};
+use spargebra::algebra::GraphTarget;
+use spargebra::term::{BlankNode, GraphName, GroundQuad, GroundTerm, NamedOrBlankNode, Quad, Term};
 #[cfg(feature = "rdf-12")]
 use spargebra::term::{GroundTriple, Triple};
-use spargebra::{GraphUpdateOperation, Update};
+use spargebra::update::{
+    ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
+    GraphUpdateOperation, InsertDataOperation, LoadOperation, Update,
+};
 #[cfg(feature = "http-client")]
 use std::io::Read;
 #[cfg(feature = "http-client")]
@@ -61,8 +61,8 @@ impl PreparedSparqlUpdate {
             .operations
             .iter()
             .map(|operation| {
-                if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
-                    Some(using.clone().map(Into::into).unwrap_or_default())
+                if let GraphUpdateOperation::DeleteInsert(operation) = operation {
+                    Some(operation.using.clone().map(Into::into).unwrap_or_default())
                 } else {
                     None
                 }
@@ -262,54 +262,37 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         using_dataset: &Option<QueryDatasetSpecification>,
     ) -> Result<(), UpdateEvaluationError> {
         match update {
-            GraphUpdateOperation::InsertData { data } => {
-                self.eval_insert_data(data);
+            GraphUpdateOperation::InsertData(op) => {
+                self.eval_insert_data(op);
                 Ok(())
             }
-            GraphUpdateOperation::DeleteData { data } => {
-                self.eval_delete_data(data);
+            GraphUpdateOperation::DeleteData(op) => {
+                self.eval_delete_data(op);
                 Ok(())
             }
-            GraphUpdateOperation::DeleteInsert {
-                delete,
-                insert,
-                pattern,
-                ..
-            } => self.eval_delete_insert(
-                delete,
-                insert,
+            GraphUpdateOperation::DeleteInsert(op) => self.eval_delete_insert(
+                op,
                 using_dataset
                     .as_ref()
                     .unwrap_or(&QueryDatasetSpecification::new()),
-                pattern,
             ),
-            GraphUpdateOperation::Load {
-                silent,
-                source,
-                destination,
-            } => {
-                if let Err(error) = self.eval_load(source, destination) {
-                    if *silent { Ok(()) } else { Err(error) }
-                } else {
-                    Ok(())
-                }
-            }
-            GraphUpdateOperation::Clear { graph, silent } => self.eval_clear(graph, *silent),
-            GraphUpdateOperation::Create { graph, silent } => self.eval_create(graph, *silent),
-            GraphUpdateOperation::Drop { graph, silent } => self.eval_drop(graph, *silent),
+            GraphUpdateOperation::Load(op) => self.eval_load(op),
+            GraphUpdateOperation::Clear(op) => self.eval_clear(op),
+            GraphUpdateOperation::Create(op) => self.eval_create(op),
+            GraphUpdateOperation::Drop(op) => self.eval_drop(op),
         }
     }
 
-    fn eval_insert_data(&mut self, data: &[Quad]) {
+    fn eval_insert_data(&mut self, operation: &InsertDataOperation) {
         let mut bnodes = FxHashMap::default();
-        for quad in data {
+        for quad in &operation.data {
             let quad = convert_quad(quad, &mut bnodes);
             self.transaction.insert(quad.as_ref());
         }
     }
 
-    fn eval_delete_data(&mut self, data: &[GroundQuad]) {
-        for quad in data {
+    fn eval_delete_data(&mut self, operation: &DeleteDataOperation) {
+        for quad in &operation.data {
             let quad = convert_ground_quad(quad);
             self.transaction.remove(quad.as_ref());
         }
@@ -317,17 +300,15 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
 
     fn eval_delete_insert(
         &mut self,
-        delete: &[GroundQuadPattern],
-        insert: &[QuadPattern],
+        operation: &DeleteInsertOperation,
         using: &QueryDatasetSpecification,
-        algebra: &GraphPattern,
     ) -> Result<(), UpdateEvaluationError> {
         let mut prepared = self.query_evaluator.prepare_delete_insert(
-            delete.to_vec(),
-            insert.to_vec(),
+            operation.delete.clone(),
+            operation.insert.clone(),
             self.base_iri.clone(),
             None,
-            algebra,
+            &operation.pattern,
         );
         *prepared.dataset_mut() = using.clone();
         let mutations = prepared
@@ -342,45 +323,41 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         Ok(())
     }
 
-    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
-        eval_load(
-            from,
-            to,
+    fn eval_load(&mut self, operation: &LoadOperation) -> Result<(), UpdateEvaluationError> {
+        if let Err(error) = eval_load(
+            operation,
             #[cfg(feature = "http-client")]
             &self.client,
             |q| self.transaction.insert(q.as_ref()),
-        )
-    }
-
-    fn eval_create(
-        &mut self,
-        graph_name: &NamedNode,
-        silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        if self
-            .transaction
-            .reader()
-            .contains_named_graph(&graph_name.as_ref().into())?
-        {
-            if silent {
-                Ok(())
-            } else {
-                Err(UpdateEvaluationError::GraphAlreadyExists(
-                    graph_name.clone(),
-                ))
-            }
+        ) {
+            if operation.silent { Ok(()) } else { Err(error) }
         } else {
-            self.transaction.insert_named_graph(graph_name.into());
             Ok(())
         }
     }
 
-    fn eval_clear(
-        &mut self,
-        graph: &GraphTarget,
-        silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        match graph {
+    fn eval_create(&mut self, operation: &CreateOperation) -> Result<(), UpdateEvaluationError> {
+        if self
+            .transaction
+            .reader()
+            .contains_named_graph(&operation.graph.as_ref().into())?
+        {
+            if operation.silent {
+                Ok(())
+            } else {
+                Err(UpdateEvaluationError::GraphAlreadyExists(
+                    operation.graph.clone(),
+                ))
+            }
+        } else {
+            self.transaction
+                .insert_named_graph((&operation.graph).into());
+            Ok(())
+        }
+    }
+
+    fn eval_clear(&mut self, operation: &ClearOperation) -> Result<(), UpdateEvaluationError> {
+        match &operation.graph {
             GraphTarget::NamedNode(graph_name) => {
                 if self
                     .transaction
@@ -388,7 +365,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                     .contains_named_graph(&graph_name.as_ref().into())?
                 {
                     Ok(self.transaction.clear_graph(graph_name.into())?)
-                } else if silent {
+                } else if operation.silent {
                     Ok(())
                 } else {
                     Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
@@ -403,12 +380,8 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn eval_drop(
-        &mut self,
-        graph: &GraphTarget,
-        silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        match graph {
+    fn eval_drop(&mut self, operation: &DropOperation) -> Result<(), UpdateEvaluationError> {
+        match &operation.graph {
             GraphTarget::NamedNode(graph_name) => {
                 if self
                     .transaction
@@ -417,7 +390,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 {
                     self.transaction.remove_named_graph(graph_name.into())?;
                     Ok(())
-                } else if silent {
+                } else if operation.silent {
                     Ok(())
                 } else {
                     Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
@@ -435,18 +408,18 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
 fn update_requires_read(update: &Update) -> bool {
     for (i, op) in update.operations.iter().enumerate() {
         match op {
-            GraphUpdateOperation::InsertData { .. }
-            | GraphUpdateOperation::DeleteData { .. }
-            | GraphUpdateOperation::Create { silent: true, .. }
-            | GraphUpdateOperation::Clear {
+            GraphUpdateOperation::InsertData(_)
+            | GraphUpdateOperation::DeleteData(_)
+            | GraphUpdateOperation::Create(CreateOperation { silent: true, .. })
+            | GraphUpdateOperation::Clear(ClearOperation {
                 graph: GraphTarget::DefaultGraph | GraphTarget::NamedGraphs | GraphTarget::AllGraphs,
                 ..
-            }
-            | GraphUpdateOperation::Drop {
+            })
+            | GraphUpdateOperation::Drop(DropOperation {
                 graph: GraphTarget::DefaultGraph | GraphTarget::NamedGraphs | GraphTarget::AllGraphs,
                 ..
-            } => (),
-            GraphUpdateOperation::DeleteInsert { .. } if i == 0 => (),
+            }) => (),
+            GraphUpdateOperation::DeleteInsert(_) if i == 0 => (),
             _ => return true,
         }
     }
@@ -481,54 +454,37 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         using_dataset: &Option<QueryDatasetSpecification>,
     ) -> Result<(), UpdateEvaluationError> {
         match update {
-            GraphUpdateOperation::InsertData { data } => {
-                self.eval_insert_data(data);
+            GraphUpdateOperation::InsertData(op) => {
+                self.eval_insert_data(op);
                 Ok(())
             }
-            GraphUpdateOperation::DeleteData { data } => {
-                self.eval_delete_data(data);
+            GraphUpdateOperation::DeleteData(op) => {
+                self.eval_delete_data(op);
                 Ok(())
             }
-            GraphUpdateOperation::DeleteInsert {
-                delete,
-                insert,
-                pattern,
-                ..
-            } => self.eval_delete_insert(
-                delete,
-                insert,
+            GraphUpdateOperation::DeleteInsert(op) => self.eval_delete_insert(
+                op,
                 using_dataset
                     .as_ref()
                     .unwrap_or(&QueryDatasetSpecification::new()),
-                pattern,
             ),
-            GraphUpdateOperation::Load {
-                silent,
-                source,
-                destination,
-            } => {
-                if let Err(error) = self.eval_load(source, destination) {
-                    if *silent { Ok(()) } else { Err(error) }
-                } else {
-                    Ok(())
-                }
-            }
-            GraphUpdateOperation::Clear { graph, silent } => self.eval_clear(graph, *silent),
-            GraphUpdateOperation::Create { graph, silent } => self.eval_create(graph, *silent),
-            GraphUpdateOperation::Drop { graph, silent } => self.eval_drop(graph, *silent),
+            GraphUpdateOperation::Load(op) => self.eval_load(op),
+            GraphUpdateOperation::Clear(op) => self.eval_clear(op),
+            GraphUpdateOperation::Create(op) => self.eval_create(op),
+            GraphUpdateOperation::Drop(op) => self.eval_drop(op),
         }
     }
 
-    fn eval_insert_data(&mut self, data: &[Quad]) {
+    fn eval_insert_data(&mut self, operation: &InsertDataOperation) {
         let mut bnodes = FxHashMap::default();
-        for quad in data {
+        for quad in &operation.data {
             let quad = convert_quad(quad, &mut bnodes);
             self.transaction.insert(quad.as_ref());
         }
     }
 
-    fn eval_delete_data(&mut self, data: &[GroundQuad]) {
-        for quad in data {
+    fn eval_delete_data(&mut self, operation: &DeleteDataOperation) {
+        for quad in &operation.data {
             let quad = convert_ground_quad(quad);
             self.transaction.remove(quad.as_ref());
         }
@@ -536,10 +492,8 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
 
     fn eval_delete_insert(
         &mut self,
-        delete: &[GroundQuadPattern],
-        insert: &[QuadPattern],
+        operation: &DeleteInsertOperation,
         using: &QueryDatasetSpecification,
-        algebra: &GraphPattern,
     ) -> Result<(), UpdateEvaluationError> {
         let Some(storage) = self.storage_for_initial_read.take() else {
             return Err(UpdateEvaluationError::Unexpected(
@@ -547,11 +501,11 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             ));
         };
         let mut prepared = self.query_evaluator.prepare_delete_insert(
-            delete.to_vec(),
-            insert.to_vec(),
+            operation.delete.clone(),
+            operation.insert.clone(),
             self.base_iri.clone(),
             None,
-            algebra,
+            &operation.pattern,
         );
         *prepared.dataset_mut() = using.clone();
         let mutations = prepared
@@ -566,36 +520,32 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         Ok(())
     }
 
-    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
-        eval_load(
-            from,
-            to,
+    fn eval_load(&mut self, operation: &LoadOperation) -> Result<(), UpdateEvaluationError> {
+        if let Err(error) = eval_load(
+            operation,
             #[cfg(feature = "http-client")]
             &self.client,
             |q| self.transaction.insert(q.as_ref()),
-        )
+        ) {
+            if operation.silent { Ok(()) } else { Err(error) }
+        } else {
+            Ok(())
+        }
     }
 
-    fn eval_create(
-        &mut self,
-        graph_name: &NamedNode,
-        silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        if !silent {
+    fn eval_create(&mut self, operation: &CreateOperation) -> Result<(), UpdateEvaluationError> {
+        if !operation.silent {
             return Err(UpdateEvaluationError::Unexpected(
                 "Not possible to create a named graph using a write-only transaction when SILENT option is not set".into(),
             ));
         }
-        self.transaction.insert_named_graph(graph_name.into());
+        self.transaction
+            .insert_named_graph((&operation.graph).into());
         Ok(())
     }
 
-    fn eval_clear(
-        &mut self,
-        graph: &GraphTarget,
-        _silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        match graph {
+    fn eval_clear(&mut self, operation: &ClearOperation) -> Result<(), UpdateEvaluationError> {
+        match &operation.graph {
             GraphTarget::NamedNode(_) => Err(UpdateEvaluationError::Unexpected(
                 "Not possible to clear a named graph using a write-only transaction".into(),
             )),
@@ -614,12 +564,8 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         }
     }
 
-    fn eval_drop(
-        &mut self,
-        graph: &GraphTarget,
-        _silent: bool,
-    ) -> Result<(), UpdateEvaluationError> {
-        match graph {
+    fn eval_drop(&mut self, operation: &DropOperation) -> Result<(), UpdateEvaluationError> {
+        match &operation.graph {
             GraphTarget::NamedNode(_) => Err(UpdateEvaluationError::Unexpected(
                 "Not possible to drop a named graph using a write-only transaction".into(),
             )),
@@ -641,20 +587,19 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
 
 #[cfg(feature = "http-client")]
 fn eval_load(
-    from: &NamedNode,
-    to: &GraphName,
+    operation: &LoadOperation,
     client: &Client,
     mut insert: impl FnMut(OxQuad),
 ) -> Result<(), UpdateEvaluationError> {
     let (content_type, body) = client
         .get(
-            from.as_str(),
+            operation.source.as_str(),
             "application/n-triples, text/turtle, application/rdf+xml",
         )
         .map_err(|e| UpdateEvaluationError::Service(Box::new(e)))?;
     let format = RdfFormat::from_media_type(&content_type)
         .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?;
-    let to_graph_name = match to {
+    let to_graph_name = match &operation.destination {
         GraphName::NamedNode(graph_name) => graph_name.into(),
         GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
     };
@@ -663,8 +608,12 @@ fn eval_load(
         .rename_blank_nodes()
         .without_named_graphs()
         .with_default_graph(to_graph_name)
-        .with_base_iri(from.as_str())
-        .map_err(|e| UpdateEvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into()))?
+        .with_base_iri(operation.source.as_str())
+        .map_err(|e| {
+            UpdateEvaluationError::Unexpected(
+                format!("Invalid URL: {}: {e}", operation.source).into(),
+            )
+        })?
         .for_reader(body)
         .with_document_loader(move |url| {
             let (content_type, mut body) = client.get(
@@ -688,8 +637,7 @@ fn eval_load(
 
 #[cfg(not(feature = "http-client"))]
 fn eval_load(
-    _from: &NamedNode,
-    _to: &GraphName,
+    _operation: &LoadOperation,
     _insert: impl FnMut(OxQuad),
 ) -> Result<(), UpdateEvaluationError> {
     Err(UpdateEvaluationError::Unexpected(

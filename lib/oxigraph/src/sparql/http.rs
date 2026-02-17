@@ -5,6 +5,7 @@ use oxrdf::NamedNode;
 use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
 use spargebra::algebra::GraphPattern;
+use spargebra::query::SelectQuery;
 use std::io::{Error, ErrorKind, Read, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -114,7 +115,7 @@ impl DefaultServiceHandler for HttpServiceHandler {
             .client
             .post(
                 service_name.as_str(),
-                spargebra::Query::Select {
+                SelectQuery {
                     dataset: None,
                     pattern: pattern.clone(),
                     base_iri: base_iri.cloned(),

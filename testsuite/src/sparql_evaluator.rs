@@ -18,8 +18,9 @@ use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
+use spargebra::SparqlParser;
 use spargebra::algebra::GraphPattern;
-use spargebra::{Query, SparqlParser};
+use spargebra::query::{Query, SelectQuery};
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -347,11 +348,14 @@ impl DefaultServiceHandler for StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
         let QueryResults::Solutions(iter) = evaluator
-            .prepare(&Query::Select {
-                dataset: None,
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            })
+            .prepare(
+                &SelectQuery {
+                    dataset: None,
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
             .execute(dataset)?
         else {
             return Err(QueryEvaluationError::Service(Box::new(io::Error::new(
@@ -739,7 +743,7 @@ fn load_to_dataset(
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let actual = (&Optimizer::optimize_graph_pattern(
-        (&if let Query::Select { pattern, .. } = SparqlParser::new()
+        (&if let Query::Select(SelectQuery { pattern, .. }) = SparqlParser::new()
             .with_base_iri(action)?
             .parse_query(&read_file_to_string(action)?)?
         {
@@ -751,9 +755,9 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     ))
         .into();
     let result = test.result.as_ref().context("No tests result found")?;
-    let Query::Select {
+    let Query::Select(SelectQuery {
         pattern: expected, ..
-    } = SparqlParser::new()
+    }) = SparqlParser::new()
         .with_base_iri(result)?
         .parse_query(&read_file_to_string(result)?)?
     else {
@@ -763,13 +767,13 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         expected == actual,
         "Not equal queries.\nDiff:\n{}\n",
         format_diff(
-            &Query::Select {
+            &SelectQuery {
                 pattern: expected,
                 dataset: None,
                 base_iri: None
             }
             .to_sse(),
-            &Query::Select {
+            &SelectQuery {
                 pattern: actual,
                 dataset: None,
                 base_iri: None
