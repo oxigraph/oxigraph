@@ -36,7 +36,7 @@ fuzz_target!(|data: sparql_smith::Update| {
         let memory_store = Store::new().unwrap();
         let memory_without_opt = SparqlEvaluator::new()
             .without_optimizations()
-            .for_update(update)
+            .for_update(update.clone())
             .on_store(&memory_store)
             .execute();
         memory_store.validate().unwrap();
@@ -52,6 +52,32 @@ fuzz_target!(|data: sparql_smith::Update| {
         assert_eq!(
             dataset_disk_with_opt, dataset_memory_without_opt,
             "With optimizations on disk:\n{dataset_disk_with_opt}\nWithout optimizations in memory:\n{dataset_memory_without_opt}"
+        );
+
+        // Parsing roundtrip
+        let roundtrip = SparqlParser::new()
+            .parse_update(&update.to_string())
+            .unwrap();
+
+        let memory_store = Store::new().unwrap();
+        let memory_roundtrip = SparqlEvaluator::new()
+            .without_optimizations()
+            .for_update(roundtrip.clone())
+            .on_store(&memory_store)
+            .execute();
+        memory_store.validate().unwrap();
+        let mut dataset_memory_roundtrip =
+            memory_store.iter().collect::<Result<Dataset, _>>().unwrap();
+        dataset_memory_roundtrip.canonicalize(CanonicalizationAlgorithm::Unstable);
+
+        assert_eq!(
+            memory_without_opt.is_ok(),
+            memory_roundtrip.is_ok(),
+            "Worked and failed depending on roundtrip: {memory_without_opt:?} {memory_roundtrip:?}"
+        );
+        assert_eq!(
+            dataset_memory_without_opt, dataset_memory_roundtrip,
+            "With optimizations on disk:\n{dataset_memory_without_opt}\nWithout optimizations in memory:\n{dataset_memory_roundtrip}"
         );
     }
 });
