@@ -72,12 +72,6 @@ impl TriGParser {
         self
     }
 
-    #[deprecated(note = "Use `lenient()` instead", since = "0.2.0")]
-    #[inline]
-    pub fn unchecked(self) -> Self {
-        self.lenient()
-    }
-
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.base = Some(Iri::parse(base_iri.into())?);

@@ -1,6 +1,6 @@
+use crate::format_err;
 use crate::io::{BytesInput, buffer_from_js_value, convert_base_iri, rdf_format};
 use crate::model::*;
-use crate::{console_warn, format_err};
 use js_sys::{Array, Map, Reflect, try_iter};
 use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::*;
@@ -345,69 +345,37 @@ impl JsStore {
             .map_err(JsError::from)?)
     }
 
-    pub fn load(
-        &self,
-        data: &JsValue,
-        options: &JsValue,
-        base_iri: &JsValue,
-        to_graph_name: &JsValue,
-    ) -> Result<(), JsValue> {
+    pub fn load(&self, data: &JsValue, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut format = None;
-        let mut parsed_base_iri = None;
-        let mut parsed_to_graph_name = None;
-        let mut unchecked = false;
+        let mut base_iri = None;
+        let mut to_graph_name = None;
         let mut lenient = false;
         let mut no_transaction = false;
-        if let Some(format_str) = options.as_string() {
-            // Backward compatibility with format as a string
-            console_warn!(
-                "The format should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt'}})"
-            );
-            format = Some(rdf_format(&format_str)?);
-        } else if !options.is_undefined() && !options.is_null() {
+        if !options.is_undefined() {
             if let Some(format_str) =
                 Reflect::get(options, &JsValue::from_str("format"))?.as_string()
             {
                 format = Some(rdf_format(&format_str)?);
             }
-            parsed_base_iri =
-                convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
             let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
-            parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
-            unchecked = Reflect::get(options, &JsValue::from_str("unchecked"))?.is_truthy();
+            to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
             lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
             no_transaction =
                 Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {{format: 'nt'}}"))?;
-        if let Some(base_iri) = convert_base_iri(base_iri)? {
-            console_warn!(
-                "The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})"
-            );
-            parsed_base_iri = Some(base_iri);
-        }
-        if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
-            console_warn!(
-                "The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', to_graph_name: 'http//example.com'}})"
-            );
-            parsed_to_graph_name = Some(to_graph_name);
-        }
 
         let mut parser = RdfParser::from_format(format);
-        if let Some(to_graph_name) = parsed_to_graph_name {
+        if let Some(to_graph_name) = to_graph_name {
             parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
         }
-        if let Some(base_iri) = parsed_base_iri {
+        if let Some(base_iri) = base_iri {
             parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
         }
-        if unchecked {
-            console_warn!(
-                "The `unchecked` option in Store.load is deprecated, please use `lenient` instead"
-            );
-            parser = parser.lenient();
-        } else if lenient {
+        if lenient {
             parser = parser.lenient();
         }
         if let Some(buffer) = buffer_from_js_value(data) {
@@ -442,35 +410,23 @@ impl JsStore {
         Ok(())
     }
 
-    pub fn dump(&self, options: &JsValue, from_graph_name: &JsValue) -> Result<String, JsValue> {
+    pub fn dump(&self, options: &JsValue) -> Result<String, JsValue> {
         // Serialization options
         let mut format = None;
-        let mut parsed_from_graph_name = None;
-        if let Some(format_str) = options.as_string() {
-            // Backward compatibility with format as a string
-            console_warn!(
-                "The format should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt'}})"
-            );
-            format = Some(rdf_format(&format_str)?);
-        } else if !options.is_undefined() && !options.is_null() {
+        let mut from_graph_name = None;
+        if !options.is_undefined() {
             if let Some(format_str) =
                 Reflect::get(options, &JsValue::from_str("format"))?.as_string()
             {
                 format = Some(rdf_format(&format_str)?);
             }
             let from_graph_name_js = Reflect::get(options, &JsValue::from_str("from_graph_name"))?;
-            parsed_from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
+            from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
-        if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-            console_warn!(
-                "The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})"
-            );
-            parsed_from_graph_name = Some(from_graph_name);
-        }
 
-        let buffer = if let Some(from_graph_name) = parsed_from_graph_name {
+        let buffer = if let Some(from_graph_name) = from_graph_name {
             self.store.dump_graph_to_writer(
                 &GraphName::try_from(from_graph_name)?,
                 format,

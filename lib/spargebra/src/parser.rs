@@ -169,16 +169,8 @@ pub struct SparqlSyntaxError {
     kind: SparqlSyntaxErrorKind,
 }
 
-impl SparqlSyntaxError {
-    pub(crate) fn from_bad_base_iri(e: IriParseError) -> Self {
-        SparqlSyntaxErrorKind::InvalidBaseIri(e).into()
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 enum SparqlSyntaxErrorKind {
-    #[error("Invalid SPARQL base IRI provided: {0}")]
-    InvalidBaseIri(#[from] IriParseError),
     #[error(transparent)]
     Syntax(#[from] peg::error::ParseError<LineCol>),
     #[error("The blank node {0} cannot be shared by multiple blocks")]

@@ -30,7 +30,3 @@ pub use crate::triple::{
 pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;
-#[deprecated(note = "Use `NamedOrBlankNode` instead", since = "0.5.0")]
-pub type Subject = NamedOrBlankNode;
-#[deprecated(note = "Use `NamedOrBlankNodeRef` instead", since = "0.5.0")]
-pub type SubjectRef<'a> = NamedOrBlankNodeRef<'a>;
