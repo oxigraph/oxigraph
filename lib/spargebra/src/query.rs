@@ -63,21 +63,6 @@ pub enum Query {
 }
 
 impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    #[deprecated(
-        note = "Use `SparqlParser::new().parse_query` instead",
-        since = "0.4.0"
-    )]
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        let mut parser = SparqlParser::new();
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
-        }
-        parser.parse_query(query)
-    }
-
     #[inline]
     pub fn dataset(&self) -> Option<&QueryDataset> {
         match self {

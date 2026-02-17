@@ -26,21 +26,6 @@ pub struct Update {
 }
 
 impl Update {
-    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    #[deprecated(
-        note = "Use `SparqlParser::new().parse_update` instead",
-        since = "0.4.0"
-    )]
-    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        let mut parser = SparqlParser::new();
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
-        }
-        parser.parse_update(update)
-    }
-
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();

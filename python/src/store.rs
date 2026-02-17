@@ -1,5 +1,5 @@
 use crate::io::{
-    PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
+    PyRdfFormat, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
     map_parse_error,
 };
 use crate::model::*;
@@ -411,7 +411,7 @@ impl PyStore {
     fn load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
@@ -482,7 +482,7 @@ impl PyStore {
     fn bulk_load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
@@ -589,7 +589,7 @@ impl PyStore {
     fn dump(
         &self,
         output: Option<PyWritableOutput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         from_graph: Option<PyGraphNameRef<'_>>,
         prefixes: Option<BTreeMap<String, String>>,
         base_iri: Option<&str>,

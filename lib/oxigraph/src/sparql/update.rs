@@ -1,8 +1,6 @@
 #[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
-#[expect(deprecated)]
-use crate::sparql::algebra::Update;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -14,7 +12,6 @@ use oxiri::Iri;
 use oxrdfio::LoadedDocument;
 use rustc_hash::FxHashMap;
 use spareval::{DeleteInsertQuad, QueryDatasetSpecification, QueryEvaluator};
-use spargebra::GraphUpdateOperation;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GroundQuad, GroundQuadPattern, GroundTerm, NamedNode, NamedOrBlankNode,
@@ -22,6 +19,7 @@ use spargebra::term::{
 };
 #[cfg(feature = "rdf-12")]
 use spargebra::term::{GroundTriple, Triple};
+use spargebra::{GraphUpdateOperation, Update};
 #[cfg(feature = "http-client")]
 use std::io::Read;
 #[cfg(feature = "http-client")]
@@ -44,7 +42,7 @@ use std::time::Duration;
 #[must_use]
 pub struct PreparedSparqlUpdate {
     evaluator: QueryEvaluator,
-    update: spargebra::Update,
+    update: Update,
     using_datasets: Vec<Option<QueryDatasetSpecification>>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
@@ -53,17 +51,27 @@ pub struct PreparedSparqlUpdate {
 }
 
 impl PreparedSparqlUpdate {
-    #[expect(deprecated)]
     pub(crate) fn new(
         evaluator: QueryEvaluator,
         update: Update,
         #[cfg(feature = "http-client")] http_timeout: Option<Duration>,
         #[cfg(feature = "http-client")] http_redirection_limit: usize,
     ) -> Self {
+        let using_datasets = update
+            .operations
+            .iter()
+            .map(|operation| {
+                if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                    Some(using.clone().map(Into::into).unwrap_or_default())
+                } else {
+                    None
+                }
+            })
+            .collect();
         Self {
             evaluator,
-            update: update.inner,
-            using_datasets: update.using_datasets,
+            update,
+            using_datasets,
             #[cfg(feature = "http-client")]
             http_timeout,
             #[cfg(feature = "http-client")]
@@ -172,7 +180,7 @@ impl PreparedSparqlUpdate {
 #[must_use]
 pub struct BoundPreparedSparqlUpdate<'a, 'b> {
     evaluator: QueryEvaluator,
-    update: spargebra::Update,
+    update: Update,
     using_datasets: Vec<Option<QueryDatasetSpecification>>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
@@ -424,7 +432,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     }
 }
 
-fn update_requires_read(update: &spargebra::Update) -> bool {
+fn update_requires_read(update: &Update) -> bool {
     for (i, op) in update.operations.iter().enumerate() {
         match op {
             GraphUpdateOperation::InsertData { .. }
