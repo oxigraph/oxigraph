@@ -6,10 +6,10 @@
 
 pub mod algebra;
 mod parser;
-mod query;
+pub mod query;
 pub mod term;
-mod update;
+pub mod update;
 
 pub use parser::{SparqlParser, SparqlSyntaxError};
-pub use query::*;
-pub use update::*;
+pub use query::Query;
+pub use update::Update;

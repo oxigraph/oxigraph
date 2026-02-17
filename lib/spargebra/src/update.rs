@@ -1,6 +1,6 @@
-use crate::SparqlParser;
+//! Data structures around SPARQL updates. The main type is [`Update`].
 use crate::algebra::*;
-use crate::parser::SparqlSyntaxError;
+use crate::parser::{SparqlParser, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -91,128 +91,32 @@ impl TryFrom<&String> for Update {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphUpdateOperation {
     /// [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation).
-    InsertData { data: Vec<Quad> },
+    InsertData(InsertDataOperation),
     /// [delete data](https://www.w3.org/TR/sparql11-update/#defn_deleteDataOperation).
-    DeleteData { data: Vec<GroundQuad> },
+    DeleteData(DeleteDataOperation),
     /// [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation).
-    DeleteInsert {
-        delete: Vec<GroundQuadPattern>,
-        insert: Vec<QuadPattern>,
-        using: Option<QueryDataset>,
-        pattern: Box<GraphPattern>,
-    },
+    DeleteInsert(DeleteInsertOperation),
     /// [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation).
-    Load {
-        silent: bool,
-        source: NamedNode,
-        destination: GraphName,
-    },
+    Load(LoadOperation),
     /// [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation).
-    Clear { silent: bool, graph: GraphTarget },
+    Clear(ClearOperation),
     /// [create](https://www.w3.org/TR/sparql11-update/#defn_createOperation).
-    Create { silent: bool, graph: NamedNode },
+    Create(CreateOperation),
     /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation).
-    Drop { silent: bool, graph: GraphTarget },
+    Drop(DropOperation),
 }
 
 impl GraphUpdateOperation {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::InsertData { data } => {
-                f.write_str("(insertData (")?;
-                for (i, t) in data.iter().enumerate() {
-                    if i > 0 {
-                        f.write_str(" ")?;
-                    }
-                    t.fmt_sse(f)?;
-                }
-                f.write_str("))")
-            }
-            Self::DeleteData { data } => {
-                f.write_str("(deleteData (")?;
-                for (i, t) in data.iter().enumerate() {
-                    if i > 0 {
-                        f.write_str(" ")?;
-                    }
-                    t.fmt_sse(f)?;
-                }
-                f.write_str("))")
-            }
-            Self::DeleteInsert {
-                delete,
-                insert,
-                using,
-                pattern,
-            } => {
-                f.write_str("(modify ")?;
-                if let Some(using) = using {
-                    f.write_str(" (using ")?;
-                    using.fmt_sse(f)?;
-                    f.write_str(" ")?;
-                    pattern.fmt_sse(f)?;
-                    f.write_str(")")?;
-                } else {
-                    pattern.fmt_sse(f)?;
-                }
-                if !delete.is_empty() {
-                    f.write_str(" (delete (")?;
-                    for (i, t) in delete.iter().enumerate() {
-                        if i > 0 {
-                            f.write_str(" ")?;
-                        }
-                        t.fmt_sse(f)?;
-                    }
-                    f.write_str("))")?;
-                }
-                if !insert.is_empty() {
-                    f.write_str(" (insert (")?;
-                    for (i, t) in insert.iter().enumerate() {
-                        if i > 0 {
-                            f.write_str(" ")?;
-                        }
-                        t.fmt_sse(f)?;
-                    }
-                    f.write_str("))")?;
-                }
-                f.write_str(")")
-            }
-            Self::Load {
-                silent,
-                source,
-                destination,
-            } => {
-                f.write_str("(load ")?;
-                if *silent {
-                    f.write_str("silent ")?;
-                }
-                write!(f, "{source} ")?;
-                destination.fmt_sse(f)?;
-                f.write_str(")")
-            }
-            Self::Clear { silent, graph } => {
-                f.write_str("(clear ")?;
-                if *silent {
-                    f.write_str("silent ")?;
-                }
-                graph.fmt_sse(f)?;
-                f.write_str(")")
-            }
-            Self::Create { silent, graph } => {
-                f.write_str("(create ")?;
-                if *silent {
-                    f.write_str("silent ")?;
-                }
-                write!(f, "{graph})")
-            }
-            Self::Drop { silent, graph } => {
-                f.write_str("(drop ")?;
-                if *silent {
-                    f.write_str("silent ")?;
-                }
-                graph.fmt_sse(f)?;
-                f.write_str(")")
-            }
+            Self::InsertData(op) => op.fmt_sse(f),
+            Self::DeleteData(op) => op.fmt_sse(f),
+            Self::DeleteInsert(op) => op.fmt_sse(f),
+            Self::Load(op) => op.fmt_sse(f),
+            Self::Clear(op) => op.fmt_sse(f),
+            Self::Create(op) => op.fmt_sse(f),
+            Self::Drop(op) => op.fmt_sse(f),
         }
     }
 }
@@ -220,89 +124,320 @@ impl GraphUpdateOperation {
 impl fmt::Display for GraphUpdateOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InsertData { data } => {
-                writeln!(f, "INSERT DATA {{")?;
-                serialize_quads(data, f)?;
-                f.write_str("}")
+            Self::InsertData(op) => op.fmt(f),
+            Self::DeleteData(op) => op.fmt(f),
+            Self::DeleteInsert(op) => op.fmt(f),
+            Self::Load(op) => op.fmt(f),
+            Self::Clear(op) => op.fmt(f),
+            Self::Create(op) => op.fmt(f),
+            Self::Drop(op) => op.fmt(f),
+        }
+    }
+}
+
+/// The [insert data](https://www.w3.org/TR/sparql11-update/#defn_insertDataOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct InsertDataOperation {
+    pub data: Vec<Quad>,
+}
+
+impl InsertDataOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(insertData (")?;
+        for (i, t) in self.data.iter().enumerate() {
+            if i > 0 {
+                f.write_str(" ")?;
             }
-            Self::DeleteData { data } => {
-                writeln!(f, "DELETE DATA {{")?;
-                write_ground_quads(data, f)?;
-                f.write_str("}")
+            t.fmt_sse(f)?;
+        }
+        f.write_str("))")
+    }
+}
+
+impl fmt::Display for InsertDataOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "INSERT DATA {{")?;
+        serialize_quads(&self.data, f)?;
+        f.write_str("}")
+    }
+}
+
+impl From<InsertDataOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: InsertDataOperation) -> Self {
+        Self::InsertData(op)
+    }
+}
+
+/// The [delete data](https://www.w3.org/TR/sparql11-update/#defn_deleteDataOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct DeleteDataOperation {
+    pub data: Vec<GroundQuad>,
+}
+
+impl DeleteDataOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(deleteData (")?;
+        for (i, t) in self.data.iter().enumerate() {
+            if i > 0 {
+                f.write_str(" ")?;
             }
-            Self::DeleteInsert {
-                delete,
-                insert,
-                using,
-                pattern,
-            } => {
-                if !delete.is_empty() {
-                    writeln!(f, "DELETE {{")?;
-                    for quad in delete {
-                        writeln!(f, "\t{quad} .")?;
-                    }
-                    writeln!(f, "}}")?;
+            t.fmt_sse(f)?;
+        }
+        f.write_str("))")
+    }
+}
+
+impl fmt::Display for DeleteDataOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "DELETE DATA {{")?;
+        write_ground_quads(&self.data, f)?;
+        f.write_str("}")
+    }
+}
+
+impl From<DeleteDataOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: DeleteDataOperation) -> Self {
+        Self::DeleteData(op)
+    }
+}
+
+/// The [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct DeleteInsertOperation {
+    pub delete: Vec<GroundQuadPattern>,
+    pub insert: Vec<QuadPattern>,
+    pub using: Option<QueryDataset>,
+    pub pattern: Box<GraphPattern>,
+}
+
+impl DeleteInsertOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(modify ")?;
+        if let Some(using) = &self.using {
+            f.write_str(" (using ")?;
+            using.fmt_sse(f)?;
+            f.write_str(" ")?;
+            self.pattern.fmt_sse(f)?;
+            f.write_str(")")?;
+        } else {
+            self.pattern.fmt_sse(f)?;
+        }
+        if !self.delete.is_empty() {
+            f.write_str(" (delete (")?;
+            for (i, t) in self.delete.iter().enumerate() {
+                if i > 0 {
+                    f.write_str(" ")?;
                 }
-                if !insert.is_empty() {
-                    writeln!(f, "INSERT {{")?;
-                    for quad in insert {
-                        writeln!(f, "\t{quad} .")?;
-                    }
-                    writeln!(f, "}}")?;
-                }
-                if let Some(using) = using {
-                    for g in &using.default {
-                        writeln!(f, "USING {g}")?;
-                    }
-                    if let Some(named) = &using.named {
-                        for g in named {
-                            writeln!(f, "USING NAMED {g}")?;
-                        }
-                    }
-                }
-                write!(
-                    f,
-                    "WHERE {{ {} }}",
-                    SparqlGraphRootPattern::new(pattern, None)
-                )
+                t.fmt_sse(f)?;
             }
-            Self::Load {
-                silent,
-                source,
-                destination,
-            } => {
-                f.write_str("LOAD ")?;
-                if *silent {
-                    f.write_str("SILENT ")?;
+            f.write_str("))")?;
+        }
+        if !self.insert.is_empty() {
+            f.write_str(" (insert (")?;
+            for (i, t) in self.insert.iter().enumerate() {
+                if i > 0 {
+                    f.write_str(" ")?;
                 }
-                write!(f, "{source}")?;
-                if destination != &GraphName::DefaultGraph {
-                    write!(f, " INTO GRAPH {destination}")?;
-                }
-                Ok(())
+                t.fmt_sse(f)?;
             }
-            Self::Clear { silent, graph } => {
-                f.write_str("CLEAR ")?;
-                if *silent {
-                    f.write_str("SILENT ")?;
-                }
-                write!(f, "{graph}")
+            f.write_str("))")?;
+        }
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for DeleteInsertOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.delete.is_empty() {
+            writeln!(f, "DELETE {{")?;
+            for quad in &self.delete {
+                writeln!(f, "\t{quad} .")?;
             }
-            Self::Create { silent, graph } => {
-                f.write_str("CREATE ")?;
-                if *silent {
-                    f.write_str("SILENT ")?;
-                }
-                write!(f, "GRAPH {graph}")
+            writeln!(f, "}}")?;
+        }
+        if !self.insert.is_empty() {
+            writeln!(f, "INSERT {{")?;
+            for quad in &self.insert {
+                writeln!(f, "\t{quad} .")?;
             }
-            Self::Drop { silent, graph } => {
-                f.write_str("DROP ")?;
-                if *silent {
-                    f.write_str("SILENT ")?;
+            writeln!(f, "}}")?;
+        }
+        if let Some(using) = &self.using {
+            for g in &using.default {
+                writeln!(f, "USING {g}")?;
+            }
+            if let Some(named) = &using.named {
+                for g in named {
+                    writeln!(f, "USING NAMED {g}")?;
                 }
-                write!(f, "{graph}")
             }
         }
+        write!(
+            f,
+            "WHERE {{ {} }}",
+            SparqlGraphRootPattern::new(&self.pattern, None)
+        )
+    }
+}
+
+impl From<DeleteInsertOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: DeleteInsertOperation) -> Self {
+        Self::DeleteInsert(op)
+    }
+}
+
+/// The [load](https://www.w3.org/TR/sparql11-update/#defn_loadOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct LoadOperation {
+    pub silent: bool,
+    pub source: NamedNode,
+    pub destination: GraphName,
+}
+
+impl LoadOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(load ")?;
+        if self.silent {
+            f.write_str("silent ")?;
+        }
+        write!(f, "{} ", self.source)?;
+        self.destination.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for LoadOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("LOAD ")?;
+        if self.silent {
+            f.write_str("SILENT ")?;
+        }
+        write!(f, "{}", self.source)?;
+        if self.destination != GraphName::DefaultGraph {
+            write!(f, " INTO GRAPH {}", self.destination)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<LoadOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: LoadOperation) -> Self {
+        Self::Load(op)
+    }
+}
+
+/// The [clear](https://www.w3.org/TR/sparql11-update/#defn_clearOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct ClearOperation {
+    pub silent: bool,
+    pub graph: GraphTarget,
+}
+
+impl ClearOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(clear ")?;
+        if self.silent {
+            f.write_str("silent ")?;
+        }
+        self.graph.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for ClearOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("CLEAR ")?;
+        if self.silent {
+            f.write_str("SILENT ")?;
+        }
+        write!(f, "{}", self.graph)
+    }
+}
+
+impl From<ClearOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: ClearOperation) -> Self {
+        Self::Clear(op)
+    }
+}
+
+/// The [create](https://www.w3.org/TR/sparql11-update/#defn_createOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct CreateOperation {
+    pub silent: bool,
+    pub graph: NamedNode,
+}
+
+impl CreateOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(create ")?;
+        if self.silent {
+            f.write_str("silent ")?;
+        }
+        write!(f, "{})", self.graph)
+    }
+}
+
+impl fmt::Display for CreateOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("CREATE ")?;
+        if self.silent {
+            f.write_str("SILENT ")?;
+        }
+        write!(f, "GRAPH {}", self.graph)
+    }
+}
+
+impl From<CreateOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: CreateOperation) -> Self {
+        Self::Create(op)
+    }
+}
+
+/// The [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct DropOperation {
+    pub silent: bool,
+    pub graph: GraphTarget,
+}
+
+impl DropOperation {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(drop ")?;
+        if self.silent {
+            f.write_str("silent ")?;
+        }
+        self.graph.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for DropOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DROP ")?;
+        if self.silent {
+            f.write_str("SILENT ")?;
+        }
+        write!(f, "{}", self.graph)
+    }
+}
+
+impl From<DropOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: DropOperation) -> Self {
+        Self::Drop(op)
     }
 }
 

@@ -430,7 +430,8 @@ impl QueryEvaluator {
     /// ```
     /// use oxrdf::{Dataset, GraphName, Literal, NamedNode, Quad};
     /// use spareval::{DeleteInsertQuad, QueryEvaluator};
-    /// use spargebra::{GraphUpdateOperation, SparqlParser};
+    /// use spargebra::SparqlParser;
+    /// use spargebra::update::GraphUpdateOperation;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let dataset = Dataset::from_iter([Quad::new(
@@ -442,17 +443,17 @@ impl QueryEvaluator {
     /// let update = SparqlParser::new().parse_update(
     ///     "DELETE { ?s ?p ?o } INSERT { ?s ?p ?o2 } WHERE { ?s ?p ?o BIND(?o +1 AS ?o2) }",
     /// )?;
-    /// let GraphUpdateOperation::DeleteInsert {
-    ///     delete,
-    ///     insert,
-    ///     using: _,
-    ///     pattern,
-    /// } = &update.operations[0]
-    /// else {
+    /// let GraphUpdateOperation::DeleteInsert(operation) = &update.operations[0] else {
     ///     unreachable!()
     /// };
     /// let results = QueryEvaluator::new()
-    ///     .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+    ///     .prepare_delete_insert(
+    ///         operation.delete.clone(),
+    ///         operation.insert.clone(),
+    ///         None,
+    ///         None,
+    ///         &operation.pattern,
+    ///     )
     ///     .execute(&dataset)?
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(
@@ -605,10 +606,8 @@ impl PreparedQuery<'_> {
     ) {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match self.query {
-            Query::Select {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Select(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -616,7 +615,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_select(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -627,10 +626,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Ask {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Ask(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -638,7 +635,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_ask(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -649,13 +646,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Construct {
-                template,
-                pattern,
-                base_iri,
-                ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Construct(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -663,11 +655,13 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
-                        Ok(evaluator) => {
-                            evaluator.evaluate_construct(&pattern, template, self.substitutions)
-                        }
+                        Ok(evaluator) => evaluator.evaluate_construct(
+                            &pattern,
+                            &query.template,
+                            self.substitutions,
+                        ),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
                     };
                 (
@@ -676,10 +670,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Describe {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Describe(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -687,7 +679,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_describe(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -716,7 +708,8 @@ impl PreparedQuery<'_> {
 /// ```
 /// use oxrdf::{Dataset, GraphName, Literal, NamedNode, Quad};
 /// use spareval::{DeleteInsertQuad, QueryEvaluator};
-/// use spargebra::{GraphUpdateOperation, SparqlParser};
+/// use spargebra::SparqlParser;
+/// use spargebra::update::GraphUpdateOperation;
 ///
 /// let ex = NamedNode::new("http://example.com")?;
 /// let dataset = Dataset::from_iter([Quad::new(
@@ -728,17 +721,17 @@ impl PreparedQuery<'_> {
 /// let update = SparqlParser::new().parse_update(
 ///     "DELETE { ?s ?p ?o } INSERT { ?s ?p ?o2 } WHERE { ?s ?p ?o BIND(?o +1 AS ?o2) }",
 /// )?;
-/// let GraphUpdateOperation::DeleteInsert {
-///     delete,
-///     insert,
-///     using: _,
-///     pattern,
-/// } = &update.operations[0]
-/// else {
+/// let GraphUpdateOperation::DeleteInsert(operation) = &update.operations[0] else {
 ///     unreachable!()
 /// };
 /// let results = QueryEvaluator::new()
-///     .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+///     .prepare_delete_insert(
+///         operation.delete.clone(),
+///         operation.insert.clone(),
+///         None,
+///         None,
+///         &operation.pattern,
+///     )
 ///     .execute(&dataset)?
 ///     .collect::<Result<Vec<_>, _>>()?;
 /// assert_eq!(

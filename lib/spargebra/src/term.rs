@@ -1,4 +1,4 @@
-//! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
+//! Data structures for basic concepts like IRI, literal or triples used in SPARQL.
 
 pub use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple, Variable};
 use std::fmt;

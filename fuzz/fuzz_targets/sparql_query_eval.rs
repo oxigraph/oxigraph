@@ -12,8 +12,9 @@ use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
 use spareval::QueryEvaluator;
+use spargebra::SparqlParser;
 use spargebra::algebra::{GraphPattern, QueryDataset};
-use spargebra::{Query, SparqlParser};
+use spargebra::query::SelectQuery;
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -131,14 +132,17 @@ impl DefaultServiceHandler for StoreServiceHandler {
         }
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .with_default_service_handler(self.clone())
-            .for_query(Query::Select {
-                dataset: Some(QueryDataset {
-                    default: vec![service_name.clone()],
-                    named: None,
-                }),
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            })
+            .for_query(
+                SelectQuery {
+                    dataset: Some(QueryDataset {
+                        default: vec![service_name.clone()],
+                        named: None,
+                    }),
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
             .on_store(&self.store)
             .execute()?
         else {
@@ -191,11 +195,14 @@ impl DefaultServiceHandler for DatasetServiceHandler {
             dataset: dataset.clone(),
         });
         let QueryResults::Solutions(iter) = evaluator
-            .prepare(&Query::Select {
-                dataset: None,
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            })
+            .prepare(
+                &SelectQuery {
+                    dataset: None,
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
             .execute(&dataset)?
         else {
             panic!()
