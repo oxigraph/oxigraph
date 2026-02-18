@@ -582,9 +582,11 @@ fn not_empty_fold<T>(
     .ok_or("The iterator should not be empty")
 }
 
+#[derive(Default)]
 enum SelectionOption {
     Distinct,
     Reduced,
+    #[default]
     Default,
 }
 
@@ -593,24 +595,17 @@ enum SelectionMember {
     Expression(Expression, Variable),
 }
 
+#[derive(Default)]
 enum SelectionVariables {
     Explicit(Vec<SelectionMember>),
+    #[default]
     Star,
-    Everything,
 }
 
+#[derive(Default)]
 struct Selection {
     pub option: SelectionOption,
     pub variables: SelectionVariables,
-}
-
-impl Selection {
-    fn no_op() -> Self {
-        Self {
-            option: SelectionOption::Default,
-            variables: SelectionVariables::Everything,
-        }
-    }
 }
 
 fn build_select(
@@ -719,7 +714,6 @@ fn build_select(
             pv.sort();
             true
         }
-        SelectionVariables::Everything => false,
     };
 
     let mut m = p;
@@ -1120,7 +1114,7 @@ parser! {
                 Ok(Query::Construct {
                     template: c,
                     dataset: d,
-                    pattern: build_select(Selection::no_op(), w, g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1129,7 +1123,7 @@ parser! {
                     template: c.clone(),
                     dataset: d,
                     pattern: build_select(
-                        Selection::no_op(),
+                        Selection::default(),
                         GraphPattern::Bgp { patterns: c },
                         g, h, o, l, v, state
                     )?,
@@ -1146,7 +1140,7 @@ parser! {
             i("DESCRIBE") _ "*" _ d:DatasetClauses() _ w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
                 Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::no_op(), w.unwrap_or_default(), g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1168,7 +1162,7 @@ parser! {
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Ask {
                 dataset: d,
-                pattern: build_select(Selection::no_op(), w, g, h, o, l, v, state)?,
+                pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
                 base_iri: state.base_iri.clone()
             })
         }
