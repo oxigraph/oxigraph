@@ -6,6 +6,7 @@
 
 pub mod algebra;
 mod parser;
+mod parser2;
 mod query;
 pub mod term;
 mod update;

@@ -19,6 +19,7 @@ sep-0006 = []
 standard-unicode-escaping = [] # Allow \uXXXX anywhere in the query/update and not only in IRIs and literals, following the SPARQL specification
 
 [dependencies]
+chumsky = {workspace = true, features = ["pratt"] }
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true

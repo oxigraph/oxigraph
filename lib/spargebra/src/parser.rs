@@ -1658,7 +1658,7 @@ parser! {
             NIL() { Vec::new() }
         rule ExpressionList_item() -> Expression = e:Expression() _ { e }
 
-        rule ConstructTemplate() -> Vec<TriplePattern> = "{" _ t:ConstructTriples() _ "}" { t }
+        rule ConstructTemplate() -> Vec<TriplePattern> = "{" _ t:ConstructTriples()? _ "}" { t.unwrap_or_default() }
 
         rule ConstructTriples() -> Vec<TriplePattern> = p:ConstructTriples_item() ** ("." _) "."? {
             p.into_iter().flatten().collect()
