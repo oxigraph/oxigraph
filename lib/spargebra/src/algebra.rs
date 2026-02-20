@@ -295,22 +295,22 @@ impl fmt::Display for Expression {
                 f.write_str(")")
             }
             Self::Add(a, b) => {
-                write!(f, "{a} + {b}")
+                write!(f, "({a} + {b})")
             }
             Self::Subtract(a, b) => {
-                write!(f, "{a} - {b}")
+                write!(f, "({a} - {b})")
             }
             Self::Multiply(a, b) => {
-                write!(f, "{a} * {b}")
+                write!(f, "({a} * {b})")
             }
             Self::Divide(a, b) => {
-                write!(f, "{a} / {b}")
+                write!(f, "({a} / {b})")
             }
-            Self::UnaryPlus(e) => write!(f, "+{e}"),
-            Self::UnaryMinus(e) => write!(f, "-{e}"),
-            Self::Not(e) => match e.as_ref() {
+            Self::UnaryPlus(e) => write!(f, "+({e})"),
+            Self::UnaryMinus(e) => write!(f, "-({e})"),
+            Self::Not(e) => match &**e {
                 Self::Exists(p) => write!(f, "NOT EXISTS {{ {p} }}"),
-                e => write!(f, "!{e}"),
+                _ => write!(f, "!({e})"),
             },
             Self::FunctionCall(function, parameters) => {
                 write!(f, "{function}")?;
@@ -767,8 +767,11 @@ impl fmt::Display for GraphPattern {
                 for (a, v) in aggregates {
                     write!(f, " ({v} AS {a})")?;
                 }
-                for b in variables {
-                    write!(f, " {b}")?;
+                for (i, v) in variables.iter().enumerate() {
+                    if !variables[..i].contains(v) {
+                        // We avoid writing twice the same variable
+                        write!(f, " {v}")?;
+                    }
                 }
                 write!(f, " WHERE {{ {inner} }}")?;
                 if !variables.is_empty() {
@@ -1227,17 +1230,14 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
         let mut order = None;
         let mut start = 0;
         let mut length = None;
-        let mut project = Vec::new();
+        let mut project = None;
 
         let mut child = self.pattern;
+        // Before project
         loop {
             match child {
-                GraphPattern::OrderBy { inner, expression } => {
+                GraphPattern::OrderBy { inner, expression } if order.is_none() => {
                     order = Some(expression);
-                    child = inner;
-                }
-                GraphPattern::Project { inner, variables } if project.is_empty() => {
-                    project.extend(variables.iter().map(|v| (v, None)));
                     child = inner;
                 }
                 GraphPattern::Distinct { inner } => {
@@ -1252,71 +1252,86 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     inner,
                     start: s,
                     length: l,
-                } => {
+                } if start == 0 && length.is_none() => {
                     start = *s;
                     length = *l;
                     child = inner;
                 }
-                GraphPattern::Extend {
-                    inner,
-                    expression,
-                    variable,
-                } if project.iter().any(|(v, _)| *v == variable)
-                    && !project.iter().any(|(_, expr)| {
+                GraphPattern::Project { inner, variables } if project.is_none() => {
+                    project = Some(variables.iter().map(|v| (v, None)).collect::<Vec<_>>());
+                    child = inner;
+                    break;
+                }
+                _ => break,
+            }
+        }
+        // we collect extends
+        if let Some(project) = &mut project {
+            while let GraphPattern::Extend {
+                inner,
+                expression,
+                variable,
+            } = child
+            {
+                if !project.iter().any(|(v, _)| *v == variable)
+                    || project.iter().any(|(_, expr)| {
                         expr.is_some_and(|expr: &Expression| {
                             let mut found = false;
                             expr.lookup_used_variable(&mut |v| found |= v == variable);
                             found
                         })
-                    }) =>
+                    })
                 {
                     // This simplification only works if the extended variable is in the projection and not used in another expression of the projection.
-                    project
-                        .iter_mut()
-                        .find(|(v, _)| *v == variable)
-                        .ok_or(fmt::Error)?
-                        .1 = Some(expression);
-                    child = inner
+                    break;
                 }
-                p => {
-                    f.write_str("SELECT")?;
-                    if distinct {
-                        f.write_str(" DISTINCT")?;
-                    }
-                    if reduced {
-                        f.write_str(" REDUCED")?;
-                    }
-                    if project.is_empty() {
-                        f.write_str(" *")?;
-                    } else {
-                        for (variable, expr) in project {
-                            if let Some(expr) = expr {
-                                write!(f, " ({expr} AS {variable})")
-                            } else {
-                                write!(f, " {variable}")
-                            }?;
-                        }
-                    }
-                    if let Some(dataset) = self.dataset {
-                        write!(f, " {dataset}")?;
-                    }
-                    write!(f, " WHERE {{ {p} }}")?;
-                    if let Some(order) = order {
-                        f.write_str(" ORDER BY")?;
-                        for c in order {
-                            write!(f, " {c}")?;
-                        }
-                    }
-                    if start > 0 {
-                        write!(f, " OFFSET {start}")?;
-                    }
-                    if let Some(length) = length {
-                        write!(f, " LIMIT {length}")?;
-                    }
-                    return Ok(());
-                }
+                project
+                    .iter_mut()
+                    .find(|(v, _)| *v == variable)
+                    .ok_or(fmt::Error)?
+                    .1 = Some(expression);
+                child = inner
             }
         }
+        f.write_str("SELECT")?;
+        if distinct {
+            f.write_str(" DISTINCT")?;
+        } else if reduced {
+            f.write_str(" REDUCED")?;
+        }
+        if let Some(project) = project {
+            if project.is_empty() {
+                // TODO: ensure there is no in-scope variable
+                f.write_str(" *")?;
+            } else {
+                for (variable, expr) in project {
+                    if let Some(expr) = expr {
+                        write!(f, " ({expr} AS {variable})")
+                    } else {
+                        write!(f, " {variable}")
+                    }?;
+                }
+            }
+        } else {
+            f.write_str(" *")?;
+        }
+        if let Some(dataset) = self.dataset {
+            write!(f, " {dataset}")?;
+        }
+        write!(f, " WHERE {{ {child} }}")?;
+        if let Some(order) = order {
+            f.write_str(" ORDER BY")?;
+            for c in order {
+                write!(f, " {c}")?;
+            }
+        }
+        if start > 0 {
+            write!(f, " OFFSET {start}")?;
+        }
+        if let Some(length) = length {
+            write!(f, " LIMIT {length}")?;
+        }
+        Ok(())
     }
 }
 
