@@ -2225,14 +2225,14 @@ parser! {
             i("STR") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Str, vec![e]) } /
             i("LANG") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Lang, vec![e]) } /
             i("LANGMATCHES") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /
-            i("LANGDIR") "(" _ e:Expression() _ ")" {?
+            i("LANGDIR") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::LangDir, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The LANGDIR function is only available in SPARQL 1.2")}
             } /
             i("DATATYPE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Datatype, vec![e]) } /
             i("BOUND") _ "(" _ v:Var() _ ")" { Expression::Bound(v) } /
             (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Iri, vec![e]) } /
-            i("BNODE") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::BNode, vec![e]) } /
+            i("BNODE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::BNode, vec![e]) } /
             i("BNODE") NIL() { Expression::FunctionCall(Function::BNode, vec![]) }  /
             i("RAND") _ NIL() { Expression::FunctionCall(Function::Rand, vec![]) } /
             i("ABS") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Abs, vec![e]) } /
@@ -2245,7 +2245,7 @@ parser! {
             StrReplaceExpression() /
             i("UCASE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::UCase, vec![e]) } /
             i("LCASE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::LCase, vec![e]) } /
-            i("ENCODE_FOR_URI") "(" _ e: Expression() _ ")" { Expression::FunctionCall(Function::EncodeForUri, vec![e]) } /
+            i("ENCODE_FOR_URI") _ "(" _ e: Expression() _ ")" { Expression::FunctionCall(Function::EncodeForUri, vec![e]) } /
             i("CONTAINS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::Contains, vec![a, b]) } /
             i("STRSTARTS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrStarts, vec![a, b]) } /
             i("STRENDS") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrEnds, vec![a, b]) } /
@@ -2262,56 +2262,56 @@ parser! {
             i("NOW") _ NIL() { Expression::FunctionCall(Function::Now, vec![]) } /
             i("UUID") _ NIL() { Expression::FunctionCall(Function::Uuid, vec![]) }/
             i("STRUUID") _ NIL() { Expression::FunctionCall(Function::StrUuid, vec![]) } /
-            i("MD5") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Md5, vec![e]) } /
-            i("SHA1") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha1, vec![e]) } /
-            i("SHA256") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha256, vec![e]) } /
-            i("SHA384") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha384, vec![e]) } /
-            i("SHA512") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha512, vec![e]) } /
+            i("MD5") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Md5, vec![e]) } /
+            i("SHA1") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha1, vec![e]) } /
+            i("SHA256") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha256, vec![e]) } /
+            i("SHA384") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha384, vec![e]) } /
+            i("SHA512") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Sha512, vec![e]) } /
             i("COALESCE") e:ExpressionList() { Expression::Coalesce(e) } /
             i("IF") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::If(Box::new(a), Box::new(b), Box::new(c)) } /
             i("STRLANG") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrLang, vec![a, b]) }  /
-            i("STRLANGDIR") "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" {?
+            i("STRLANGDIR") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::StrLangDir, vec![a, b, c]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The STRLANGDIR function is only available in SPARQL 1.2")}
             } /
             i("STRDT") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrDt, vec![a, b]) } /
-            i("sameTerm") "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::SameTerm(Box::new(a), Box::new(b)) } /
+            i("sameTerm") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::SameTerm(Box::new(a), Box::new(b)) } /
             (i("isIRI") / i("isURI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsIri, vec![e]) } /
-            i("isBLANK") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
-            i("isLITERAL") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
-            i("isNUMERIC") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
-            i("hasLang") "(" _ e:Expression() _ ")" {?
+            i("isBLANK") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
+            i("isLITERAL") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
+            i("isNUMERIC") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
+            i("hasLang") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::HasLang, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The hasLang function is only available in SPARQL 1.2")}
             } /
-            i("hasLangDir") "(" _ e:Expression() _ ")" {?
+            i("hasLangDir") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::HasLangDir, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The hasLangDir function is only available in SPARQL 1.2")}
             } /
             RegexExpression() /
             ExistsFunc() /
             NotExistsFunc() /
-            i("TRIPLE") "(" _ s:Expression() _ "," _ p:Expression() "," _ o:Expression() ")" {?
+            i("TRIPLE") _ "(" _ s:Expression() _ "," _ p:Expression() "," _ o:Expression() ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p, o]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The TRIPLE function is only available in SPARQL 1.2")}
             } /
-            i("SUBJECT") "(" _ e:Expression() _ ")" {?
+            i("SUBJECT") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Subject, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The SUBJECT function is only available in SPARQL 1.2")}
             } /
-            i("PREDICATE") "(" _ e:Expression() _ ")" {?
+            i("PREDICATE") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Predicate, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The PREDICATE function is only available in SPARQL 1.2")}
             } /
-            i("OBJECT") "(" _ e:Expression() _ ")" {?
+            i("OBJECT") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Object, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The OBJECT function is only available in SPARQL 1.2")}
             } /
-            i("isTriple") "(" _ e:Expression() _ ")" {?
+            i("isTriple") _ "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::IsTriple, vec![e]))}
                 #[cfg(not(feature = "sparql-12"))]{Err("The isTriple function is only available in SPARQL 1.2")}
             } /
-            i("ADJUST") "("  _ a:Expression() _ "," _ b:Expression() _ ")" {?
+            i("ADJUST") _ "("  _ a:Expression() _ "," _ b:Expression() _ ")" {?
                 #[cfg(feature = "sep-0002")]{Ok(Expression::FunctionCall(Function::Adjust, vec![a, b]))}
                 #[cfg(not(feature = "sep-0002"))]{Err("The ADJUST function is only available in SPARQL-dev SEP 0002")}
             }
