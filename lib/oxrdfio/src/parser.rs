@@ -53,7 +53,7 @@ use tokio::io::AsyncRead;
 /// - [`with_base_iri`](Self::with_base_iri) to resolve the relative IRIs.
 /// - [`rename_blank_nodes`](Self::rename_blank_nodes) to rename the blank nodes to auto-generated numbers to avoid conflicts when merging RDF graphs together.
 /// - [`without_named_graphs`](Self::without_named_graphs) to parse a single graph.
-/// - [`unchecked`](Self::unchecked) to skip some validations if the file is already known to be valid.
+/// - [`lenient`](Self::lenient) to skip some validations if the file is already known to be valid.
 ///
 /// ```
 /// use oxrdfio::{RdfFormat, RdfParser};
@@ -246,12 +246,6 @@ impl RdfParser {
             RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.lenient()),
         };
         self
-    }
-
-    #[deprecated(note = "Use `lenient()` instead", since = "0.2.0")]
-    #[inline]
-    pub fn unchecked(self) -> Self {
-        self.lenient()
     }
 
     /// Parses from a [`Read`] implementation and returns an iterator of quads.

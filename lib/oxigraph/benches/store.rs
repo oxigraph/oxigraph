@@ -264,7 +264,12 @@ fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
                     }
                 }
             },
-            Operation::Update(u) => store.update_opt(u.clone(), evaluator.clone()).unwrap(),
+            Operation::Update(u) => evaluator
+                .clone()
+                .for_update(u.clone())
+                .on_store(store)
+                .execute()
+                .unwrap(),
         }
     }
 }

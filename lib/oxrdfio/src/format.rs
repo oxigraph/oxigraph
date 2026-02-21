@@ -134,16 +134,6 @@ impl RdfFormat {
         matches!(self, Self::JsonLd { .. } | Self::NQuads | Self::TriG)
     }
 
-    #[deprecated(note = "All format will soon support RDF 1.2", since = "0.2.0")]
-    #[inline]
-    #[cfg(feature = "rdf-12")]
-    pub const fn supports_rdf_star(self) -> bool {
-        matches!(
-            self,
-            Self::NTriples | Self::NQuads | Self::Turtle | Self::TriG
-        )
-    }
-
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.

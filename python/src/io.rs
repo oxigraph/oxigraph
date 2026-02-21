@@ -368,23 +368,6 @@ impl PyRdfFormat {
         self.inner.supports_datasets()
     }
 
-    /// :return: if the format supports `RDF-star quoted triples <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted>`_.
-    /// :rtype: bool
-    ///
-    /// >>> RdfFormat.N_TRIPLES.supports_rdf_star
-    /// True
-    /// >>> RdfFormat.RDF_XML.supports_rdf_star
-    /// False
-    #[cfg(feature = "rdf-12")]
-    #[getter]
-    fn supports_rdf_star(&self) -> PyResult<bool> {
-        deprecation_warning(
-            "RdfFormat.supports_rdf_star is deprecated, all formats will support RDF 1.2 soon.",
-        )?;
-        #[expect(deprecated)]
-        Ok(self.inner.supports_rdf_star())
-    }
-
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
