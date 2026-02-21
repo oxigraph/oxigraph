@@ -206,7 +206,7 @@ fn build_rocksdb() {
         }
     }
 
-    config.compile("rocksdb");
+    config.flag("-flto").compile("rocksdb");
 }
 
 #[cfg(not(feature = "pkg-config"))]
