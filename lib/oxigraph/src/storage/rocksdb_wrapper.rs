@@ -42,6 +42,12 @@ pub struct ColumnFamilyDefinition {
     pub unordered_writes: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DbOptions {
+    pub max_open_files: Option<i32>,
+    pub fd_reserve: Option<u32>,
+}
+
 #[derive(Clone)]
 pub struct Db {
     inner: DbKind,
@@ -125,13 +131,17 @@ impl Drop for RoDbHandler {
 }
 
 impl Db {
+    const DEFAULT_FD_RESERVE: u32 = 48;
+    const MINIMUM_MAX_OPEN_FILES: u64 = 48;
+
     pub fn open_read_write(
         path: &Path,
         column_families: Vec<ColumnFamilyDefinition>,
+        db_options: DbOptions,
     ) -> Result<Self, StorageError> {
         let c_path = path_to_cstring(path)?;
         unsafe {
-            let options = Self::db_options()?;
+            let options = Self::db_options(db_options)?;
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
             rocksdb_options_set_compression(options, rocksdb_lz4_compression.try_into().unwrap());
@@ -250,7 +260,7 @@ impl Db {
     ) -> Result<Self, StorageError> {
         unsafe {
             let c_path = path_to_cstring(path)?;
-            let options = Self::db_options()?;
+            let options = Self::db_options(DbOptions::default())?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
@@ -306,7 +316,7 @@ impl Db {
         }
     }
 
-    fn db_options() -> Result<*mut rocksdb_options_t, StorageError> {
+    fn db_options(db_options: DbOptions) -> Result<*mut rocksdb_options_t, StorageError> {
         static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
         unsafe {
             let options = rocksdb_options_create();
@@ -316,19 +326,14 @@ impl Db {
                 options,
                 available_parallelism()?.get().try_into().unwrap(),
             );
-            if let Some(available_fd) = available_file_descriptors()? {
-                if available_fd < 96 {
-                    rocksdb_options_destroy(options);
-                    return Err(io::Error::other(format!(
-                        "Oxigraph needs at least 96 file descriptors, \
-                                    only {available_fd} allowed. \
-                                    Run e.g. `ulimit -n 512` to allow 512 opened files"
-                    ))
-                    .into());
-                }
-                // macOS sometime set the number of available file descriptors as "unlimited" ie. INT_MAX
-                // We use 8192 in this case because the hard limit is 10240
-                let max_open_files = (available_fd - 48).try_into().unwrap_or(8192);
+            if let Some(max_open_files) = db_options.max_open_files {
+                rocksdb_options_set_max_open_files(options, max_open_files);
+            } else if let Some(available_fd) = available_file_descriptors()? {
+                let max_open_files = Self::max_open_files_from_fd_limit(
+                    available_fd,
+                    db_options.fd_reserve.unwrap_or(Self::DEFAULT_FD_RESERVE),
+                )
+                .inspect_err(|_| rocksdb_options_destroy(options))?;
                 rocksdb_options_set_max_open_files(options, max_open_files);
             }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
@@ -346,6 +351,22 @@ impl Db {
             );
             Ok(options)
         }
+    }
+
+    fn max_open_files_from_fd_limit(available_fd: u64, fd_reserve: u32) -> io::Result<i32> {
+        let fd_reserve = u64::from(fd_reserve);
+        let minimum_fd = fd_reserve + Self::MINIMUM_MAX_OPEN_FILES;
+        if available_fd < minimum_fd {
+            return Err(io::Error::other(format!(
+                "Oxigraph needs at least {minimum_fd} file descriptors when reserving \
+                {fd_reserve} descriptors for non-RocksDB usage, \
+                only {available_fd} allowed. \
+                Run e.g. `ulimit -n 512` to allow 512 opened files"
+            )));
+        }
+        // macOS sometime set the number of available file descriptors as "unlimited" i.e. UINT64_MAX
+        // We use 8192 in this case because the hard limit is typically around 10240.
+        Ok((available_fd - fd_reserve).try_into().unwrap_or(8192))
     }
 
     fn column_families_names_and_options(
@@ -1234,7 +1255,7 @@ fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
 }
 
 #[cfg(unix)]
-fn available_file_descriptors() -> io::Result<Option<libc::rlim_t>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     let mut rlimit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
@@ -1247,11 +1268,36 @@ fn available_file_descriptors() -> io::Result<Option<libc::rlim_t>> {
 }
 
 #[cfg(windows)]
-fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(Some(512)) // https://docs.microsoft.com/en-us/cpp/c-runtime-library/file-handling
 }
 
 #[cfg(not(any(unix, windows)))]
-fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Db;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn max_open_files_from_fd_limit_default_reserve() {
+        assert_eq!(
+            Db::max_open_files_from_fd_limit(512, Db::DEFAULT_FD_RESERVE).unwrap(),
+            464
+        );
+    }
+
+    #[test]
+    fn max_open_files_from_fd_limit_custom_reserve() {
+        assert_eq!(Db::max_open_files_from_fd_limit(512, 128).unwrap(), 384);
+    }
+
+    #[test]
+    fn max_open_files_from_fd_limit_requires_minimum_fds() {
+        let error = Db::max_open_files_from_fd_limit(95, Db::DEFAULT_FD_RESERVE).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Other);
+    }
 }

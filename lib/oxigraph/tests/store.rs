@@ -5,6 +5,8 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use oxigraph::store::StoreOptions;
 use std::error::Error;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::fs::remove_dir_all;
@@ -141,6 +143,25 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::new()?;
     let store = Store::open(&dir)?;
+    store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
+    for q in quads(GraphNameRef::DefaultGraph) {
+        assert!(store.contains(q)?);
+    }
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_load_graph_on_disk_with_options() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open_with_options(
+        &dir,
+        StoreOptions {
+            max_open_files: Some(128),
+            fd_reserve: Some(64),
+        },
+    )?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);

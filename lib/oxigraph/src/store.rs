@@ -36,6 +36,8 @@ use crate::sparql::{
     Query, QueryEvaluationError, QueryExplanation, QueryResults, SparqlEvaluator, Update,
     UpdateEvaluationError,
 };
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use crate::storage::StorageOptions;
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::map_thread_result;
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
@@ -103,6 +105,30 @@ pub struct Store {
     storage: Storage,
 }
 
+/// Options used when opening an on-disk [`Store`].
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StoreOptions {
+    /// Maximum number of files that RocksDB keeps open.
+    ///
+    /// If set to `None`, Oxigraph derives this value from the process file descriptor limit.
+    pub max_open_files: Option<i32>,
+    /// Number of file descriptors to reserve for non-RocksDB usage when deriving `max_open_files`.
+    ///
+    /// The default reserve is `48` to preserve the historical behavior.
+    pub fd_reserve: Option<u32>,
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+impl From<StoreOptions> for StorageOptions {
+    fn from(value: StoreOptions) -> Self {
+        Self {
+            max_open_files: value.max_open_files,
+            fd_reserve: value.fd_reserve,
+        }
+    }
+}
+
 impl Store {
     /// New in-memory [`Store`] without RocksDB.
     pub fn new() -> Result<Self, StorageError> {
@@ -118,8 +144,23 @@ impl Store {
     /// use [`Store::open_read_only`].
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
+        Self::open_with_options(path, StoreOptions::default())
+    }
+
+    /// Opens a read-write [`Store`] with explicit RocksDB options and creates it if it does not exist yet.
+    ///
+    /// Only one read-write [`Store`] can exist at the same time.
+    /// If you want to have extra [`Store`] instance opened on the same data
+    /// use [`Store::open_read_only`].
+    ///
+    /// Lower `max_open_files` values reduce open file descriptor usage but might increase read I/O and cache misses.
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    pub fn open_with_options(
+        path: impl AsRef<Path>,
+        options: StoreOptions,
+    ) -> Result<Self, StorageError> {
         Ok(Self {
-            storage: Storage::open(path.as_ref())?,
+            storage: Storage::open_with_options(path.as_ref(), options.into())?,
         })
     }
 

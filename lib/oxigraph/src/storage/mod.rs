@@ -8,8 +8,8 @@ use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLook
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use crate::storage::rocksdb::{
     RocksDbChainedDecodingQuadIterator, RocksDbDecodingGraphIterator, RocksDbStorage,
-    RocksDbStorageBulkLoader, RocksDbStorageReadableTransaction, RocksDbStorageReader,
-    RocksDbStorageTransaction,
+    RocksDbStorageBulkLoader, RocksDbStorageOptions, RocksDbStorageReadableTransaction,
+    RocksDbStorageReader, RocksDbStorageTransaction,
 };
 use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -29,6 +29,13 @@ mod rocksdb_wrapper;
 pub mod small_string;
 
 pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct StorageOptions {
+    pub(crate) max_open_files: Option<i32>,
+    pub(crate) fd_reserve: Option<u32>,
+}
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -53,8 +60,19 @@ impl Storage {
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open(path: &Path) -> Result<Self, StorageError> {
+        Self::open_with_options(path, StorageOptions::default())
+    }
+
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    pub fn open_with_options(path: &Path, options: StorageOptions) -> Result<Self, StorageError> {
         Ok(Self {
-            kind: StorageKind::RocksDb(RocksDbStorage::open(path)?),
+            kind: StorageKind::RocksDb(RocksDbStorage::open_with_options(
+                path,
+                RocksDbStorageOptions {
+                    max_open_files: options.max_open_files,
+                    fd_reserve: options.fd_reserve,
+                },
+            )?),
         })
     }
 
