@@ -157,10 +157,9 @@ fn test_load_graph_on_disk_with_options() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::new()?;
     let store = Store::open_with_options(
         &dir,
-        StoreOptions {
-            max_open_files: Some(128),
-            fd_reserve: Some(64),
-        },
+        StoreOptions::default()
+            .with_max_open_files(128)
+            .with_fd_reserve(64),
     )?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {

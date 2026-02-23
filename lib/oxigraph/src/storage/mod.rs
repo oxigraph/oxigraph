@@ -60,7 +60,9 @@ impl Storage {
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open(path: &Path) -> Result<Self, StorageError> {
-        Self::open_with_options(path, StorageOptions::default())
+        Ok(Self {
+            kind: StorageKind::RocksDb(RocksDbStorage::open(path)?),
+        })
     }
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
