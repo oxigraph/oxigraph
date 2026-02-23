@@ -235,7 +235,7 @@ fn main() {
 #[cfg(feature = "pkg-config")]
 fn main() {
     let library = pkg_config::Config::new()
-        .atleast_version("8.0.0")
+        .atleast_version("10.9.0")
         .probe("rocksdb")
         .unwrap();
     build_rocksdb_api(&library.include_paths);
