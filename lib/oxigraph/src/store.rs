@@ -152,15 +152,15 @@ impl StoreOptions {
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 impl From<StoreOptions> for StorageOptions {
     fn from(value: StoreOptions) -> Self {
-        Self {
-            max_open_files: value
+        Self::new(
+            value
                 .max_open_files
                 .map(|max_open_files| match max_open_files {
                     StoreMaxOpenFiles::Limited(value) => value.try_into().unwrap_or(i32::MAX),
                     StoreMaxOpenFiles::Unlimited => -1,
                 }),
-            fd_reserve: value.fd_reserve,
-        }
+            value.fd_reserve,
+        )
     }
 }
 

@@ -33,8 +33,18 @@ pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct StorageOptions {
-    pub(crate) max_open_files: Option<i32>,
-    pub(crate) fd_reserve: Option<u32>,
+    max_open_files: Option<i32>,
+    fd_reserve: Option<u32>,
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+impl StorageOptions {
+    pub(crate) fn new(max_open_files: Option<i32>, fd_reserve: Option<u32>) -> Self {
+        Self {
+            max_open_files,
+            fd_reserve,
+        }
+    }
 }
 
 /// Low level storage primitives
