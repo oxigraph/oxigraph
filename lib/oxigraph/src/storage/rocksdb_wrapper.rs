@@ -1105,9 +1105,8 @@ impl Iter<'_> {
     pub fn key(&self) -> Option<&[u8]> {
         if self.is_valid() {
             unsafe {
-                let mut len = 0;
-                let val = rocksdb_iter_key(self.inner, &raw mut len);
-                Some(slice::from_raw_parts(val.cast(), len))
+                let key = rocksdb_iter_key_slice(self.inner);
+                Some(slice::from_raw_parts(key.data.cast(), key.size))
             }
         } else {
             None
