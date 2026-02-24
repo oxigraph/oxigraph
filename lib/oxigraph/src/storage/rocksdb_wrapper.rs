@@ -479,24 +479,20 @@ impl Db {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                DbKind::ReadOnly(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len(),
-                    ))
-                }
-                DbKind::ReadWrite(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
+                DbKind::ReadOnly(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    db.db,
+                    db.read_options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len(),
+                )),
+                DbKind::ReadWrite(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    db.db,
+                    db.read_options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
             }?;
             Ok(if slice.is_null() {
                 None
@@ -727,24 +723,20 @@ impl<'a> Reader<'a> {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                InnerReader::ReadOnly(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
-                InnerReader::ReadWrite(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
+                InnerReader::ReadOnly(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    inner.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
+                InnerReader::ReadWrite(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    inner.db.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
                 InnerReader::Transaction(inner) => {
                     ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
                         inner.batch,
@@ -991,12 +983,12 @@ impl ReadableTransaction<'_> {
     }
 }
 
-pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
+pub struct PinnableSlice(*mut rocksdb_pinnable_handle_t);
 
 impl Drop for PinnableSlice {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_pinnableslice_destroy(self.0);
+            rocksdb_pinnable_handle_destroy(self.0);
         }
     }
 }
@@ -1007,7 +999,7 @@ impl Deref for PinnableSlice {
     fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnableslice_value(self.0, &raw mut len);
+            let val = rocksdb_pinnable_handle_get_value(self.0, &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
     }

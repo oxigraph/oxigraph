@@ -39,7 +39,7 @@ struct rocksdb_ingestexternalfileoptions_t {
   IngestExternalFileOptions rep;
 };
 
-struct rocksdb_pinnableslice_t {
+struct rocksdb_pinnable_handle_t {
   PinnableSlice rep;
 };
 
@@ -88,13 +88,13 @@ oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
   return result;
 }
 
-rocksdb_pinnableslice_t*
+rocksdb_pinnable_handle_t*
 oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
     const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family, const char* key,
     size_t keylen, char** errptr) {
-  rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+  rocksdb_pinnable_handle_t* v = new (rocksdb_pinnable_handle_t);
   Status s = wbwi->rep->GetFromBatchAndDB(
       db->rep, options->rep, column_family->rep, Slice(key, keylen), &v->rep);
   if (!s.ok()) {
