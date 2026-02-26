@@ -909,7 +909,6 @@ impl<R> InternalRdfXmlParser<R> {
             Resource,
             #[cfg(feature = "rdf-12")]
             Triple,
-            Other,
         }
 
         #[derive(PartialEq, Eq)]
@@ -1066,7 +1065,12 @@ impl<R> InternalRdfXmlParser<R> {
                         "Resource" => RdfXmlParseType::Resource,
                         #[cfg(feature = "rdf-12")]
                         "Triple" => RdfXmlParseType::Triple,
-                        _ => RdfXmlParseType::Other,
+                        t => {
+                            return Err(RdfXmlSyntaxError::msg(format!(
+                                "'{t}' is not a valid value of rdf:parseType"
+                            ))
+                            .into());
+                        }
                     };
                 } else if cfg!(feature = "rdf-12") && *attribute_url == *RDF_VERSION {
                     #[cfg(feature = "rdf-12")]
@@ -1411,23 +1415,6 @@ impl<R> InternalRdfXmlParser<R> {
                         #[cfg(feature = "rdf-12")]
                         rdf_version,
                         triples: Vec::new(),
-                    },
-                    RdfXmlParseType::Other => RdfXmlState::ParseTypeLiteralPropertyElt {
-                        iri,
-                        base_iri,
-                        language,
-                        #[cfg(feature = "rdf-12")]
-                        base_direction,
-                        subject,
-                        writer: Writer::new(Vec::default()),
-                        id_attr,
-                        #[cfg(feature = "rdf-12")]
-                        annotation_attr,
-                        #[cfg(feature = "rdf-12")]
-                        annotation_node_id_attr,
-                        emit: false,
-                        #[cfg(feature = "rdf-12")]
-                        rdf_version,
                     },
                 }
             }
