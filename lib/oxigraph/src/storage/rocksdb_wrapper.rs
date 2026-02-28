@@ -479,24 +479,20 @@ impl Db {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                DbKind::ReadOnly(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len(),
-                    ))
-                }
-                DbKind::ReadWrite(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
+                DbKind::ReadOnly(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    db.db,
+                    db.read_options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len(),
+                )),
+                DbKind::ReadWrite(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    db.db,
+                    db.read_options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
             }?;
             Ok(if slice.is_null() {
                 None
@@ -511,7 +507,40 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
+        unsafe {
+            let mut buffer = 0_u8;
+            let mut value_len = 0;
+            let mut found = 0;
+            match &self.inner {
+                DbKind::ReadOnly(db) => {
+                    ffi_result!(rocksdb_get_into_buffer_cf(
+                        db.db,
+                        db.read_options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        (&raw mut buffer).cast(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))?;
+                }
+                DbKind::ReadWrite(db) => {
+                    ffi_result!(rocksdb_get_into_buffer_cf(
+                        db.db,
+                        db.read_options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        (&raw mut buffer).cast(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))?;
+                }
+            }
+            Ok(found != 0)
+        }
     }
 
     pub fn insert(
@@ -727,24 +756,20 @@ impl<'a> Reader<'a> {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                InnerReader::ReadOnly(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
-                InnerReader::ReadWrite(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
+                InnerReader::ReadOnly(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    inner.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
+                InnerReader::ReadWrite(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                    inner.db.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len()
+                )),
                 InnerReader::Transaction(inner) => {
                     ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
                         inner.batch,
@@ -769,7 +794,42 @@ impl<'a> Reader<'a> {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
+        unsafe {
+            let mut buffer = 0_u8;
+            let mut value_len = 0;
+            let mut found = 0;
+            match &self.inner {
+                InnerReader::ReadOnly(inner) => {
+                    ffi_result!(rocksdb_get_into_buffer_cf(
+                        inner.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        (&raw mut buffer).cast(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))?;
+                    Ok(found != 0)
+                }
+                InnerReader::ReadWrite(inner) => {
+                    ffi_result!(rocksdb_get_into_buffer_cf(
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        (&raw mut buffer).cast(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))?;
+                    Ok(found != 0)
+                }
+                InnerReader::Transaction(_) => Ok(self.get(column_family, key)?.is_some()),
+            }
+        }
     }
 
     #[expect(clippy::iter_not_returning_iterator)]
@@ -991,12 +1051,12 @@ impl ReadableTransaction<'_> {
     }
 }
 
-pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
+pub struct PinnableSlice(*mut rocksdb_pinnable_handle_t);
 
 impl Drop for PinnableSlice {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_pinnableslice_destroy(self.0);
+            rocksdb_pinnable_handle_destroy(self.0);
         }
     }
 }
@@ -1007,7 +1067,7 @@ impl Deref for PinnableSlice {
     fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnableslice_value(self.0, &raw mut len);
+            let val = rocksdb_pinnable_handle_get_value(self.0, &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
     }
@@ -1113,9 +1173,8 @@ impl Iter<'_> {
     pub fn key(&self) -> Option<&[u8]> {
         if self.is_valid() {
             unsafe {
-                let mut len = 0;
-                let val = rocksdb_iter_key(self.inner, &raw mut len);
-                Some(slice::from_raw_parts(val.cast(), len))
+                let key = rocksdb_iter_key_slice(self.inner);
+                Some(slice::from_raw_parts(key.data.cast(), key.size))
             }
         } else {
             None
@@ -1254,4 +1313,46 @@ fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
 #[cfg(not(any(unix, windows)))]
 fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    #[expect(clippy::panic_in_result_fn)]
+    fn contains_key_handles_empty_and_non_empty_values() -> Result<(), StorageError> {
+        let dir = TempDir::new()?;
+        let db = Db::open_read_write(dir.path(), vec![])?;
+        let default_cf = db.column_family("default")?;
+
+        assert!(!db.contains_key(&default_cf, b"missing")?);
+
+        db.insert(&default_cf, b"empty", &[])?;
+        db.insert(&default_cf, b"non-empty", b"value")?;
+        db.flush()?;
+
+        assert!(db.contains_key(&default_cf, b"empty")?);
+        assert!(db.contains_key(&default_cf, b"non-empty")?);
+        assert!(!db.contains_key(&default_cf, b"missing")?);
+
+        let rw_reader = db.snapshot();
+        assert!(rw_reader.contains_key(&default_cf, b"empty")?);
+        assert!(rw_reader.contains_key(&default_cf, b"non-empty")?);
+        assert!(!rw_reader.contains_key(&default_cf, b"missing")?);
+
+        let ro_db = Db::open_read_only(dir.path(), vec![])?;
+        let ro_default_cf = ro_db.column_family("default")?;
+        assert!(ro_db.contains_key(&ro_default_cf, b"empty")?);
+        assert!(ro_db.contains_key(&ro_default_cf, b"non-empty")?);
+        assert!(!ro_db.contains_key(&ro_default_cf, b"missing")?);
+
+        let ro_reader = ro_db.snapshot();
+        assert!(ro_reader.contains_key(&ro_default_cf, b"empty")?);
+        assert!(ro_reader.contains_key(&ro_default_cf, b"non-empty")?);
+        assert!(!ro_reader.contains_key(&ro_default_cf, b"missing")?);
+
+        Ok(())
+    }
 }

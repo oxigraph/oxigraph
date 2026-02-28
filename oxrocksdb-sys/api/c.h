@@ -22,12 +22,12 @@ oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_iterator_t* base_iterator,
     const rocksdb_readoptions_t* options, rocksdb_column_family_handle_t* cf);
 
-extern ROCKSDB_LIBRARY_API rocksdb_pinnableslice_t*
+extern ROCKSDB_LIBRARY_API rocksdb_pinnable_handle_t*
 oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
     const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family, const char* key,
-    size_t keylen, char** errptr);  // TODO: remove when targeting 10.3+
+    size_t keylen, char** errptr);
 
 extern ROCKSDB_LIBRARY_API rocksdb_readoptions_t*
 oxrocksdb_readoptions_create_copy(rocksdb_readoptions_t*);
