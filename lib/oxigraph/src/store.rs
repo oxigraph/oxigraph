@@ -36,6 +36,8 @@ use crate::sparql::{
     Query, QueryEvaluationError, QueryExplanation, QueryResults, SparqlEvaluator, Update,
     UpdateEvaluationError,
 };
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use crate::storage::StorageOptions;
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::map_thread_result;
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
@@ -103,6 +105,65 @@ pub struct Store {
     storage: Storage,
 }
 
+/// Options used when opening an on-disk [`Store`].
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StoreOptions {
+    max_open_files: Option<StoreMaxOpenFiles>,
+    fd_reserve: Option<u32>,
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StoreMaxOpenFiles {
+    Limited(u32),
+    Unlimited,
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+impl StoreOptions {
+    /// Sets the maximum number of files that RocksDB keeps open.
+    ///
+    /// If the value is greater than [`i32::MAX`], it is clamped to [`i32::MAX`].
+    #[must_use]
+    pub fn with_max_open_files(mut self, max_open_files: u32) -> Self {
+        self.max_open_files = Some(StoreMaxOpenFiles::Limited(max_open_files));
+        self
+    }
+
+    /// Configures RocksDB to keep files opened (equivalent to RocksDB `max_open_files = -1`).
+    #[must_use]
+    pub fn with_unlimited_max_open_files(mut self) -> Self {
+        self.max_open_files = Some(StoreMaxOpenFiles::Unlimited);
+        self
+    }
+
+    /// Sets the number of file descriptors reserved for non-RocksDB usage when deriving
+    /// `max_open_files` from the process file descriptor limit.
+    ///
+    /// The default reserve is `48` to preserve the historical behavior.
+    #[must_use]
+    pub fn with_fd_reserve(mut self, fd_reserve: u32) -> Self {
+        self.fd_reserve = Some(fd_reserve);
+        self
+    }
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+impl From<StoreOptions> for StorageOptions {
+    fn from(value: StoreOptions) -> Self {
+        Self::new(
+            value
+                .max_open_files
+                .map(|max_open_files| match max_open_files {
+                    StoreMaxOpenFiles::Limited(value) => value.try_into().unwrap_or(i32::MAX),
+                    StoreMaxOpenFiles::Unlimited => -1,
+                }),
+            value.fd_reserve,
+        )
+    }
+}
+
 impl Store {
     /// New in-memory [`Store`] without RocksDB.
     pub fn new() -> Result<Self, StorageError> {
@@ -120,6 +181,23 @@ impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
+        })
+    }
+
+    /// Opens a read-write [`Store`] with explicit RocksDB options and creates it if it does not exist yet.
+    ///
+    /// Only one read-write [`Store`] can exist at the same time.
+    /// If you want to have extra [`Store`] instance opened on the same data
+    /// use [`Store::open_read_only`].
+    ///
+    /// Lower `max_open_files` values reduce open file descriptor usage but might increase read I/O and cache misses.
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    pub fn open_with_options(
+        path: impl AsRef<Path>,
+        options: StoreOptions,
+    ) -> Result<Self, StorageError> {
+        Ok(Self {
+            storage: Storage::open_with_options(path.as_ref(), options.into())?,
         })
     }
 
