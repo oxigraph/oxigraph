@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
@@ -19,7 +19,7 @@ use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::algebra::GraphPattern;
-use spargebra::{Query, SparqlParser};
+use spargebra::{Query, SparqlParser, SparqlParser2};
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use sparopt::Optimizer;
 use std::collections::HashMap;
@@ -101,6 +101,10 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
         .with_base_iri(query_file)?
         .parse_query(&read_file_to_string(query_file)?)
         .context("Not able to parse")?;
+    SparqlParser2::new()
+        .with_base_iri(query_file)?
+        .parse_query(&read_file_to_string(query_file)?)
+        .map_err(|e| anyhow!("Failed to parse: {e}"))?;
     SparqlParser::new()
         .parse_query(&query.to_string())
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
@@ -173,6 +177,10 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         .with_base_iri(query_file)?
         .parse_query(&read_file_to_string(query_file)?)
         .context("Failure to parse query")?;
+    SparqlParser2::new()
+        .with_base_iri(query_file)?
+        .parse_query(&read_file_to_string(query_file)?)
+        .map_err(|e| anyhow!("Failed to parse: {e}"))?;
 
     // We check parsing roundtrip
     SparqlParser::new()
