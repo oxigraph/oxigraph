@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
@@ -19,7 +19,7 @@ use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::algebra::GraphPattern;
-use spargebra::{Query, SparqlParser};
+use spargebra::{Query, SparqlParser, SparqlParser2};
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use sparopt::Optimizer;
 use std::collections::HashMap;
@@ -101,6 +101,10 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
         .with_base_iri(query_file)?
         .parse_query(&read_file_to_string(query_file)?)
         .context("Not able to parse")?;
+    SparqlParser2::new()
+        .with_base_iri(query_file)?
+        .parse_query(&read_file_to_string(query_file)?)
+        .map_err(|e| anyhow!("Failed to parse: {e}"))?;
     SparqlParser::new()
         .parse_query(&query.to_string())
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
@@ -111,6 +115,13 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     let query_file = test.action.as_deref().context("No action found")?;
     ensure!(
         SparqlParser::new()
+            .with_base_iri(query_file)?
+            .parse_query(&read_file_to_string(query_file)?)
+            .is_err(),
+        "Oxigraph parses even if it should not."
+    );
+    ensure!(
+        SparqlParser2::new()
             .with_base_iri(query_file)?
             .parse_query(&read_file_to_string(query_file)?)
             .is_err(),
@@ -169,10 +180,10 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         load_to_dataset(value, &mut dataset, name.clone())?;
     }
     let query_file = test.query.as_deref().context("No action found")?;
-    let query = SparqlParser::new()
+    let query = SparqlParser2::new()
         .with_base_iri(query_file)?
         .parse_query(&read_file_to_string(query_file)?)
-        .context("Failure to parse query")?;
+        .map_err(|e| anyhow!("Failed to parse: {e}"))?;
 
     // We check parsing roundtrip
     SparqlParser::new()
@@ -232,6 +243,10 @@ fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     SparqlParser::new()
         .parse_update(&update.to_string())
         .with_context(|| format!("Failure to deserialize \"{update}\""))?;
+    SparqlParser2::new()
+        .with_base_iri(update_file)?
+        .parse_update(&read_file_to_string(update_file)?)
+        .context("Not able to parse")?;
     Ok(())
 }
 
@@ -239,6 +254,13 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test.action.as_deref().context("No action found")?;
     ensure!(
         SparqlParser::new()
+            .with_base_iri(update_file)?
+            .parse_update(&read_file_to_string(update_file)?)
+            .is_err(),
+        "Oxigraph parses even if it should not."
+    );
+    ensure!(
+        SparqlParser2::new()
             .with_base_iri(update_file)?
             .parse_update(&read_file_to_string(update_file)?)
             .is_err(),
@@ -265,7 +287,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     }
 
     let update_file = test.update.as_deref().context("No action found")?;
-    let update = SparqlParser::new()
+    let update = SparqlParser2::new()
         .with_base_iri(update_file)?
         .parse_update(&read_file_to_string(update_file)?)
         .context("Failure to parse update")?;

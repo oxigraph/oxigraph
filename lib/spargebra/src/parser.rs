@@ -186,7 +186,7 @@ enum SparqlSyntaxErrorKind {
 }
 
 #[cfg(feature = "standard-unicode-escaping")]
-fn unescape_unicode_codepoints(input: &str) -> Cow<'_, str> {
+pub(crate) fn unescape_unicode_codepoints(input: &str) -> Cow<'_, str> {
     if needs_unescape_unicode_codepoints(input) {
         UnescapeUnicodeCharIterator::new(input).collect()
     } else {
