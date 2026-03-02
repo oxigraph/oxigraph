@@ -1753,7 +1753,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 let silent = *silent;
                 let service_name =
                     TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset)?;
-                self.build_graph_pattern_evaluator(inner, encoded_variables, &mut Vec::new())?; // We call recursively to fill "encoded_variables"
+                inner.lookup_used_variables(&mut |v| {
+                    encode_variable(encoded_variables, v);
+                }); // We fill "encoded_variables"
                 let graph_pattern = spargebra::algebra::GraphPattern::from(inner.as_ref());
                 let variables = Rc::from(encoded_variables.as_slice());
                 let eval = self.clone();
