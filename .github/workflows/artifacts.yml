@@ -78,7 +78,6 @@ jobs:
         with:
           name: oxigraph_${{ matrix.arch }}_linux_gnu
           path: oxigraph-*.data/scripts/oxigraph
-          archive: false
       - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_linux_gnu
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v2
@@ -162,7 +161,6 @@ jobs:
         with:
           name: oxigraph_${{ matrix.arch }}_apple
           path: oxigraph-*.data/scripts/oxigraph
-          archive: false
       - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_apple
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v2
@@ -228,7 +226,6 @@ jobs:
         with:
           name: oxigraph_${{ matrix.arch }}_windows
           path: oxigraph-*.data/scripts/oxigraph.exe
-          archive: false
       - run: mv oxigraph-*.data/scripts/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v2
