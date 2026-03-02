@@ -424,7 +424,7 @@ impl Optimizer {
                     filters.extend(expressions)
                 } else {
                     filters.push(expression)
-                };
+                }
                 Self::push_filters(*inner, filters, input_types)
             }
             GraphPattern::Union { inner } => GraphPattern::union_all(

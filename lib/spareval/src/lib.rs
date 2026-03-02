@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(doc, doc = include_str!("../README.md"))]
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
@@ -1179,7 +1179,7 @@ mod tests {
 
         // NamedNode has no EBV
         let iri = NamedNode::new("http://example.com/").unwrap();
-        let nn = Expression::from(iri.clone());
+        let nn = Expression::from(iri);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&nn, std::iter::empty()),
             None
