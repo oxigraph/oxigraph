@@ -2967,21 +2967,17 @@ impl JsonLdExpansionConverter {
         propagate: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> Option<JsonLdContext> {
-        active_context
-            .term_definitions
-            .get(active_property)
-            .and_then(|term_definition| {
-                Some(self.context_processor.process_context(
-                    active_context,
-                    term_definition.context.clone()?,
-                    term_definition.base_url.as_ref().or(self.base_url.as_ref()),
-                    &mut Vec::new(),
-                    override_protected,
-                    propagate,
-                    true,
-                    errors,
-                ))
-            })
+        let term_definition = active_context.term_definitions.get(active_property)?;
+        Some(self.context_processor.process_context(
+            active_context,
+            term_definition.context.clone()?,
+            term_definition.base_url.as_ref().or(self.base_url.as_ref()),
+            &mut Vec::new(),
+            override_protected,
+            propagate,
+            true,
+            errors,
+        ))
     }
 
     pub fn active_context(&self) -> &JsonLdContext {

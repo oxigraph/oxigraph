@@ -1939,7 +1939,7 @@ fn normalize_day(yr: i64, mo: i64, mut da: i64) -> Option<(i64, u8, u8)> {
             mo = mo2;
         } else {
             return Some((yr, mo, u8::try_from(da).ok()?));
-        };
+        }
     }
 }
 

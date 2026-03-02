@@ -685,7 +685,7 @@ impl N3Lexer {
             match str_from_utf8(&data[i..i + end], i..i + end) {
                 Ok(s) => string.push_str(s),
                 Err(e) => return Some((end, Err(e))),
-            };
+            }
             i += end;
             match data[i] {
                 c if c == delimiter => {
@@ -736,7 +736,7 @@ impl N3Lexer {
             match str_from_utf8(&data[i..i + end], i..i + end) {
                 Ok(s) => string.push_str(s),
                 Err(e) => return Some((end, Err(e))),
-            };
+            }
             i += end;
             match data[i] {
                 c if c == delimiter => {
@@ -918,7 +918,7 @@ impl N3Lexer {
     ) -> Result<Option<char>, TokenRecognizerError> {
         if data.len() < len {
             return Ok(None);
-        };
+        }
         let mut codepoint = 0;
         for i in 0..len {
             let c = data[i];

@@ -2116,8 +2116,8 @@ struct ExpressionContext<'a, E> {
     stat_children: &'a mut Vec<Rc<EvalNodeWithStats>>,
 }
 
-impl<'a, 'b, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
-    for ExpressionContext<'b, SimpleEvaluator<'a, D>>
+impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
+    for ExpressionContext<'_, SimpleEvaluator<'a, D>>
 {
     type Tuple = InternalTuple<D::InternalTerm>;
     type Term = D::InternalTerm;
@@ -2378,7 +2378,7 @@ impl<T: Clone + Eq + Hash> AccumulatorWrapper<'_, T> {
             Self::CountInternal { evaluator, count } => {
                 if evaluator(tuple).is_some() {
                     *count += 1;
-                };
+                }
             }
             Self::CountDistinctInternal {
                 seen,
@@ -2571,7 +2571,7 @@ impl Accumulator for MinAccumulator {
     }
 
     fn finish(&mut self) -> Option<ExpressionTerm> {
-        self.min.clone().and_then(|v| v)
+        self.min.clone()?
     }
 }
 
@@ -2593,7 +2593,7 @@ impl Accumulator for MaxAccumulator {
     }
 
     fn finish(&mut self) -> Option<ExpressionTerm> {
-        self.max.clone().and_then(|v| v)
+        self.max.clone()?
     }
 }
 
@@ -4115,9 +4115,8 @@ fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
     match selector {
         TripleTemplateValue::Constant(term) => Some(term.clone()),
         TripleTemplateValue::Variable(v) => {
-            tuple
-                .get(*v)
-                .and_then(|t| dataset.externalize_term(t.clone()).ok()) // TODO: raise error
+            let t = tuple.get(*v)?;
+            dataset.externalize_term(t.clone()).ok() // TODO: raise error
         }
         TripleTemplateValue::BlankNode(bnode) => {
             if *bnode >= bnodes.len() {

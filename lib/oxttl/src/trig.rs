@@ -13,6 +13,7 @@ use oxrdf::{
     TermRef,
 };
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::hash_map::Iter;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -904,7 +905,7 @@ impl TriGSerializer {
     pub fn low_level(self) -> LowLevelTriGSerializer {
         // We sort prefixes by decreasing length
         let mut prefixes = self.prefixes.into_iter().collect::<Vec<_>>();
-        prefixes.sort_unstable_by(|(_, l), (_, r)| r.len().cmp(&l.len()));
+        prefixes.sort_unstable_by_key(|(_, p)| Reverse(p.len()));
         LowLevelTriGSerializer {
             prefixes,
             base_iri: self.base_iri,

@@ -235,10 +235,10 @@ impl RdfFormat {
                 // We have a look at parameters
                 for (key, mut value) in parameters {
                     match key {
-                        "charset" => {
-                            if !UTF8_CHARSETS.iter().any(|c| c.eq_ignore_ascii_case(value)) {
-                                return None; // No other charset than UTF-8 is supported
-                            }
+                        "charset"
+                            if !UTF8_CHARSETS.iter().any(|c| c.eq_ignore_ascii_case(value)) =>
+                        {
+                            return None; // No other charset than UTF-8 is supported
                         }
                         "profile" => {
                             // We remove enclosing double quotes

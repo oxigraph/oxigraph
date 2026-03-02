@@ -44,14 +44,14 @@ impl<'a> DeleteInsertIter<'a> {
     }
 }
 
-impl<'a> Iterator for DeleteInsertIter<'a> {
+impl Iterator for DeleteInsertIter<'_> {
     type Item = Result<DeleteInsertQuad, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Result<DeleteInsertQuad, QueryEvaluationError>> {
         loop {
             if let Some(quad) = self.buffer.pop_front() {
                 return Some(Ok(quad));
-            };
+            }
             let solution = match self.solutions.next()? {
                 Ok(solution) => solution,
                 Err(e) => return Some(Err(e)),
