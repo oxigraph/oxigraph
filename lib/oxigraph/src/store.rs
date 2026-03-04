@@ -107,7 +107,7 @@ pub struct Store {
 
 /// Options used when opening an on-disk [`Store`].
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct StoreOptions {
     max_open_files: Option<StoreMaxOpenFiles>,
     fd_reserve: Option<u32>,
