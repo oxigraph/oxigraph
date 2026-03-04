@@ -479,14 +479,14 @@ impl Db {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                DbKind::ReadOnly(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                DbKind::ReadOnly(db) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
                     db.db,
                     db.read_options,
                     column_family.0,
                     key.as_ptr().cast(),
                     key.len(),
                 )),
-                DbKind::ReadWrite(db) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                DbKind::ReadWrite(db) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
                     db.db,
                     db.read_options,
                     column_family.0,
@@ -513,7 +513,7 @@ impl Db {
             let mut found = 0;
             match &self.inner {
                 DbKind::ReadOnly(db) => {
-                    ffi_result!(rocksdb_get_into_buffer_cf(
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
                         db.db,
                         db.read_options,
                         column_family.0,
@@ -526,7 +526,7 @@ impl Db {
                     ))?;
                 }
                 DbKind::ReadWrite(db) => {
-                    ffi_result!(rocksdb_get_into_buffer_cf(
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
                         db.db,
                         db.read_options,
                         column_family.0,
@@ -756,14 +756,14 @@ impl<'a> Reader<'a> {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.inner {
-                InnerReader::ReadOnly(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                InnerReader::ReadOnly(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
                     inner.db,
                     self.options,
                     column_family.0,
                     key.as_ptr().cast(),
                     key.len()
                 )),
-                InnerReader::ReadWrite(inner) => ffi_result!(rocksdb_get_pinned_cf_v2(
+                InnerReader::ReadWrite(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
                     inner.db.db,
                     self.options,
                     column_family.0,
@@ -800,7 +800,7 @@ impl<'a> Reader<'a> {
             let mut found = 0;
             match &self.inner {
                 InnerReader::ReadOnly(inner) => {
-                    ffi_result!(rocksdb_get_into_buffer_cf(
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
                         inner.db,
                         self.options,
                         column_family.0,
@@ -814,7 +814,7 @@ impl<'a> Reader<'a> {
                     Ok(found != 0)
                 }
                 InnerReader::ReadWrite(inner) => {
-                    ffi_result!(rocksdb_get_into_buffer_cf(
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
                         inner.db.db,
                         self.options,
                         column_family.0,
@@ -1051,12 +1051,12 @@ impl ReadableTransaction<'_> {
     }
 }
 
-pub struct PinnableSlice(*mut rocksdb_pinnable_handle_t);
+pub struct PinnableSlice(*mut oxrocksdb_pinnable_handle_t);
 
 impl Drop for PinnableSlice {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_pinnable_handle_destroy(self.0);
+            oxrocksdb_pinnable_handle_destroy(self.0);
         }
     }
 }
@@ -1067,7 +1067,7 @@ impl Deref for PinnableSlice {
     fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnable_handle_get_value(self.0, &raw mut len);
+            let val = oxrocksdb_pinnable_handle_get_value(self.0, &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
     }
@@ -1173,7 +1173,7 @@ impl Iter<'_> {
     pub fn key(&self) -> Option<&[u8]> {
         if self.is_valid() {
             unsafe {
-                let key = rocksdb_iter_key_slice(self.inner);
+                let key = oxrocksdb_iter_key_slice(self.inner);
                 Some(slice::from_raw_parts(key.data.cast(), key.size))
             }
         } else {

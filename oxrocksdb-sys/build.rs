@@ -33,6 +33,7 @@ fn bindgen_rocksdb_api(includes: &[PathBuf]) {
         .allowlist_function("rocksdb_.*")
         .allowlist_function("oxrocksdb_.*")
         .allowlist_type("rocksdb_.*")
+        .allowlist_type("oxrocksdb_.*")
         .allowlist_var("rocksdb_.*")
         .generate()
         .unwrap()
@@ -235,7 +236,7 @@ fn main() {
 #[cfg(feature = "pkg-config")]
 fn main() {
     let library = pkg_config::Config::new()
-        .atleast_version("10.9.0")
+        .atleast_version("8.0.0")
         .probe("rocksdb")
         .unwrap();
     build_rocksdb_api(&library.include_paths);
