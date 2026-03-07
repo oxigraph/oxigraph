@@ -1260,8 +1260,12 @@ fn available_file_descriptors() -> io::Result<Option<u64>> {
         rlim_cur: 0,
         rlim_max: 0,
     };
+    #[cfg_attr(target_pointer_width = "64", expect(clippy::useless_conversion))]
     if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut rlimit) } == 0 {
-        Ok(Some(min(rlimit.rlim_cur, rlimit.rlim_max)))
+        Ok(Some(min(
+            u64::from(rlimit.rlim_cur),
+            u64::from(rlimit.rlim_max),
+        )))
     } else {
         Err(io::Error::last_os_error())
     }
