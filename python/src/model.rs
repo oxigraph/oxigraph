@@ -608,11 +608,11 @@ impl PyDefaultGraph {
         Self {}
     }
 
-    fn __str__(&self) -> &str {
+    fn __str__(&self) -> &'static str {
         "DEFAULT"
     }
 
-    fn __repr__(&self) -> &str {
+    fn __repr__(&self) -> &'static str {
         "<DefaultGraph>"
     }
 

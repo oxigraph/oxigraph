@@ -33,6 +33,7 @@ fn bindgen_rocksdb_api(includes: &[PathBuf]) {
         .allowlist_function("rocksdb_.*")
         .allowlist_function("oxrocksdb_.*")
         .allowlist_type("rocksdb_.*")
+        .allowlist_type("oxrocksdb_.*")
         .allowlist_var("rocksdb_.*")
         .generate()
         .unwrap()

@@ -222,7 +222,7 @@ impl<'a> UnescapeUnicodeCharIterator<'a> {
 }
 
 #[cfg(feature = "standard-unicode-escaping")]
-impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
+impl Iterator for UnescapeUnicodeCharIterator<'_> {
     type Item = char;
 
     fn next(&mut self) -> Option<char> {

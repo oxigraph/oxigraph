@@ -372,7 +372,7 @@ impl JsonLdContextProcessor {
                                 format!("Invalid @vocab '{value}'"),
                                 JsonLdErrorCode::InvalidVocabMapping,
                             ));
-                        };
+                        }
                     }
                     _ => errors.push(JsonLdSyntaxError::msg_and_code(
                         "@vocab value must be a string",
@@ -440,7 +440,7 @@ impl JsonLdContextProcessor {
                         JsonLdErrorCode::InvalidPropagateValue,
                     ));
                     continue;
-                };
+                }
             }
             // 5.13)
             let mut protected = false;

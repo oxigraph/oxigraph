@@ -1,6 +1,6 @@
-import json
+import re
+import subprocess
 from pathlib import Path
-from urllib.request import urlopen
 
 import tomlkit
 
@@ -9,12 +9,15 @@ LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",
     "allow_attributes_without_reason",
+    "arbitrary_source_item_ordering",
     "arithmetic_side_effects",  # TODO: might be nice
     "as_conversions",
     "big_endian_bytes",
     "cargo_common_metadata",  # TODO: might be nice
+    "cognitive_complexity",
     "doc_markdown",  # Too many false positives
     "default_numeric_fallback",
+    "doc_paragraphs_missing_punctuation", # TODO: very verbose
     "else_if_without_else",
     "exhaustive_enums",
     "exhaustive_structs",
@@ -47,6 +50,7 @@ LINT_BLACKLIST = {
     "pub_use",
     "pub_with_shorthand",
     "question_mark_used",
+    "redundant_test_prefix", # TODO: might be nice
     "ref_option", # TODO: might be nice
     "self_named_module_files",  # TODO: might be nice
     "semicolon_if_nothing_returned",  # TODO: might be nice
@@ -69,12 +73,11 @@ LINT_BLACKLIST = {
 }
 
 lints = set()
-with urlopen(
-    f"https://rust-lang.github.io/rust-clippy/rust-{TARGET_VERSION}/lints.json"
-) as response:
-    for lint in json.load(response):
-        if lint["level"] == "allow" and lint["group"] != "nursery":
-            lints.add(lint["id"])
+clippy_help = subprocess.check_output(["cargo", "clippy", "--", "-W", "help"], cwd=Path(__file__).parent.parent / "lib" / "oxrdf").decode()
+nursery_lints = [match.group(1) for match in re.finditer('clippy::([a-z-]+)', re.search('\n *clippy::nursery *(clippy::[a-z-]+,? *)*', clippy_help).group(0))]
+for match in re.finditer(r'\n *clippy::([a-z-]+)  allow   ', clippy_help):
+    if match.group(1) not in nursery_lints:
+        lints.add(match.group(1).replace('-', '_'))
 
 for flag in LINT_BLACKLIST:
     if flag in lints:

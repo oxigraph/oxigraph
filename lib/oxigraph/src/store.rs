@@ -2021,7 +2021,7 @@ impl BulkLoader<'_> {
                                         swap(&mut batch, &mut batch_to_save);
                                         if sender.send(batch_to_save).is_err() {
                                             return Ok(());
-                                        };
+                                        }
                                     }
                                 }
                                 Err(e) => {

@@ -258,7 +258,7 @@ impl<'a> MemoryStorageReader<'a> {
                 return Err(
                     CorruptionError::new("Quad in named graph that does not exists").into(),
                 );
-            };
+            }
             next.clone_from(&current.previous);
         }
         if count_last_quad != expected_quad_len {
@@ -885,15 +885,11 @@ impl VersionRange {
             VersionRange::Bigger(range) => {
                 for start_end in range.chunks(2) {
                     match start_end {
-                        [start, end] => {
-                            if *start <= version && version < *end {
-                                return true;
-                            }
+                        [start, end] if *start <= version && version < *end => {
+                            return true;
                         }
-                        [start] => {
-                            if *start <= version {
-                                return true;
-                            }
+                        [start] if *start <= version => {
+                            return true;
                         }
                         _ => (),
                     }

@@ -1461,6 +1461,7 @@ fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNu
     Some(if !always_double && exp >= digits_count && exp < 21 {
         buffer.push_str(integer_part);
         buffer.push_str(decimal_part);
+        #[expect(clippy::map_with_unused_argument_over_ranges)]
         buffer.extend((0..(exp - digits_count)).map(|_| '0'));
         RdfJsonNumber::Integer(buffer)
     } else {

@@ -3,6 +3,7 @@
 #include <rocksdb/db.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 
+#include <cstring>
 #include <vector>
 
 using ROCKSDB_NAMESPACE::ColumnFamilyHandle;
@@ -39,7 +40,7 @@ struct rocksdb_ingestexternalfileoptions_t {
   IngestExternalFileOptions rep;
 };
 
-struct rocksdb_pinnableslice_t {
+struct oxrocksdb_pinnable_handle_t {
   PinnableSlice rep;
 };
 
@@ -88,13 +89,75 @@ oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
   return result;
 }
 
-rocksdb_pinnableslice_t*
+oxrocksdb_pinnable_handle_t* oxrocksdb_get_pinned_cf_v2(
+    rocksdb_t* db, const rocksdb_readoptions_t* options,
+    rocksdb_column_family_handle_t* column_family, const char* key,
+    size_t keylen, char** errptr) {
+  oxrocksdb_pinnable_handle_t* handle = new (oxrocksdb_pinnable_handle_t);
+  Status s = db->rep->Get(options->rep, column_family->rep, Slice(key, keylen),
+                          &handle->rep);
+  if (!s.ok()) {
+    delete handle;
+    if (!s.IsNotFound()) {
+      SaveError(errptr, s);
+    }
+    return nullptr;
+  }
+  return handle;
+}
+
+const char* oxrocksdb_pinnable_handle_get_value(
+    const oxrocksdb_pinnable_handle_t* handle, size_t* vallen) {
+  if (!handle) {
+    *vallen = 0;
+    return nullptr;
+  }
+  *vallen = handle->rep.size();
+  return handle->rep.data();
+}
+
+void oxrocksdb_pinnable_handle_destroy(oxrocksdb_pinnable_handle_t* handle) {
+  delete handle;
+}
+
+unsigned char oxrocksdb_get_into_buffer_cf(
+    rocksdb_t* db, const rocksdb_readoptions_t* options,
+    rocksdb_column_family_handle_t* column_family, const char* key,
+    size_t keylen, char* buffer, size_t buffer_size, size_t* vallen,
+    unsigned char* found, char** errptr) {
+  PinnableSlice pinnable_val;
+  Status s = db->rep->Get(options->rep, column_family->rep, Slice(key, keylen),
+                          &pinnable_val);
+  if (s.ok()) {
+    *found = 1;
+    *vallen = pinnable_val.size();
+    if (buffer_size >= pinnable_val.size()) {
+      memcpy(buffer, pinnable_val.data(), pinnable_val.size());
+      return 1;
+    }
+    return 0;
+  } else {
+    *found = 0;
+    *vallen = 0;
+    if (!s.IsNotFound()) {
+      SaveError(errptr, s);
+    }
+    return 0;
+  }
+}
+
+oxrocksdb_slice_t oxrocksdb_iter_key_slice(const rocksdb_iterator_t* iter) {
+  const Slice key = iter->rep->key();
+  return oxrocksdb_slice_t{key.data(), key.size()};
+}
+
+oxrocksdb_pinnable_handle_t*
 oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
     const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family, const char* key,
     size_t keylen, char** errptr) {
-  rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+  oxrocksdb_pinnable_handle_t* v = new (oxrocksdb_pinnable_handle_t);
   Status s = wbwi->rep->GetFromBatchAndDB(
       db->rep, options->rep, column_family->rep, Slice(key, keylen), &v->rep);
   if (!s.ok()) {

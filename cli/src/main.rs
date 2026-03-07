@@ -1155,7 +1155,7 @@ fn base_url(request: &Request<Body>) -> String {
             if path_and_query.query().is_some() {
                 *path_and_query = PathAndQuery::try_from(path_and_query.path()).unwrap();
             }
-        };
+        }
         Uri::from_parts(parts).unwrap().to_string()
     } else {
         uri.to_string()
