@@ -1369,7 +1369,7 @@ mod tests {
     #[expect(clippy::panic_in_result_fn)]
     fn contains_key_handles_empty_and_non_empty_values() -> Result<(), StorageError> {
         let dir = TempDir::new()?;
-        let db = Db::open_read_write(dir.path(), vec![])?;
+        let db = Db::open_read_write(dir.path(), vec![], DbOptions::default())?;
         let default_cf = db.column_family("default")?;
 
         assert!(!db.contains_key(&default_cf, b"missing")?);
