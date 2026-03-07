@@ -477,29 +477,24 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<Option<PinnableSlice>, StorageError> {
-        unsafe {
-            let slice = match &self.inner {
-                DbKind::ReadOnly(db) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
-                    db.db,
-                    db.read_options,
-                    column_family.0,
-                    key.as_ptr().cast(),
-                    key.len(),
-                )),
-                DbKind::ReadWrite(db) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
-                    db.db,
-                    db.read_options,
-                    column_family.0,
-                    key.as_ptr().cast(),
-                    key.len()
-                )),
-            }?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
+        let (db, read_options) = match &self.inner {
+            DbKind::ReadOnly(db) => (db.db, db.read_options),
+            DbKind::ReadWrite(db) => (db.db, db.read_options),
+        };
+        let slice = unsafe {
+            ffi_result!(oxrocksdb_get_pinned_cf_v2(
+                db,
+                read_options,
+                column_family.0,
+                key.as_ptr().cast(),
+                key.len(),
+            ))
+        }?;
+        Ok(if slice.is_null() {
+            None
+        } else {
+            Some(PinnableSlice(slice))
+        })
     }
 
     pub fn contains_key(
@@ -507,40 +502,26 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
+        let (db, read_options) = match &self.inner {
+            DbKind::ReadOnly(db) => (db.db, db.read_options),
+            DbKind::ReadWrite(db) => (db.db, db.read_options),
+        };
+        let mut value_len = 0;
+        let mut found = 0;
         unsafe {
-            let mut buffer = 0_u8;
-            let mut value_len = 0;
-            let mut found = 0;
-            match &self.inner {
-                DbKind::ReadOnly(db) => {
-                    ffi_result!(oxrocksdb_get_into_buffer_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len(),
-                        (&raw mut buffer).cast(),
-                        0,
-                        &raw mut value_len,
-                        &raw mut found
-                    ))?;
-                }
-                DbKind::ReadWrite(db) => {
-                    ffi_result!(oxrocksdb_get_into_buffer_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len(),
-                        (&raw mut buffer).cast(),
-                        0,
-                        &raw mut value_len,
-                        &raw mut found
-                    ))?;
-                }
-            }
-            Ok(found != 0)
-        }
+            ffi_result!(oxrocksdb_get_into_buffer_cf(
+                db,
+                read_options,
+                column_family.0,
+                key.as_ptr().cast(),
+                key.len(),
+                ptr::null_mut(),
+                0,
+                &raw mut value_len,
+                &raw mut found
+            ))
+        }?;
+        Ok(found != 0)
     }
 
     pub fn insert(
@@ -593,7 +574,7 @@ impl Db {
         };
         unsafe {
             rocksdb_compact_range_cf_opt(
-                db.db.cast(),
+                db.db,
                 column_family.0,
                 db.compaction_options,
                 ptr::null(),
@@ -749,55 +730,14 @@ impl Drop for Reader<'_> {
 }
 
 impl<'a> Reader<'a> {
-    pub fn get(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-    ) -> Result<Option<PinnableSlice>, StorageError> {
-        unsafe {
-            let slice = match &self.inner {
-                InnerReader::ReadOnly(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
-                    inner.db,
-                    self.options,
-                    column_family.0,
-                    key.as_ptr().cast(),
-                    key.len()
-                )),
-                InnerReader::ReadWrite(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
-                    inner.db.db,
-                    self.options,
-                    column_family.0,
-                    key.as_ptr().cast(),
-                    key.len()
-                )),
-                InnerReader::Transaction(inner) => {
-                    ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
-                        inner.batch,
-                        inner.db.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
-            }?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
-    }
-
     pub fn contains_key(
         &self,
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
+        let mut value_len = 0;
+        let mut found = 0;
         unsafe {
-            let mut buffer = 0_u8;
-            let mut value_len = 0;
-            let mut found = 0;
             match &self.inner {
                 InnerReader::ReadOnly(inner) => {
                     ffi_result!(oxrocksdb_get_into_buffer_cf(
@@ -806,12 +746,11 @@ impl<'a> Reader<'a> {
                         column_family.0,
                         key.as_ptr().cast(),
                         key.len(),
-                        (&raw mut buffer).cast(),
+                        ptr::null_mut(),
                         0,
                         &raw mut value_len,
                         &raw mut found
-                    ))?;
-                    Ok(found != 0)
+                    ))
                 }
                 InnerReader::ReadWrite(inner) => {
                     ffi_result!(oxrocksdb_get_into_buffer_cf(
@@ -820,16 +759,29 @@ impl<'a> Reader<'a> {
                         column_family.0,
                         key.as_ptr().cast(),
                         key.len(),
-                        (&raw mut buffer).cast(),
+                        ptr::null_mut(),
                         0,
                         &raw mut value_len,
                         &raw mut found
-                    ))?;
-                    Ok(found != 0)
+                    ))
                 }
-                InnerReader::Transaction(_) => Ok(self.get(column_family, key)?.is_some()),
+                InnerReader::Transaction(inner) => {
+                    ffi_result!(oxrocksdb_writebatch_wi_get_into_buffer_cf(
+                        inner.batch,
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        ptr::null_mut(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))
+                }
             }
-        }
+        }?;
+        Ok(found != 0)
     }
 
     #[expect(clippy::iter_not_returning_iterator)]

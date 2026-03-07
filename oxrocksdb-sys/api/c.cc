@@ -151,24 +151,34 @@ oxrocksdb_slice_t oxrocksdb_iter_key_slice(const rocksdb_iterator_t* iter) {
   return oxrocksdb_slice_t{key.data(), key.size()};
 }
 
-oxrocksdb_pinnable_handle_t*
-oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
+unsigned char oxrocksdb_writebatch_wi_get_into_buffer_cf(
     rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
     const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family, const char* key,
-    size_t keylen, char** errptr) {
-  oxrocksdb_pinnable_handle_t* v = new (oxrocksdb_pinnable_handle_t);
-  Status s = wbwi->rep->GetFromBatchAndDB(
-      db->rep, options->rep, column_family->rep, Slice(key, keylen), &v->rep);
-  if (!s.ok()) {
-    delete (v);
+    size_t keylen, char* buffer, size_t buffer_size, size_t* vallen,
+    unsigned char* found, char** errptr) {
+  PinnableSlice pinnable_val;
+  Status s =
+      wbwi->rep->GetFromBatchAndDB(db->rep, options->rep, column_family->rep,
+                                   Slice(key, keylen), &pinnable_val);
+  if (s.ok()) {
+    *found = 1;
+    *vallen = pinnable_val.size();
+    if (buffer_size >= pinnable_val.size()) {
+      memcpy(buffer, pinnable_val.data(), pinnable_val.size());
+      return 1;
+    }
+    return 0;
+  } else {
+    *found = 0;
+    *vallen = 0;
     if (!s.IsNotFound()) {
       SaveError(errptr, s);
     }
-    return nullptr;
+    return 0;
   }
-  return v;
 }
+
 rocksdb_readoptions_t* oxrocksdb_readoptions_create_copy(
     rocksdb_readoptions_t* options) {
   return new rocksdb_readoptions_t(*options);
