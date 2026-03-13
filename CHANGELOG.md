@@ -1,3 +1,13 @@
+# [0.5.6] - 2026-03-14
+
+### Changed
+- SPARQL: DESCRIBE: do not describe values of blank node "variables".
+- SPARQL: Fixes some bug in the parser related to spacing.
+- SPARQL: Fixes evaluation of SERVICE clauses with unsupported custom functions.
+- JSON-LD: fixes serialization of relative IRIs looking like keywords.
+- RocksDB: reduce the number of copies in read operations.
+
+
 # [0.5.5] - 2026-02-14
 
 ### Added
