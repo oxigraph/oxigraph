@@ -48,7 +48,8 @@ fuzz_target!(|data: sparql_smith::Query| {
             .with_default_service_handler(DatasetServiceHandler {
                 dataset: dataset.clone(),
             })
-            .execute(dataset, &query);
+            .prepare(&query)
+            .execute(dataset);
         match (with_opt, without_opt) {
             (Ok(with_opt), Ok(without_opt)) => {
                 assert_eq!(
@@ -65,6 +66,43 @@ fuzz_target!(|data: sparql_smith::Query| {
             (Err(e), Ok(r)) => {
                 if !matches!(r, QueryResults::Boolean(false)) {
                     panic!("without optimizations passed whereas with optimizations failed: {e}")
+                }
+            }
+        }
+
+        // Parsing roundtrip
+        let roundtrip_query = SparqlParser::new()
+            .parse_query(&query.to_string())
+            .expect(&format!("Invalid roundtrip {query}"));
+
+        let roundtrip = QueryEvaluator::new()
+            .without_optimizations()
+            .prepare(&roundtrip_query)
+            .execute(dataset);
+        let without_opt = QueryEvaluator::new()
+            .without_optimizations()
+            .with_default_service_handler(DatasetServiceHandler {
+                dataset: dataset.clone(),
+            })
+            .prepare(&query)
+            .execute(dataset);
+
+        match (roundtrip, without_opt) {
+            (Ok(roundtrip), Ok(without_opt)) => {
+                assert_eq!(
+                    query_results_key(roundtrip, query_str.contains(" REDUCED ")),
+                    query_results_key(without_opt, query_str.contains(" REDUCED "))
+                )
+            }
+            (Err(_), Err(_)) => (),
+            (Ok(r), Err(e)) => {
+                if !matches!(r, QueryResults::Boolean(false)) {
+                    panic!("roundtripped passed whereas without optimizations failed: {e}")
+                }
+            }
+            (Err(e), Ok(r)) => {
+                if !matches!(r, QueryResults::Boolean(false)) {
+                    panic!("roundtripped passed whereas with optimizations failed: {e}")
                 }
             }
         }
@@ -189,14 +227,13 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
             dataset: dataset.clone(),
         });
-        let QueryResults::Solutions(iter) = evaluator.execute(
-            &dataset,
-            &Query::Select {
+        let QueryResults::Solutions(iter) = evaluator
+            .prepare(&Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
                 base_iri: base_iri.cloned(),
-            },
-        )?
+            })
+            .execute(&dataset)?
         else {
             panic!()
         };
