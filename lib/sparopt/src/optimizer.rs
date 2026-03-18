@@ -8,18 +8,30 @@ use oxrdf::Variable;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{GroundTermPattern, NamedNodePattern};
 use std::cmp::{max, min};
+use std::collections::HashSet;
 
 pub struct Optimizer;
 
 impl Optimizer {
     pub fn optimize_graph_pattern(pattern: GraphPattern) -> GraphPattern {
-        let pattern = Self::normalize_pattern(pattern, &VariableTypes::default());
+        let mut seen = HashSet::new();
+        let pattern = Self::normalize_pattern(pattern, &VariableTypes::default(), &mut seen);
         let pattern = Self::reorder_joins(pattern, &VariableTypes::default());
         Self::push_filters(pattern, Vec::new(), &VariableTypes::default())
     }
 
     /// Normalize the pattern, discarding any join ordering information
-    fn normalize_pattern(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
+    fn normalize_pattern(
+        pattern: GraphPattern,
+        input_types: &VariableTypes,
+        seen: &mut HashSet<GraphPattern>,
+    ) -> GraphPattern {
+        if seen.contains(&pattern) {
+            return GraphPattern::empty(); // Avoid infinite recursion by returning an empty pattern
+        }
+
+        seen.insert(pattern.clone());
+
         match pattern {
             GraphPattern::QuadPattern {
                 subject,
@@ -48,19 +60,26 @@ impl Optimizer {
                 left,
                 right,
                 algorithm,
-            } => GraphPattern::join(
-                Self::normalize_pattern(*left, input_types),
-                Self::normalize_pattern(*right, input_types),
-                algorithm,
-            ),
+            } => {
+                let l = Self::normalize_pattern(*left, input_types, seen);
+                let r = Self::normalize_pattern(*right, input_types, seen);
+                // If one side became empty, return the other
+                if l == GraphPattern::empty() {
+                    r
+                } else if r == GraphPattern::empty() {
+                    l
+                } else {
+                    GraphPattern::join(l, r, algorithm)
+                }
+            }
             GraphPattern::LeftJoin {
                 left,
                 right,
                 expression,
                 algorithm,
             } => {
-                let left = Self::normalize_pattern(*left, input_types);
-                let right = Self::normalize_pattern(*right, input_types);
+                let left = Self::normalize_pattern(*left, input_types, seen);
+                let right = Self::normalize_pattern(*right, input_types, seen);
                 let mut inner_types = infer_graph_pattern_types(&left, input_types.clone());
                 inner_types.intersect_with(infer_graph_pattern_types(&right, input_types.clone()));
                 GraphPattern::left_join(
@@ -72,13 +91,17 @@ impl Optimizer {
             }
             #[cfg(feature = "sep-0006")]
             GraphPattern::Lateral { left, right } => {
-                let left = Self::normalize_pattern(*left, input_types);
+                // lateral uses fresh scopes for left and right
+                let mut left_seen = HashSet::new();
+                let left = Self::normalize_pattern(*left, input_types, &mut left_seen);
                 let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                let right = Self::normalize_pattern(*right, &left_types);
+                let mut right_seen = HashSet::new();
+                let right = Self::normalize_pattern(*right, &left_types, &mut right_seen);
                 GraphPattern::lateral(left, right)
             }
             GraphPattern::Filter { inner, expression } => {
-                let inner = Self::normalize_pattern(*inner, input_types);
+                let mut inner_seen = seen.clone();
+                let inner = Self::normalize_pattern(*inner, input_types, &mut inner_seen);
                 let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
                 let expression = Self::normalize_expression(expression, &inner_types);
                 let expression_type = infer_expression_type(&expression, &inner_types);
@@ -89,16 +112,17 @@ impl Optimizer {
                 }
             }
             GraphPattern::Union { inner } => GraphPattern::union_all(
-                inner
-                    .into_iter()
-                    .map(|e| Self::normalize_pattern(e, input_types)),
+                inner.into_iter().map(|e| {
+                    let mut s = seen.clone();
+                    Self::normalize_pattern(e, input_types, &mut s)
+                }),
             ),
             GraphPattern::Extend {
                 inner,
                 variable,
                 expression,
             } => {
-                let inner = Self::normalize_pattern(*inner, input_types);
+                let inner = Self::normalize_pattern(*inner, input_types, seen);
                 let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
                 let expression = Self::normalize_expression(expression, &inner_types);
                 let expression_type = infer_expression_type(&expression, &inner_types);
@@ -114,8 +138,8 @@ impl Optimizer {
                 right,
                 algorithm,
             } => GraphPattern::minus(
-                Self::normalize_pattern(*left, input_types),
-                Self::normalize_pattern(*right, input_types),
+                Self::normalize_pattern(*left, input_types, seen),
+                Self::normalize_pattern(*right, input_types, seen),
                 algorithm,
             ),
             GraphPattern::Values {
@@ -123,7 +147,7 @@ impl Optimizer {
                 bindings,
             } => GraphPattern::values(variables, bindings),
             GraphPattern::OrderBy { inner, expression } => {
-                let inner = Self::normalize_pattern(*inner, input_types);
+                let inner = Self::normalize_pattern(*inner, input_types, seen);
                 let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
                 GraphPattern::order_by(
                     inner,
@@ -141,19 +165,19 @@ impl Optimizer {
                 )
             }
             GraphPattern::Project { inner, variables } => {
-                GraphPattern::project(Self::normalize_pattern(*inner, input_types), variables)
+                GraphPattern::project(Self::normalize_pattern(*inner, input_types, seen), variables)
             }
             GraphPattern::Distinct { inner } => {
-                GraphPattern::distinct(Self::normalize_pattern(*inner, input_types))
+                GraphPattern::distinct(Self::normalize_pattern(*inner, input_types, seen))
             }
             GraphPattern::Reduced { inner } => {
-                GraphPattern::reduced(Self::normalize_pattern(*inner, input_types))
+                GraphPattern::reduced(Self::normalize_pattern(*inner, input_types, seen))
             }
             GraphPattern::Slice {
                 inner,
                 start,
                 length,
-            } => GraphPattern::slice(Self::normalize_pattern(*inner, input_types), start, length),
+            } => GraphPattern::slice(Self::normalize_pattern(*inner, input_types, seen), start, length),
             GraphPattern::Group {
                 inner,
                 variables,
@@ -161,7 +185,7 @@ impl Optimizer {
             } => {
                 // TODO: min, max and sample don't care about DISTINCT
                 GraphPattern::group(
-                    Self::normalize_pattern(*inner, input_types),
+                    Self::normalize_pattern(*inner, input_types, seen),
                     variables,
                     aggregates,
                 )
@@ -242,7 +266,10 @@ impl Optimizer {
             }
             Expression::UnaryMinus(inner) => -Self::normalize_expression(*inner, types),
             Expression::Not(inner) => !Self::normalize_expression(*inner, types),
-            Expression::Exists(inner) => Expression::exists(Self::normalize_pattern(*inner, types)),
+            Expression::Exists(inner) => {
+                let mut seen = HashSet::new();
+                Expression::exists(Self::normalize_pattern(*inner, types, &mut seen))
+            }
             Expression::Bound(variable) => {
                 let t = types.get(&variable);
                 if !t.undef {
