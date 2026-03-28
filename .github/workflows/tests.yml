@@ -410,9 +410,11 @@ jobs:
     strategy:
       matrix:
         include:
+          - target: "sparql_query"
           - target: "sparql_query_eval"
             build_args: "--features sparql-smith/service"
             run_args: "-fork=1 -ignore_timeouts=1"
+          - target: "sparql_update"
           - target: "sparql_update_eval"
             build_args: "--features rocksdb"
             run_args: "-fork=1 -ignore_timeouts=1"
