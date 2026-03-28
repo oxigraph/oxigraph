@@ -214,7 +214,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.flush()
             r = parse_query_results(path=fp.name)
             self.assertIsInstance(r, QuerySolutions)
-            results = list(r)  # type: ignore[arg-type]
+            results = list(r)  # ty: ignore[invalid-argument-type]
             self.assertEqual(results[0]["s"], NamedNode("http://example.com/s"))
             self.assertEqual(results[0][2], Literal("1"))
 
@@ -251,7 +251,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"{]")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format=QueryResultsFormat.JSON))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format=QueryResultsFormat.JSON))  # ty: ignore[invalid-argument-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 1)
             self.assertEqual(ctx.exception.offset, 2)
@@ -265,7 +265,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"1\t<foo >\n")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format=QueryResultsFormat.TSV))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format=QueryResultsFormat.TSV))  # ty: ignore[invalid-argument-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 3)
