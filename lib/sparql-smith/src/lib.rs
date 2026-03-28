@@ -2094,9 +2094,9 @@ enum UnaryExpression {
 impl fmt::Display for UnaryExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Not(e) => write!(f, "!{e}"),
-            Self::Plus(e) => write!(f, "+{e}"),
-            Self::Minus(e) => write!(f, "-{e}"),
+            Self::Not(e) => write!(f, "! {e}"),
+            Self::Plus(e) => write!(f, "+ {e}"),
+            Self::Minus(e) => write!(f, "- {e}"),
             Self::Base(e) => write!(f, "{e}"),
         }
     }

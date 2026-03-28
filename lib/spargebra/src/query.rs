@@ -1,7 +1,8 @@
 //! Data structures around SPARQL queries. The main type is [`Query`].
 
+use crate::SparqlParser;
 use crate::algebra::*;
-use crate::parser::{SparqlParser, SparqlSyntaxError};
+use crate::error::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
