@@ -27,7 +27,7 @@ class ExtendedDocTestFinder(DocTestFinder):
         seen[id(obj)] = 1
 
         # Find a test for this object, and add it to the list of tests.
-        test = self._get_test(obj, name, module, globs, source_lines)  # type: ignore[attr-defined]
+        test = self._get_test(obj, name, module, globs, source_lines)  # ty: ignore[unresolved-attribute]
         if test is not None:
             tests.append(test)
 
