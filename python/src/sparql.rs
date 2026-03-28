@@ -9,8 +9,8 @@ use oxigraph::sparql::results::{
 };
 use oxigraph::sparql::{
     AggregateFunctionAccumulator, PreparedSparqlQuery, QueryEvaluationError, QueryResults,
-    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, UpdateEvaluationError,
-    Variable,
+    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, SparqlSyntaxError,
+    UpdateEvaluationError, Variable,
 };
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
@@ -33,7 +33,7 @@ pub fn prepare_sparql_query(
 ) -> PyResult<PreparedSparqlQuery> {
     let mut prepared = evaluator
         .parse_query(query)
-        .map_err(|e| PySyntaxError::new_err(e.to_string()))?;
+        .map_err(map_sparql_syntax_error)?;
 
     if use_default_graph_as_union && default_graph.is_some() {
         return Err(PyValueError::new_err(
@@ -824,6 +824,31 @@ pub fn map_update_evaluation_error(error: UpdateEvaluationError) -> PyErr {
             },
         },
         _ => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+#[expect(clippy::needless_pass_by_value)]
+pub fn map_sparql_syntax_error(error: SparqlSyntaxError) -> PyErr {
+    let location = error.location();
+    // Python 3.9 does not support end line and end column
+    if python_version() >= (3, 10) {
+        let params = (
+            None::<PathBuf>,
+            Some(location.start.line + 1),
+            Some(location.start.column + 1),
+            None::<Vec<u8>>,
+            Some(location.end.line + 1),
+            Some(location.end.column + 1),
+        );
+        PySyntaxError::new_err((error.to_string(), params))
+    } else {
+        let params = (
+            None::<PathBuf>,
+            Some(location.start.line + 1),
+            Some(location.start.column + 1),
+            None::<Vec<u8>>,
+        );
+        PySyntaxError::new_err((error.to_string(), params))
     }
 }
 
