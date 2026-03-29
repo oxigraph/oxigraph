@@ -8,7 +8,7 @@ use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -361,7 +361,7 @@ impl PyStore {
                 custom_aggregate_functions,
             )?
             .parse_update(update)
-            .map_err(|e| PySyntaxError::new_err(e.to_string()))?
+            .map_err(map_sparql_syntax_error)?
             .on_store(&self.inner)
             .execute()
             .map_err(map_update_evaluation_error)
