@@ -24,6 +24,14 @@ jobs:
           component: rustfmt
       - run: cargo fmt -- --check
 
+  toml-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with: { tool: taplo }
+      - run: taplo check --default-schema-catalogs
+
   clippy:
     runs-on: ubuntu-latest
     steps:
