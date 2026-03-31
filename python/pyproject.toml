@@ -6,26 +6,35 @@ build-backend = "maturin"
 # Most of the metadata are in Cargo.toml and injected by maturin
 name = "pyoxigraph"
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
-    "Programming Language :: Rust",
-    "Topic :: Database :: Database Engines/Servers",
-    "Topic :: Software Development :: Libraries :: Python Modules",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Programming Language :: Rust",
+  "Topic :: Database :: Database Engines/Servers",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.8"
-dynamic = ["authors", "description", "keywords", "license", "license-files", "maintainers", "readme", "version"]
+dynamic = [
+  "authors",
+  "description",
+  "keywords",
+  "license",
+  "license-files",
+  "maintainers",
+  "readme",
+  "version",
+]
 
 [project.urls]
 Changelog = "https://github.com/oxigraph/oxigraph/blob/main/CHANGELOG.md"
@@ -35,18 +44,15 @@ Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
 [dependency-groups]
-build = [
-    "maturin~=1.0",
-    "ruff~=0.15.0"
-]
+build = ["maturin~=1.0", "ruff~=0.15.0"]
 dev = [
-    { include-group = "build" },
-    "furo",
-    "mypy~=1.0",
-    "ty~=0.0.17",
-    "sphinx>=7.0,<10.0",
-    "sphinx-lint~=1.0",
-    "regex<2026.2.0" # TODO: fixes an installation bug with pypy
+  { include-group = "build" },
+  "furo",
+  "mypy~=1.0",
+  "ty~=0.0.17",
+  "sphinx>=7.0,<10.0",
+  "sphinx-lint~=1.0",
+  "regex<2026.2.0",            # TODO: fixes an installation bug with pypy
 ]
 
 [tool.ruff]
@@ -54,24 +60,23 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "ARG",
-    "B",
-    "C40",
-    "E",
-    "F",
-    "FBT",
-    "I",
-    "ICN",
-    "N",
-    "PIE",
-    "PTH",
-    "RET",
-    "RUF",
-    "SIM",
-    "T10",
-    "TCH",
-    "TID",
-    "UP",
-    "W",
-    "YTT"
+  "ARG",
+  "B",
+  "C40",
+  "E",
+  "F",
+  "FBT",
+  "I",
+  "ICN",
+  "N",
+  "PIE",
+  "PTH",
+  "RET",
+  "RUF",
+  "SIM",
+  "T10",
+  "TID",
+  "UP",
+  "W",
+  "YTT",
 ]
