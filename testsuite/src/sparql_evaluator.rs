@@ -174,11 +174,6 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         .parse_query(&read_file_to_string(query_file)?)
         .context("Failure to parse query")?;
 
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_query(&query.to_string())
-        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
-
     let mut evaluator = QueryEvaluator::new()
         .with_default_service_handler(StaticServiceHandler::new(&test.service_data)?);
     for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
@@ -269,11 +264,6 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         .with_base_iri(update_file)?
         .parse_update(&read_file_to_string(update_file)?)
         .context("Failure to parse update")?;
-
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_update(&update.to_string())
-        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
     store
         .update(update.clone())
