@@ -258,7 +258,7 @@ impl fmt::Display for GraphUpdateOperation {
                     }
                     writeln!(f, "}}")?;
                 }
-                if !insert.is_empty() {
+                if !insert.is_empty() || delete.is_empty() {
                     writeln!(f, "INSERT {{")?;
                     for quad in insert {
                         writeln!(f, "\t{quad} .")?;
