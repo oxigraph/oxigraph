@@ -13,6 +13,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   python_sdist:
     runs-on: ubuntu-latest
@@ -289,7 +291,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     permissions:
-      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v6
@@ -320,7 +321,6 @@ jobs:
     permissions:
       id-token: write
       packages: write
-      contents: read
       attestations: write
       artifact-metadata: write
     steps:
