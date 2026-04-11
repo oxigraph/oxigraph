@@ -1,6 +1,6 @@
 use crate::context::{
     JsonLdContext, JsonLdContextProcessor, JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
-    has_keyword_form, is_keyword, json_node_from_events,
+    LoadDocumentCallback, has_keyword_form, is_keyword, json_node_from_events,
 };
 use crate::error::JsonLdErrorCode;
 use crate::profile::JsonLdProcessingMode;
@@ -278,18 +278,7 @@ impl JsonLdExpansionConverter {
         self.is_end
     }
 
-    pub fn with_load_document_callback(
-        mut self,
-        callback: impl Fn(
-            &str,
-            &JsonLdLoadDocumentOptions,
-        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
-    ) -> Self {
+    pub fn with_load_document_callback(mut self, callback: impl LoadDocumentCallback) -> Self {
         self.context_processor.load_document_callback = Some(Arc::new(callback));
         self
     }

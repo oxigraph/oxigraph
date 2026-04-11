@@ -1,4 +1,6 @@
-use crate::context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument, JsonLdTermDefinition};
+use crate::context::{
+    JsonLdLoadDocumentOptions, JsonLdRemoteDocument, JsonLdTermDefinition, LoadDocumentCallback,
+};
 use crate::error::{JsonLdParseError, JsonLdSyntaxError};
 use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
 use crate::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
@@ -405,18 +407,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// assert_eq!(1, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn with_load_document_callback(
-        mut self,
-        callback: impl Fn(
-            &str,
-            &JsonLdLoadDocumentOptions,
-        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
-    ) -> Self {
+    pub fn with_load_document_callback(mut self, callback: impl LoadDocumentCallback) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
     }
@@ -733,18 +724,7 @@ impl SliceJsonLdParser<'_> {
     /// assert_eq!(1, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn with_load_document_callback(
-        mut self,
-        callback: impl Fn(
-            &str,
-            &JsonLdLoadDocumentOptions,
-        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
-    ) -> Self {
+    pub fn with_load_document_callback(mut self, callback: impl LoadDocumentCallback) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
     }

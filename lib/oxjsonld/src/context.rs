@@ -9,15 +9,6 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::slice;
 use std::sync::{Arc, Mutex};
 
-type LoadDocumentCallback = dyn Fn(
-        &str,
-        &JsonLdLoadDocumentOptions,
-    ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-    + Send
-    + Sync
-    + UnwindSafe
-    + RefUnwindSafe;
-
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum JsonNode {
     String(String),
@@ -75,7 +66,39 @@ pub struct JsonLdContextProcessor {
     pub lenient: bool, // Custom option to ignore invalid base IRIs
     pub max_context_recursion: usize,
     pub remote_context_cache: Arc<Mutex<HashMap<String, (Option<Iri<String>>, JsonNode)>>>,
-    pub load_document_callback: Option<Arc<LoadDocumentCallback>>,
+    pub load_document_callback:
+        Option<Arc<dyn LoadDocumentCallback<Error = Box<dyn Error + Send + Sync>>>>,
+}
+
+pub trait LoadDocumentCallback: Send + Sync + UnwindSafe + RefUnwindSafe + 'static {
+    type Error: Error + Send + Sync + 'static;
+
+    fn load(
+        &self,
+        url: &str,
+        options: &JsonLdLoadDocumentOptions,
+    ) -> Result<JsonLdRemoteDocument, Self::Error>;
+}
+
+impl<
+    E: Error + Send + Sync + 'static,
+    F: Fn(&str, &JsonLdLoadDocumentOptions) -> Result<JsonLdRemoteDocument, E>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
+> LoadDocumentCallback for F
+{
+    type Error = E;
+
+    fn load(
+        &self,
+        url: &str,
+        options: &JsonLdLoadDocumentOptions,
+    ) -> Result<JsonLdRemoteDocument, Self::Error> {
+        (self)(url, options)
+    }
 }
 
 /// Used to pass various options to the LoadDocumentCallback.
@@ -1393,7 +1416,7 @@ impl JsonLdContextProcessor {
                 JsonLdErrorCode::LoadingRemoteContextFailed,
             ));
         };
-        let context_document = match load_document_callback(
+        let context_document = match load_document_callback.load(
             url,
             &JsonLdLoadDocumentOptions {
                 request_profile: JsonLdProfile::Context.into(),
