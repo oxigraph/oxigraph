@@ -76,6 +76,14 @@
       "requires": "CompoundLiteral",
       "input": "di11-in.jsonld",
       "expect": "di11-out.nq"
+    },
+    {
+      "@id": "#default_language_and_type_mapping",
+      "@type": [ "jld:PositiveEvaluationTest", "jld:ToRDFTest" ],
+      "name": "explicit type from the context and default language",
+      "purpose": "The datatype has priority.",
+      "input": "default_language_and_type_mapping.jsonld",
+      "expect": "default_language_and_type_mapping.nq"
     }
   ]
 }

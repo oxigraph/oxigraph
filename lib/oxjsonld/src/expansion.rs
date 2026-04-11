@@ -2899,9 +2899,8 @@ impl JsonLdExpansionConverter {
                         r#type = Some(type_mapping.clone());
                     }
                 }
-            }
-            // 5)
-            if matches!(value, JsonEvent::String(_)) {
+            } else if matches!(value, JsonEvent::String(_)) {
+                // 5
                 language = term_definition
                     .language_mapping
                     .clone()
@@ -2910,15 +2909,12 @@ impl JsonLdExpansionConverter {
                     .direction_mapping
                     .unwrap_or(active_context.default_direction);
             }
-        } else {
-            // 5)
-            if matches!(value, JsonEvent::String(_)) {
-                if language.is_none() {
-                    language.clone_from(&active_context.default_language);
-                }
-                if direction.is_none() {
-                    direction.clone_from(&active_context.default_direction);
-                }
+        } else if matches!(value, JsonEvent::String(_)) {
+            if language.is_none() {
+                language.clone_from(&active_context.default_language);
+            }
+            if direction.is_none() {
+                direction.clone_from(&active_context.default_direction);
             }
         }
         if reverse {
