@@ -1,0 +1,1 @@
+_:foo <http://example.org/foo> "true"^^<xsd:boolean> .
