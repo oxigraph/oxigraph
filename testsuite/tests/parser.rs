@@ -19,7 +19,7 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
         &[],
     )
 }
-#[cfg(all(feature = "rdf-12", not(windows)))] // Tests don't like git auto "\r\n" on Windows
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -45,7 +45,7 @@ fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(all(feature = "rdf-12", not(windows)))] // Tests don't like git auto "\r\n" on Windows
+#[cfg(feature = "rdf-12")]
 #[test]
 fn rdf12_n_quads_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
