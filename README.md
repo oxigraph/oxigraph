@@ -52,6 +52,7 @@ Also, some parts of Oxigraph are available as standalone Rust crates:
 * [`sparesults`](./lib/sparesults), parsers and serializers for SPARQL result formats.
 * [`sparopt`](./lib/sparopt), a SPARQL optimizer.
 * [`oxsdatatypes`](./lib/oxsdatatypes), an implementation of some XML Schema datatypes.
+* [`spargeo`](./lib/spargeo), a partial implementation of [GeoSPARQL](https://docs.ogc.org/is/22-047r1/22-047r1.html).
 
 The library layers in Oxigraph. The elements above depend on the elements below:
 ![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)
@@ -93,7 +94,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 * [RelationLabs](https://relationlabs.ai/) that is building [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
 * [Field 33](https://field33.com) that was building [an ontology management platform](https://plow.pm/).
 * [Magnus Bakken](https://github.com/magbak) who is building [Data Treehouse](https://www.data-treehouse.com/), a time-series + RDF datalake platform, and [chrontext](https://github.com/magbak/chrontext), a SPARQL query endpoint on top of joint RDF and time series databases.
-* [DeciSym.AI](https://www.decisym.ai/) a cyber security consulting company providing RDF-based software.
+* [DeciSym.AI](https://www.decisym.ai/) a cybersecurity consulting company providing RDF-based software.
 * [ACE IoT Solutions](https://aceiotsolutions.com/), a building IOT platform.
 * [Albin Larsson](https://byabbe.se/) who is building [GovDirectory](https://www.govdirectory.org/), a directory of public agencies based on Wikidata.
 
