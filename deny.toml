@@ -1,5 +1,5 @@
 [advisories]
-ignore = ["RUSTSEC-2018-0015"]
+ignore = ["RUSTSEC-2026-0097"]
 
 [licenses]
 allow = [
@@ -9,8 +9,6 @@ allow = [
   "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
-  "MPL-2.0",
-  "OpenSSL",
   "Unicode-3.0",
   "Zlib",
 ]
