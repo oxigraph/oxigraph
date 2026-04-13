@@ -2,6 +2,7 @@ import sys
 import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
+from typing import cast
 
 from pyoxigraph import (
     Literal,
@@ -214,7 +215,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.flush()
             r = parse_query_results(path=fp.name)
             self.assertIsInstance(r, QuerySolutions)
-            results = list(r)  # ty: ignore[invalid-argument-type]
+            results = list(cast(QuerySolutions, r))
             self.assertEqual(results[0]["s"], NamedNode("http://example.com/s"))
             self.assertEqual(results[0][2], Literal("1"))
 
@@ -251,7 +252,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"{]")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format=QueryResultsFormat.JSON))  # ty: ignore[invalid-argument-type]
+                list(cast(QuerySolutions, parse_query_results(path=fp.name, format=QueryResultsFormat.JSON)))
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 1)
             self.assertEqual(ctx.exception.offset, 2)
@@ -265,7 +266,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"1\t<foo >\n")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format=QueryResultsFormat.TSV))  # ty: ignore[invalid-argument-type]
+                list(cast(QuerySolutions, parse_query_results(path=fp.name, format=QueryResultsFormat.TSV)))
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 3)
