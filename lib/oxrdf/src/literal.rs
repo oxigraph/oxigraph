@@ -150,6 +150,18 @@ impl Literal {
         self.as_ref().value()
     }
 
+    /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
+    #[inline]
+    pub fn into_value(self) -> String {
+        match self.0 {
+            LiteralContent::String(value)
+            | LiteralContent::TypedLiteral { value, .. }
+            | LiteralContent::LanguageTaggedString { value, .. } => value,
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString { value, .. } => value,
+        }
+    }
+
     /// The literal [language tag](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag) if it is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     ///
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
