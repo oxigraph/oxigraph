@@ -363,12 +363,19 @@ impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: if value == f32::INFINITY {
-                "INF".to_owned()
-            } else if value == f32::NEG_INFINITY {
-                "-INF".to_owned()
-            } else {
-                value.to_string()
+            value: {
+                #[cfg(feature = "oxsdatatypes")]
+                {
+                    Float::from(value).to_string()
+                }
+                #[cfg(not(feature = "oxsdatatypes"))]
+                if value == f32::INFINITY {
+                    "INF".to_owned()
+                } else if value == f32::NEG_INFINITY {
+                    "-INF".to_owned()
+                } else {
+                    value.to_string()
+                }
             },
             datatype: xsd::FLOAT.into(),
         })
@@ -379,12 +386,19 @@ impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: if value == f64::INFINITY {
-                "INF".to_owned()
-            } else if value == f64::NEG_INFINITY {
-                "-INF".to_owned()
-            } else {
-                value.to_string()
+            value: {
+                #[cfg(feature = "oxsdatatypes")]
+                {
+                    Double::from(value).to_string()
+                }
+                #[cfg(not(feature = "oxsdatatypes"))]
+                if value == f64::INFINITY {
+                    "INF".to_owned()
+                } else if value == f64::NEG_INFINITY {
+                    "-INF".to_owned()
+                } else {
+                    value.to_string()
+                }
             },
             datatype: xsd::DOUBLE.into(),
         })
