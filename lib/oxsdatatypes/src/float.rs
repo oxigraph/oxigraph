@@ -1,3 +1,4 @@
+use crate::double::format_finite_float;
 use crate::{Boolean, Double, Integer};
 use std::cmp::Ordering;
 use std::fmt;
@@ -8,8 +9,6 @@ use std::str::FromStr;
 /// [XML Schema `float` datatype](https://www.w3.org/TR/xmlschema11-2/#float)
 ///
 /// Uses internally a [`f32`].
-///
-/// <div class="warning">Serialization does not follow the canonical mapping.</div>
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Float {
@@ -187,8 +186,10 @@ impl fmt::Display for Float {
             f.write_str("INF")
         } else if self.value == f32::NEG_INFINITY {
             f.write_str("-INF")
+        } else if self.value.is_nan() {
+            f.write_str("NaN")
         } else {
-            self.value.fmt(f)
+            format_finite_float::<40>(self.value, f)
         }
     }
 }
@@ -292,18 +293,33 @@ mod tests {
         assert_eq!(Float::from_str("INF")?.to_string(), "INF");
         assert_eq!(Float::from_str("+INF")?.to_string(), "INF");
         assert_eq!(Float::from_str("-INF")?.to_string(), "-INF");
-        assert_eq!(Float::from_str("0.0E0")?.to_string(), "0");
-        assert_eq!(Float::from_str("-0.0E0")?.to_string(), "-0");
-        assert_eq!(Float::from_str("0.1e1")?.to_string(), "1");
-        assert_eq!(Float::from_str("-0.1e1")?.to_string(), "-1");
-        assert_eq!(Float::from_str("1.e1")?.to_string(), "10");
-        assert_eq!(Float::from_str("-1.e1")?.to_string(), "-10");
-        assert_eq!(Float::from_str("1")?.to_string(), "1");
-        assert_eq!(Float::from_str("-1")?.to_string(), "-1");
-        assert_eq!(Float::from_str("1.")?.to_string(), "1");
-        assert_eq!(Float::from_str("-1.")?.to_string(), "-1");
+        assert_eq!(Float::from_str("0.0E0")?.to_string(), "0.0E0");
+        assert_eq!(Float::from_str("-0.0E0")?.to_string(), "-0.0E0");
+        assert_eq!(Float::from_str("0.1")?.to_string(), "1.0E-1");
+        assert_eq!(Float::from_str("0.1e1")?.to_string(), "1.0E0");
+        assert_eq!(Float::from_str("-0.1e1")?.to_string(), "-1.0E0");
+        assert_eq!(Float::from_str("1.e1")?.to_string(), "1.0E1");
+        assert_eq!(Float::from_str("-1.e1")?.to_string(), "-1.0E1");
+        assert_eq!(Float::from_str("12")?.to_string(), "1.2E1");
+        assert_eq!(Float::from_str("0.1")?.to_string(), "1.0E-1");
+        assert_eq!(Float::from_str("0.01")?.to_string(), "1.0E-2");
+        assert_eq!(Float::from_str("1")?.to_string(), "1.0E0");
+        assert_eq!(Float::from_str("-1")?.to_string(), "-1.0E0");
+        assert_eq!(Float::from_str("1.")?.to_string(), "1.0E0");
+        assert_eq!(Float::from_str("-1.")?.to_string(), "-1.0E0");
+        assert_eq!(Float::from_str("+1e20")?.to_string(), "1.0E20");
         assert_eq!(Float::from_str(&f32::MIN.to_string())?, Float::MIN);
         assert_eq!(Float::from_str(&f32::MAX.to_string())?, Float::MAX);
         Ok(())
+    }
+
+    #[test]
+    fn format() {
+        assert_eq!(Float::from(f32::INFINITY).to_string(), "INF");
+        assert_eq!(Float::from(f32::NEG_INFINITY).to_string(), "-INF");
+        assert_eq!(Float::from(f32::NAN).to_string(), "NaN");
+        assert_eq!(Float::from(f32::MIN).to_string(), "-3.4028235E38");
+        assert_eq!(Float::from(f32::MAX).to_string(), "3.4028235E38");
+        assert_eq!(Float::from(f32::EPSILON).to_string(), "1.1920929E-7");
     }
 }
