@@ -118,7 +118,7 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(Literal(0), Literal("0", datatype=XSD_INTEGER))
         self.assertEqual(Literal(1), Literal("1", datatype=XSD_INTEGER))
 
-        self.assertEqual(Literal(0.1), Literal("0.1", datatype=XSD_DOUBLE))
+        self.assertEqual(Literal(0.1), Literal("1.0E-1", datatype=XSD_DOUBLE))
         self.assertEqual(Literal(math.inf), Literal("INF", datatype=XSD_DOUBLE))
         self.assertEqual(Literal(-math.inf), Literal("-INF", datatype=XSD_DOUBLE))
         self.assertEqual(Literal(-math.nan), Literal("NaN", datatype=XSD_DOUBLE))

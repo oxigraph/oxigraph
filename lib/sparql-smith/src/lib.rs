@@ -8,10 +8,10 @@ pub const DATA_TRIG: &str = "
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :1 :2 :3 , :4 ;
-   :5 true , 1 , '1'^^xsd:decimal , '1'^^xsd:double .
+   :5 true , 1 , '1'^^xsd:decimal , 1.0E0 .
 
 :3 :2 :4 ;
-   :5 false , 0 , '0'^^xsd:decimal , '0'^^xsd:double .
+   :5 false , 0 , '0'^^xsd:decimal , 0.0E0 .
 
 :1 {
     :1 :2 :3 , 'foo' .
@@ -37,24 +37,24 @@ const LITERALS: [&str; 54] = [
     "false",
     "0",
     "\"0\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
-    "\"0\"^^<http://www.w3.org/2001/XMLSchema#double>",
-    "\"-0\"^^<http://www.w3.org/2001/XMLSchema#double>",
+    "0.0E0",
+    "-0.0E0",
     "1",
     "\"1\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
-    "\"1\"^^<http://www.w3.org/2001/XMLSchema#double>",
+    "1.0E0",
     "-1",
     "\"-1\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
-    "\"-1\"^^<http://www.w3.org/2001/XMLSchema#double>",
+    "-1.0E0",
     "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"INF\"^^<http://www.w3.org/2001/XMLSchema#float>",
     "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#float>",
     "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#float>",
-    "\"0\"^^<http://www.w3.org/2001/XMLSchema#float>",
-    "\"-0\"^^<http://www.w3.org/2001/XMLSchema#float>",
-    "\"1\"^^<http://www.w3.org/2001/XMLSchema#float>",
-    "\"-1\"^^<http://www.w3.org/2001/XMLSchema#float>",
+    "\"0.0E0\"^^<http://www.w3.org/2001/XMLSchema#float>",
+    "\"-0.0E0\"^^<http://www.w3.org/2001/XMLSchema#float>",
+    "\"1.0E0\"^^<http://www.w3.org/2001/XMLSchema#float>",
+    "\"-1.0E0\"^^<http://www.w3.org/2001/XMLSchema#float>",
     "\"P1YT1S\"^^<http://www.w3.org/2001/XMLSchema#duration>",
     "\"P1Y\"^^<http://www.w3.org/2001/XMLSchema#duration>",
     "\"PT1S\"^^<http://www.w3.org/2001/XMLSchema#duration>",
