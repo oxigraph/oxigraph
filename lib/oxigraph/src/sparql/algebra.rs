@@ -7,7 +7,6 @@
 use spareval::QueryDatasetSpecification;
 use spargebra::GraphUpdateOperation;
 use std::fmt;
-use std::str::FromStr;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
@@ -41,15 +40,6 @@ pub struct Query {
 }
 
 impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(
-        query: &str,
-        base_iri: Option<&str>,
-    ) -> Result<Self, spargebra::SparqlSyntaxError> {
-        #[expect(deprecated)]
-        Ok(spargebra::Query::parse(query, base_iri)?.into())
-    }
-
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
     pub fn dataset(&self) -> &QueryDatasetSpecification {
         &self.dataset
@@ -64,30 +54,6 @@ impl Query {
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f) // TODO: override
-    }
-}
-
-impl FromStr for Query {
-    type Err = spargebra::SparqlSyntaxError;
-
-    fn from_str(query: &str) -> Result<Self, Self::Err> {
-        Self::parse(query, None)
-    }
-}
-
-impl TryFrom<&str> for Query {
-    type Error = spargebra::SparqlSyntaxError;
-
-    fn try_from(query: &str) -> Result<Self, Self::Error> {
-        Self::from_str(query)
-    }
-}
-
-impl TryFrom<&String> for Query {
-    type Error = spargebra::SparqlSyntaxError;
-
-    fn try_from(query: &String) -> Result<Self, Self::Error> {
-        Self::from_str(query)
     }
 }
 
@@ -123,15 +89,6 @@ pub struct Update {
 }
 
 impl Update {
-    /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(
-        update: &str,
-        base_iri: Option<&str>,
-    ) -> Result<Self, spargebra::SparqlSyntaxError> {
-        #[expect(deprecated)]
-        Ok(spargebra::Update::parse(update, base_iri)?.into())
-    }
-
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
     pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDatasetSpecification> {
         self.using_datasets.iter().filter_map(Option::as_ref)
@@ -146,30 +103,6 @@ impl Update {
 impl fmt::Display for Update {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
-    }
-}
-
-impl FromStr for Update {
-    type Err = spargebra::SparqlSyntaxError;
-
-    fn from_str(update: &str) -> Result<Self, Self::Err> {
-        Self::parse(update, None)
-    }
-}
-
-impl TryFrom<&str> for Update {
-    type Error = spargebra::SparqlSyntaxError;
-
-    fn try_from(update: &str) -> Result<Self, Self::Error> {
-        Self::from_str(update)
-    }
-}
-
-impl TryFrom<&String> for Update {
-    type Error = spargebra::SparqlSyntaxError;
-
-    fn try_from(update: &String) -> Result<Self, Self::Error> {
-        Self::from_str(update)
     }
 }
 

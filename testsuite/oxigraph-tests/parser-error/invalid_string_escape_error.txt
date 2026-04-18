@@ -1,1 +1,1 @@
-Parser error at line 1 between columns 53 and 55: Unexpected escape character '\a'
+Syntax error at line 1 between columns 53 and 55: Unexpected escape character '\a'
