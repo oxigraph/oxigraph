@@ -1,7 +1,6 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`]
 //! and a serializer implemented by [`TriGSerializer`].
 
-use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
@@ -1378,7 +1377,7 @@ fn escape_local_name(value: &str) -> Option<String> {
     let mut output = String::with_capacity(value.len());
     let mut chars = value.chars();
     let first = chars.next()?;
-    if N3Lexer::is_possible_pn_chars_u(first) || first == ':' || first.is_ascii_digit() {
+    if is_possible_pn_chars_u(first) || first == ':' || first.is_ascii_digit() {
         output.push(first);
     } else if can_be_escaped_in_local_name(first) {
         output.push('\\');
@@ -1388,8 +1387,7 @@ fn escape_local_name(value: &str) -> Option<String> {
     }
 
     while let Some(c) = chars.next() {
-        if N3Lexer::is_possible_pn_chars(c) || c == ':' || (c == '.' && !chars.as_str().is_empty())
-        {
+        if is_possible_pn_chars(c) || c == ':' || (c == '.' && !chars.as_str().is_empty()) {
             output.push(c);
         } else if can_be_escaped_in_local_name(c) {
             output.push('\\');
@@ -1400,6 +1398,37 @@ fn escape_local_name(value: &str) -> Option<String> {
     }
 
     Some(output)
+}
+
+// [157s]  PN_CHARS_BASE  ::=  [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
+fn is_possible_pn_chars_base(c: char) -> bool {
+    matches!(c,
+        'A'..='Z'
+        | 'a'..='z'
+        | '\u{00C0}'..='\u{00D6}'
+        | '\u{00D8}'..='\u{00F6}'
+        | '\u{00F8}'..='\u{02FF}'
+        | '\u{0370}'..='\u{037D}'
+        | '\u{037F}'..='\u{1FFF}'
+        | '\u{200C}'..='\u{200D}'
+        | '\u{2070}'..='\u{218F}'
+        | '\u{2C00}'..='\u{2FEF}'
+        | '\u{3001}'..='\u{D7FF}'
+        | '\u{F900}'..='\u{FDCF}'
+        | '\u{FDF0}'..='\u{FFFD}'
+        | '\u{10000}'..='\u{EFFFF}')
+}
+
+// [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_'
+fn is_possible_pn_chars_u(c: char) -> bool {
+    is_possible_pn_chars_base(c) || c == '_'
+}
+
+// [160s]  PN_CHARS  ::=  PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
+fn is_possible_pn_chars(c: char) -> bool {
+    is_possible_pn_chars_u(c)
+        || matches!(c,
+        '-' | '0'..='9' | '\u{00B7}' | '\u{0300}'..='\u{036F}' | '\u{203F}'..='\u{2040}')
 }
 
 fn can_be_escaped_in_local_name(c: char) -> bool {

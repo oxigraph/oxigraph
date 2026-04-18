@@ -1,6 +1,6 @@
 //! Shared parser implementation for Turtle and TriG.
 
-use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name};
+use crate::lexer::{N3Lexer, N3LexerOptions, N3Token, resolve_local_name};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
@@ -154,7 +154,7 @@ impl RuleRecognizer for TriGRecognizer {
                 }
                 TriGState::BaseExpectIri => {
                     if let N3Token::IriRef(iri) = token {
-                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri.into()));
                         self
                     } else {
                         self.error(errors, "The BASE keyword should be followed by an IRI")
@@ -174,7 +174,9 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::PrefixExpectIri { name } => {
                     if let N3Token::IriRef(iri) = token {
-                        context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                        context
+                            .prefixes
+                            .insert(name, Iri::parse_unchecked(iri.into()));
                         self
                     } else {
                         self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
@@ -674,8 +676,10 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::String(value) | N3Token::LongString(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: true });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into(),
+                            emit: true,
+                        });
                         self
                     }
                     N3Token::Integer(v) => {
@@ -1132,8 +1136,10 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::String(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: false });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into(),
+                            emit: false,
+                        });
                         self
                     }
                     N3Token::Integer(v) => {
@@ -1248,7 +1254,7 @@ impl TriGRecognizer {
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::Turtle, lenient),
+                N3Lexer::new(lenient),
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,

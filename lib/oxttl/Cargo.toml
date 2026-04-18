@@ -17,6 +17,7 @@ rdf-12 = ["oxrdf/rdf-12"]
 async-tokio = ["dep:tokio"]
 
 [dependencies]
+logos = { git = "https://github.com/Tpt/logos.git", branch = "is-prefix", features = ["state_machine_codegen"] }
 memchr.workspace = true
 oxrdf.workspace = true
 oxiri.workspace = true
