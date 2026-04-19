@@ -1,3 +1,10 @@
+# [0.5.7] - 2026-04-19
+
+### Changed
+- JSON-LD: Fixes conflicts between `@type` and `@language` in property-scoped contexts.
+- Bump RocksDB to 11.0.4
+
+
 # [0.5.6] - 2026-03-14
 
 ### Changed
