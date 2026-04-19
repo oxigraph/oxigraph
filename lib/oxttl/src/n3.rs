@@ -1,6 +1,6 @@
 //! A [N3](https://w3c.github.io/N3/spec/) streaming parser implemented by [`N3Parser`].
 
-use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name};
+use crate::lexer::{N3Lexer, N3LexerOptions, N3Token, resolve_local_name};
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{
@@ -944,7 +944,7 @@ impl RuleRecognizer for N3Recognizer {
                     errors.push("A dot is expected at the end of N3 statements".into());
                 }
                 N3State::BaseExpectIri => return if let N3Token::IriRef(iri) = token {
-                    context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                    context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri.into()));
                     self
                 } else {
                     self.error(errors, "The BASE keyword should be followed by an IRI")
@@ -959,7 +959,7 @@ impl RuleRecognizer for N3Recognizer {
                     }
                 },
                 N3State::PrefixExpectIri { name } => return if let N3Token::IriRef(iri) = token {
-                    context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                    context.prefixes.insert(name, Iri::parse_unchecked(iri.into()));
                     self
                 } else {
                     self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
@@ -1148,7 +1148,7 @@ impl RuleRecognizer for N3Recognizer {
                             self
                         }
                         N3Token::String(value) | N3Token::LongString(value) => {
-                            self.stack.push(N3State::LiteralPossibleSuffix { value });
+                            self.stack.push(N3State::LiteralPossibleSuffix { value: value.into() });
                             self
                         }
                         N3Token::Integer(v) => {
@@ -1387,13 +1387,13 @@ impl N3Recognizer {
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,
-        unchecked: bool,
+        lenient: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::N3, unchecked),
+                N3Lexer::new(lenient),
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
