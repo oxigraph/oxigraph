@@ -1,0 +1,34 @@
+[package]
+name = "oxreason"
+version = "0.1.0-alpha.0"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["RDF", "OWL", "SHACL", "reasoning", "inference"]
+categories = ["database-implementations"]
+repository = "https://github.com/patrykorwat/oxigraph/tree/main/lib/oxreason"
+description = "OWL 2 RL reasoning and SHACL validation for Oxigraph (scaffold, not yet implemented)"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Reserved for follow up milestones.
+owl2-rl = []
+shacl-core = []
+# Forward oxrdf's RDF 1.2 triple term support so the rule engine's
+# pattern matches on `TermRef::Triple` compile under the same flag.
+rdf-12 = ["oxrdf/rdf-12"]
+
+[dependencies]
+oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxsdatatypes.workspace = true
+rustc-hash.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

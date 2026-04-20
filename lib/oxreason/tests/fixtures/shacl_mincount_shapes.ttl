@@ -1,0 +1,12 @@
+@prefix : <https://example.org/ontology#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:CompanyShape a sh:NodeShape ;
+    sh:targetClass :Company ;
+    sh:property [
+        sh:path :entityName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
