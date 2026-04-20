@@ -2,8 +2,7 @@
 //!
 //! Usage: `reasoner_bench <reasoner> <path-to-turtle>`
 //!
-//! `<reasoner>` is one of `oxreason`, `oxreason-eq` (equality rules on),
-//! or `reasonable`.
+//! `<reasoner>` is one of `oxreason` or `reasonable`.
 //!
 //! Prints a single line of JSON to stdout:
 //!
@@ -38,18 +37,17 @@ use oxttl::TurtleParser;
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: reasoner_bench <oxreason|oxreason-eq|reasonable> <path-to-turtle>");
+        eprintln!("usage: reasoner_bench <oxreason|reasonable> <path-to-turtle>");
         return ExitCode::from(2);
     }
     let reasoner = args[1].as_str();
     let path = &args[2];
 
     let result = match reasoner {
-        "oxreason" => run_oxreason(path, false),
-        "oxreason-eq" => run_oxreason(path, true),
+        "oxreason" => run_oxreason(path),
         "reasonable" => run_reasonable(path),
         other => {
-            eprintln!("unknown reasoner '{other}'; expected oxreason, oxreason-eq, or reasonable");
+            eprintln!("unknown reasoner '{other}'; expected oxreason or reasonable");
             return ExitCode::from(2);
         }
     };
@@ -85,7 +83,7 @@ struct Run {
     firings: u64,
 }
 
-fn run_oxreason(path: &str, equality_rules: bool) -> Result<Run, Box<dyn std::error::Error>> {
+fn run_oxreason(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
     let file = File::open(Path::new(path))?;
     let reader = BufReader::new(file);
 
@@ -98,7 +96,7 @@ fn run_oxreason(path: &str, equality_rules: bool) -> Result<Run, Box<dyn std::er
     let parse_ms = ms(parse_start.elapsed());
     let triples_in = graph.len();
 
-    let config = ReasonerConfig::owl2_rl().with_equality_rules(equality_rules);
+    let config = ReasonerConfig::owl2_rl();
     let r = Reasoner::new(config);
 
     let reason_start = Instant::now();
@@ -106,7 +104,7 @@ fn run_oxreason(path: &str, equality_rules: bool) -> Result<Run, Box<dyn std::er
     let reason_ms = ms(reason_start.elapsed());
 
     Ok(Run {
-        reasoner: if equality_rules { "oxreason-eq" } else { "oxreason" },
+        reasoner: "oxreason",
         parse_ms,
         reason_ms,
         triples_in,

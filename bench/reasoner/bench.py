@@ -5,7 +5,6 @@ Reasoners under test:
 
 * ``oxreason`` (native Rust): timed inside a Rust bench binary so Python
   overhead stays out of parse and reasoning durations.
-* ``oxreason-eq`` (native Rust): same binary, equality rules enabled.
 * ``reasonable`` (native Rust, via its own binding): also timed inside the
   same Rust bench binary against the ``reasonable`` crate directly.
 * ``owlrl`` (rdflib + owlrl): the pure Python reference implementation from
@@ -87,7 +86,7 @@ def ensure_fixture(target_triples: int, data_dir: Path) -> Path:
 def make_native_runner(binary: Path, reasoner_key: str) -> Callable[[Path], tuple[float, float, int]]:
     """Return a runner that subprocesses the Rust bench binary.
 
-    ``reasoner_key`` is one of ``oxreason``, ``oxreason-eq``, ``reasonable``.
+    ``reasoner_key`` is one of ``oxreason`` or ``reasonable``.
     The returned callable parses the single JSON line the binary prints
     and returns ``(parse_ms, reason_ms, triples_out)`` to match the other
     adapters.
@@ -251,7 +250,6 @@ def plot(summary: dict, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     colors = {
         "oxreason": "#1f77b4",
-        "oxreason-eq": "#9467bd",
         "owlrl": "#d62728",
         "reasonable": "#2ca02c",
     }
@@ -312,18 +310,18 @@ def main() -> None:
         default=None,
         help=(
             "restrict to a subset of reasoners from "
-            "{oxreason, oxreason-eq, reasonable, owlrl}"
+            "{oxreason, reasonable, owlrl}"
         ),
     )
     args = parser.parse_args()
 
-    all_reasoners = ["oxreason", "oxreason-eq", "reasonable", "owlrl"]
+    all_reasoners = ["oxreason", "reasonable", "owlrl"]
     selected = args.only if args.only is not None else all_reasoners
     for name in selected:
         if name not in all_reasoners:
             parser.error(f"unknown reasoner '{name}'; expected one of {all_reasoners}")
 
-    native_reasoners = {"oxreason", "oxreason-eq", "reasonable"}
+    native_reasoners = {"oxreason", "reasonable"}
     if any(name in native_reasoners for name in selected):
         if not args.native_bin.exists():
             parser.error(

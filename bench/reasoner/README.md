@@ -4,7 +4,6 @@ This directory contains a benchmark pipeline that compares OWL 2 RL reasoners
 on LUBM-style synthetic graphs:
 
 * `oxreason` from this repository, timed inside a Rust bench binary.
-* `oxreason-eq`: the same crate with the OWL 2 RL equality rules enabled.
 * [reasonable](https://github.com/gtfierro/reasonable) (Rust), also timed
   inside the same Rust bench binary via its crates.io release.
 * [OWL-RL](https://github.com/RDFLib/OWL-RL) (`owlrl` + rdflib, pure Python),
@@ -57,7 +56,7 @@ Outputs land in the `--output-dir`:
 Useful flags:
 
 * `--only` restricts the run to a subset of
-  `{oxreason, oxreason-eq, reasonable, owlrl}`.
+  `{oxreason, reasonable, owlrl}`.
 * `--native-bin` points at a different build of the Rust bench binary.
 
 ```
@@ -84,6 +83,6 @@ stdout:
 {"reasoner":"oxreason","parse_ms":12.3,"reason_ms":45.6,"triples_in":1234,"triples_out":3456,"rounds":3,"firings":12345}
 ```
 
-`reasoner` is one of `oxreason`, `oxreason-eq`, or `reasonable`.
+`reasoner` is one of `oxreason` or `reasonable`.
 `rounds` and `firings` are `0` for `reasonable` because that crate does
 not expose those counters.
