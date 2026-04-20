@@ -1,0 +1,20 @@
+[package]
+name = "reasoner-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Rust-only bench harness that times oxreason and reasonable on a Turtle fixture"
+
+[[bin]]
+name = "reasoner_bench"
+path = "src/main.rs"
+
+[dependencies]
+oxrdf = { path = "../../../lib/oxrdf", features = ["oxsdatatypes"] }
+oxreason = { path = "../../../lib/oxreason" }
+oxttl = { path = "../../../lib/oxttl" }
+reasonable = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

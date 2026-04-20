@@ -1,35 +1,42 @@
 # OWL 2 RL reasoner benchmark
 
-This directory contains a small benchmark pipeline that compares three OWL 2
-RL reasoners on LUBM-style synthetic graphs:
+This directory contains a benchmark pipeline that compares OWL 2 RL reasoners
+on LUBM-style synthetic graphs:
 
-* `pyoxigraph.Reasoner` from this repository (backed by the `oxreason` crate)
-* [OWL-RL](https://github.com/RDFLib/OWL-RL) (`owlrl` + rdflib, pure Python)
-* [reasonable](https://github.com/gtfierro/reasonable) (Rust, Python binding)
+* `oxreason` from this repository, timed inside a Rust bench binary.
+* `oxreason-eq`: the same crate with the OWL 2 RL equality rules enabled.
+* [reasonable](https://github.com/gtfierro/reasonable) (Rust), also timed
+  inside the same Rust bench binary via its crates.io release.
+* [OWL-RL](https://github.com/RDFLib/OWL-RL) (`owlrl` + rdflib, pure Python),
+  timed in the Python driver because it has no Rust counterpart.
+
+Timing the two Rust reasoners inside one native binary keeps Python's parse
+and FFI costs off the hot path for both. Each `(reasoner, size, repeat)`
+cell is a fresh subprocess so there is no warm cache advantage either way.
 
 The pipeline has three pieces:
 
 * `generate_lubm.py` synthesises Turtle fixtures of a tunable size.
-* `bench.py` parses each fixture into each reasoner's native data structure,
-  runs reasoning, and records wall-clock durations.
-* `bench.py` also emits a Matplotlib PNG comparing the reasoners across sizes.
+* `native/` contains the Rust bench binary that owns parsing and reasoning.
+* `bench.py` drives the matrix, shells out to the binary, runs OWL-RL in
+  process, and emits CSV, JSON, and a Matplotlib PNG.
 
 ## Prerequisites
 
-Build `pyoxigraph` with the new `Reasoner` binding and install the Python
-reasoners:
+Build the Rust bench binary:
 
 ```
-# from the repository root
-cd python
-uv run maturin develop --release
-cd ..
-
-pip install rdflib owlrl reasonable matplotlib
+cargo build --release --manifest-path bench/reasoner/native/Cargo.toml
 ```
 
-The `pyoxigraph` build produces a Python wheel that exposes `Reasoner` and
-`ReasoningReport` from the `pyoxigraph` package.
+Install the Python dependencies used by the driver and by OWL-RL:
+
+```
+pip install rdflib owlrl matplotlib
+```
+
+The `reasonable` Python package is no longer required: the Rust bench
+binary links the `reasonable` crate directly.
 
 ## Running the benchmark
 
@@ -47,10 +54,14 @@ Outputs land in the `--output-dir`:
 * `summary.json` median, min, and max per (reasoner, size)
 * `reasoner_comparison.png` log-log plot of reasoning duration vs input size
 
-`--only` narrows the run to a subset of reasoners, useful for debugging:
+Useful flags:
+
+* `--only` restricts the run to a subset of
+  `{oxreason, oxreason-eq, reasonable, owlrl}`.
+* `--native-bin` points at a different build of the Rust bench binary.
 
 ```
-python bench/reasoner/bench.py --only pyoxigraph --sizes 100 1000 10000
+python bench/reasoner/bench.py --only oxreason reasonable --sizes 100 1000 10000
 ```
 
 ## Workload notes
@@ -62,3 +73,17 @@ includes a sub-class hierarchy (`University`, `Department`, `Faculty`,
 `subOrganizationOf`, and a symmetric `colleagueOf`. Each size setting
 scales the university count and picks the one whose estimated triple count
 is closest to the target.
+
+## JSON contract from the native bench binary
+
+The Rust binary at `native/src/main.rs` takes two positional arguments,
+`<reasoner>` and `<path-to-turtle>`, and prints a single JSON line to
+stdout:
+
+```json
+{"reasoner":"oxreason","parse_ms":12.3,"reason_ms":45.6,"triples_in":1234,"triples_out":3456,"rounds":3,"firings":12345}
+```
+
+`reasoner` is one of `oxreason`, `oxreason-eq`, or `reasonable`.
+`rounds` and `firings` are `0` for `reasonable` because that crate does
+not expose those counters.

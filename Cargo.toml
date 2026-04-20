@@ -20,6 +20,9 @@ members = [
   "python",
   "testsuite",
 ]
+exclude = [
+  "bench/reasoner/native",
+]
 resolver = "2"
 
 [workspace.package]

@@ -3,25 +3,32 @@
 
 Reasoners under test:
 
-* ``pyoxigraph`` (native): the ``oxreason`` crate exposed through the new
-  :py:class:`pyoxigraph.Reasoner` binding.
+* ``oxreason`` (native Rust): timed inside a Rust bench binary so Python
+  overhead stays out of parse and reasoning durations.
+* ``oxreason-eq`` (native Rust): same binary, equality rules enabled.
+* ``reasonable`` (native Rust, via its own binding): also timed inside the
+  same Rust bench binary against the ``reasonable`` crate directly.
 * ``owlrl`` (rdflib + owlrl): the pure Python reference implementation from
-  https://github.com/RDFLib/OWL-RL.
-* ``reasonable``: the Rust-backed reasoner from
-  https://github.com/gtfierro/reasonable, used via its Python binding.
+  https://github.com/RDFLib/OWL-RL. Timed in process because it has no
+  Rust counterpart.
 
-For each target triple count the script generates a Turtle fixture (or
-reuses a cached one), loads it into each reasoner's native data structure,
-and times just the reasoning step. Parse time is measured separately for
-visibility but is not part of the headline number.
+The Rust bench binary lives at ``bench/reasoner/native`` and is invoked
+as a subprocess once per (reasoner, size, repeat) cell. It prints a
+single JSON line with parse_ms, reason_ms, triples_in, triples_out,
+rounds, and firings. This keeps the playing field even between oxreason
+and reasonable: both are timed in native code against their own native
+index, with no Python parse or insert on the hot path.
 
 Results are written to CSV and to a Matplotlib PNG plot.
 
 Usage::
 
-    python bench.py --sizes 100 300 1000 3000 10000 30000 100000 \\
-                    --repeats 3 \\
-                    --output-dir bench/reasoner/out
+    # build the Rust bench binary first
+    cargo build --release --manifest-path bench/reasoner/native/Cargo.toml
+
+    python bench/reasoner/bench.py --sizes 100 300 1000 3000 10000 30000 100000 \\
+                                   --repeats 3 \\
+                                   --output-dir bench/reasoner/out
 """
 
 from __future__ import annotations
@@ -39,6 +46,8 @@ from typing import Callable
 
 HERE = Path(__file__).resolve().parent
 GENERATE = HERE / "generate_lubm.py"
+REPO_ROOT = HERE.parent.parent
+NATIVE_BIN_DEFAULT = REPO_ROOT / "bench" / "reasoner" / "native" / "target" / "release" / "reasoner_bench"
 
 
 @dataclass
@@ -75,28 +84,31 @@ def ensure_fixture(target_triples: int, data_dir: Path) -> Path:
 # -----------------------------------------------------------------------------
 
 
-def run_pyoxigraph(ttl_path: Path) -> tuple[float, float, int]:
-    """Load the Turtle file into a pyoxigraph Dataset and run oxreason.
+def make_native_runner(binary: Path, reasoner_key: str) -> Callable[[Path], tuple[float, float, int]]:
+    """Return a runner that subprocesses the Rust bench binary.
 
-    ``parse`` yields Quads with ``DefaultGraph`` as the graph_name for
-    Turtle input, so we can insert them straight into the dataset.
+    ``reasoner_key`` is one of ``oxreason``, ``oxreason-eq``, ``reasonable``.
+    The returned callable parses the single JSON line the binary prints
+    and returns ``(parse_ms, reason_ms, triples_out)`` to match the other
+    adapters.
     """
-    from pyoxigraph import Dataset, RdfFormat, Reasoner, parse
 
-    ds = Dataset()
+    def runner(ttl_path: Path) -> tuple[float, float, int]:
+        proc = subprocess.run(
+            [str(binary), reasoner_key, str(ttl_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        line = proc.stdout.strip().splitlines()[-1]
+        payload = json.loads(line)
+        return (
+            float(payload["parse_ms"]),
+            float(payload["reason_ms"]),
+            int(payload["triples_out"]),
+        )
 
-    parse_start = time.perf_counter()
-    with ttl_path.open("rb") as fh:
-        for quad in parse(fh, format=RdfFormat.TURTLE):
-            ds.add(quad)
-    parse_ms = (time.perf_counter() - parse_start) * 1000.0
-
-    reasoner = Reasoner(profile="owl2-rl")
-    reason_start = time.perf_counter()
-    reasoner.expand(ds)
-    reason_ms = (time.perf_counter() - reason_start) * 1000.0
-
-    return parse_ms, reason_ms, len(ds)
+    return runner
 
 
 def run_owlrl(ttl_path: Path) -> tuple[float, float, int]:
@@ -114,29 +126,6 @@ def run_owlrl(ttl_path: Path) -> tuple[float, float, int]:
     reason_ms = (time.perf_counter() - reason_start) * 1000.0
 
     return parse_ms, reason_ms, len(g)
-
-
-def run_reasonable(ttl_path: Path) -> tuple[float, float, int]:
-    """Load the Turtle file into reasonable.PyReasoner and run reasoning."""
-    import reasonable
-
-    r = reasonable.PyReasoner()
-    parse_start = time.perf_counter()
-    r.load_file(str(ttl_path))
-    parse_ms = (time.perf_counter() - parse_start) * 1000.0
-
-    reason_start = time.perf_counter()
-    triples = r.reason()
-    reason_ms = (time.perf_counter() - reason_start) * 1000.0
-
-    return parse_ms, reason_ms, len(triples)
-
-
-REASONERS: dict[str, Callable[[Path], tuple[float, float, int]]] = {
-    "pyoxigraph": run_pyoxigraph,
-    "owlrl": run_owlrl,
-    "reasonable": run_reasonable,
-}
 
 
 # -----------------------------------------------------------------------------
@@ -165,6 +154,13 @@ def run_cell(
     for i in range(repeats):
         try:
             parse_ms, reason_ms, triples_out = fn(ttl_path)
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            print(
+                f"  [{reasoner_name}] repeat {i}: FAILED (exit {exc.returncode}): {stderr}",
+                file=sys.stderr,
+            )
+            continue
         except Exception as exc:
             print(
                 f"  [{reasoner_name}] repeat {i}: FAILED: {exc}",
@@ -228,7 +224,7 @@ def summarise(results: list[RunResult]) -> dict:
         by_key.setdefault((r.reasoner, r.target_triples), []).append(r.reason_ms)
         actuals[r.target_triples] = r.actual_triples
         outputs[(r.reasoner, r.target_triples)] = r.triples_out
-    summary = {}
+    summary: dict = {}
     for (reasoner, target), samples in by_key.items():
         summary.setdefault(reasoner, []).append(
             {
@@ -254,7 +250,8 @@ def plot(summary: dict, path: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
     colors = {
-        "pyoxigraph": "#1f77b4",
+        "oxreason": "#1f77b4",
+        "oxreason-eq": "#9467bd",
         "owlrl": "#d62728",
         "reasonable": "#2ca02c",
     }
@@ -304,13 +301,43 @@ def main() -> None:
         help="directory for generated fixtures, CSV, JSON, and PNG",
     )
     parser.add_argument(
+        "--native-bin",
+        type=Path,
+        default=NATIVE_BIN_DEFAULT,
+        help="path to the Rust bench binary (reasoner_bench)",
+    )
+    parser.add_argument(
         "--only",
         nargs="+",
-        choices=list(REASONERS.keys()),
-        default=list(REASONERS.keys()),
-        help="restrict to a subset of reasoners",
+        default=None,
+        help=(
+            "restrict to a subset of reasoners from "
+            "{oxreason, oxreason-eq, reasonable, owlrl}"
+        ),
     )
     args = parser.parse_args()
+
+    all_reasoners = ["oxreason", "oxreason-eq", "reasonable", "owlrl"]
+    selected = args.only if args.only is not None else all_reasoners
+    for name in selected:
+        if name not in all_reasoners:
+            parser.error(f"unknown reasoner '{name}'; expected one of {all_reasoners}")
+
+    native_reasoners = {"oxreason", "oxreason-eq", "reasonable"}
+    if any(name in native_reasoners for name in selected):
+        if not args.native_bin.exists():
+            parser.error(
+                f"native bench binary not found at {args.native_bin}. "
+                "Build it with: cargo build --release --manifest-path "
+                "bench/reasoner/native/Cargo.toml"
+            )
+
+    runners: dict[str, Callable[[Path], tuple[float, float, int]]] = {}
+    for name in selected:
+        if name in native_reasoners:
+            runners[name] = make_native_runner(args.native_bin, name)
+        elif name == "owlrl":
+            runners[name] = run_owlrl
 
     data_dir = args.output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -320,9 +347,10 @@ def main() -> None:
         ttl = ensure_fixture(size, data_dir)
         actual = count_triples(ttl)
         print(f"\n== target={size} actual_triples={actual} ({ttl.name}) ==")
-        for name in args.only:
-            fn = REASONERS[name]
-            all_results.extend(run_cell(name, fn, ttl, size, actual, args.repeats))
+        for name in selected:
+            all_results.extend(
+                run_cell(name, runners[name], ttl, size, actual, args.repeats)
+            )
 
     csv_path = args.output_dir / "results.csv"
     json_path = args.output_dir / "summary.json"
