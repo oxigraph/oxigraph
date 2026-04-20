@@ -51,6 +51,8 @@
 //!    The `materialise_into_named_graph` config knob is honoured by
 //!    `Reasoner::expand_into`, which is still stubbed.
 
+use std::time::{Duration, Instant};
+
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::{
     Graph, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef, Triple,
@@ -58,6 +60,106 @@ use oxrdf::{
 use rustc_hash::FxHashMap;
 
 use crate::reasoner::{ReasonerConfig, ReasoningProfile};
+
+/// Lightweight per-rule profiler gated by the `OXREASON_PROFILE` environment
+/// variable. Intentionally kept in the main source file (not a feature flag)
+/// so it is trivial to turn on ad hoc without recompiling downstream crates.
+/// Off by default: construction is a single env read and a small allocation
+/// that is never touched again. When on, every rule invocation is bracketed
+/// by `Instant::now()` calls; the summary is printed to stderr when
+/// `expand` returns.
+struct Profiler {
+    enabled: bool,
+    entries: Vec<(&'static str, Duration, u64, u64)>,
+}
+
+impl Profiler {
+    fn new() -> Self {
+        let enabled = std::env::var("OXREASON_PROFILE")
+            .map(|v| v != "0" && !v.is_empty())
+            .unwrap_or(false);
+        Self {
+            enabled,
+            entries: Vec::new(),
+        }
+    }
+
+    /// Time a single apply_* call, accumulating per-rule elapsed time and
+    /// firing count. When disabled the closure still runs but no timing work
+    /// happens. The extra `delta_triples` argument records the delta size the
+    /// rule was scanned against (useful for detecting rules that keep running
+    /// on empty deltas).
+    fn time<F>(&mut self, name: &'static str, delta_triples: u64, f: F) -> u64
+    where
+        F: FnOnce() -> u64,
+    {
+        if !self.enabled {
+            return f();
+        }
+        let start = Instant::now();
+        let firings = f();
+        let elapsed = start.elapsed();
+        // Accumulate by name: rules are called once per round, so the same
+        // &'static str appears many times. Linear search is fine; the list
+        // tops out at ~30 entries.
+        if let Some(e) = self.entries.iter_mut().find(|e| e.0 == name) {
+            e.1 += elapsed;
+            e.2 = e.2.saturating_add(firings);
+            e.3 = e.3.saturating_add(delta_triples);
+        } else {
+            self.entries.push((name, elapsed, firings, delta_triples));
+        }
+        firings
+    }
+
+    /// Time a non-rule block (e.g. dedup/insert, delta build). Same accumulation
+    /// path as `time` but with an explicit zero firing count.
+    fn time_block<T, F>(&mut self, name: &'static str, f: F) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        if !self.enabled {
+            return f();
+        }
+        let start = Instant::now();
+        let value = f();
+        let elapsed = start.elapsed();
+        if let Some(e) = self.entries.iter_mut().find(|e| e.0 == name) {
+            e.1 += elapsed;
+        } else {
+            self.entries.push((name, elapsed, 0, 0));
+        }
+        value
+    }
+
+    fn report(&self, total: Duration) {
+        if !self.enabled {
+            return;
+        }
+        let mut sorted: Vec<&(&'static str, Duration, u64, u64)> = self.entries.iter().collect();
+        sorted.sort_by_key(|e| std::cmp::Reverse(e.1));
+        eprintln!(
+            "OXREASON_PROFILE total_ms={:.3}",
+            total.as_secs_f64() * 1000.0
+        );
+        eprintln!(
+            "{:<18}  {:>10}  {:>8}  {:>10}  {:>10}",
+            "rule", "ms", "pct", "firings", "delta_in"
+        );
+        for (name, elapsed, firings, delta_in) in sorted {
+            let ms = elapsed.as_secs_f64() * 1000.0;
+            let pct = if total.as_secs_f64() > 0.0 {
+                100.0 * elapsed.as_secs_f64() / total.as_secs_f64()
+            } else {
+                0.0
+            };
+            eprintln!(
+                "{:<18}  {:>10.3}  {:>7.1}%  {:>10}  {:>10}",
+                name, ms, pct, firings, delta_in
+            );
+        }
+    }
+}
 
 /// `http://www.w3.org/2002/07/owl#TransitiveProperty`
 const OWL_TRANSITIVE_PROPERTY: NamedNodeRef<'static> =
@@ -307,13 +409,37 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     let profile = config.profile();
     let equality_on = config.equality_rules_enabled();
 
+    let mut prof = Profiler::new();
+    let run_start = Instant::now();
+
     let mut stats = RunStats::default();
     let mut delta: Option<DeltaIndex> = None;
+
+    // Shadow set of every triple in the graph. Seeded from the input graph
+    // once, then kept in lockstep with successful `graph.insert` calls. The
+    // profiler showed that `graph.insert` (which touches all six BTreeSet
+    // indexes of the underlying dataset) and per-round `FxHashSet<Triple>`
+    // deduplication together consumed ~65-78% of reasoning time. Most
+    // candidate triples a rule produces are already in the graph from a
+    // prior round, so the 6-index insert path runs and fails N-1 out of N
+    // times. An owned `FxHashSet<Triple>` probe is a single hash lookup
+    // with cheap `Arc` comparisons, so it short-circuits all of that work
+    // for duplicates. The memory overhead is O(|graph|) extra triples of
+    // pointer-sized members (each owned triple is three `Arc`-backed
+    // terms); on LUBM 10000 that is under 1 MB.
+    let mut seen_total = prof.time_block("seen.seed", || {
+        let mut set: rustc_hash::FxHashSet<Triple> =
+            rustc_hash::FxHashSet::with_capacity_and_hasher(graph.len() * 2, Default::default());
+        for t in graph.iter() {
+            set.insert(t.into_owned());
+        }
+        set
+    });
 
     // Build the class-expression T-Box cache once up front. It is reused
     // across rounds and only rebuilt when the previous round's delta
     // contains a predicate that could change its contents.
-    let mut tbox = TBoxCache::build(graph);
+    let mut tbox = prof.time_block("tbox.build", || TBoxCache::build(graph));
 
     // Sample once which inconsistency families this graph can trigger.
     // The gate is conservative: if the input has no `owl:disjointWith`
@@ -330,7 +456,8 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // afterwards it contains every saturated triple, so any clash
         // produced by an earlier rule surfaces on the next round.
         if run_detectors {
-            if let Some(clash) = find_inconsistency(graph, triggers) {
+            let maybe_clash = prof.time_block("inconsistency", || find_inconsistency(graph, triggers));
+            if let Some(clash) = maybe_clash {
                 return Err(clash);
             }
         }
@@ -339,49 +466,50 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         let mut round_firings: u64 = 0;
 
         let delta_ref = delta.as_ref();
+        let delta_size: u64 = delta_ref.map_or(0, |d| d.by_predicate.values().map(|v| v.len() as u64).sum());
 
         // RDFS compatible rules. Run in both profiles.
-        round_firings = round_firings.saturating_add(apply_cax_sco(graph, delta_ref, &mut pending));
-        round_firings = round_firings.saturating_add(apply_prp_dom(graph, delta_ref, &mut pending));
-        round_firings = round_firings.saturating_add(apply_prp_rng(graph, delta_ref, &mut pending));
-        round_firings = round_firings.saturating_add(apply_prp_spo1(graph, delta_ref, &mut pending));
+        round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("prp-dom", delta_size, || apply_prp_dom(graph, delta_ref, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("prp-rng", delta_size, || apply_prp_rng(graph, delta_ref, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("prp-spo1", delta_size, || apply_prp_spo1(graph, delta_ref, &mut pending)));
 
         // OWL rules. Skipped when running the Rdfs profile.
         if profile != ReasoningProfile::Rdfs {
-            round_firings = round_firings.saturating_add(apply_prp_trp(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_prp_symp(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_prp_inv(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_prp_eqp(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cax_eqc(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(prof.time("prp-trp", delta_size, || apply_prp_trp(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("prp-symp", delta_size, || apply_prp_symp(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("prp-inv", delta_size, || apply_prp_inv(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("prp-eqp", delta_size, || apply_prp_eqp(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, &mut pending)));
 
             // M3 schema rules.
-            round_firings = round_firings.saturating_add(apply_scm_cls(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_sco(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_op(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_dp(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_eqc1(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_eqc2(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_eqp1(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_eqp2(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_dom1(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_scm_rng1(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(prof.time("scm-cls", delta_size, || apply_scm_cls(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-sco", delta_size, || apply_scm_sco(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-op", delta_size, || apply_scm_op(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-dp", delta_size, || apply_scm_dp(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-eqc1", delta_size, || apply_scm_eqc1(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-eqc2", delta_size, || apply_scm_eqc2(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-eqp1", delta_size, || apply_scm_eqp1(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-eqp2", delta_size, || apply_scm_eqp2(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-dom1", delta_size, || apply_scm_dom1(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("scm-rng1", delta_size, || apply_scm_rng1(graph, delta_ref, &mut pending)));
 
             // M4 rules.
-            round_firings = round_firings.saturating_add(apply_scm_spo(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_hv1(graph, &tbox, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_hv2(graph, &tbox, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_int1(graph, &tbox, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_int2(graph, &tbox, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_uni(graph, &tbox, &mut pending));
+            round_firings = round_firings.saturating_add(prof.time("scm-spo", delta_size, || apply_scm_spo(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-hv1", delta_size, || apply_cls_hv1(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-hv2", delta_size, || apply_cls_hv2(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-int1", delta_size, || apply_cls_int1(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-int2", delta_size, || apply_cls_int2(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-uni", delta_size, || apply_cls_uni(graph, &tbox, &mut pending)));
 
             if equality_on {
-                round_firings = round_firings.saturating_add(apply_prp_fp(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_prp_ifp(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_eq_sym(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_eq_trans(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_eq_rep_s(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_eq_rep_p(graph, delta_ref, &mut pending));
-                round_firings = round_firings.saturating_add(apply_eq_rep_o(graph, delta_ref, &mut pending));
+                round_firings = round_firings.saturating_add(prof.time("prp-fp", delta_size, || apply_prp_fp(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("prp-ifp", delta_size, || apply_prp_ifp(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("eq-sym", delta_size, || apply_eq_sym(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("eq-trans", delta_size, || apply_eq_trans(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("eq-rep-s", delta_size, || apply_eq_rep_s(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("eq-rep-p", delta_size, || apply_eq_rep_p(graph, delta_ref, &mut pending)));
+                round_firings = round_firings.saturating_add(prof.time("eq-rep-o", delta_size, || apply_eq_rep_o(graph, delta_ref, &mut pending)));
             }
         }
 
@@ -393,28 +521,64 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // probing `graph.insert` avoids rehashing and re-comparing those
         // duplicates against the live graph. `FxHashSet` is used to match
         // the rest of the engine's hashing strategy.
-        let mut seen: rustc_hash::FxHashSet<Triple> =
-            rustc_hash::FxHashSet::with_capacity_and_hasher(pending.len(), Default::default());
-        let mut new_triples: Vec<Triple> = Vec::new();
-        for triple in pending {
-            if !seen.insert(triple.clone()) {
-                continue;
-            }
-            if graph.insert(&triple) {
+        let new_triples = {
+            let mut new_triples: Vec<Triple> = Vec::new();
+            let mut seen_time = Duration::ZERO;
+            let mut insert_time = Duration::ZERO;
+            let profile_split = prof.enabled;
+            for triple in pending {
+                // `Triple::clone` allocates three owned `String`s (subject,
+                // predicate, object IRIs), so it is much more expensive
+                // than a typical pointer clone. Most pending triples are
+                // duplicates we have already derived, so we test against
+                // the shadow set with a borrowed probe first and only
+                // clone on a genuinely novel triple.
+                let t0 = if profile_split { Some(Instant::now()) } else { None };
+                let already = seen_total.contains(&triple);
+                if let Some(t) = t0 {
+                    seen_time += t.elapsed();
+                }
+                if already {
+                    continue;
+                }
+                // Novel triple: insert into both shadow set and graph, and
+                // push onto `new_triples` for the next delta. One clone for
+                // the shadow set; the original `triple` moves into the
+                // `new_triples` vec.
+                let t1 = if profile_split { Some(Instant::now()) } else { None };
+                seen_total.insert(triple.clone());
+                graph.insert(&triple);
+                if let Some(t) = t1 {
+                    insert_time += t.elapsed();
+                }
                 new_triples.push(triple);
             }
-        }
+            if profile_split {
+                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "seen.probe") {
+                    e.1 += seen_time;
+                } else {
+                    prof.entries.push(("seen.probe", seen_time, 0, 0));
+                }
+                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "graph.insert") {
+                    e.1 += insert_time;
+                } else {
+                    prof.entries.push(("graph.insert", insert_time, 0, 0));
+                }
+            }
+            new_triples
+        };
         let round_added = new_triples.len() as u64;
         stats.added = stats.added.saturating_add(round_added);
 
         if round_added == 0 {
+            prof.report(run_start.elapsed());
             return Ok(stats);
         }
 
         // Build the delta for the next round from the triples that were
         // actually new to the graph. Dedup happens at `graph.insert` time
         // above, so `new_triples` already excludes duplicates.
-        let next_delta = DeltaIndex::build(&new_triples);
+        let next_delta = prof.time_block("delta.build", || DeltaIndex::build(&new_triples));
 
         // Rebuild the class-expression cache only if the delta actually
         // touched one of its trigger predicates. In practice no
@@ -425,7 +589,7 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // `prp-spo1` (if the user declares a subPropertyOf chain reaching
         // one of those predicates) could in principle touch the T-Box.
         if next_delta.touches_tbox() {
-            tbox = TBoxCache::build(graph);
+            tbox = prof.time_block("tbox.build", || TBoxCache::build(graph));
         }
 
         delta = Some(next_delta);
