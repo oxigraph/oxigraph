@@ -13,3 +13,4 @@ It is composed on a main library, [`oxigraph`](./oxigraph) and a set of smaller 
 * [`sparopt`](./sparesults), a SPARQL optimizer.
 * [`spareval`](./spareval), a SPARQL evaluator.
 * [`oxsdatatypes`](./oxsdatatypes), an implementation of some XML Schema datatypes.
+* [`oxreason`](./oxreason), OWL 2 RL forward chaining reasoner and SHACL validator.

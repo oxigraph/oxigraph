@@ -53,6 +53,7 @@ Also, some parts of Oxigraph are available as standalone Rust crates:
 * [`sparopt`](./lib/sparopt), a SPARQL optimizer.
 * [`oxsdatatypes`](./lib/oxsdatatypes), an implementation of some XML Schema datatypes.
 * [`spargeo`](./lib/spargeo), a partial implementation of [GeoSPARQL](https://docs.ogc.org/is/22-047r1/22-047r1.html).
+* [`oxreason`](./lib/oxreason), OWL 2 RL forward chaining reasoner and SHACL validator.
 
 The library layers in Oxigraph. The elements above depend on the elements below:
 ![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)
