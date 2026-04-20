@@ -28,6 +28,14 @@ pub enum RuleId {
     cax_int,
     cax_uni,
 
+    // Class expression rules.
+    cls_int1,
+    cls_int2,
+    cls_uni,
+    cls_hv1,
+    cls_hv2,
+    cls_nothing2,
+
     // Property axioms.
     prp_dom,
     prp_rng,
@@ -40,6 +48,9 @@ pub enum RuleId {
     prp_eqp2,
     prp_fp,
     prp_ifp,
+    prp_irp,
+    prp_asyp,
+    prp_pdw,
 
     // Equality (opt in).
     eq_ref,
@@ -54,6 +65,7 @@ pub enum RuleId {
     scm_sco,
     scm_op,
     scm_dp,
+    scm_spo,
     scm_eqc1,
     scm_eqc2,
     scm_eqp1,
@@ -80,6 +92,12 @@ impl RuleId {
             Self::cax_dw => "cax-dw",
             Self::cax_int => "cax-int",
             Self::cax_uni => "cax-uni",
+            Self::cls_int1 => "cls-int1",
+            Self::cls_int2 => "cls-int2",
+            Self::cls_uni => "cls-uni",
+            Self::cls_hv1 => "cls-hv1",
+            Self::cls_hv2 => "cls-hv2",
+            Self::cls_nothing2 => "cls-nothing2",
             Self::prp_dom => "prp-dom",
             Self::prp_rng => "prp-rng",
             Self::prp_trp => "prp-trp",
@@ -91,6 +109,9 @@ impl RuleId {
             Self::prp_eqp2 => "prp-eqp2",
             Self::prp_fp => "prp-fp",
             Self::prp_ifp => "prp-ifp",
+            Self::prp_irp => "prp-irp",
+            Self::prp_asyp => "prp-asyp",
+            Self::prp_pdw => "prp-pdw",
             Self::eq_ref => "eq-ref",
             Self::eq_sym => "eq-sym",
             Self::eq_trans => "eq-trans",
@@ -101,6 +122,7 @@ impl RuleId {
             Self::scm_sco => "scm-sco",
             Self::scm_op => "scm-op",
             Self::scm_dp => "scm-dp",
+            Self::scm_spo => "scm-spo",
             Self::scm_eqc1 => "scm-eqc1",
             Self::scm_eqc2 => "scm-eqc2",
             Self::scm_eqp1 => "scm-eqp1",

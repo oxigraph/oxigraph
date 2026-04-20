@@ -25,7 +25,7 @@
 )]
 
 use oxrdf::vocab::{rdf, rdfs};
-use oxrdf::{Graph, NamedNode, Triple};
+use oxrdf::{BlankNode, Graph, NamedNode, Triple};
 use oxreason::{ReasonError, Reasoner, ReasonerConfig};
 
 fn iri(s: &str) -> NamedNode {
@@ -530,4 +530,233 @@ fn custom_profile_still_returns_not_implemented() {
     let reasoner = Reasoner::new(ReasonerConfig::custom(RuleSet::owl2_rl_core()));
     let err = reasoner.expand(&mut g).unwrap_err();
     assert!(matches!(err, ReasonError::NotImplemented(_)));
+}
+
+// ---------------------------------------------------------------------------
+// M4 rule tests: scm-spo, cls-hv1, cls-hv2, cls-int1, cls-int2, cls-uni,
+// plus four inconsistency detectors (cls-nothing2, prp-irp, prp-asyp,
+// prp-pdw). The inconsistency detectors surface via
+// `ReasonError::InconsistentAxiom` with a human readable message.
+
+#[test]
+fn scm_spo_closes_subproperty_chain() {
+    let mut g = Graph::default();
+
+    g.insert(&Triple::new(ex("worksFor"), rdfs::SUB_PROPERTY_OF, ex("employedBy")));
+    g.insert(&Triple::new(ex("employedBy"), rdfs::SUB_PROPERTY_OF, ex("relatedTo")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(
+        ex("worksFor"),
+        rdfs::SUB_PROPERTY_OF,
+        ex("relatedTo"),
+    )));
+}
+
+#[test]
+fn cls_hv1_propagates_restriction_value_to_instances() {
+    // Class c: owl:Restriction on owl:onProperty speaksLanguage with
+    // owl:hasValue "Polish". Any instance of c must then speak Polish.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("speaksLanguage")));
+    g.insert(&Triple::new(c.clone(), owl("hasValue"), ex("Polish")));
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, c));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(
+        ex("Alice"),
+        ex("speaksLanguage"),
+        ex("Polish"),
+    )));
+}
+
+#[test]
+fn cls_hv2_infers_restriction_membership_from_value() {
+    // Instance has speaksLanguage Polish. Inverse direction of cls-hv1:
+    // that instance must be a member of the restriction class.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("speaksLanguage")));
+    g.insert(&Triple::new(c.clone(), owl("hasValue"), ex("Polish")));
+    g.insert(&Triple::new(ex("Alice"), ex("speaksLanguage"), ex("Polish")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, c)));
+}
+
+#[test]
+fn cls_int1_requires_all_members_to_type_instance() {
+    // Polish citizen class defined as intersection of Citizen and
+    // LivesInPoland. Anyone typed as both must be inferred as a PolishCitizen.
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(ex("PolishCitizen"), owl("intersectionOf"), list_head.clone()));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("Citizen")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("LivesInPoland")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, ex("Citizen")));
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, ex("LivesInPoland")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, ex("PolishCitizen"))));
+}
+
+#[test]
+fn cls_int1_requires_every_member_to_match() {
+    // Only one of the two required types present; intersection must not fire.
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(ex("PolishCitizen"), owl("intersectionOf"), list_head.clone()));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("Citizen")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("LivesInPoland")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, ex("Citizen")));
+
+    let _ = expand(&mut g);
+
+    assert!(!g.contains(&Triple::new(ex("Alice"), rdf::TYPE, ex("PolishCitizen"))));
+}
+
+#[test]
+fn cls_int2_splits_intersection_membership_into_each_member() {
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(ex("PolishCitizen"), owl("intersectionOf"), list_head.clone()));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("Citizen")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("LivesInPoland")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, ex("PolishCitizen")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, ex("Citizen"))));
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, ex("LivesInPoland"))));
+}
+
+#[test]
+fn cls_uni_membership_from_any_union_member() {
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(ex("Adult"), owl("unionOf"), list_head.clone()));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("Student")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("Worker")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, ex("Student")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, ex("Adult"))));
+}
+
+#[test]
+fn cls_nothing2_raises_inconsistent_axiom() {
+    let mut g = Graph::default();
+
+    g.insert(&Triple::new(ex("Acme"), rdf::TYPE, owl("Nothing")));
+
+    let err = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand(&mut g)
+        .expect_err("owl:Nothing typing must clash");
+
+    match err {
+        ReasonError::InconsistentAxiom { message } => {
+            assert!(message.contains("cls-nothing2"), "unexpected message: {message}");
+            assert!(message.contains("Acme"), "unexpected message: {message}");
+        }
+        other => panic!("expected InconsistentAxiom, got {other:?}"),
+    }
+}
+
+#[test]
+fn prp_irp_raises_inconsistent_axiom_on_reflexive_edge() {
+    let mut g = Graph::default();
+
+    g.insert(&Triple::new(
+        ex("parentOf"),
+        rdf::TYPE,
+        owl("IrreflexiveProperty"),
+    ));
+    g.insert(&Triple::new(ex("Alice"), ex("parentOf"), ex("Alice")));
+
+    let err = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand(&mut g)
+        .expect_err("reflexive edge on irreflexive property must clash");
+
+    match err {
+        ReasonError::InconsistentAxiom { message } => {
+            assert!(message.contains("prp-irp"), "unexpected message: {message}");
+        }
+        other => panic!("expected InconsistentAxiom, got {other:?}"),
+    }
+}
+
+#[test]
+fn prp_asyp_raises_inconsistent_axiom_on_opposing_edges() {
+    let mut g = Graph::default();
+
+    g.insert(&Triple::new(
+        ex("parentOf"),
+        rdf::TYPE,
+        owl("AsymmetricProperty"),
+    ));
+    g.insert(&Triple::new(ex("Alice"), ex("parentOf"), ex("Bob")));
+    g.insert(&Triple::new(ex("Bob"), ex("parentOf"), ex("Alice")));
+
+    let err = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand(&mut g)
+        .expect_err("opposing edges on asymmetric property must clash");
+
+    match err {
+        ReasonError::InconsistentAxiom { message } => {
+            assert!(message.contains("prp-asyp"), "unexpected message: {message}");
+        }
+        other => panic!("expected InconsistentAxiom, got {other:?}"),
+    }
+}
+
+#[test]
+fn prp_pdw_raises_inconsistent_axiom_on_disjoint_property_pair() {
+    let mut g = Graph::default();
+
+    g.insert(&Triple::new(
+        ex("parentOf"),
+        owl("propertyDisjointWith"),
+        ex("childOf"),
+    ));
+    g.insert(&Triple::new(ex("Alice"), ex("parentOf"), ex("Bob")));
+    g.insert(&Triple::new(ex("Alice"), ex("childOf"), ex("Bob")));
+
+    let err = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand(&mut g)
+        .expect_err("two disjoint properties on the same pair must clash");
+
+    match err {
+        ReasonError::InconsistentAxiom { message } => {
+            assert!(message.contains("prp-pdw"), "unexpected message: {message}");
+        }
+        other => panic!("expected InconsistentAxiom, got {other:?}"),
+    }
 }

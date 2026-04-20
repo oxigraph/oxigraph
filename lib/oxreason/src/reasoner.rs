@@ -159,22 +159,26 @@ impl Reasoner {
     /// Returns a [`ReasoningReport`] describing how many triples were added
     /// and how much work was done.
     ///
-    /// Current behaviour (M1 plus M2 plus M3): runs the core rules cax-sco,
-    /// prp-dom, prp-rng, prp-spo1, and for the Owl2Rl profile also prp-trp,
-    /// prp-symp, prp-inv1, prp-inv2, prp-eqp1, prp-eqp2, cax-eqc1, cax-eqc2,
-    /// plus the schema rules scm-cls, scm-sco, scm-op, scm-dp, scm-eqc1,
-    /// scm-eqc2, scm-eqp1, scm-eqp2, scm-dom1, scm-rng1, plus the
-    /// inconsistency detector cax-dw. The equality rules (eq-sym, eq-trans,
-    /// eq-rep-s, eq-rep-p, eq-rep-o) and the functional property rules
-    /// (prp-fp, prp-ifp) are gated behind
-    /// [`ReasonerConfig::with_equality_rules`] and default to off.
+    /// Current behaviour (M1 plus M2 plus M3 plus M4): runs the core rules
+    /// cax-sco, prp-dom, prp-rng, prp-spo1, and for the Owl2Rl profile also
+    /// prp-trp, prp-symp, prp-inv1, prp-inv2, prp-eqp1, prp-eqp2, cax-eqc1,
+    /// cax-eqc2, the schema rules scm-cls, scm-sco, scm-spo, scm-op, scm-dp,
+    /// scm-eqc1, scm-eqc2, scm-eqp1, scm-eqp2, scm-dom1, scm-rng1, the
+    /// class expression rules cls-hv1, cls-hv2, cls-int1, cls-int2, cls-uni,
+    /// and the inconsistency detectors cax-dw, cls-nothing2, prp-irp,
+    /// prp-asyp, prp-pdw. The equality rules (eq-sym, eq-trans, eq-rep-s,
+    /// eq-rep-p, eq-rep-o) and the functional property rules (prp-fp,
+    /// prp-ifp) are gated behind [`ReasonerConfig::with_equality_rules`]
+    /// and default to off.
     ///
     /// When cax-dw finds an individual typed as two classes that appear in
     /// an `owl:disjointWith` pair, expansion aborts and returns
     /// [`ReasonError::Inconsistent`] with the offending individual and
-    /// classes named. Returns [`ReasonError::NotImplemented`] for the Custom
-    /// profile because the caller-supplied RuleSet is not yet plugged into
-    /// the engine.
+    /// classes named. Other clashes (cls-nothing2, prp-irp, prp-asyp,
+    /// prp-pdw) surface as [`ReasonError::InconsistentAxiom`] with a
+    /// rule-prefixed human message. Returns [`ReasonError::NotImplemented`]
+    /// for the Custom profile because the caller-supplied RuleSet is not
+    /// yet plugged into the engine.
     pub fn expand(&self, graph: &mut Graph) -> Result<ReasoningReport, ReasonError> {
         match self.config.profile {
             ReasoningProfile::Owl2Rl | ReasoningProfile::Rdfs => match engine::expand(graph, &self.config) {
@@ -183,10 +187,13 @@ impl Reasoner {
                     rounds: stats.rounds,
                     firings: stats.firings,
                 }),
-                Err(clash) => Err(ReasonError::Inconsistent {
+                Err(engine::Inconsistency::DisjointClasses(clash)) => Err(ReasonError::Inconsistent {
                     individual: clash.individual.to_string(),
                     class_a: clash.class_a.to_string(),
                     class_b: clash.class_b.to_string(),
+                }),
+                Err(other) => Err(ReasonError::InconsistentAxiom {
+                    message: other.message(),
                 }),
             },
             ReasoningProfile::Custom => Err(ReasonError::NotImplemented(

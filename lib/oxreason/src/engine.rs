@@ -1,4 +1,4 @@
-//! Forward chaining engine (M1 plus M2 plus M3).
+//! Forward chaining engine (M1 plus M2 plus M3 plus M4).
 //!
 //! M1 implements the five schema rules `cax-sco`, `prp-dom`, `prp-rng`,
 //! `prp-spo1`, `prp-trp` from `DESIGN.md` section 9.
@@ -16,6 +16,16 @@
 //! and the inconsistency detector `cax-dw`, which aborts expansion with a
 //! [`DisjointClash`] when an individual carries two types that appear in an
 //! `owl:disjointWith` pair.
+//!
+//! M4 adds one more schema rule (`scm-spo`, transitivity of
+//! `rdfs:subPropertyOf`), the class expression rules
+//! `cls-hv1`, `cls-hv2`, `cls-int1`, `cls-int2`, `cls-uni`, and three
+//! additional inconsistency detectors: `cls-nothing2` (any instance of
+//! `owl:Nothing`), `prp-irp` (a reflexive edge on an
+//! `owl:IrreflexiveProperty`), `prp-asyp` (both directions of an
+//! `owl:AsymmetricProperty` between the same individuals), and
+//! `prp-pdw` (a pair of individuals related by two
+//! `owl:propertyDisjointWith` properties).
 //!
 //! An `rdfs` profile alias runs only the four RDFS compatible rules and
 //! skips every OWL-specific rule (including equality, schema closure, and
@@ -91,6 +101,27 @@ const OWL_INVERSE_FUNCTIONAL_PROPERTY: NamedNodeRef<'static> =
 /// `http://www.w3.org/2002/07/owl#disjointWith`
 const OWL_DISJOINT_WITH: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#disjointWith");
+/// `http://www.w3.org/2002/07/owl#IrreflexiveProperty`
+const OWL_IRREFLEXIVE_PROPERTY: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#IrreflexiveProperty");
+/// `http://www.w3.org/2002/07/owl#AsymmetricProperty`
+const OWL_ASYMMETRIC_PROPERTY: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#AsymmetricProperty");
+/// `http://www.w3.org/2002/07/owl#propertyDisjointWith`
+const OWL_PROPERTY_DISJOINT_WITH: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#propertyDisjointWith");
+/// `http://www.w3.org/2002/07/owl#hasValue`
+const OWL_HAS_VALUE: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#hasValue");
+/// `http://www.w3.org/2002/07/owl#onProperty`
+const OWL_ON_PROPERTY: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#onProperty");
+/// `http://www.w3.org/2002/07/owl#intersectionOf`
+const OWL_INTERSECTION_OF: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#intersectionOf");
+/// `http://www.w3.org/2002/07/owl#unionOf`
+const OWL_UNION_OF: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#unionOf");
 
 /// Summary of a chaining run, consumed by `Reasoner::expand` to build a
 /// `ReasoningReport`.
@@ -107,6 +138,79 @@ pub(crate) struct DisjointClash {
     pub individual: NamedOrBlankNode,
     pub class_a: NamedNode,
     pub class_b: NamedNode,
+}
+
+/// Why the engine aborted expansion.
+///
+/// `DisjointClasses` is the existing cax-dw path and keeps its structured
+/// shape so the reasoner API can still surface the offending individual
+/// and classes. The other variants cover the four M4 inconsistency checks
+/// and carry a pre-formatted human message because their shapes do not
+/// line up (some name a pair of individuals, some a single property, some
+/// both). The `ReasonError::InconsistentAxiom` variant at the public API
+/// boundary renders that message directly.
+#[derive(Clone, Debug)]
+pub(crate) enum Inconsistency {
+    /// cax-dw: an individual holds two types that are declared disjoint.
+    DisjointClasses(DisjointClash),
+    /// cls-nothing2: an individual is typed as `owl:Nothing`.
+    NothingType { individual: String },
+    /// prp-irp: a reflexive edge over an `owl:IrreflexiveProperty`.
+    IrreflexiveViolation {
+        property: String,
+        individual: String,
+    },
+    /// prp-asyp: two opposing edges over an `owl:AsymmetricProperty`.
+    AsymmetricViolation {
+        property: String,
+        subject: String,
+        object: String,
+    },
+    /// prp-pdw: a pair of individuals linked by two
+    /// `owl:propertyDisjointWith` properties.
+    PropertyDisjointnessViolation {
+        property_a: String,
+        property_b: String,
+        subject: String,
+        object: String,
+    },
+}
+
+impl Inconsistency {
+    /// Human readable message used by `ReasonError::InconsistentAxiom`.
+    /// Not used for `DisjointClasses` which takes a structured public path.
+    pub(crate) fn message(&self) -> String {
+        match self {
+            Self::DisjointClasses(c) => format!(
+                "cax-dw: individual {} is typed as disjoint classes {} and {}",
+                c.individual, c.class_a, c.class_b,
+            ),
+            Self::NothingType { individual } => {
+                format!("cls-nothing2: individual {individual} is typed as owl:Nothing")
+            }
+            Self::IrreflexiveViolation {
+                property,
+                individual,
+            } => format!(
+                "prp-irp: irreflexive property {property} has a reflexive edge on {individual}",
+            ),
+            Self::AsymmetricViolation {
+                property,
+                subject,
+                object,
+            } => format!(
+                "prp-asyp: asymmetric property {property} relates {subject} and {object} in both directions",
+            ),
+            Self::PropertyDisjointnessViolation {
+                property_a,
+                property_b,
+                subject,
+                object,
+            } => format!(
+                "prp-pdw: properties {property_a} and {property_b} are declared disjoint but both relate {subject} to {object}",
+            ),
+        }
+    }
 }
 
 /// Triples added in the previous round, grouped by predicate so each rule
@@ -148,11 +252,11 @@ impl DeltaIndex {
 
 /// Run the forward chainer to fixpoint on the given graph.
 ///
-/// Returns the final [`RunStats`] on a clean saturation, or a
-/// [`DisjointClash`] describing the first cax-dw violation found. The
-/// clash is surfaced even when encountered on round zero, so the reasoner
-/// fails fast on pre-existing inconsistencies in the input graph.
-pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunStats, DisjointClash> {
+/// Returns the final [`RunStats`] on a clean saturation, or an
+/// [`Inconsistency`] describing the first violation found. A clash is
+/// surfaced even when encountered on round zero, so the reasoner fails
+/// fast on pre-existing inconsistencies in the input graph.
+pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunStats, Inconsistency> {
     let profile = config.profile();
     let equality_on = config.equality_rules_enabled();
 
@@ -162,13 +266,13 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     loop {
         stats.rounds = stats.rounds.saturating_add(1);
 
-        // cax-dw runs first so an inconsistent graph aborts before we spend
-        // more work materialising vacuous consequences. The detector scans
-        // the full graph; on round 1 the graph is the input, afterwards it
-        // contains every saturated triple, so any clash produced by an
-        // earlier rule surfaces immediately on the next round.
+        // Inconsistency detectors run first so an inconsistent graph aborts
+        // before we spend more work materialising vacuous consequences. The
+        // detectors scan the full graph; on round 1 the graph is the input,
+        // afterwards it contains every saturated triple, so any clash
+        // produced by an earlier rule surfaces on the next round.
         if profile != ReasoningProfile::Rdfs {
-            if let Some(clash) = find_cax_dw_clash(graph) {
+            if let Some(clash) = find_inconsistency(graph) {
                 return Err(clash);
             }
         }
@@ -203,6 +307,14 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
             round_firings = round_firings.saturating_add(apply_scm_eqp2(graph, delta_ref, &mut pending));
             round_firings = round_firings.saturating_add(apply_scm_dom1(graph, delta_ref, &mut pending));
             round_firings = round_firings.saturating_add(apply_scm_rng1(graph, delta_ref, &mut pending));
+
+            // M4 rules.
+            round_firings = round_firings.saturating_add(apply_scm_spo(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_hv1(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_hv2(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_int1(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_int2(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_uni(graph, delta_ref, &mut pending));
 
             if equality_on {
                 round_firings = round_firings.saturating_add(apply_prp_fp(graph, delta_ref, &mut pending));
@@ -1822,9 +1934,30 @@ fn join_same_object(
 }
 
 // ---------------------------------------------------------------------------
-// cax-dw inconsistency detection. Scans the current graph for any
-// individual carrying two types that appear in a symmetric
-// owl:disjointWith pair. Returns the first clash found.
+// Inconsistency detection. Scans the current graph for any violation of
+// the five OWL 2 RL clash rules (cax-dw, cls-nothing2, prp-irp, prp-asyp,
+// prp-pdw) and returns the first one found. The order is fixed: cax-dw
+// first so existing behaviour is preserved, then cls-nothing2, prp-irp,
+// prp-asyp, prp-pdw.
+
+fn find_inconsistency(graph: &Graph) -> Option<Inconsistency> {
+    if let Some(c) = find_cax_dw_clash(graph) {
+        return Some(Inconsistency::DisjointClasses(c));
+    }
+    if let Some(c) = find_cls_nothing2(graph) {
+        return Some(c);
+    }
+    if let Some(c) = find_prp_irp(graph) {
+        return Some(c);
+    }
+    if let Some(c) = find_prp_asyp(graph) {
+        return Some(c);
+    }
+    if let Some(c) = find_prp_pdw(graph) {
+        return Some(c);
+    }
+    None
+}
 
 fn find_cax_dw_clash(graph: &Graph) -> Option<DisjointClash> {
     // Build the symmetric disjointness relation once per round.
@@ -1861,6 +1994,424 @@ fn find_cax_dw_clash(graph: &Graph) -> Option<DisjointClash> {
         }
     }
     None
+}
+
+/// cls-nothing2: if `x rdf:type owl:Nothing` then the graph is inconsistent.
+fn find_cls_nothing2(graph: &Graph) -> Option<Inconsistency> {
+    let mut first = graph.subjects_for_predicate_object(rdf::TYPE, OWL_NOTHING);
+    first
+        .next()
+        .map(NamedOrBlankNodeRef::into_owned)
+        .map(|x| Inconsistency::NothingType {
+            individual: x.to_string(),
+        })
+}
+
+/// prp-irp: if `p rdf:type owl:IrreflexiveProperty` and `x p x` then the
+/// graph is inconsistent.
+fn find_prp_irp(graph: &Graph) -> Option<Inconsistency> {
+    let irreflexive: Vec<NamedNode> = graph
+        .subjects_for_predicate_object(rdf::TYPE, OWL_IRREFLEXIVE_PROPERTY)
+        .filter_map(named_node_from_subject)
+        .collect();
+    for p in irreflexive {
+        for t in graph.triples_for_predicate(p.as_ref()) {
+            let Some(object) = term_ref_to_named_or_blank(t.object) else {
+                continue;
+            };
+            let subject = t.subject.into_owned();
+            if named_or_blank_eq(&subject, &object) {
+                return Some(Inconsistency::IrreflexiveViolation {
+                    property: p.to_string(),
+                    individual: subject.to_string(),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// prp-asyp: if `p rdf:type owl:AsymmetricProperty` and both `x p y` and
+/// `y p x` hold then the graph is inconsistent.
+fn find_prp_asyp(graph: &Graph) -> Option<Inconsistency> {
+    let asymmetric: Vec<NamedNode> = graph
+        .subjects_for_predicate_object(rdf::TYPE, OWL_ASYMMETRIC_PROPERTY)
+        .filter_map(named_node_from_subject)
+        .collect();
+    for p in asymmetric {
+        let edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = graph
+            .triples_for_predicate(p.as_ref())
+            .filter_map(|t| {
+                let x = t.subject.into_owned();
+                let y = term_ref_to_named_or_blank(t.object)?;
+                Some((x, y))
+            })
+            .collect();
+        for (x, y) in &edges {
+            if named_or_blank_eq(x, y) {
+                // Reflexive edges on an asymmetric property are a separate
+                // violation shape, but spec-wise they already clash so we
+                // still report via prp-asyp rather than silently accept.
+                return Some(Inconsistency::AsymmetricViolation {
+                    property: p.to_string(),
+                    subject: x.to_string(),
+                    object: y.to_string(),
+                });
+            }
+            let reverse = Triple::new(
+                y.clone(),
+                p.clone(),
+                match x {
+                    NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+                    NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+                },
+            );
+            if graph.contains(&reverse) {
+                return Some(Inconsistency::AsymmetricViolation {
+                    property: p.to_string(),
+                    subject: x.to_string(),
+                    object: y.to_string(),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// prp-pdw: if `p1 owl:propertyDisjointWith p2`, `x p1 y`, and `x p2 y`
+/// all hold then the graph is inconsistent.
+fn find_prp_pdw(graph: &Graph) -> Option<Inconsistency> {
+    let pairs: Vec<(NamedNode, NamedNode)> = graph
+        .triples_for_predicate(OWL_PROPERTY_DISJOINT_WITH)
+        .filter_map(|t| {
+            let p1 = named_node_from_subject(t.subject)?;
+            let p2 = named_node_from_term(t.object)?;
+            Some((p1, p2))
+        })
+        .collect();
+    for (p1, p2) in &pairs {
+        let edges: Vec<(NamedOrBlankNode, Term)> = graph
+            .triples_for_predicate(p1.as_ref())
+            .map(|t| (t.subject.into_owned(), t.object.into_owned()))
+            .collect();
+        for (x, y) in edges {
+            if graph.contains(&Triple::new(x.clone(), p2.clone(), y.clone())) {
+                return Some(Inconsistency::PropertyDisjointnessViolation {
+                    property_a: p1.to_string(),
+                    property_b: p2.to_string(),
+                    subject: x.to_string(),
+                    object: y.to_string(),
+                });
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// M4 schema and class expression rules.
+
+fn apply_scm_spo(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // scm-spo: transitivity of rdfs:subPropertyOf.
+    //
+    // Semi-naive:
+    //   Branch 1: delta(spo) × graph(spo).
+    //   Branch 2: graph(spo) × delta(spo).
+    let edges: Vec<(NamedNode, NamedNode)> = graph
+        .triples_for_predicate(rdfs::SUB_PROPERTY_OF)
+        .filter_map(|t| {
+            let p1 = named_node_from_subject(t.subject)?;
+            let p2 = named_node_from_term(t.object)?;
+            Some((p1, p2))
+        })
+        .collect();
+
+    let mut firings: u64 = 0;
+
+    let Some(d) = delta else {
+        firings = firings.saturating_add(join_spo_chain(&edges, &edges, pending));
+        return firings;
+    };
+
+    let delta_edges: Vec<(NamedNode, NamedNode)> = d
+        .for_predicate(rdfs::SUB_PROPERTY_OF)
+        .iter()
+        .filter_map(|t| {
+            let p1 = owned_subject_named(&t.subject)?;
+            let p2 = owned_object_named(&t.object)?;
+            Some((p1, p2))
+        })
+        .collect();
+
+    firings = firings.saturating_add(join_spo_chain(&delta_edges, &edges, pending));
+    firings = firings.saturating_add(join_spo_chain(&edges, &delta_edges, pending));
+    firings
+}
+
+/// For each (p1, p2) in `left` and (p2, p3) in `right`, push
+/// (p1, rdfs:subPropertyOf, p3).
+fn join_spo_chain(
+    left: &[(NamedNode, NamedNode)],
+    right: &[(NamedNode, NamedNode)],
+    pending: &mut Vec<Triple>,
+) -> u64 {
+    let mut firings: u64 = 0;
+    for (p1, p2) in left {
+        for (p2b, p3) in right {
+            if p2 == p2b {
+                pending.push(Triple::new(p1.clone(), rdfs::SUB_PROPERTY_OF, p3.clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+/// Collect every `owl:Restriction`-like pair (c, p, v) where `c` is a
+/// subject carrying both `owl:onProperty p` and `owl:hasValue v`. The
+/// class `c` may be a blank node (typical for anonymous restrictions).
+/// Literal values are supported on the value side.
+fn collect_hasvalue_restrictions(graph: &Graph) -> Vec<(NamedOrBlankNode, NamedNode, Term)> {
+    let mut out: Vec<(NamedOrBlankNode, NamedNode, Term)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_HAS_VALUE) {
+        let c = t.subject.into_owned();
+        let v = t.object.into_owned();
+        // Find the matching onProperty edge for `c`.
+        let on_property = graph
+            .objects_for_subject_predicate(c.as_ref(), OWL_ON_PROPERTY)
+            .find_map(|o| match o {
+                TermRef::NamedNode(n) => Some(n.into_owned()),
+                _ => None,
+            });
+        if let Some(p) = on_property {
+            out.push((c, p, v));
+        }
+    }
+    out
+}
+
+fn apply_cls_hv1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // cls-hv1: c owl:hasValue v, c owl:onProperty p, x rdf:type c => x p v.
+    //
+    // Restriction classes are tiny, so we snapshot them per round without
+    // splitting into delta branches. We still filter by the value type: if
+    // v is a literal, the consequent is a literal-tailed triple, which is
+    // fine; if v is a resource, the consequent still has x as the subject.
+    let mut firings: u64 = 0;
+    let restrictions = collect_hasvalue_restrictions(graph);
+    for (c, p, v) in restrictions {
+        let individuals: Vec<NamedOrBlankNode> = graph
+            .subjects_for_predicate_object(rdf::TYPE, c.as_ref())
+            .map(NamedOrBlankNodeRef::into_owned)
+            .collect();
+        for x in individuals {
+            pending.push(Triple::new(x, p.clone(), v.clone()));
+            firings = firings.saturating_add(1);
+        }
+    }
+    firings
+}
+
+fn apply_cls_hv2(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // cls-hv2: c owl:hasValue v, c owl:onProperty p, x p v => x rdf:type c.
+    // Here c can be a blank node (anonymous restriction) so the inferred
+    // type keeps its Term shape via NamedOrBlankNode.
+    let mut firings: u64 = 0;
+    let restrictions = collect_hasvalue_restrictions(graph);
+    for (c, p, v) in restrictions {
+        let c_term: Term = match &c {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        // Find all x such that (x, p, v).
+        let subjects: Vec<NamedOrBlankNode> = graph
+            .triples_for_predicate(p.as_ref())
+            .filter_map(|t| {
+                if t.object == v.as_ref() {
+                    Some(t.subject.into_owned())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for x in subjects {
+            pending.push(Triple::new(x, rdf::TYPE, c_term.clone()));
+            firings = firings.saturating_add(1);
+        }
+    }
+    firings
+}
+
+/// Walk an RDF list headed at `head` and return its resource members. A
+/// literal member or a missing rdf:first yields `None`. The list must
+/// terminate in `rdf:nil`; cyclic lists are truncated once a node repeats.
+fn parse_rdf_list(graph: &Graph, head: NamedOrBlankNodeRef<'_>) -> Option<Vec<NamedOrBlankNode>> {
+    let nil = rdf::NIL;
+    let mut out: Vec<NamedOrBlankNode> = Vec::new();
+    let mut current: NamedOrBlankNode = head.into_owned();
+    let mut seen: rustc_hash::FxHashSet<NamedOrBlankNode> = rustc_hash::FxHashSet::default();
+    loop {
+        if current.as_ref() == NamedOrBlankNodeRef::NamedNode(nil) {
+            return Some(out);
+        }
+        if !seen.insert(current.clone()) {
+            // Cycle detected; return what we have so no infinite loops.
+            return Some(out);
+        }
+        // first
+        let first = graph
+            .objects_for_subject_predicate(current.as_ref(), rdf::FIRST)
+            .next()
+            .and_then(|t| match t {
+                TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
+                TermRef::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.into_owned())),
+                _ => None,
+            })?;
+        out.push(first);
+        // rest
+        let rest = graph
+            .objects_for_subject_predicate(current.as_ref(), rdf::REST)
+            .next()
+            .and_then(|t| match t {
+                TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
+                TermRef::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.into_owned())),
+                _ => None,
+            })?;
+        current = rest;
+    }
+}
+
+/// Collect every (c, members) where `c owl:intersectionOf L` and `L` is a
+/// well-formed RDF list of resources.
+fn collect_intersection_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
+    let mut out: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_INTERSECTION_OF) {
+        let Some(head) = term_ref_to_named_or_blank(t.object) else {
+            continue;
+        };
+        let Some(members) = parse_rdf_list(graph, head.as_ref()) else {
+            continue;
+        };
+        if !members.is_empty() {
+            out.push((t.subject.into_owned(), members));
+        }
+    }
+    out
+}
+
+/// Collect every (c, members) where `c owl:unionOf L` and `L` is a
+/// well-formed RDF list of resources.
+fn collect_union_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
+    let mut out: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_UNION_OF) {
+        let Some(head) = term_ref_to_named_or_blank(t.object) else {
+            continue;
+        };
+        let Some(members) = parse_rdf_list(graph, head.as_ref()) else {
+            continue;
+        };
+        if !members.is_empty() {
+            out.push((t.subject.into_owned(), members));
+        }
+    }
+    out
+}
+
+fn apply_cls_int1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // cls-int1: c owl:intersectionOf (c1 ... cn), x rdf:type ci for all i
+    // then x rdf:type c. Per W3C the classes are resources and the list is
+    // a well-formed RDF list.
+    let mut firings: u64 = 0;
+    let classes = collect_intersection_classes(graph);
+    for (c, members) in classes {
+        // Candidate individuals: those typed as the first member.
+        let Some(first) = members.first() else { continue };
+        let first_ref = first.as_ref();
+        let first_term: TermRef<'_> = match first_ref {
+            NamedOrBlankNodeRef::NamedNode(n) => TermRef::NamedNode(n),
+            NamedOrBlankNodeRef::BlankNode(b) => TermRef::BlankNode(b),
+        };
+        let candidates: Vec<NamedOrBlankNode> = graph
+            .triples_for_predicate(rdf::TYPE)
+            .filter_map(|t| {
+                if t.object == first_term {
+                    Some(t.subject.into_owned())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let c_term: Term = match &c {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        for x in candidates {
+            let mut all = true;
+            for m in members.iter().skip(1) {
+                let m_term: Term = match m {
+                    NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+                    NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+                };
+                if !graph.contains(&Triple::new(x.clone(), rdf::TYPE, m_term)) {
+                    all = false;
+                    break;
+                }
+            }
+            if all {
+                pending.push(Triple::new(x, rdf::TYPE, c_term.clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+fn apply_cls_int2(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // cls-int2: c owl:intersectionOf (c1 ... cn), x rdf:type c
+    // then x rdf:type ci for all i.
+    let mut firings: u64 = 0;
+    let classes = collect_intersection_classes(graph);
+    for (c, members) in classes {
+        let individuals: Vec<NamedOrBlankNode> = graph
+            .subjects_for_predicate_object(rdf::TYPE, c.as_ref())
+            .map(NamedOrBlankNodeRef::into_owned)
+            .collect();
+        for x in individuals {
+            for m in &members {
+                let m_term: Term = match m {
+                    NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+                    NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+                };
+                pending.push(Triple::new(x.clone(), rdf::TYPE, m_term));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+fn apply_cls_uni(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+    // cls-uni: c owl:unionOf (c1 ... cn), x rdf:type ci for any one i
+    // then x rdf:type c.
+    let mut firings: u64 = 0;
+    let classes = collect_union_classes(graph);
+    for (c, members) in classes {
+        let c_term: Term = match &c {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        for m in &members {
+            let individuals: Vec<NamedOrBlankNode> = graph
+                .subjects_for_predicate_object(rdf::TYPE, m.as_ref())
+                .map(NamedOrBlankNodeRef::into_owned)
+                .collect();
+            for x in individuals {
+                pending.push(Triple::new(x, rdf::TYPE, c_term.clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
 }
 
 // ---------------------------------------------------------------------------
@@ -2378,12 +2929,12 @@ mod tests {
         g.insert(&Triple::new(ex("Acme"), rdf::TYPE, ex("Organisation")));
 
         let err = expand(&mut g, &owl_cfg()).unwrap_err();
+        let Inconsistency::DisjointClasses(clash) = err else {
+            panic!("expected DisjointClasses variant");
+        };
 
-        assert_eq!(
-            err.individual,
-            NamedOrBlankNode::NamedNode(ex("Acme")),
-        );
-        let classes = [err.class_a.clone(), err.class_b.clone()];
+        assert_eq!(clash.individual, NamedOrBlankNode::NamedNode(ex("Acme")));
+        let classes = [clash.class_a.clone(), clash.class_b.clone()];
         assert!(classes.contains(&ex("Person")));
         assert!(classes.contains(&ex("Organisation")));
     }

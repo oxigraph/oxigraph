@@ -45,6 +45,20 @@ pub enum ReasonError {
         /// The other disjoint class.
         class_b: String,
     },
+
+    /// Reasoning detected an inconsistency that is not a cax-dw clash. Covers
+    /// cls-nothing2 (an individual typed as `owl:Nothing`), prp-irp (a
+    /// reflexive edge on an `owl:IrreflexiveProperty`), prp-asyp (both
+    /// directions of an `owl:AsymmetricProperty` between the same two
+    /// individuals), and prp-pdw (an individual pair linked by two
+    /// `owl:propertyDisjointWith` properties). The `message` carries a
+    /// rule-specific human description of the clash, prefixed with the rule
+    /// identifier.
+    #[error("inconsistent graph: {message}")]
+    InconsistentAxiom {
+        /// Rule-specific human description of the clash.
+        message: String,
+    },
 }
 
 /// Errors raised by the SHACL validator.
