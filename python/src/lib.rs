@@ -7,12 +7,14 @@
 mod dataset;
 mod io;
 mod model;
+mod reasoner;
 mod sparql;
 mod store;
 
 use crate::dataset::*;
 use crate::io::*;
 use crate::model::*;
+use crate::reasoner::*;
 use crate::sparql::*;
 use crate::store::*;
 use pyo3::prelude::*;
@@ -30,7 +32,7 @@ pub mod pyoxigraph {
     use super::{
         PyBlankNode, PyCanonicalizationAlgorithm, PyDataset, PyDefaultGraph, PyLiteral,
         PyNamedNode, PyQuad, PyQuadParser, PyQueryBoolean, PyQueryResultsFormat, PyQuerySolution,
-        PyQuerySolutions, PyQueryTriples, PyRdfFormat, PyStore, PyTriple, PyVariable, parse,
-        parse_query_results, serialize,
+        PyQuerySolutions, PyQueryTriples, PyRdfFormat, PyReasoner, PyReasoningReport, PyStore,
+        PyTriple, PyVariable, parse, parse_query_results, serialize,
     };
 }

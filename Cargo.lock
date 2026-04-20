@@ -1799,6 +1799,7 @@ version = "0.1.0-alpha.0"
 dependencies = [
  "oxrdf",
  "oxsdatatypes",
+ "oxttl",
  "rustc-hash",
  "thiserror 1.0.69",
 ]
@@ -2068,6 +2069,7 @@ name = "pyoxigraph"
 version = "0.5.7"
 dependencies = [
  "oxigraph",
+ "oxreason",
  "pyo3",
  "spargeo",
 ]

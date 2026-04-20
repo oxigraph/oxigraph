@@ -68,6 +68,7 @@ Table of contents
    io
    store
    sparql
+   reasoner
    migration
 
 

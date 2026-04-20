@@ -26,6 +26,13 @@ oxsdatatypes.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+oxttl.workspace = true
+
+[[example]]
+name = "bench_once"
+path = "examples/bench_once.rs"
+
 [lints]
 workspace = true
 
