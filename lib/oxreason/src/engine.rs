@@ -384,6 +384,15 @@ const OWL_INTERSECTION_OF: NamedNodeRef<'static> =
 /// `http://www.w3.org/2002/07/owl#unionOf`
 const OWL_UNION_OF: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#unionOf");
+/// `http://www.w3.org/2002/07/owl#someValuesFrom`
+const OWL_SOME_VALUES_FROM: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#someValuesFrom");
+/// `http://www.w3.org/2002/07/owl#allValuesFrom`
+const OWL_ALL_VALUES_FROM: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#allValuesFrom");
+/// `http://www.w3.org/2002/07/owl#propertyChainAxiom`
+const OWL_PROPERTY_CHAIN_AXIOM: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#propertyChainAxiom");
 
 /// Summary of a chaining run, consumed by `Reasoner::expand` to build a
 /// `ReasoningReport`.
@@ -512,16 +521,20 @@ impl DeltaIndex {
     }
 
     /// Returns true when this delta contains any triple whose predicate is
-    /// part of the T-Box trigger set. That set is the six predicates that
+    /// part of the T-Box trigger set. That set is the nine predicates that
     /// `TBoxCache` reads while it materialises restriction, intersection,
-    /// and union structures: `owl:hasValue`, `owl:onProperty`,
-    /// `owl:intersectionOf`, `owl:unionOf`, `rdf:first`, and `rdf:rest`.
-    /// All other predicate deltas leave the cache valid.
+    /// union, and property chain structures: `owl:hasValue`, `owl:onProperty`,
+    /// `owl:intersectionOf`, `owl:unionOf`, `owl:someValuesFrom`,
+    /// `owl:allValuesFrom`, `owl:propertyChainAxiom`, `rdf:first`, and
+    /// `rdf:rest`. All other predicate deltas leave the cache valid.
     fn touches_tbox(&self) -> bool {
         !self.for_predicate(OWL_HAS_VALUE).is_empty()
             || !self.for_predicate(OWL_ON_PROPERTY).is_empty()
             || !self.for_predicate(OWL_INTERSECTION_OF).is_empty()
             || !self.for_predicate(OWL_UNION_OF).is_empty()
+            || !self.for_predicate(OWL_SOME_VALUES_FROM).is_empty()
+            || !self.for_predicate(OWL_ALL_VALUES_FROM).is_empty()
+            || !self.for_predicate(OWL_PROPERTY_CHAIN_AXIOM).is_empty()
             || !self.for_predicate(rdf::FIRST).is_empty()
             || !self.for_predicate(rdf::REST).is_empty()
     }
@@ -547,6 +560,18 @@ struct TBoxCache {
     /// One tuple per `c owl:unionOf (c1 .. cn)` with a well-formed list of
     /// resource members.
     union_classes: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)>,
+    /// One tuple per `owl:Restriction`-shaped node with both
+    /// `owl:onProperty` and `owl:someValuesFrom` set. Filler is a resource
+    /// (named or blank class).
+    somevaluesfrom_restrictions: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)>,
+    /// One tuple per `owl:Restriction`-shaped node with both
+    /// `owl:onProperty` and `owl:allValuesFrom` set. Filler is a resource.
+    allvaluesfrom_restrictions: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)>,
+    /// One tuple per `p owl:propertyChainAxiom (p1 ... pn)` with a
+    /// well-formed list of property IRIs. `p` and each `pi` are named
+    /// properties; blank node properties are ignored since they cannot
+    /// appear as the predicate of a triple in oxrdf.
+    property_chains: Vec<(NamedNode, Vec<NamedNode>)>,
 }
 
 impl TBoxCache {
@@ -555,6 +580,9 @@ impl TBoxCache {
             hasvalue_restrictions: collect_hasvalue_restrictions(graph),
             intersection_classes: collect_intersection_classes(graph),
             union_classes: collect_union_classes(graph),
+            somevaluesfrom_restrictions: collect_somevaluesfrom_restrictions(graph),
+            allvaluesfrom_restrictions: collect_allvaluesfrom_restrictions(graph),
+            property_chains: collect_property_chains(graph),
         }
     }
 }
@@ -671,6 +699,10 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
             round_firings = round_firings.saturating_add(prof.time("cls-int1", delta_size, || apply_cls_int1(graph, &tbox, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("cls-int2", delta_size, || apply_cls_int2(graph, &tbox, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("cls-uni", delta_size, || apply_cls_uni(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-svf1", delta_size, || apply_cls_svf1(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-svf2", delta_size, || apply_cls_svf2(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cls-avf", delta_size, || apply_cls_avf(graph, &tbox, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("prp-spo2", delta_size, || apply_prp_spo2(graph, &tbox, &mut pending)));
 
             if equality_on {
                 round_firings = round_firings.saturating_add(prof.time("prp-fp", delta_size, || apply_prp_fp(graph, delta_ref, &mut pending)));
@@ -2929,6 +2961,249 @@ fn apply_cls_uni(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> 
                 pending.push(Triple::new(x, rdf::TYPE, c_term.clone()));
                 firings = firings.saturating_add(1);
             }
+        }
+    }
+    firings
+}
+
+/// Collect every `owl:Restriction`-like pair (c, p, y) where `c` carries
+/// both `owl:onProperty p` and `owl:someValuesFrom y`. `y` must be a
+/// resource class (named or blank node); literal fillers are skipped.
+fn collect_somevaluesfrom_restrictions(
+    graph: &Graph,
+) -> Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> {
+    let mut out: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_SOME_VALUES_FROM) {
+        let Some(y) = term_ref_to_named_or_blank(t.object) else {
+            continue;
+        };
+        let c = t.subject.into_owned();
+        let on_property = graph
+            .objects_for_subject_predicate(c.as_ref(), OWL_ON_PROPERTY)
+            .find_map(|o| match o {
+                TermRef::NamedNode(n) => Some(n.into_owned()),
+                _ => None,
+            });
+        if let Some(p) = on_property {
+            out.push((c, p, y));
+        }
+    }
+    out
+}
+
+/// Collect every `owl:Restriction`-like pair (c, p, y) where `c` carries
+/// both `owl:onProperty p` and `owl:allValuesFrom y`. `y` must be a
+/// resource class.
+fn collect_allvaluesfrom_restrictions(
+    graph: &Graph,
+) -> Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> {
+    let mut out: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_ALL_VALUES_FROM) {
+        let Some(y) = term_ref_to_named_or_blank(t.object) else {
+            continue;
+        };
+        let c = t.subject.into_owned();
+        let on_property = graph
+            .objects_for_subject_predicate(c.as_ref(), OWL_ON_PROPERTY)
+            .find_map(|o| match o {
+                TermRef::NamedNode(n) => Some(n.into_owned()),
+                _ => None,
+            });
+        if let Some(p) = on_property {
+            out.push((c, p, y));
+        }
+    }
+    out
+}
+
+/// Collect every `p owl:propertyChainAxiom (p1 ... pn)` with a well-formed
+/// list of property IRIs. `p` must be a named property; blank node
+/// properties are skipped since they cannot sit in the predicate position
+/// of an oxrdf triple. Chain members that resolve to a blank node are also
+/// skipped (the entire chain is dropped in that case).
+fn collect_property_chains(graph: &Graph) -> Vec<(NamedNode, Vec<NamedNode>)> {
+    let mut out: Vec<(NamedNode, Vec<NamedNode>)> = Vec::new();
+    for t in graph.triples_for_predicate(OWL_PROPERTY_CHAIN_AXIOM) {
+        let p = match t.subject {
+            NamedOrBlankNodeRef::NamedNode(n) => n.into_owned(),
+            NamedOrBlankNodeRef::BlankNode(_) => continue,
+        };
+        let Some(head) = term_ref_to_named_or_blank(t.object) else {
+            continue;
+        };
+        let Some(members) = parse_rdf_list(graph, head.as_ref()) else {
+            continue;
+        };
+        if members.is_empty() {
+            continue;
+        }
+        let mut chain: Vec<NamedNode> = Vec::with_capacity(members.len());
+        let mut all_named = true;
+        for m in members {
+            match m {
+                NamedOrBlankNode::NamedNode(n) => chain.push(n),
+                NamedOrBlankNode::BlankNode(_) => {
+                    all_named = false;
+                    break;
+                }
+            }
+        }
+        if all_named && !chain.is_empty() {
+            out.push((p, chain));
+        }
+    }
+    out
+}
+
+fn apply_cls_svf1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+    // cls-svf1: c owl:someValuesFrom y, c owl:onProperty p,
+    //           u p v, v rdf:type y  =>  u rdf:type c.
+    //
+    // For each (c, p, y), scan every `u p v` triple and check whether `v`
+    // carries `rdf:type y`. The filler `y` is a resource, so `v` must be a
+    // named or blank node for the type probe to succeed. cls-svf2 handles
+    // the owl:Thing filler degenerate case separately.
+    let mut firings: u64 = 0;
+    let thing_term: Term = Term::NamedNode(OWL_THING.into_owned());
+    for (c, p, y) in &tbox.somevaluesfrom_restrictions {
+        let y_term: Term = match y {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        if y_term == thing_term {
+            continue;
+        }
+        let c_term: Term = match c {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        for t in graph.triples_for_predicate(p.as_ref()) {
+            let Some(v_subject) = term_ref_to_named_or_blank(t.object) else {
+                continue;
+            };
+            if graph.contains(&Triple::new(v_subject, rdf::TYPE, y_term.clone())) {
+                let u = t.subject.into_owned();
+                pending.push(Triple::new(u, rdf::TYPE, c_term.clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+fn apply_cls_svf2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+    // cls-svf2: c owl:someValuesFrom owl:Thing, c owl:onProperty p,
+    //           u p v  =>  u rdf:type c.
+    //
+    // Degenerate case of cls-svf1 where the filler is owl:Thing, so any
+    // resource `v` on the object side satisfies the filler check
+    // vacuously. Literals on the object side are skipped because owl:Thing
+    // ranges over individuals in OWL 2 RL.
+    let mut firings: u64 = 0;
+    let thing_term: Term = Term::NamedNode(OWL_THING.into_owned());
+    for (c, p, y) in &tbox.somevaluesfrom_restrictions {
+        let y_term: Term = match y {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        if y_term != thing_term {
+            continue;
+        }
+        let c_term: Term = match c {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        for t in graph.triples_for_predicate(p.as_ref()) {
+            if term_ref_to_named_or_blank(t.object).is_none() {
+                continue;
+            }
+            let u = t.subject.into_owned();
+            pending.push(Triple::new(u, rdf::TYPE, c_term.clone()));
+            firings = firings.saturating_add(1);
+        }
+    }
+    firings
+}
+
+fn apply_cls_avf(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+    // cls-avf: c owl:allValuesFrom y, c owl:onProperty p,
+    //          u rdf:type c, u p v  =>  v rdf:type y.
+    //
+    // For each (c, p, y), enumerate individuals `u` typed as `c`, then for
+    // each `u p v` edge push `v rdf:type y`. The object `v` must be a
+    // resource so the consequent is well-formed.
+    let mut firings: u64 = 0;
+    for (c, p, y) in &tbox.allvaluesfrom_restrictions {
+        let y_term: Term = match y {
+            NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
+            NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
+        };
+        let individuals: Vec<NamedOrBlankNode> = graph
+            .subjects_for_predicate_object(rdf::TYPE, c.as_ref())
+            .map(NamedOrBlankNodeRef::into_owned)
+            .collect();
+        for u in individuals {
+            for o in graph.objects_for_subject_predicate(u.as_ref(), p.as_ref()) {
+                let Some(v) = term_ref_to_named_or_blank(o) else {
+                    continue;
+                };
+                pending.push(Triple::new(v, rdf::TYPE, y_term.clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+fn apply_prp_spo2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+    // prp-spo2: p owl:propertyChainAxiom (p1 ... pn),
+    //           u1 p1 u2, u2 p2 u3, ..., un pn u(n+1)
+    //           =>  u1 p u(n+1).
+    //
+    // Naive chain traversal: for each chain, start with the set of
+    // `u1 p1 u2` triples, then for each step extend by looking up
+    // `current p(i+1) ?`. Intermediate and final endpoints must be
+    // resources because they sit in the subject position of the next
+    // link or in the object position of the inferred `u1 p u(n+1)` edge
+    // whose property is an object property (chain axioms in OWL 2 RL are
+    // restricted to object properties).
+    let mut firings: u64 = 0;
+    for (p, chain) in &tbox.property_chains {
+        if chain.is_empty() {
+            continue;
+        }
+        let first = &chain[0];
+        let mut frontier: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = Vec::new();
+        for t in graph.triples_for_predicate(first.as_ref()) {
+            let Some(current) = term_ref_to_named_or_blank(t.object) else {
+                continue;
+            };
+            let u1 = t.subject.into_owned();
+            frontier.push((u1, current));
+        }
+        for pi in chain.iter().skip(1) {
+            if frontier.is_empty() {
+                break;
+            }
+            let mut next_frontier: Vec<(NamedOrBlankNode, NamedOrBlankNode)> =
+                Vec::with_capacity(frontier.len());
+            for (u1, current) in &frontier {
+                for o in graph.objects_for_subject_predicate(current.as_ref(), pi.as_ref()) {
+                    let Some(next) = term_ref_to_named_or_blank(o) else {
+                        continue;
+                    };
+                    next_frontier.push((u1.clone(), next));
+                }
+            }
+            frontier = next_frontier;
+        }
+        for (u1, last) in frontier {
+            let last_term: Term = match last {
+                NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n),
+                NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b),
+            };
+            pending.push(Triple::new(u1, p.clone(), last_term));
+            firings = firings.saturating_add(1);
         }
     }
     firings

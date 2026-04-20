@@ -760,3 +760,182 @@ fn prp_pdw_raises_inconsistent_axiom_on_disjoint_property_pair() {
         other => panic!("expected InconsistentAxiom, got {other:?}"),
     }
 }
+
+#[test]
+fn cls_svf1_infers_restriction_membership_from_typed_filler() {
+    // Class c is `owl:Restriction on p with someValuesFrom y`. Alice has
+    // `p bob` and Bob is typed as `y`. Alice must then be typed as c.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("hasChild")));
+    g.insert(&Triple::new(c.clone(), owl("someValuesFrom"), ex("Student")));
+    g.insert(&Triple::new(ex("Alice"), ex("hasChild"), ex("Bob")));
+    g.insert(&Triple::new(ex("Bob"), rdf::TYPE, ex("Student")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, c)));
+}
+
+#[test]
+fn cls_svf1_does_not_fire_when_filler_type_missing() {
+    // Bob has no `rdf:type Student`, so the filler check fails and Alice
+    // must not be inferred as a member of the restriction class.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("hasChild")));
+    g.insert(&Triple::new(c.clone(), owl("someValuesFrom"), ex("Student")));
+    g.insert(&Triple::new(ex("Alice"), ex("hasChild"), ex("Bob")));
+
+    let _ = expand(&mut g);
+
+    assert!(!g.contains(&Triple::new(ex("Alice"), rdf::TYPE, c)));
+}
+
+#[test]
+fn cls_svf2_infers_membership_on_owl_thing_filler() {
+    // With filler `owl:Thing`, any resource on the object side satisfies
+    // the restriction vacuously. Alice has a `hasChild` edge, so Alice
+    // must be a member of c.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("hasChild")));
+    g.insert(&Triple::new(c.clone(), owl("someValuesFrom"), owl("Thing")));
+    g.insert(&Triple::new(ex("Alice"), ex("hasChild"), ex("Bob")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Alice"), rdf::TYPE, c)));
+}
+
+#[test]
+fn cls_avf_propagates_filler_type_to_all_values() {
+    // All children of a PolishFamily member are PolishCitizens.
+    // Alice is a PolishFamily member with two children; both must then
+    // be inferred as PolishCitizens.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("hasChild")));
+    g.insert(&Triple::new(c.clone(), owl("allValuesFrom"), ex("PolishCitizen")));
+    g.insert(&Triple::new(ex("Alice"), rdf::TYPE, c));
+    g.insert(&Triple::new(ex("Alice"), ex("hasChild"), ex("Bob")));
+    g.insert(&Triple::new(ex("Alice"), ex("hasChild"), ex("Carol")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(ex("Bob"), rdf::TYPE, ex("PolishCitizen"))));
+    assert!(g.contains(&Triple::new(ex("Carol"), rdf::TYPE, ex("PolishCitizen"))));
+}
+
+#[test]
+fn cls_avf_skips_individuals_not_in_restriction_class() {
+    // Dave is not typed as c, so his children are not constrained by the
+    // restriction even though the restriction class exists.
+    let mut g = Graph::default();
+    let c = BlankNode::default();
+
+    g.insert(&Triple::new(c.clone(), owl("onProperty"), ex("hasChild")));
+    g.insert(&Triple::new(c, owl("allValuesFrom"), ex("PolishCitizen")));
+    g.insert(&Triple::new(ex("Dave"), ex("hasChild"), ex("Eve")));
+
+    let _ = expand(&mut g);
+
+    assert!(!g.contains(&Triple::new(ex("Eve"), rdf::TYPE, ex("PolishCitizen"))));
+}
+
+#[test]
+fn prp_spo2_chains_grandparent_from_parent_of_parent() {
+    // hasGrandparent is defined by the property chain (hasParent,
+    // hasParent). Alice has Bob as parent, Bob has Carol as parent.
+    // So Alice must have Carol as grandparent.
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(
+        ex("hasGrandparent"),
+        owl("propertyChainAxiom"),
+        list_head.clone(),
+    ));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("hasParent")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("hasParent")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), ex("hasParent"), ex("Bob")));
+    g.insert(&Triple::new(ex("Bob"), ex("hasParent"), ex("Carol")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(
+        ex("Alice"),
+        ex("hasGrandparent"),
+        ex("Carol"),
+    )));
+}
+
+#[test]
+fn prp_spo2_chains_uncle_from_parent_then_sibling() {
+    // hasUncle = hasParent o hasBrother. Two different properties in the
+    // chain exercise the multi-step join correctly.
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(
+        ex("hasUncle"),
+        owl("propertyChainAxiom"),
+        list_head.clone(),
+    ));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("hasParent")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("hasBrother")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), ex("hasParent"), ex("Bob")));
+    g.insert(&Triple::new(ex("Bob"), ex("hasBrother"), ex("Charlie")));
+
+    let _ = expand(&mut g);
+
+    assert!(g.contains(&Triple::new(
+        ex("Alice"),
+        ex("hasUncle"),
+        ex("Charlie"),
+    )));
+}
+
+#[test]
+fn prp_spo2_does_not_fire_when_chain_breaks() {
+    // hasGrandparent = hasParent o hasParent, but Alice only has a
+    // single-step parent. The consequent must not be materialised.
+    let mut g = Graph::default();
+    let list_head = BlankNode::default();
+    let list_tail = BlankNode::default();
+
+    g.insert(&Triple::new(
+        ex("hasGrandparent"),
+        owl("propertyChainAxiom"),
+        list_head.clone(),
+    ));
+    g.insert(&Triple::new(list_head.clone(), rdf::FIRST, ex("hasParent")));
+    g.insert(&Triple::new(list_head, rdf::REST, list_tail.clone()));
+    g.insert(&Triple::new(list_tail.clone(), rdf::FIRST, ex("hasParent")));
+    g.insert(&Triple::new(list_tail, rdf::REST, rdf::NIL));
+
+    g.insert(&Triple::new(ex("Alice"), ex("hasParent"), ex("Bob")));
+
+    let _ = expand(&mut g);
+
+    // No hasGrandparent triple for Alice should exist.
+    let ok = g
+        .triples_for_predicate(ex("hasGrandparent").as_ref())
+        .any(|t| {
+            t.subject
+                == oxrdf::NamedOrBlankNodeRef::NamedNode(ex("Alice").as_ref())
+        });
+    assert!(!ok, "hasGrandparent must not be materialised for a broken chain");
+}
