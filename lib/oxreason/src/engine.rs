@@ -55,11 +55,171 @@ use std::time::{Duration, Instant};
 
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::{
-    Graph, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef, Triple,
+    Graph, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef,
+    Triple,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::reasoner::{ReasonerConfig, ReasoningProfile};
+
+/// Packed interner ID: 2 kind bits (top) plus 30 bits of per-kind index.
+/// Fits in a single `u32`, so the shadow set becomes a hash over three u32
+/// triples instead of three owned `String` allocations. A 30 bit index gives
+/// ~1B distinct terms per kind, which comfortably clears any graph that fits
+/// in memory.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+struct TermId(u32);
+
+const KIND_SHIFT: u32 = 30;
+const ID_MASK: u32 = (1 << KIND_SHIFT) - 1;
+const KIND_NAMED: u32 = 0;
+const KIND_BLANK: u32 = 1 << KIND_SHIFT;
+const KIND_LITERAL: u32 = 2 << KIND_SHIFT;
+
+impl TermId {
+    #[inline]
+    fn named(idx: u32) -> Self {
+        debug_assert!(idx <= ID_MASK);
+        Self(KIND_NAMED | idx)
+    }
+    #[inline]
+    fn blank(idx: u32) -> Self {
+        debug_assert!(idx <= ID_MASK);
+        Self(KIND_BLANK | idx)
+    }
+    #[inline]
+    fn literal(idx: u32) -> Self {
+        debug_assert!(idx <= ID_MASK);
+        Self(KIND_LITERAL | idx)
+    }
+}
+
+/// Term interner that produces small fixed-size ids for reasoner use.
+///
+/// Named nodes and blank nodes are keyed by their string form (IRI /
+/// identifier). Lookup of an existing term is one `FxHashMap<String, u32>`
+/// probe that takes a `&str` through the `Borrow<str>` impl on `String`, so
+/// no allocation happens on a hit. On a miss we clone the string once.
+///
+/// Literals are keyed by the owned `Literal` itself because the value plus
+/// datatype (plus optional language tag) form a composite that is awkward
+/// to represent as `&str`. Every A-Box literal we see already arrives as an
+/// owned `Literal` on the commit path (`pending: Vec<Triple>` carries owned
+/// terms), so lookup needs no extra allocation in steady state. Seeding from
+/// the input graph pays one `into_owned()` per distinct literal.
+struct Interner {
+    named_by_iri: FxHashMap<String, u32>,
+    blank_by_id: FxHashMap<String, u32>,
+    literal_ids: FxHashMap<Literal, u32>,
+    named_count: u32,
+    blank_count: u32,
+    literal_count: u32,
+}
+
+impl Interner {
+    fn with_capacity(n: usize) -> Self {
+        Self {
+            named_by_iri: FxHashMap::with_capacity_and_hasher(n, Default::default()),
+            blank_by_id: FxHashMap::with_capacity_and_hasher(n / 8 + 1, Default::default()),
+            literal_ids: FxHashMap::with_capacity_and_hasher(n / 4 + 1, Default::default()),
+            named_count: 0,
+            blank_count: 0,
+            literal_count: 0,
+        }
+    }
+
+    #[inline]
+    fn intern_named_str(&mut self, iri: &str) -> TermId {
+        if let Some(&idx) = self.named_by_iri.get(iri) {
+            return TermId::named(idx);
+        }
+        let idx = self.named_count;
+        self.named_count += 1;
+        self.named_by_iri.insert(iri.to_owned(), idx);
+        TermId::named(idx)
+    }
+
+    #[inline]
+    fn intern_blank_str(&mut self, id: &str) -> TermId {
+        if let Some(&idx) = self.blank_by_id.get(id) {
+            return TermId::blank(idx);
+        }
+        let idx = self.blank_count;
+        self.blank_count += 1;
+        self.blank_by_id.insert(id.to_owned(), idx);
+        TermId::blank(idx)
+    }
+
+    #[inline]
+    fn intern_literal_owned(&mut self, l: &Literal) -> TermId {
+        if let Some(&idx) = self.literal_ids.get(l) {
+            return TermId::literal(idx);
+        }
+        let idx = self.literal_count;
+        self.literal_count += 1;
+        self.literal_ids.insert(l.clone(), idx);
+        TermId::literal(idx)
+    }
+
+    #[inline]
+    fn intern_subject(&mut self, s: &NamedOrBlankNode) -> TermId {
+        match s {
+            NamedOrBlankNode::NamedNode(n) => self.intern_named_str(n.as_str()),
+            NamedOrBlankNode::BlankNode(b) => self.intern_blank_str(b.as_str()),
+        }
+    }
+
+    #[inline]
+    fn intern_subject_ref(&mut self, s: NamedOrBlankNodeRef<'_>) -> TermId {
+        match s {
+            NamedOrBlankNodeRef::NamedNode(n) => self.intern_named_str(n.as_str()),
+            NamedOrBlankNodeRef::BlankNode(b) => self.intern_blank_str(b.as_str()),
+        }
+    }
+
+    #[inline]
+    fn intern_term(&mut self, t: &Term) -> TermId {
+        match t {
+            Term::NamedNode(n) => self.intern_named_str(n.as_str()),
+            Term::BlankNode(b) => self.intern_blank_str(b.as_str()),
+            Term::Literal(l) => self.intern_literal_owned(l),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => unreachable!("rdf-12 embedded triples are not supported here"),
+        }
+    }
+
+    #[inline]
+    fn intern_term_ref(&mut self, t: TermRef<'_>) -> TermId {
+        match t {
+            TermRef::NamedNode(n) => self.intern_named_str(n.as_str()),
+            TermRef::BlankNode(b) => self.intern_blank_str(b.as_str()),
+            TermRef::Literal(lref) => {
+                // Fast path: probe by a temporary owned Literal built from
+                // the ref. `into_owned` allocates the value (and, for typed
+                // literals, the datatype IRI) once per probe miss; hits
+                // still have to allocate because `FxHashMap<Literal, u32>`
+                // cannot key on a borrow without `raw_entry_mut`, which is
+                // unstable. Literal-valued triples are a minority on typical
+                // OWL 2 RL workloads, so this cost stays in the noise.
+                let owned = lref.into_owned();
+                self.intern_literal_owned(&owned)
+            }
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => unreachable!("rdf-12 embedded triples are not supported here"),
+        }
+    }
+
+    /// Convenience for the commit path: intern all three components of an
+    /// owned triple in one call. Returns the packed tuple used as the key
+    /// for the shadow set.
+    #[inline]
+    fn intern_triple(&mut self, t: &Triple) -> (TermId, TermId, TermId) {
+        let s = self.intern_subject(&t.subject);
+        let p = self.intern_named_str(t.predicate.as_str());
+        let o = self.intern_term(&t.object);
+        (s, p, o)
+    }
+}
 
 /// Lightweight per-rule profiler gated by the `OXREASON_PROFILE` environment
 /// variable. Intentionally kept in the main source file (not a feature flag)
@@ -415,23 +575,33 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     let mut stats = RunStats::default();
     let mut delta: Option<DeltaIndex> = None;
 
-    // Shadow set of every triple in the graph. Seeded from the input graph
-    // once, then kept in lockstep with successful `graph.insert` calls. The
-    // profiler showed that `graph.insert` (which touches all six BTreeSet
+    // Shadow set of every triple in the graph, keyed by interned term ids.
+    // The profiler showed that `graph.insert` (which touches all six BTreeSet
     // indexes of the underlying dataset) and per-round `FxHashSet<Triple>`
     // deduplication together consumed ~65-78% of reasoning time. Most
     // candidate triples a rule produces are already in the graph from a
-    // prior round, so the 6-index insert path runs and fails N-1 out of N
-    // times. An owned `FxHashSet<Triple>` probe is a single hash lookup
-    // with cheap `Arc` comparisons, so it short-circuits all of that work
-    // for duplicates. The memory overhead is O(|graph|) extra triples of
-    // pointer-sized members (each owned triple is three `Arc`-backed
-    // terms); on LUBM 10000 that is under 1 MB.
+    // prior round, so the 6-index insert path would otherwise run and fail
+    // N-1 out of N times.
+    //
+    // The shadow set stores `(TermId, TermId, TermId)` tuples. That is 12
+    // bytes per entry versus ~80 bytes for an owned `Triple` with three
+    // owned `String`-backed terms. The smaller entry reduces memory
+    // pressure, and equality on the hot probe compares three `u32`s
+    // instead of three `String`s. Hashing the u32 tuple is trivial; the
+    // three interner lookups still hash the term strings once each, so
+    // the hash work is comparable to hashing the full `Triple` but the
+    // shadow-set probe itself is essentially free. On a genuine insert
+    // we save the three `String` clones that `Triple::clone` used to do
+    // for the shadow set entry.
+    let mut interner = Interner::with_capacity(graph.len());
     let mut seen_total = prof.time_block("seen.seed", || {
-        let mut set: rustc_hash::FxHashSet<Triple> =
-            rustc_hash::FxHashSet::with_capacity_and_hasher(graph.len() * 2, Default::default());
+        let mut set: FxHashSet<(TermId, TermId, TermId)> =
+            FxHashSet::with_capacity_and_hasher(graph.len() * 2, Default::default());
         for t in graph.iter() {
-            set.insert(t.into_owned());
+            let s = interner.intern_subject_ref(t.subject);
+            let p = interner.intern_named_str(t.predicate.as_str());
+            let o = interner.intern_term_ref(t.object);
+            set.insert((s, p, o));
         }
         set
     });
@@ -519,34 +689,30 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // cax-sco branch that bridges through a fan-in node pushes the
         // same `x rdf:type d`). Deduplicating the pending batch before
         // probing `graph.insert` avoids rehashing and re-comparing those
-        // duplicates against the live graph. `FxHashSet` is used to match
-        // the rest of the engine's hashing strategy.
+        // duplicates against the live graph.
+        //
+        // The commit path now works in interned-id space. For each pending
+        // triple we compute `(TermId, TermId, TermId)` from the interner,
+        // probe the shadow set once, and only touch `graph.insert` on a
+        // genuine novel triple. Duplicates never reach `graph.insert`, so
+        // the six BTreeSet inserts (which each clone a `String`) only run
+        // when they actually add something.
         let new_triples = {
             let mut new_triples: Vec<Triple> = Vec::new();
             let mut seen_time = Duration::ZERO;
             let mut insert_time = Duration::ZERO;
             let profile_split = prof.enabled;
             for triple in pending {
-                // `Triple::clone` allocates three owned `String`s (subject,
-                // predicate, object IRIs), so it is much more expensive
-                // than a typical pointer clone. Most pending triples are
-                // duplicates we have already derived, so we test against
-                // the shadow set with a borrowed probe first and only
-                // clone on a genuinely novel triple.
                 let t0 = if profile_split { Some(Instant::now()) } else { None };
-                let already = seen_total.contains(&triple);
+                let key = interner.intern_triple(&triple);
+                let already = !seen_total.insert(key);
                 if let Some(t) = t0 {
                     seen_time += t.elapsed();
                 }
                 if already {
                     continue;
                 }
-                // Novel triple: insert into both shadow set and graph, and
-                // push onto `new_triples` for the next delta. One clone for
-                // the shadow set; the original `triple` moves into the
-                // `new_triples` vec.
                 let t1 = if profile_split { Some(Instant::now()) } else { None };
-                seen_total.insert(triple.clone());
                 graph.insert(&triple);
                 if let Some(t) = t1 {
                     insert_time += t.elapsed();
@@ -854,7 +1020,7 @@ fn apply_prp_trp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 
     // Which properties had their TransitiveProperty declaration arrive in the
     // previous round's delta? An empty set when delta is None.
-    let newly_transitive: rustc_hash::FxHashSet<NamedNode> =
+    let newly_transitive: FxHashSet<NamedNode> =
         new_property_types(delta, OWL_TRANSITIVE_PROPERTY);
 
     let mut firings: u64 = 0;
@@ -919,9 +1085,9 @@ fn join_square(
 fn new_property_types(
     delta: Option<&DeltaIndex>,
     cls: NamedNodeRef<'_>,
-) -> rustc_hash::FxHashSet<NamedNode> {
+) -> FxHashSet<NamedNode> {
     let Some(d) = delta else {
-        return rustc_hash::FxHashSet::default();
+        return FxHashSet::default();
     };
     d.for_predicate(rdf::TYPE)
         .iter()
@@ -1025,7 +1191,7 @@ fn apply_prp_inv(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
     };
 
     // Branch 1: delta schema × full graph data.
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedNode, NamedNode)> = rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedNode, NamedNode)> = FxHashSet::default();
     for t in d.for_predicate(OWL_INVERSE_OF) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
@@ -1107,7 +1273,7 @@ fn apply_prp_eqp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
         return firings;
     };
 
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedNode, NamedNode)> = rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedNode, NamedNode)> = FxHashSet::default();
     for t in d.for_predicate(OWL_EQUIVALENT_PROPERTY) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
@@ -1180,7 +1346,7 @@ fn apply_cax_eqc(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 
     // Branch 1: delta(equivalentClass) × graph(type). Track which schema
     // pairs we already processed so Branch 2 does not duplicate them.
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedNode, NamedNode)> = rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedNode, NamedNode)> = FxHashSet::default();
     for t in d.for_predicate(OWL_EQUIVALENT_CLASS) {
         let Some(c1) = owned_subject_named(&t.subject) else { continue };
         let Some(c2) = owned_object_named(&t.object) else { continue };
@@ -1871,8 +2037,8 @@ fn apply_eq_rep_s(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     };
 
     // Branch 1: delta(sameAs) × graph.
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedOrBlankNode, NamedOrBlankNode)> =
-        rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedOrBlankNode, NamedOrBlankNode)> =
+        FxHashSet::default();
     for t in d.for_predicate(OWL_SAME_AS) {
         let Some(y) = owned_object_named_or_blank(&t.object) else { continue };
         seen_schema.insert((t.subject.clone(), y.clone()));
@@ -1959,7 +2125,7 @@ fn apply_eq_rep_p(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     };
 
     // Branch 1: delta(sameAs) × graph(p1).
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedNode, NamedNode)> = rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedNode, NamedNode)> = FxHashSet::default();
     for t in d.for_predicate(OWL_SAME_AS) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
@@ -2003,7 +2169,7 @@ fn apply_eq_rep_o(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     };
 
     // Branch 1: delta(sameAs) × graph(?, ?, o1).
-    let mut seen_schema: rustc_hash::FxHashSet<(NamedOrBlankNode, Term)> = rustc_hash::FxHashSet::default();
+    let mut seen_schema: FxHashSet<(NamedOrBlankNode, Term)> = FxHashSet::default();
     for t in d.for_predicate(OWL_SAME_AS) {
         let o1: NamedOrBlankNode = t.subject.clone();
         let o2: Term = t.object.clone();
@@ -2606,7 +2772,7 @@ fn parse_rdf_list(graph: &Graph, head: NamedOrBlankNodeRef<'_>) -> Option<Vec<Na
     let nil = rdf::NIL;
     let mut out: Vec<NamedOrBlankNode> = Vec::new();
     let mut current: NamedOrBlankNode = head.into_owned();
-    let mut seen: rustc_hash::FxHashSet<NamedOrBlankNode> = rustc_hash::FxHashSet::default();
+    let mut seen: FxHashSet<NamedOrBlankNode> = FxHashSet::default();
     loop {
         if current.as_ref() == NamedOrBlankNodeRef::NamedNode(nil) {
             return Some(out);
