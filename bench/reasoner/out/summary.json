@@ -3,36 +3,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 2.804,
-      "reason_ms_min": 2.776,
-      "reason_ms_max": 3.295,
+      "reason_ms_median": 3.718,
+      "reason_ms_min": 3.436,
+      "reason_ms_max": 5.547,
       "triples_out": 707,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 5.084,
-      "reason_ms_min": 4.961,
-      "reason_ms_max": 5.636,
+      "reason_ms_median": 3.967,
+      "reason_ms_min": 3.852,
+      "reason_ms_max": 4.357,
       "triples_out": 1258,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 15.714,
-      "reason_ms_min": 15.18,
-      "reason_ms_max": 16.168,
+      "reason_ms_median": 10.994,
+      "reason_ms_min": 10.968,
+      "reason_ms_max": 13.488,
       "triples_out": 3456,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 49.342,
-      "reason_ms_min": 48.003,
-      "reason_ms_max": 51.152,
+      "reason_ms_median": 37.787,
+      "reason_ms_min": 34.555,
+      "reason_ms_max": 38.402,
       "triples_out": 10051,
       "repeats": 3
     }
@@ -41,36 +41,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 0.427,
-      "reason_ms_min": 0.415,
-      "reason_ms_max": 0.668,
+      "reason_ms_median": 0.464,
+      "reason_ms_min": 0.449,
+      "reason_ms_max": 0.613,
       "triples_out": 569,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 0.598,
-      "reason_ms_min": 0.598,
-      "reason_ms_max": 0.607,
+      "reason_ms_median": 0.591,
+      "reason_ms_min": 0.578,
+      "reason_ms_max": 0.612,
       "triples_out": 1060,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 1.465,
-      "reason_ms_min": 1.392,
-      "reason_ms_max": 1.527,
+      "reason_ms_median": 1.422,
+      "reason_ms_min": 1.359,
+      "reason_ms_max": 1.449,
       "triples_out": 3018,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 3.779,
-      "reason_ms_min": 3.775,
-      "reason_ms_max": 3.956,
+      "reason_ms_median": 3.811,
+      "reason_ms_min": 3.713,
+      "reason_ms_max": 3.865,
       "triples_out": 8893,
       "repeats": 3
     }
@@ -79,36 +79,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 90.48062493093312,
-      "reason_ms_min": 89.91195913404226,
-      "reason_ms_max": 90.59291682206094,
+      "reason_ms_median": 93.84083398617804,
+      "reason_ms_min": 93.66341703571379,
+      "reason_ms_max": 94.92900012992322,
       "triples_out": 921,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 154.97337514534593,
-      "reason_ms_min": 154.41920794546604,
-      "reason_ms_max": 156.55512502416968,
+      "reason_ms_median": 164.23104191198945,
+      "reason_ms_min": 162.7803749870509,
+      "reason_ms_max": 166.3758340291679,
       "triples_out": 1545,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 409.6342499833554,
-      "reason_ms_min": 402.5647919625044,
-      "reason_ms_max": 415.13833310455084,
+      "reason_ms_median": 434.0507909655571,
+      "reason_ms_min": 428.3303329721093,
+      "reason_ms_max": 440.35116699524224,
       "triples_out": 4035,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 1180.3934159688652,
-      "reason_ms_min": 1172.625291859731,
-      "reason_ms_max": 1182.6750000473112,
+      "reason_ms_median": 1255.1359590142965,
+      "reason_ms_min": 1245.6010000314564,
+      "reason_ms_max": 1262.1652078814805,
       "triples_out": 11506,
       "repeats": 3
     }

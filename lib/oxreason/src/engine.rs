@@ -248,6 +248,53 @@ impl DeltaIndex {
             .get(p.as_str())
             .map_or(&[][..], Vec::as_slice)
     }
+
+    /// Returns true when this delta contains any triple whose predicate is
+    /// part of the T-Box trigger set. That set is the six predicates that
+    /// `TBoxCache` reads while it materialises restriction, intersection,
+    /// and union structures: `owl:hasValue`, `owl:onProperty`,
+    /// `owl:intersectionOf`, `owl:unionOf`, `rdf:first`, and `rdf:rest`.
+    /// All other predicate deltas leave the cache valid.
+    fn touches_tbox(&self) -> bool {
+        !self.for_predicate(OWL_HAS_VALUE).is_empty()
+            || !self.for_predicate(OWL_ON_PROPERTY).is_empty()
+            || !self.for_predicate(OWL_INTERSECTION_OF).is_empty()
+            || !self.for_predicate(OWL_UNION_OF).is_empty()
+            || !self.for_predicate(rdf::FIRST).is_empty()
+            || !self.for_predicate(rdf::REST).is_empty()
+    }
+}
+
+/// Snapshot of the class-expression T-Box the class rules iterate over.
+///
+/// The five M4 class-expression rules (`cls-hv1`, `cls-hv2`, `cls-int1`,
+/// `cls-int2`, `cls-uni`) all start each round by walking the graph for
+/// `owl:hasValue`/`owl:onProperty` pairs and for RDF lists under
+/// `owl:intersectionOf` and `owl:unionOf`. On LUBM-style data the T-Box is
+/// small and the A-Box is huge, so repeating that walk every round wastes
+/// most of the rule time. Instead we materialise the three relevant tables
+/// once before the fixpoint loop and reuse them across rounds, rebuilding
+/// only when the previous round actually emitted a trigger predicate.
+struct TBoxCache {
+    /// One tuple per `owl:Restriction`-shaped node with both
+    /// `owl:onProperty` and `owl:hasValue` set.
+    hasvalue_restrictions: Vec<(NamedOrBlankNode, NamedNode, Term)>,
+    /// One tuple per `c owl:intersectionOf (c1 .. cn)` with a well-formed
+    /// list of resource members.
+    intersection_classes: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)>,
+    /// One tuple per `c owl:unionOf (c1 .. cn)` with a well-formed list of
+    /// resource members.
+    union_classes: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)>,
+}
+
+impl TBoxCache {
+    fn build(graph: &Graph) -> Self {
+        Self {
+            hasvalue_restrictions: collect_hasvalue_restrictions(graph),
+            intersection_classes: collect_intersection_classes(graph),
+            union_classes: collect_union_classes(graph),
+        }
+    }
 }
 
 /// Run the forward chainer to fixpoint on the given graph.
@@ -263,6 +310,17 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     let mut stats = RunStats::default();
     let mut delta: Option<DeltaIndex> = None;
 
+    // Build the class-expression T-Box cache once up front. It is reused
+    // across rounds and only rebuilt when the previous round's delta
+    // contains a predicate that could change its contents.
+    let mut tbox = TBoxCache::build(graph);
+
+    // Sample once which inconsistency families this graph can trigger.
+    // The gate is conservative: if the input has no `owl:disjointWith`
+    // edges, for example, nothing can derive a cax-dw clash later either.
+    let triggers = InconsistencyTriggers::scan(graph);
+    let run_detectors = profile != ReasoningProfile::Rdfs && triggers.any();
+
     loop {
         stats.rounds = stats.rounds.saturating_add(1);
 
@@ -271,8 +329,8 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // detectors scan the full graph; on round 1 the graph is the input,
         // afterwards it contains every saturated triple, so any clash
         // produced by an earlier rule surfaces on the next round.
-        if profile != ReasoningProfile::Rdfs {
-            if let Some(clash) = find_inconsistency(graph) {
+        if run_detectors {
+            if let Some(clash) = find_inconsistency(graph, triggers) {
                 return Err(clash);
             }
         }
@@ -310,11 +368,11 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
 
             // M4 rules.
             round_firings = round_firings.saturating_add(apply_scm_spo(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_hv1(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_hv2(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_int1(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_int2(graph, delta_ref, &mut pending));
-            round_firings = round_firings.saturating_add(apply_cls_uni(graph, delta_ref, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_hv1(graph, &tbox, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_hv2(graph, &tbox, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_int1(graph, &tbox, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_int2(graph, &tbox, &mut pending));
+            round_firings = round_firings.saturating_add(apply_cls_uni(graph, &tbox, &mut pending));
 
             if equality_on {
                 round_firings = round_firings.saturating_add(apply_prp_fp(graph, delta_ref, &mut pending));
@@ -329,8 +387,19 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
 
         stats.firings = stats.firings.saturating_add(round_firings);
 
+        // Many rules derive the same consequent (for example every
+        // cax-sco branch that bridges through a fan-in node pushes the
+        // same `x rdf:type d`). Deduplicating the pending batch before
+        // probing `graph.insert` avoids rehashing and re-comparing those
+        // duplicates against the live graph. `FxHashSet` is used to match
+        // the rest of the engine's hashing strategy.
+        let mut seen: rustc_hash::FxHashSet<Triple> =
+            rustc_hash::FxHashSet::with_capacity_and_hasher(pending.len(), Default::default());
         let mut new_triples: Vec<Triple> = Vec::new();
         for triple in pending {
+            if !seen.insert(triple.clone()) {
+                continue;
+            }
             if graph.insert(&triple) {
                 new_triples.push(triple);
             }
@@ -345,7 +414,21 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         // Build the delta for the next round from the triples that were
         // actually new to the graph. Dedup happens at `graph.insert` time
         // above, so `new_triples` already excludes duplicates.
-        delta = Some(DeltaIndex::build(&new_triples));
+        let next_delta = DeltaIndex::build(&new_triples);
+
+        // Rebuild the class-expression cache only if the delta actually
+        // touched one of its trigger predicates. In practice no
+        // currently-implemented rule emits `owl:hasValue`, `owl:onProperty`,
+        // `owl:intersectionOf`, `owl:unionOf`, `rdf:first`, or `rdf:rest`,
+        // so this almost never fires on OWL 2 RL workloads. The check is
+        // still here because `eq-rep-*` (behind the equality flag) and
+        // `prp-spo1` (if the user declares a subPropertyOf chain reaching
+        // one of those predicates) could in principle touch the T-Box.
+        if next_delta.touches_tbox() {
+            tbox = TBoxCache::build(graph);
+        }
+
+        delta = Some(next_delta);
     }
 }
 
@@ -1049,8 +1132,19 @@ fn apply_scm_sco(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 
     let mut firings: u64 = 0;
 
+    // A predicate on a hash index by the pivot column `c2` lets each chain
+    // join run in expected O(|left|) instead of O(|left| * |right|). The
+    // class hierarchy in OWL 2 RL can get wide (thousands of classes), so
+    // this matters in practice even when the hierarchy itself is sparse.
+    let right_by_pivot = build_pivot_index(&edges);
+
     let Some(d) = delta else {
-        firings = firings.saturating_add(join_sco_chain(&edges, &edges, pending));
+        firings = firings.saturating_add(join_chain_hashed(
+            &edges,
+            &right_by_pivot,
+            rdfs::SUB_CLASS_OF,
+            pending,
+        ));
         return firings;
     };
 
@@ -1064,23 +1158,55 @@ fn apply_scm_sco(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
         })
         .collect();
 
-    firings = firings.saturating_add(join_sco_chain(&delta_edges, &edges, pending));
-    firings = firings.saturating_add(join_sco_chain(&edges, &delta_edges, pending));
+    let delta_by_pivot = build_pivot_index(&delta_edges);
+
+    // Branch 1: delta(sco) × graph(sco). Pivot on graph's left column.
+    firings = firings.saturating_add(join_chain_hashed(
+        &delta_edges,
+        &right_by_pivot,
+        rdfs::SUB_CLASS_OF,
+        pending,
+    ));
+    // Branch 2: graph(sco) × delta(sco). Pivot on delta's left column.
+    firings = firings.saturating_add(join_chain_hashed(
+        &edges,
+        &delta_by_pivot,
+        rdfs::SUB_CLASS_OF,
+        pending,
+    ));
     firings
 }
 
-/// For each (c1, c2) in `left` and (c2, c3) in `right`, push
-/// (c1, rdfs:subClassOf, c3).
-fn join_sco_chain(
+/// Build a hash index keyed by the left column of a pair list. Used to
+/// accelerate transitive-closure joins where the pivot column of the right
+/// side is the first element of each tuple (i.e. for a chain join
+/// `(a, b) x (b, c)` indexing `(b, c)` by `b`).
+fn build_pivot_index(
+    pairs: &[(NamedNode, NamedNode)],
+) -> FxHashMap<NamedNode, Vec<NamedNode>> {
+    let mut out: FxHashMap<NamedNode, Vec<NamedNode>> = FxHashMap::default();
+    for (k, v) in pairs {
+        out.entry(k.clone()).or_default().push(v.clone());
+    }
+    out
+}
+
+/// Hash-indexed chain join: for each `(c1, c2)` in `left` look up every
+/// `c3` such that `(c2, c3)` sits in the index, and push
+/// `(c1, predicate, c3)` onto `pending`. Expected cost is
+/// `O(|left| + matches)` rather than the `O(|left| * |right|)` of the
+/// nested-loop version.
+fn join_chain_hashed(
     left: &[(NamedNode, NamedNode)],
-    right: &[(NamedNode, NamedNode)],
+    right_by_pivot: &FxHashMap<NamedNode, Vec<NamedNode>>,
+    predicate: NamedNodeRef<'_>,
     pending: &mut Vec<Triple>,
 ) -> u64 {
     let mut firings: u64 = 0;
     for (c1, c2) in left {
-        for (c2b, c3) in right {
-            if c2 == c2b {
-                pending.push(Triple::new(c1.clone(), rdfs::SUB_CLASS_OF, c3.clone()));
+        if let Some(targets) = right_by_pivot.get(c2) {
+            for c3 in targets {
+                pending.push(Triple::new(c1.clone(), predicate, c3.clone()));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1940,21 +2066,90 @@ fn join_same_object(
 // first so existing behaviour is preserved, then cls-nothing2, prp-irp,
 // prp-asyp, prp-pdw.
 
-fn find_inconsistency(graph: &Graph) -> Option<Inconsistency> {
-    if let Some(c) = find_cax_dw_clash(graph) {
-        return Some(Inconsistency::DisjointClasses(c));
+/// Snapshot of which inconsistency families the graph can actually
+/// trigger. Each flag gates the corresponding detector: if the graph
+/// contains no `owl:disjointWith` edges, for example, no later round can
+/// produce a cax-dw clash, so the detector is skipped.
+///
+/// All currently-implemented rules produce A-Box triples only (rdf:type
+/// and individual property edges). None of them emit `owl:disjointWith`,
+/// `owl:IrreflexiveProperty`, `owl:AsymmetricProperty`, or
+/// `owl:propertyDisjointWith`, so the T-Box side of these detectors is
+/// frozen and can be sampled once. `x rdf:type owl:Nothing` can in
+/// theory be produced by cax-sco if the user declares a subclass chain
+/// into `owl:Nothing`, but only if the source class had instances in
+/// the first place, so we still sample up front and live with the
+/// conservative gate. Future rules that change this assumption must
+/// update this struct and the gating logic.
+#[derive(Default, Clone, Copy)]
+struct InconsistencyTriggers {
+    has_disjoint_with: bool,
+    has_nothing_declaration: bool,
+    has_irreflexive_property: bool,
+    has_asymmetric_property: bool,
+    has_property_disjoint_with: bool,
+}
+
+impl InconsistencyTriggers {
+    fn scan(graph: &Graph) -> Self {
+        Self {
+            has_disjoint_with: graph
+                .triples_for_predicate(OWL_DISJOINT_WITH)
+                .next()
+                .is_some(),
+            has_nothing_declaration: graph
+                .subjects_for_predicate_object(rdf::TYPE, OWL_NOTHING)
+                .next()
+                .is_some(),
+            has_irreflexive_property: graph
+                .subjects_for_predicate_object(rdf::TYPE, OWL_IRREFLEXIVE_PROPERTY)
+                .next()
+                .is_some(),
+            has_asymmetric_property: graph
+                .subjects_for_predicate_object(rdf::TYPE, OWL_ASYMMETRIC_PROPERTY)
+                .next()
+                .is_some(),
+            has_property_disjoint_with: graph
+                .triples_for_predicate(OWL_PROPERTY_DISJOINT_WITH)
+                .next()
+                .is_some(),
+        }
     }
-    if let Some(c) = find_cls_nothing2(graph) {
-        return Some(c);
+
+    fn any(self) -> bool {
+        self.has_disjoint_with
+            || self.has_nothing_declaration
+            || self.has_irreflexive_property
+            || self.has_asymmetric_property
+            || self.has_property_disjoint_with
     }
-    if let Some(c) = find_prp_irp(graph) {
-        return Some(c);
+}
+
+fn find_inconsistency(graph: &Graph, triggers: InconsistencyTriggers) -> Option<Inconsistency> {
+    if triggers.has_disjoint_with {
+        if let Some(c) = find_cax_dw_clash(graph) {
+            return Some(Inconsistency::DisjointClasses(c));
+        }
     }
-    if let Some(c) = find_prp_asyp(graph) {
-        return Some(c);
+    if triggers.has_nothing_declaration {
+        if let Some(c) = find_cls_nothing2(graph) {
+            return Some(c);
+        }
     }
-    if let Some(c) = find_prp_pdw(graph) {
-        return Some(c);
+    if triggers.has_irreflexive_property {
+        if let Some(c) = find_prp_irp(graph) {
+            return Some(c);
+        }
+    }
+    if triggers.has_asymmetric_property {
+        if let Some(c) = find_prp_asyp(graph) {
+            return Some(c);
+        }
+    }
+    if triggers.has_property_disjoint_with {
+        if let Some(c) = find_prp_pdw(graph) {
+            return Some(c);
+        }
     }
     None
 }
@@ -2128,8 +2323,15 @@ fn apply_scm_spo(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 
     let mut firings: u64 = 0;
 
+    let right_by_pivot = build_pivot_index(&edges);
+
     let Some(d) = delta else {
-        firings = firings.saturating_add(join_spo_chain(&edges, &edges, pending));
+        firings = firings.saturating_add(join_chain_hashed(
+            &edges,
+            &right_by_pivot,
+            rdfs::SUB_PROPERTY_OF,
+            pending,
+        ));
         return firings;
     };
 
@@ -2143,27 +2345,20 @@ fn apply_scm_spo(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
         })
         .collect();
 
-    firings = firings.saturating_add(join_spo_chain(&delta_edges, &edges, pending));
-    firings = firings.saturating_add(join_spo_chain(&edges, &delta_edges, pending));
-    firings
-}
+    let delta_by_pivot = build_pivot_index(&delta_edges);
 
-/// For each (p1, p2) in `left` and (p2, p3) in `right`, push
-/// (p1, rdfs:subPropertyOf, p3).
-fn join_spo_chain(
-    left: &[(NamedNode, NamedNode)],
-    right: &[(NamedNode, NamedNode)],
-    pending: &mut Vec<Triple>,
-) -> u64 {
-    let mut firings: u64 = 0;
-    for (p1, p2) in left {
-        for (p2b, p3) in right {
-            if p2 == p2b {
-                pending.push(Triple::new(p1.clone(), rdfs::SUB_PROPERTY_OF, p3.clone()));
-                firings = firings.saturating_add(1);
-            }
-        }
-    }
+    firings = firings.saturating_add(join_chain_hashed(
+        &delta_edges,
+        &right_by_pivot,
+        rdfs::SUB_PROPERTY_OF,
+        pending,
+    ));
+    firings = firings.saturating_add(join_chain_hashed(
+        &edges,
+        &delta_by_pivot,
+        rdfs::SUB_PROPERTY_OF,
+        pending,
+    ));
     firings
 }
 
@@ -2190,16 +2385,15 @@ fn collect_hasvalue_restrictions(graph: &Graph) -> Vec<(NamedOrBlankNode, NamedN
     out
 }
 
-fn apply_cls_hv1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_hv1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-hv1: c owl:hasValue v, c owl:onProperty p, x rdf:type c => x p v.
     //
-    // Restriction classes are tiny, so we snapshot them per round without
-    // splitting into delta branches. We still filter by the value type: if
-    // v is a literal, the consequent is a literal-tailed triple, which is
-    // fine; if v is a resource, the consequent still has x as the subject.
+    // The restriction list comes from the T-Box cache so we do not walk the
+    // schema every round. We still filter by the value type: if v is a
+    // literal, the consequent is a literal-tailed triple, which is fine;
+    // if v is a resource, the consequent still has x as the subject.
     let mut firings: u64 = 0;
-    let restrictions = collect_hasvalue_restrictions(graph);
-    for (c, p, v) in restrictions {
+    for (c, p, v) in &tbox.hasvalue_restrictions {
         let individuals: Vec<NamedOrBlankNode> = graph
             .subjects_for_predicate_object(rdf::TYPE, c.as_ref())
             .map(NamedOrBlankNodeRef::into_owned)
@@ -2212,14 +2406,13 @@ fn apply_cls_hv1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_cls_hv2(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_hv2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-hv2: c owl:hasValue v, c owl:onProperty p, x p v => x rdf:type c.
     // Here c can be a blank node (anonymous restriction) so the inferred
     // type keeps its Term shape via NamedOrBlankNode.
     let mut firings: u64 = 0;
-    let restrictions = collect_hasvalue_restrictions(graph);
-    for (c, p, v) in restrictions {
-        let c_term: Term = match &c {
+    for (c, p, v) in &tbox.hasvalue_restrictions {
+        let c_term: Term = match c {
             NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
             NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
         };
@@ -2317,13 +2510,12 @@ fn collect_union_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBla
     out
 }
 
-fn apply_cls_int1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_int1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-int1: c owl:intersectionOf (c1 ... cn), x rdf:type ci for all i
     // then x rdf:type c. Per W3C the classes are resources and the list is
     // a well-formed RDF list.
     let mut firings: u64 = 0;
-    let classes = collect_intersection_classes(graph);
-    for (c, members) in classes {
+    for (c, members) in &tbox.intersection_classes {
         // Candidate individuals: those typed as the first member.
         let Some(first) = members.first() else { continue };
         let first_ref = first.as_ref();
@@ -2341,7 +2533,7 @@ fn apply_cls_int1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<
                 }
             })
             .collect();
-        let c_term: Term = match &c {
+        let c_term: Term = match c {
             NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
             NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
         };
@@ -2366,18 +2558,17 @@ fn apply_cls_int1(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<
     firings
 }
 
-fn apply_cls_int2(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_int2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-int2: c owl:intersectionOf (c1 ... cn), x rdf:type c
     // then x rdf:type ci for all i.
     let mut firings: u64 = 0;
-    let classes = collect_intersection_classes(graph);
-    for (c, members) in classes {
+    for (c, members) in &tbox.intersection_classes {
         let individuals: Vec<NamedOrBlankNode> = graph
             .subjects_for_predicate_object(rdf::TYPE, c.as_ref())
             .map(NamedOrBlankNodeRef::into_owned)
             .collect();
         for x in individuals {
-            for m in &members {
+            for m in members {
                 let m_term: Term = match m {
                     NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
                     NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
@@ -2390,17 +2581,16 @@ fn apply_cls_int2(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<
     firings
 }
 
-fn apply_cls_uni(graph: &Graph, _delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_uni(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-uni: c owl:unionOf (c1 ... cn), x rdf:type ci for any one i
     // then x rdf:type c.
     let mut firings: u64 = 0;
-    let classes = collect_union_classes(graph);
-    for (c, members) in classes {
-        let c_term: Term = match &c {
+    for (c, members) in &tbox.union_classes {
+        let c_term: Term = match c {
             NamedOrBlankNode::NamedNode(n) => Term::NamedNode(n.clone()),
             NamedOrBlankNode::BlankNode(b) => Term::BlankNode(b.clone()),
         };
-        for m in &members {
+        for m in members {
             let individuals: Vec<NamedOrBlankNode> = graph
                 .subjects_for_predicate_object(rdf::TYPE, m.as_ref())
                 .map(NamedOrBlankNodeRef::into_owned)
