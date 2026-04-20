@@ -4,10 +4,12 @@ oxreason
 OWL 2 RL reasoning and SHACL validation for [Oxigraph](https://oxigraph.org/).
 
 Status: OWL 2 RL forward chainer with 39 inference rules wired in,
-semi-naive evaluation, and five inconsistency detectors. SHACL validator is
-scaffolded with `sh:minCount` landed. See `DESIGN.md` for the milestone
-plan and `TESTING.md` for the per rule integration test layout under
-`tests/`.
+semi-naive evaluation, and five inconsistency detectors. Rule body lookups
+for `cax-sco` and `cax-eqc` go through a reasoner-local `GraphView`
+secondary index keyed by interned `TermId` (u32) so hot-path probes hash
+u32 pairs instead of IRI strings. SHACL validator is scaffolded with
+`sh:minCount` landed. See `DESIGN.md` for the milestone plan and
+`TESTING.md` for the per rule integration test layout under `tests/`.
 
 Tracks [oxigraph issue #130](https://github.com/oxigraph/oxigraph/issues/130).
 
@@ -162,6 +164,15 @@ every subsequent round joins each rule against the `DeltaIndex` built from
 triples added in the previous round. Inconsistency detectors run first so
 the engine fails fast on bad input.
 
+Alongside the `DeltaIndex` the engine maintains a `GraphView`, a
+reasoner-local secondary index keyed by interned `TermId` pairs rather
+than IRI strings. It is seeded during the same pass that seeds the shadow
+set at `expand` start and kept current incrementally from the commit loop.
+`cax-sco` and `cax-eqc` consume it via `subjects_for_pred_obj(p, o)`, so
+their hot-path probe is a `u32` pair hash instead of a `NamedNode` clone
+plus IRI compare. The underlying `oxrdf::Graph` stays BTreeSet-backed so
+SPARQL consumers are unaffected.
+
 ```mermaid
 flowchart TD
     A[Graph in] --> B{round N}
@@ -190,8 +201,9 @@ A LUBM-style synthetic benchmark comparing `oxreason`, `reasonable`, and
 where results land.
 
 Reasoning time, best of 3 runs, macOS ARM, 2026-04-20. `oxreason` is the
-current fork with interning and Arc-backed term internals. `reasonable` is
-the baseline Rust crate. Ratio is `oxreason / reasonable`.
+current fork with interning, Arc-backed term internals, and the
+`GraphView` TermId-keyed index for `cax-sco` and `cax-eqc`. `reasonable`
+is the baseline Rust crate. Ratio is `oxreason / reasonable`.
 
 | Dataset    | oxreason (ms) | reasonable (ms) | Ratio |
 |------------|---------------|-----------------|-------|
@@ -200,12 +212,22 @@ the baseline Rust crate. Ratio is `oxreason / reasonable`.
 | LUBM 1000  | 6.73          | 1.74            | 3.9x  |
 | LUBM 3000  | 21.16         | 4.82            | 4.4x  |
 
-The remaining gap is dominated by `graph.insert` in oxrdf, which walks six
-`BTreeSet` indexes per novel triple. The reference reasoner uses a flat
-hash-indexed store. Closing the gap requires either switching oxrdf's
-dataset to a hash-indexed representation or routing reasoner rule bodies
-through the interner so hot-path lookups compare `u32` ids rather than
-IRI strings.
+Numbers above predate `GraphView` and need a refresh on the same machine.
+A/B runs on the sandbox during the `GraphView` landing showed a 4 to 15
+percent win on reasoning time, largest at LUBM 100 and 300 where hash
+cost is a larger fraction of total, smallest at LUBM 10000 where
+`graph.insert` still dominates.
+
+The remaining gap is dominated by `graph.insert` in oxrdf, which walks
+six `BTreeSet` indexes per novel triple. The reference reasoner uses a
+flat hash-indexed store. A prior experiment that replaced oxrdf with a
+reasoner-local `FxHashMap`-backed store regressed at LUBM 1000 and above
+because hashing six owned `Arc<str>` IRIs per novel triple costs more
+than the `BTreeSet` traversals at those sizes. Future work on closing
+the gap is therefore aimed at extending `GraphView` to cover more rule
+body patterns (a `by_pred` index for `triples_for_predicate(p)`) and at
+an upstream oxrdf `HashSet`-backed dataset variant gated so SPARQL
+consumers can opt in.
 
 ![Reasoner comparison on LUBM-style data](../../bench/reasoner/out/reasoner_comparison.png)
 

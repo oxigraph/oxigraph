@@ -3,36 +3,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 2.237,
-      "reason_ms_min": 1.766,
-      "reason_ms_max": 3.176,
+      "reason_ms_median": 1.994,
+      "reason_ms_min": 1.802,
+      "reason_ms_max": 2.705,
       "triples_out": 707,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 2.991,
-      "reason_ms_min": 2.9,
-      "reason_ms_max": 3.118,
+      "reason_ms_median": 1.836,
+      "reason_ms_min": 1.834,
+      "reason_ms_max": 1.855,
       "triples_out": 1258,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 8.79,
-      "reason_ms_min": 7.798,
-      "reason_ms_max": 9.107,
+      "reason_ms_median": 4.983,
+      "reason_ms_min": 4.927,
+      "reason_ms_max": 5.412,
       "triples_out": 3456,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 23.889,
-      "reason_ms_min": 23.353,
-      "reason_ms_max": 25.088,
+      "reason_ms_median": 16.738,
+      "reason_ms_min": 16.725,
+      "reason_ms_max": 17.084,
       "triples_out": 10051,
       "repeats": 3
     }
@@ -41,36 +41,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 0.494,
-      "reason_ms_min": 0.49,
-      "reason_ms_max": 0.766,
+      "reason_ms_median": 0.5,
+      "reason_ms_min": 0.459,
+      "reason_ms_max": 0.657,
       "triples_out": 569,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 0.778,
-      "reason_ms_min": 0.771,
-      "reason_ms_max": 0.843,
+      "reason_ms_median": 0.584,
+      "reason_ms_min": 0.564,
+      "reason_ms_max": 0.614,
       "triples_out": 1060,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 1.81,
-      "reason_ms_min": 1.803,
-      "reason_ms_max": 1.81,
+      "reason_ms_median": 1.322,
+      "reason_ms_min": 1.285,
+      "reason_ms_max": 1.463,
       "triples_out": 3018,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 4.775,
-      "reason_ms_min": 4.629,
-      "reason_ms_max": 4.78,
+      "reason_ms_median": 3.87,
+      "reason_ms_min": 3.768,
+      "reason_ms_max": 3.878,
       "triples_out": 8893,
       "repeats": 3
     }
@@ -79,36 +79,36 @@
     {
       "target_triples": 100,
       "actual_triples": 218,
-      "reason_ms_median": 120.83104206249118,
-      "reason_ms_min": 120.03787513822317,
-      "reason_ms_max": 124.13695803843439,
+      "reason_ms_median": 96.67958319187164,
+      "reason_ms_min": 96.20675002224743,
+      "reason_ms_max": 97.36991696991026,
       "triples_out": 921,
       "repeats": 3
     },
     {
       "target_triples": 300,
       "actual_triples": 383,
-      "reason_ms_median": 206.34204195812345,
-      "reason_ms_min": 205.10766678489745,
-      "reason_ms_max": 206.89408294856548,
+      "reason_ms_median": 166.6974169202149,
+      "reason_ms_min": 165.1863749139011,
+      "reason_ms_max": 167.57774981670082,
       "triples_out": 1545,
       "repeats": 3
     },
     {
       "target_triples": 1000,
       "actual_triples": 1043,
-      "reason_ms_median": 542.7009998820722,
-      "reason_ms_min": 528.7373750470579,
-      "reason_ms_max": 555.2564999088645,
+      "reason_ms_median": 444.8517910204828,
+      "reason_ms_min": 438.4084159974009,
+      "reason_ms_max": 454.6960419975221,
       "triples_out": 4035,
       "repeats": 3
     },
     {
       "target_triples": 3000,
       "actual_triples": 3022,
-      "reason_ms_median": 1549.0330420434475,
-      "reason_ms_min": 1529.4145829975605,
-      "reason_ms_max": 1576.262207934633,
+      "reason_ms_median": 1291.0684591624886,
+      "reason_ms_min": 1276.9679999910295,
+      "reason_ms_max": 1346.1032921914011,
       "triples_out": 11506,
       "repeats": 3
     }
