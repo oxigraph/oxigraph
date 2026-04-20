@@ -3,6 +3,7 @@ use oxiri::{Iri, IriParseError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::cmp::Ordering;
 use std::fmt;
+use std::sync::Arc;
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
@@ -18,7 +19,12 @@ use std::fmt;
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
-    iri: String,
+    // `Arc<str>` keeps clones cheap: a refcount bump instead of a full
+    // `String` allocation. Hash, equality, and ordering all delegate to
+    // the underlying `str`, so the behaviour is byte-identical to the
+    // previous `String` field. Reference cycles are impossible because
+    // the inner type is plain `str`, so there is no leak risk.
+    iri: Arc<str>,
 }
 
 impl NamedNode {
@@ -38,18 +44,18 @@ impl NamedNode {
     ///
     /// [`NamedNode::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(iri: impl Into<String>) -> Self {
+    pub fn new_unchecked(iri: impl Into<Arc<str>>) -> Self {
         Self { iri: iri.into() }
     }
 
     #[inline]
     pub fn as_str(&self) -> &str {
-        self.iri.as_str()
+        &self.iri
     }
 
     #[inline]
     pub fn into_string(self) -> String {
-        self.iri
+        self.iri.as_ref().to_owned()
     }
 
     #[inline]
@@ -223,7 +229,7 @@ impl From<Iri<String>> for NamedNode {
     #[inline]
     fn from(iri: Iri<String>) -> Self {
         Self {
-            iri: iri.into_inner(),
+            iri: iri.into_inner().into(),
         }
     }
 }
@@ -282,7 +288,7 @@ mod tests {
     fn named_node_construction() {
         assert_eq!(
             "http://example.org/",
-            NamedNode::new("http://example.org/").unwrap().iri
+            &*NamedNode::new("http://example.org/").unwrap().iri
         );
     }
 

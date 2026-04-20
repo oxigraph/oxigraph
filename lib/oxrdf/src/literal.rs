@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
+use std::sync::Arc;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
@@ -38,19 +39,23 @@ pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum LiteralContent {
-    String(String),
+    // `Arc<str>` keeps `Literal::clone` cheap: a refcount bump instead of
+    // an allocation for every string payload. Hash and equality delegate
+    // to the inner `str` so behaviour is byte-identical to the previous
+    // `String` shape.
+    String(Arc<str>),
     LanguageTaggedString {
-        value: String,
-        language: String,
+        value: Arc<str>,
+        language: Arc<str>,
     },
     #[cfg(feature = "rdf-12")]
     DirectionalLanguageTaggedString {
-        value: String,
-        language: String,
+        value: Arc<str>,
+        language: Arc<str>,
         direction: BaseDirection,
     },
     TypedLiteral {
-        value: String,
+        value: Arc<str>,
         datatype: NamedNode,
     },
 }
@@ -58,13 +63,13 @@ enum LiteralContent {
 impl Literal {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
     #[inline]
-    pub fn new_simple_literal(value: impl Into<String>) -> Self {
+    pub fn new_simple_literal(value: impl Into<Arc<str>>) -> Self {
         Self(LiteralContent::String(value.into()))
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     #[inline]
-    pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
+    pub fn new_typed_literal(value: impl Into<Arc<str>>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
         Self(if datatype == xsd::STRING {
@@ -77,7 +82,7 @@ impl Literal {
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     #[inline]
     pub fn new_language_tagged_literal(
-        value: impl Into<String>,
+        value: impl Into<Arc<str>>,
         language: impl Into<String>,
     ) -> Result<Self, LanguageTagParseError> {
         let mut language = language.into();
@@ -97,8 +102,8 @@ impl Literal {
     /// [`Literal::new_language_tagged_literal()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_language_tagged_literal_unchecked(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<Arc<str>>,
+        language: impl Into<Arc<str>>,
     ) -> Self {
         Self(LiteralContent::LanguageTaggedString {
             value: value.into(),
@@ -110,7 +115,7 @@ impl Literal {
     #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn new_directional_language_tagged_literal(
-        value: impl Into<String>,
+        value: impl Into<Arc<str>>,
         language: impl Into<String>,
         direction: impl Into<BaseDirection>,
     ) -> Result<Self, LanguageTagParseError> {
@@ -133,8 +138,8 @@ impl Literal {
     #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn new_directional_language_tagged_literal_unchecked(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<Arc<str>>,
+        language: impl Into<Arc<str>>,
         direction: impl Into<BaseDirection>,
     ) -> Self {
         Self(LiteralContent::DirectionalLanguageTaggedString {
@@ -224,16 +229,26 @@ impl Literal {
         Option<BaseDirection>,
     ) {
         match self.0 {
-            LiteralContent::String(s) => (s, None, None, None),
-            LiteralContent::LanguageTaggedString { value, language } => {
-                (value, None, Some(language), None)
-            }
+            LiteralContent::String(s) => (s.as_ref().to_owned(), None, None, None),
+            LiteralContent::LanguageTaggedString { value, language } => (
+                value.as_ref().to_owned(),
+                None,
+                Some(language.as_ref().to_owned()),
+                None,
+            ),
             LiteralContent::DirectionalLanguageTaggedString {
                 value,
                 language,
                 direction,
-            } => (value, None, Some(language), Some(direction)),
-            LiteralContent::TypedLiteral { value, datatype } => (value, Some(datatype), None, None),
+            } => (
+                value.as_ref().to_owned(),
+                None,
+                Some(language.as_ref().to_owned()),
+                Some(direction),
+            ),
+            LiteralContent::TypedLiteral { value, datatype } => {
+                (value.as_ref().to_owned(), Some(datatype), None, None)
+            }
         }
     }
 
@@ -242,11 +257,15 @@ impl Literal {
     #[inline]
     pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
         match self.0 {
-            LiteralContent::String(s) => (s, None, None),
-            LiteralContent::LanguageTaggedString { value, language } => {
-                (value, None, Some(language))
+            LiteralContent::String(s) => (s.as_ref().to_owned(), None, None),
+            LiteralContent::LanguageTaggedString { value, language } => (
+                value.as_ref().to_owned(),
+                None,
+                Some(language.as_ref().to_owned()),
+            ),
+            LiteralContent::TypedLiteral { value, datatype } => {
+                (value.as_ref().to_owned(), Some(datatype), None)
             }
-            LiteralContent::TypedLiteral { value, datatype } => (value, Some(datatype), None),
         }
     }
 }
@@ -268,14 +287,14 @@ impl<'a> From<&'a str> for Literal {
 impl From<String> for Literal {
     #[inline]
     fn from(value: String) -> Self {
-        Self(LiteralContent::String(value))
+        Self(LiteralContent::String(value.into()))
     }
 }
 
 impl<'a> From<Cow<'a, str>> for Literal {
     #[inline]
     fn from(value: Cow<'a, str>) -> Self {
-        Self(LiteralContent::String(value.into()))
+        Self(LiteralContent::String(Arc::from(value.as_ref())))
     }
 }
 
@@ -283,7 +302,7 @@ impl From<bool> for Literal {
     #[inline]
     fn from(value: bool) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::BOOLEAN.into(),
         })
     }
@@ -293,7 +312,7 @@ impl From<i128> for Literal {
     #[inline]
     fn from(value: i128) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -303,7 +322,7 @@ impl From<i64> for Literal {
     #[inline]
     fn from(value: i64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -313,7 +332,7 @@ impl From<i32> for Literal {
     #[inline]
     fn from(value: i32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -323,7 +342,7 @@ impl From<i16> for Literal {
     #[inline]
     fn from(value: i16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -333,7 +352,7 @@ impl From<u64> for Literal {
     #[inline]
     fn from(value: u64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -343,7 +362,7 @@ impl From<u32> for Literal {
     #[inline]
     fn from(value: u32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -353,7 +372,7 @@ impl From<u16> for Literal {
     #[inline]
     fn from(value: u16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -364,11 +383,11 @@ impl From<f32> for Literal {
     fn from(value: f32) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: if value == f32::INFINITY {
-                "INF".to_owned()
+                Arc::from("INF")
             } else if value == f32::NEG_INFINITY {
-                "-INF".to_owned()
+                Arc::from("-INF")
             } else {
-                value.to_string()
+                value.to_string().into()
             },
             datatype: xsd::FLOAT.into(),
         })
@@ -380,11 +399,11 @@ impl From<f64> for Literal {
     fn from(value: f64) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: if value == f64::INFINITY {
-                "INF".to_owned()
+                Arc::from("INF")
             } else if value == f64::NEG_INFINITY {
-                "-INF".to_owned()
+                Arc::from("-INF")
             } else {
-                value.to_string()
+                value.to_string().into()
             },
             datatype: xsd::DOUBLE.into(),
         })
@@ -678,11 +697,11 @@ impl<'a> LiteralRef<'a> {
     #[inline]
     pub fn into_owned(self) -> Literal {
         Literal(match self.0 {
-            LiteralRefContent::String(value) => LiteralContent::String(value.to_owned()),
+            LiteralRefContent::String(value) => LiteralContent::String(Arc::from(value)),
             LiteralRefContent::LanguageTaggedString { value, language } => {
                 LiteralContent::LanguageTaggedString {
-                    value: value.to_owned(),
-                    language: language.to_owned(),
+                    value: Arc::from(value),
+                    language: Arc::from(language),
                 }
             }
             #[cfg(feature = "rdf-12")]
@@ -691,12 +710,12 @@ impl<'a> LiteralRef<'a> {
                 language,
                 direction,
             } => LiteralContent::DirectionalLanguageTaggedString {
-                value: value.to_owned(),
-                language: language.to_owned(),
+                value: Arc::from(value),
+                language: Arc::from(language),
                 direction,
             },
             LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
-                value: value.to_owned(),
+                value: Arc::from(value),
                 datatype: datatype.into_owned(),
             },
         })

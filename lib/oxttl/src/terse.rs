@@ -1224,7 +1224,7 @@ impl RuleRecognizer for TriGRecognizer {
             }
             [.., TriGState::LiteralPossibleSuffix { value, emit: true }] => {
                 self.cur_object
-                    .push(Literal::new_simple_literal(value).into());
+                    .push(Literal::new_simple_literal(value.as_str()).into());
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }

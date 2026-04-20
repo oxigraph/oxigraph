@@ -3,6 +3,7 @@ use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::io::Write;
+use std::sync::Arc;
 use std::{fmt, str};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -24,7 +25,10 @@ pub struct BlankNode(BlankNodeContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum BlankNodeContent {
-    Named(String),
+    // `Arc<str>` makes `BlankNode::clone` cheap: a refcount bump instead
+    // of a `String` allocation. Hash and equality delegate to the inner
+    // `str` so the behaviour matches the previous `String` shape.
+    Named(Arc<str>),
     Anonymous { id: [u8; 16], str: IdStr },
 }
 
@@ -48,7 +52,7 @@ impl BlankNode {
     ///
     /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(id: impl Into<String>) -> Self {
+    pub fn new_unchecked(id: impl Into<Arc<str>>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
             Self::new_from_unique_id(numerical_id)
@@ -81,7 +85,7 @@ impl BlankNode {
     #[inline]
     pub fn into_string(self) -> String {
         match self.0 {
-            BlankNodeContent::Named(id) => id,
+            BlankNodeContent::Named(id) => id.as_ref().to_owned(),
             BlankNodeContent::Anonymous { str, .. } => str.as_str().to_owned(),
         }
     }
@@ -89,7 +93,7 @@ impl BlankNode {
     #[inline]
     pub fn as_ref(&self) -> BlankNodeRef<'_> {
         BlankNodeRef(match &self.0 {
-            BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id.as_str()),
+            BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id),
             BlankNodeContent::Anonymous { id, str } => BlankNodeRefContent::Anonymous {
                 id: *id,
                 str: str.as_str(),
@@ -208,7 +212,7 @@ impl<'a> BlankNodeRef<'a> {
     #[inline]
     pub fn into_owned(self) -> BlankNode {
         BlankNode(match self.0 {
-            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
+            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(Arc::from(id)),
             BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
                 id,
                 str: IdStr::new(u128::from_ne_bytes(id)),
