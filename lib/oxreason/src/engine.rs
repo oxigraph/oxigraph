@@ -1056,7 +1056,7 @@ where
             round_firings = round_firings.saturating_add(prof.time("prp-symp", delta_size, || apply_prp_symp(graph, delta_ref, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("prp-inv", delta_size, || apply_prp_inv(graph, delta_ref, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("prp-eqp", delta_size, || apply_prp_eqp(graph, delta_ref, &mut pending)));
-            round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, type_id, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, type_id, &mut pending_keyed)));
 
             // M3 schema rules.
             round_firings = round_firings.saturating_add(prof.time("scm-cls", delta_size, || apply_scm_cls(graph, delta_ref, &mut pending)));
@@ -1784,7 +1784,7 @@ fn apply_cax_eqc(
     graph: &FlatGraph,
     delta: Option<&DeltaIndex>,
     type_id: TermId,
-    pending: &mut Vec<Triple>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
 ) -> u64 {
     // cax-eqc1: if c1 owl:equivalentClass c2 and x rdf:type c1 then x rdf:type c2.
     // cax-eqc2: if c1 owl:equivalentClass c2 and x rdf:type c2 then x rdf:type c1.
@@ -1793,11 +1793,13 @@ fn apply_cax_eqc(
     //   Branch 1: delta(equivalentClass) × graph(type).
     //   Branch 2: graph(equivalentClass) × delta(type) (indexed by class).
     //
-    // Like cax-sco the graph(type) leg goes through
-    // `FlatGraph::subjects_for_pred_obj_id` to key the lookup on a
-    // `(TermId, TermId)` pair rather than the predicate IRI and class IRI.
-    // Each equivalentClass pair is paired with the interned ids of both
-    // classes so the inner loop is pure u32 work.
+    // The graph(type) leg goes through
+    // `FlatGraph::subjects_ids_for_pred_obj_id`, which returns each subject
+    // paired with its interned `TermId`. The `(x_id, type_id, to_id)` key
+    // is assembled right there so the consequent commits through
+    // `FlatGraph::insert_keyed` and skips `intern_triple`'s three Arc<str>
+    // hashes per emitted triple. Branch 2 does the same by resolving the
+    // delta subject's id once via `lookup_subject_ref` when indexing.
     let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(OWL_EQUIVALENT_CLASS)
         .filter_map(|t| {
@@ -1813,8 +1815,12 @@ fn apply_cax_eqc(
 
     let Some(d) = delta else {
         for (c1, c1_id, c2, c2_id) in &pairs {
-            firings = firings.saturating_add(reclassify(graph, *c1_id, c2, type_id, pending));
-            firings = firings.saturating_add(reclassify(graph, *c2_id, c1, type_id, pending));
+            firings = firings.saturating_add(reclassify(
+                graph, *c1_id, c2, *c2_id, type_id, pending_keyed,
+            ));
+            firings = firings.saturating_add(reclassify(
+                graph, *c2_id, c1, *c1_id, type_id, pending_keyed,
+            ));
         }
         return firings;
     };
@@ -1828,26 +1834,34 @@ fn apply_cax_eqc(
         let Some(c1_id) = graph.lookup_named(c1.as_str()) else { continue };
         let Some(c2_id) = graph.lookup_named(c2.as_str()) else { continue };
         seen_schema.insert((c1.clone(), c2.clone()));
-        firings = firings.saturating_add(reclassify(graph, c1_id, &c2, type_id, pending));
-        firings = firings.saturating_add(reclassify(graph, c2_id, &c1, type_id, pending));
+        firings = firings.saturating_add(reclassify(
+            graph, c1_id, &c2, c2_id, type_id, pending_keyed,
+        ));
+        firings = firings.saturating_add(reclassify(
+            graph, c2_id, &c1, c1_id, type_id, pending_keyed,
+        ));
     }
 
     // Branch 2: graph(equivalentClass) × delta(type). Index delta typings
-    // once by class so each schema pair does O(1) lookups.
-    let new_typings = index_delta_types(d);
-    for (c1, _, c2, _) in &pairs {
+    // once by class together with each subject's interned id so each
+    // schema pair emits (x, rdf:type, c) triples with the full key in
+    // hand.
+    let new_typings = index_delta_types_with_ids(graph, d);
+    for (c1, c1_id, c2, c2_id) in &pairs {
         if seen_schema.contains(&(c1.clone(), c2.clone())) {
             continue;
         }
         if let Some(xs) = new_typings.get(c1) {
-            for x in xs {
-                pending.push(Triple::new(x.clone(), rdf::TYPE, c2.clone()));
+            for (x_id, x) in xs {
+                let triple = Triple::new(x.clone(), rdf::TYPE, c2.clone());
+                pending_keyed.push((triple, (*x_id, type_id, *c2_id)));
                 firings = firings.saturating_add(1);
             }
         }
         if let Some(xs) = new_typings.get(c2) {
-            for x in xs {
-                pending.push(Triple::new(x.clone(), rdf::TYPE, c1.clone()));
+            for (x_id, x) in xs {
+                let triple = Triple::new(x.clone(), rdf::TYPE, c1.clone());
+                pending_keyed.push((triple, (*x_id, type_id, *c1_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1855,32 +1869,41 @@ fn apply_cax_eqc(
     firings
 }
 
-/// For every (x, rdf:type, from) edge in the graph push (x, rdf:type, to).
-/// Goes through `FlatGraph::subjects_for_pred_obj_id` so the lookup hashes
-/// a `(TermId, TermId)` pair instead of the predicate plus class IRI.
+/// For every (x, rdf:type, from) edge in the graph push (x, rdf:type, to)
+/// onto the keyed commit buffer. Goes through
+/// `FlatGraph::subjects_ids_for_pred_obj_id` so the lookup hashes a
+/// `(TermId, TermId)` pair and the consequent's key is assembled
+/// component-by-component without re-interning.
 fn reclassify(
     graph: &FlatGraph,
     from_id: TermId,
     to: &NamedNode,
+    to_id: TermId,
     type_id: TermId,
-    pending: &mut Vec<Triple>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
 ) -> u64 {
     let mut firings: u64 = 0;
-    for x in graph.subjects_for_pred_obj_id(type_id, from_id) {
-        pending.push(Triple::new(x.into_owned(), rdf::TYPE, to.clone()));
+    for (x_id, x) in graph.subjects_ids_for_pred_obj_id(type_id, from_id) {
+        let triple = Triple::new(x.into_owned(), rdf::TYPE, to.clone());
+        pending_keyed.push((triple, (x_id, type_id, to_id)));
         firings = firings.saturating_add(1);
     }
     firings
 }
 
-/// Group delta `rdf:type` triples by their object class. Returned map holds
-/// the list of fresh individuals for each class touched in the previous
-/// round.
-fn index_delta_types(delta: &DeltaIndex) -> FxHashMap<NamedNode, Vec<NamedOrBlankNode>> {
-    let mut out: FxHashMap<NamedNode, Vec<NamedOrBlankNode>> = FxHashMap::default();
+/// Group delta `rdf:type` triples by their object class, carrying each
+/// subject's interned id alongside the owned subject. The id probe goes
+/// through `lookup_subject_ref`, one hash per delta triple, and saves the
+/// three hashes that `intern_triple` would otherwise do on commit.
+fn index_delta_types_with_ids(
+    graph: &FlatGraph,
+    delta: &DeltaIndex,
+) -> FxHashMap<NamedNode, Vec<(TermId, NamedOrBlankNode)>> {
+    let mut out: FxHashMap<NamedNode, Vec<(TermId, NamedOrBlankNode)>> = FxHashMap::default();
     for t in delta.for_predicate(rdf::TYPE) {
         let Some(c) = owned_object_named(&t.object) else { continue };
-        out.entry(c).or_default().push(t.subject.clone());
+        let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+        out.entry(c).or_default().push((x_id, t.subject.clone()));
     }
     out
 }
