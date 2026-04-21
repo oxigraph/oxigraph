@@ -746,3 +746,62 @@ fn test_wkt_literal_store_roundtrip() -> Result<(), Box<dyn Error>> {
     store.validate()?;
     Ok(())
 }
+
+/// The WKB side column family round-trip. Big geometries (polygons,
+/// long linestrings) are held in `BigWktLiteral` with the raw WKB
+/// bytes living in the `wkbs` side CF keyed by the same `StrHash`
+/// that backs id2str. `Store::object_geometries_for_pattern` must
+/// rehydrate them via that lookup without re-running the WKT lexer.
+#[cfg(feature = "geosparql")]
+#[test]
+fn test_wkt_literal_side_cf_roundtrip() -> Result<(), Box<dyn Error>> {
+    use geo::Geometry;
+
+    let store = Store::new()?;
+    let wkt_datatype =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
+    let predicate =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#asWKT");
+    let feature_a = NamedNodeRef::new_unchecked("http://example.org/f/a");
+    let feature_b = NamedNodeRef::new_unchecked("http://example.org/f/b");
+
+    // A point (inline SmallWktLiteral) and a polygon (BigWktLiteral +
+    // wkbs side CF) so we can confirm both paths decode through the
+    // same iterator.
+    let point_lit = LiteralRef::new_typed_literal("POINT(1 2)", wkt_datatype);
+    let polygon_lit = LiteralRef::new_typed_literal(
+        "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))",
+        wkt_datatype,
+    );
+
+    store.insert(QuadRef::new(
+        feature_a,
+        predicate,
+        point_lit,
+        GraphNameRef::DefaultGraph,
+    ))?;
+    store.insert(QuadRef::new(
+        feature_b,
+        predicate,
+        polygon_lit,
+        GraphNameRef::DefaultGraph,
+    ))?;
+
+    let mut saw_point = false;
+    let mut saw_polygon = false;
+    for geom in store.object_geometries_for_pattern(None, Some(predicate), None) {
+        match geom? {
+            Geometry::Point(_) => saw_point = true,
+            Geometry::Polygon(_) => saw_polygon = true,
+            other => panic!("unexpected geometry shape: {other:?}"),
+        }
+    }
+    assert!(saw_point, "inline point must decode via SmallWktLiteral");
+    assert!(
+        saw_polygon,
+        "polygon must decode via BigWktLiteral + wkbs side CF"
+    );
+
+    store.validate()?;
+    Ok(())
+}

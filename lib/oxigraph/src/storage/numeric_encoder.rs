@@ -520,6 +520,34 @@ impl EncodedTerm {
     pub fn as_geometry(&self) -> Option<geo::Geometry<f64>> {
         crate::storage::wkb_codec::decode_wkb_to_geometry(self.wkb_bytes()?)
     }
+
+    /// Resolve a `wktLiteral` to a `geo::Geometry<f64>`, consulting the
+    /// side CF for [`Self::BigWktLiteral`] payloads when needed.
+    ///
+    /// For [`Self::SmallWktLiteral`] the WKB bytes live inline and the
+    /// lookup is never touched. For [`Self::BigWktLiteral`] the bytes
+    /// are fetched from the WKB side store keyed by the same StrHash
+    /// that id2str uses for the lexical form. Returns `Ok(None)` when
+    /// the term is not a geometry, when the lookup has no entry, or
+    /// when the stored WKB is corrupt.
+    #[cfg(feature = "geosparql")]
+    pub fn resolve_geometry<L: WkbLookup + ?Sized>(
+        &self,
+        lookup: &L,
+    ) -> Result<Option<geo::Geometry<f64>>, StorageError> {
+        match self {
+            Self::SmallWktLiteral(bytes) => Ok(crate::storage::wkb_codec::decode_wkb_to_geometry(
+                bytes.as_slice(),
+            )),
+            Self::BigWktLiteral { value_id } => {
+                let Some(bytes) = lookup.get_wkb(value_id)? else {
+                    return Ok(None);
+                };
+                Ok(crate::storage::wkb_codec::decode_wkb_to_geometry(&bytes))
+            }
+            _ => Ok(None),
+        }
+    }
 }
 impl From<NamedNodeRef<'_>> for EncodedTerm {
     fn from(named_node: NamedNodeRef<'_>) -> Self {
@@ -825,6 +853,44 @@ pub trait StrLookup {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
 }
 
+/// Read-side handle for the WKB side store.
+///
+/// Implementations return the raw WKB bytes stored for a
+/// [`EncodedTerm::BigWktLiteral`] value, keyed by the same
+/// [`StrHash`] used by the id2str store for the literal's lexical
+/// form. Callers decode the bytes through
+/// [`crate::storage::wkb_codec::decode_wkb_to_geometry`] to avoid the
+/// WKT lexer round trip on every geometry access.
+///
+/// [`Ok(None)`](Ok) means the key has no entry (e.g. a store written
+/// before the side CF existed, or a literal never inserted through
+/// the geosparql insert path).
+#[cfg(feature = "geosparql")]
+pub trait WkbLookup {
+    fn get_wkb(&self, key: &StrHash) -> Result<Option<Vec<u8>>, StorageError>;
+}
+
+/// Companion to [`insert_term`] that feeds the WKB side store.
+///
+/// Only [`EncodedTerm::BigWktLiteral`] triggers a callback, because
+/// [`EncodedTerm::SmallWktLiteral`] already carries the WKB inline in
+/// the encoded term and needs no out-of-band blob. Malformed WKT is
+/// silently skipped on the theory that the generic typed-literal path
+/// already stored the lexical form, so a subsequent read still
+/// reproduces the original literal.
+#[cfg(feature = "geosparql")]
+pub fn insert_term_wkb<F: FnMut(&StrHash, &[u8])>(
+    term: TermRef<'_>,
+    encoded: &EncodedTerm,
+    insert_wkb: &mut F,
+) {
+    if let (TermRef::Literal(literal), EncodedTerm::BigWktLiteral { value_id }) = (term, encoded) {
+        if let Some(bytes) = crate::storage::wkb_codec::encode_wkt_value(literal.value()) {
+            insert_wkb(value_id, &bytes);
+        }
+    }
+}
+
 pub fn insert_term<F: FnMut(&StrHash, &str)>(
     term: TermRef<'_>,
     encoded: &EncodedTerm,
@@ -929,11 +995,14 @@ pub fn insert_term<F: FnMut(&StrHash, &str)>(
             #[cfg(feature = "geosparql")]
             EncodedTerm::BigWktLiteral { value_id } => {
                 // Store the WKT lexical so the decoder can reconstruct
-                // the literal. A follow-up task will also persist the
-                // raw WKB bytes to a side column family keyed by the
-                // same `value_id`, letting geometry accessors skip the
-                // WKT lexer without breaking on-disk compatibility with
-                // stores written before that CF existed.
+                // the literal. The raw WKB bytes are persisted in
+                // parallel by [`insert_term_wkb`] into the `wkbs` side
+                // column family, keyed by the same `value_id`. That
+                // lets geometry accessors skip the WKT lexer via
+                // [`EncodedTerm::resolve_geometry`] without breaking
+                // on-disk compatibility with stores written before the
+                // side CF existed: a missing wkbs entry falls back to
+                // the lexical and the generic decode path.
                 insert_str(value_id, literal.value());
             }
             _ => unreachable!("Invalid literal encoding: {encoded:?} for {term}"),

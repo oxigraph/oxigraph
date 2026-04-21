@@ -4,6 +4,8 @@ pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
+#[cfg(feature = "geosparql")]
+use crate::storage::numeric_encoder::{WkbLookup, insert_term_wkb};
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
@@ -24,6 +26,8 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 pub struct MemoryStorage {
     content: Arc<Content>,
     id2str: Arc<DashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
+    #[cfg(feature = "geosparql")]
+    wkbs: Arc<DashMap<StrHash, Vec<u8>, BuildHasherDefault<StrHashHasher>>>,
     version_counter: Arc<AtomicUsize>,
     transaction_counter: Arc<Mutex<usize>>,
 }
@@ -55,6 +59,8 @@ impl MemoryStorage {
                 graphs: DashMap::default(),
             }),
             id2str: Arc::new(DashMap::default()),
+            #[cfg(feature = "geosparql")]
+            wkbs: Arc::new(DashMap::default()),
             version_counter: Arc::new(AtomicUsize::new(0)),
             transaction_counter: Arc::new(Mutex::new(usize::MAX >> 1)),
         }
@@ -412,6 +418,13 @@ impl StrLookup for MemoryStorageReader<'_> {
     }
 }
 
+#[cfg(feature = "geosparql")]
+impl WkbLookup for MemoryStorageReader<'_> {
+    fn get_wkb(&self, key: &StrHash) -> Result<Option<Vec<u8>>, StorageError> {
+        Ok(self.storage.wkbs.view(key, |_, v| v.clone()))
+    }
+}
+
 #[must_use]
 pub struct MemoryStorageTransaction<'a> {
     storage: &'a MemoryStorage,
@@ -565,7 +578,9 @@ impl MemoryStorageTransaction<'_> {
     }
 
     fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value));
+        #[cfg(feature = "geosparql")]
+        insert_term_wkb(term, encoded, &mut |key, bytes| self.insert_wkb(key, bytes));
     }
 
     fn insert_str(&self, key: &StrHash, value: &str) {
@@ -575,6 +590,14 @@ impl MemoryStorageTransaction<'_> {
             .entry(*key)
             .or_insert_with(|| value.into());
         debug_assert_eq!(*inserted, value, "Hash conflict for two strings");
+    }
+
+    #[cfg(feature = "geosparql")]
+    fn insert_wkb(&self, key: &StrHash, bytes: &[u8]) {
+        self.storage
+            .wkbs
+            .entry(*key)
+            .or_insert_with(|| bytes.to_vec());
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) {

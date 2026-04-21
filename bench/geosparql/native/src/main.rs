@@ -20,12 +20,15 @@
 //!   should stay near-constant in `points` for a fixed polygon set.
 //! * `wktstore`: loads the fixture into an oxigraph store built with
 //!   the `geosparql` feature so `wktLiteral` values are parsed once
-//!   into WKB at insert time. At query time the bench pulls the
-//!   point geometries back via `Store::object_geometries_for_pattern`,
-//!   which skips the WKT lexer for inline WKB literals. This isolates
-//!   the storage-side cost amortisation that oxigraph issue #1560
-//!   proposes: identical geometry loop to `geo`, but the parse tax is
-//!   paid in `parse_ms` once rather than on every `query_ms` call.
+//!   into WKB at insert time. Points land inline in `SmallWktLiteral`,
+//!   polygons and long linestrings spill into `BigWktLiteral` with
+//!   the raw WKB in the `wkbs` side column family. At query time the
+//!   bench pulls every geometry back via
+//!   `Store::object_geometries_for_pattern`, which skips the WKT
+//!   lexer on both paths. This isolates the storage-side cost
+//!   amortisation that oxigraph issue #1560 proposes: identical
+//!   geometry loop to `geo`, but the parse tax is paid in `parse_ms`
+//!   once rather than on every `query_ms` call.
 //!
 //! Workload: for each polygon in the fixture, test every point in the
 //! fixture. Total ops = num_polygons * num_points. The engine is timed
@@ -274,40 +277,40 @@ fn run_index(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
 ///
 /// The fixture is loaded through [`Store::load_from_reader`] so
 /// `wktLiteral` objects go through the WKB encode path on insert.
-/// At query time point geometries are pulled back via
+/// At query time geometries are pulled back via
 /// [`Store::object_geometries_for_pattern`], which returns parsed
-/// `geo::Geometry<f64>` without re-running the WKT lexer for inline
-/// literals. Polygons still come from the raw turtle file because the
-/// `BigWktLiteral` side-CF path is not wired yet, so large geometries
-/// take the generic typed-literal route which does not expose the
-/// geometry directly.
+/// `geo::Geometry<f64>` without re-running the WKT lexer. Points use
+/// the inline [`SmallWktLiteral`] fast path, polygons come from the
+/// [`BigWktLiteral`] WKB side CF. Both bypass the WKT lexer.
 fn run_wktstore(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
     let parse_start = Instant::now();
 
     // Load the fixture into an in-memory store. The geosparql feature
-    // drives the WKB-encoded path for every inline-sized wktLiteral.
+    // drives the WKB-encoded path for every wktLiteral on insert:
+    // points land inline in SmallWktLiteral, polygons and big
+    // linestrings go through BigWktLiteral + the wkbs side CF.
     let store = Store::new()?;
     let file = File::open(Path::new(path))?;
     store.load_from_reader(RdfFormat::Turtle, BufReader::new(file))?;
 
-    // Pull the point geometries out of the store via the fast
-    // accessor. This is the path the bench is meant to measure.
+    // Pull every wktLiteral geometry out of the store via the fast
+    // accessor, then bucket by shape at the retrieval site. Points
+    // and polygons both bypass the WKT lexer: points through the
+    // inline WKB bytes, polygons through the side CF.
     let as_wkt = OxigraphNamedNodeRef::new_unchecked(AS_WKT_IRI);
-    let point_geoms: Vec<Geometry> = store
-        .object_geometries_for_pattern(None, Some(as_wkt), None)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // Polygons are not covered by the inline path (their WKB
-    // overflows SmallBytes::<32>::CAPACITY) and the BigWktLiteral
-    // variant that now holds them only keeps the WKT lexical in
-    // id2str, not the raw WKB. Until the side-CF work for polygon
-    // WKB lands we still gather polygons from the source file and
-    // parse once. The matching amortisation is tracked in task #71.
-    let (_raw_points, polygons) = extract_wkts(path)?;
-    let polygon_geoms: Vec<Geometry> = polygons
-        .iter()
-        .map(|s| Geometry::try_from_wkt_str(s).map_err(|e| format!("parse polygon: {e}")))
-        .collect::<Result<_, _>>()?;
+    let mut point_geoms: Vec<Geometry> = Vec::new();
+    let mut polygon_geoms: Vec<Geometry> = Vec::new();
+    for geom in store.object_geometries_for_pattern(None, Some(as_wkt), None) {
+        let geom = geom?;
+        match &geom {
+            Geometry::Point(_) => point_geoms.push(geom),
+            Geometry::Polygon(_) | Geometry::MultiPolygon(_) => polygon_geoms.push(geom),
+            _ => {
+                // Other shapes are not used by the fixture but we
+                // keep them out of the hot loop rather than error.
+            }
+        }
+    }
     let parse_ms = ms(parse_start.elapsed());
 
     let query_start = Instant::now();

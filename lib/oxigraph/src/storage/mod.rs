@@ -5,6 +5,8 @@ use crate::storage::memory::{
     MemoryStorageTransaction, QuadIterator,
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
+#[cfg(feature = "geosparql")]
+use crate::storage::numeric_encoder::WkbLookup;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use crate::storage::rocksdb::{
     RocksDbChainedDecodingQuadIterator, RocksDbDecodingGraphIterator, RocksDbStorage,
@@ -341,6 +343,17 @@ impl StrLookup for StorageReader<'_> {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.get_str(key),
             StorageReaderKind::Memory(reader) => reader.get_str(key),
+        }
+    }
+}
+
+#[cfg(feature = "geosparql")]
+impl WkbLookup for StorageReader<'_> {
+    fn get_wkb(&self, key: &StrHash) -> Result<Option<Vec<u8>>, StorageError> {
+        match &self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReaderKind::RocksDb(reader) => reader.get_wkb(key),
+            StorageReaderKind::Memory(reader) => reader.get_wkb(key),
         }
     }
 }

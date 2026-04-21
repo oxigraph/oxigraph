@@ -480,14 +480,14 @@ impl Store {
         self.quads_for_pattern(None, None, None, None)
     }
 
-    /// Iterate the parsed [`geo::Geometry`] of every inline WKB-encoded
+    /// Iterate the parsed [`geo::Geometry`] of every WKB-backed
     /// `wktLiteral` object matching the given pattern.
     ///
-    /// Quads whose object is not an inline WKB-encoded geometry are
-    /// skipped. This exposes the fast path that WKB-backed storage
-    /// enables: geometries are returned without routing through the
-    /// WKT lexer on every access. The iterator is gated behind the
-    /// `geosparql` Cargo feature.
+    /// Small geometries (points) take the inline WKB fast path;
+    /// polygons and long linestrings are rehydrated from the `wkbs`
+    /// side column family. Both skip the WKT lexer on every access.
+    /// Quads whose object is not a `wktLiteral` are silently skipped.
+    /// The iterator is gated behind the `geosparql` Cargo feature.
     #[cfg(feature = "geosparql")]
     pub fn object_geometries_for_pattern(
         &self,
@@ -496,14 +496,13 @@ impl Store {
         graph_name: Option<GraphNameRef<'_>>,
     ) -> ObjectGeometryIter<'static> {
         let reader = self.storage.snapshot();
-        ObjectGeometryIter {
-            iter: reader.quads_for_pattern(
-                subject.map(EncodedTerm::from).as_ref(),
-                predicate.map(EncodedTerm::from).as_ref(),
-                None,
-                graph_name.map(EncodedTerm::from).as_ref(),
-            ),
-        }
+        let iter = reader.quads_for_pattern(
+            subject.map(EncodedTerm::from).as_ref(),
+            predicate.map(EncodedTerm::from).as_ref(),
+            None,
+            graph_name.map(EncodedTerm::from).as_ref(),
+        );
+        ObjectGeometryIter { iter, reader }
     }
 
     /// Checks if this store contains a given quad.
@@ -1694,17 +1693,20 @@ impl Iterator for QuadIter<'_> {
 }
 
 /// Parsed geometries for `wktLiteral` object values, fetched without
-/// routing through the WKT lexer for inline WKB-encoded literals.
+/// routing through the WKT lexer.
 ///
-/// Yields a [`geo::Geometry<f64>`] for every quad whose object is an
-/// inline (small) WKB-encoded geometry. Quads whose object is not a
-/// geometry or whose WKB spilled to the generic typed-literal path are
-/// skipped rather than re-parsed, so this iterator measures exactly
-/// the fast path the WKB storage enables.
+/// Yields a [`geo::Geometry<f64>`] for every quad whose object is a
+/// WKB-backed geometry, using the inline fast path for
+/// [`SmallWktLiteral`](crate::storage::numeric_encoder::EncodedTerm::SmallWktLiteral)
+/// values and the side column family for
+/// [`BigWktLiteral`](crate::storage::numeric_encoder::EncodedTerm::BigWktLiteral)
+/// values. Quads whose object is not a geometry are skipped rather
+/// than re-parsed.
 #[cfg(feature = "geosparql")]
 #[must_use]
 pub struct ObjectGeometryIter<'a> {
     iter: DecodingQuadIterator<'a>,
+    reader: StorageReader<'a>,
 }
 
 #[cfg(feature = "geosparql")]
@@ -1714,14 +1716,13 @@ impl Iterator for ObjectGeometryIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iter.next()? {
-                Ok(quad) => {
-                    if let Some(geom) = quad.object.as_geometry() {
-                        return Some(Ok(geom));
+                Ok(quad) => match quad.object.resolve_geometry(&self.reader) {
+                    Ok(Some(geom)) => return Some(Ok(geom)),
+                    Ok(None) => {
+                        // Object is not a WKB-backed geometry. Skip.
                     }
-                    // Object is not an inline WKB-encoded geometry.
-                    // Silently skip so callers that only care about the
-                    // fast path do not pay a WKT parse here.
-                }
+                    Err(error) => return Some(Err(error)),
+                },
                 Err(error) => return Some(Err(error)),
             }
         }

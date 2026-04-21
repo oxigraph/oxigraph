@@ -13,6 +13,8 @@ pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
+#[cfg(feature = "geosparql")]
+use crate::storage::numeric_encoder::{WkbLookup, insert_term_wkb};
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, DbOptions, Iter, ReadableTransaction, Reader,
     Transaction,
@@ -47,6 +49,14 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+/// Side store for raw WKB bytes of oversized `wktLiteral` values.
+///
+/// Populated only when the `geosparql` feature is on, keyed by the
+/// same [`StrHash`] that id2str uses for the literal's lexical form.
+/// Stores written without the feature omit the CF and read paths
+/// gracefully return `None` for missing entries.
+#[cfg(feature = "geosparql")]
+const WKBS_CF: &str = "wkbs";
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RocksDbStorageOptions {
@@ -79,6 +89,8 @@ pub struct RocksDbStorage {
     dpos_cf: ColumnFamily,
     dosp_cf: ColumnFamily,
     graphs_cf: ColumnFamily,
+    #[cfg(feature = "geosparql")]
+    wkbs_cf: ColumnFamily,
 }
 
 impl RocksDbStorage {
@@ -169,6 +181,13 @@ impl RocksDbStorage {
                 min_prefix_size: 17, // named or blank node start
                 unordered_writes: false,
             },
+            #[cfg(feature = "geosparql")]
+            ColumnFamilyDefinition {
+                name: WKBS_CF,
+                use_iter: false,
+                min_prefix_size: 0,
+                unordered_writes: true,
+            },
         ]
     }
 
@@ -186,6 +205,8 @@ impl RocksDbStorage {
             dpos_cf: db.column_family(DPOS_CF)?,
             dosp_cf: db.column_family(DOSP_CF)?,
             graphs_cf: db.column_family(GRAPHS_CF)?,
+            #[cfg(feature = "geosparql")]
+            wkbs_cf: db.column_family(WKBS_CF)?,
             db,
         };
         this.migrate()?;
@@ -934,6 +955,17 @@ impl StrLookup for RocksDbStorageReader<'_> {
     }
 }
 
+#[cfg(feature = "geosparql")]
+impl WkbLookup for RocksDbStorageReader<'_> {
+    fn get_wkb(&self, key: &StrHash) -> Result<Option<Vec<u8>>, StorageError> {
+        Ok(self
+            .storage
+            .db
+            .get(&self.storage.wkbs_cf, &key.to_be_bytes())?
+            .map(Vec::from))
+    }
+}
+
 #[must_use]
 pub struct RocksDbStorageTransaction<'a> {
     buffer: Vec<u8>,
@@ -1016,7 +1048,9 @@ impl RocksDbStorageTransaction<'_> {
     }
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value));
+        #[cfg(feature = "geosparql")]
+        insert_term_wkb(term, encoded, &mut |key, bytes| self.insert_wkb(key, bytes));
     }
 
     fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
@@ -1033,6 +1067,12 @@ impl RocksDbStorageTransaction<'_> {
             &key.to_be_bytes(),
             value.as_bytes(),
         )
+    }
+
+    #[cfg(feature = "geosparql")]
+    fn insert_wkb(&mut self, key: &StrHash, bytes: &[u8]) {
+        self.transaction
+            .insert(&self.storage.wkbs_cf, &key.to_be_bytes(), bytes)
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) {
@@ -1213,7 +1253,9 @@ impl RocksDbStorageReadableTransaction<'_> {
     }
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value));
+        #[cfg(feature = "geosparql")]
+        insert_term_wkb(term, encoded, &mut |key, bytes| self.insert_wkb(key, bytes));
     }
 
     fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
@@ -1230,6 +1272,12 @@ impl RocksDbStorageReadableTransaction<'_> {
             &key.to_be_bytes(),
             value.as_bytes(),
         );
+    }
+
+    #[cfg(feature = "geosparql")]
+    fn insert_wkb(&mut self, key: &StrHash, bytes: &[u8]) {
+        self.transaction
+            .insert(&self.storage.wkbs_cf, &key.to_be_bytes(), bytes);
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) {
@@ -1481,6 +1529,8 @@ impl RocksDbStorageBulkLoader<'_> {
 struct FileBulkLoader<'a> {
     storage: &'a RocksDbStorage,
     id2str: HashMap<StrHash, Box<str>, BuildHasherDefault<StrHashHasher>>,
+    #[cfg(feature = "geosparql")]
+    wkbs: HashMap<StrHash, Vec<u8>, BuildHasherDefault<StrHashHasher>>,
     quads: FxHashSet<EncodedQuad>,
     triples: FxHashSet<EncodedQuad>,
     graphs: FxHashSet<EncodedTerm>,
@@ -1499,6 +1549,8 @@ impl<'a> FileBulkLoader<'a> {
                 3 * batch_size,
                 BuildHasherDefault::default(),
             ),
+            #[cfg(feature = "geosparql")]
+            wkbs: HashMap::with_capacity_and_hasher(batch_size, BuildHasherDefault::default()),
             quads: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
             triples: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
             graphs: FxHashSet::default(),
@@ -1573,6 +1625,22 @@ impl<'a> FileBulkLoader<'a> {
                 id2str_sst.insert(&k, v.as_bytes())?;
             }
             sst_files.push((self.storage.id2str_cf.clone(), id2str_sst.finish()?));
+        }
+
+        // wkbs (side CF for BigWktLiteral WKB bytes)
+        #[cfg(feature = "geosparql")]
+        if !self.wkbs.is_empty() {
+            self.fail_if_cancelled()?;
+            let mut wkbs = take(&mut self.wkbs)
+                .into_iter()
+                .map(|(k, v)| (k.to_be_bytes(), v))
+                .collect::<Vec<_>>();
+            wkbs.sort_unstable();
+            let mut wkbs_sst = self.storage.db.new_sst_file()?;
+            for (k, v) in wkbs {
+                wkbs_sst.insert(&k, &v)?;
+            }
+            sst_files.push((self.storage.wkbs_cf.clone(), wkbs_sst.finish()?));
         }
 
         if !self.triples.is_empty() {
@@ -1687,7 +1755,11 @@ impl<'a> FileBulkLoader<'a> {
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
         insert_term(term, encoded, &mut |key, value| {
             self.id2str.entry(*key).or_insert_with(|| value.into());
-        })
+        });
+        #[cfg(feature = "geosparql")]
+        insert_term_wkb(term, encoded, &mut |key, bytes| {
+            self.wkbs.entry(*key).or_insert_with(|| bytes.to_vec());
+        });
     }
 
     fn build_sst_for_keys(
