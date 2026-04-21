@@ -13,6 +13,11 @@
 //!   geometries. This is the lower bound that spargeo could reach if
 //!   literal parsing were amortised (e.g. via the WKB storage proposed
 //!   in oxigraph issue #1560).
+//! * `index`: parses every WKT literal once, drops the points into
+//!   `spargeo::index::SpatialIndex`, and calls `query_within` for each
+//!   polygon. Exercises the ancestor walk plus Hilbert range scan path
+//!   that gathers candidates before `geo::Relate` runs, so query_ms
+//!   should stay near-constant in `points` for a fixed polygon set.
 //!
 //! Workload: for each polygon in the fixture, test every point in the
 //! fixture. Total ops = num_polygons * num_points. The engine is timed
@@ -43,6 +48,7 @@ use geo::{Geometry, Relate};
 use oxrdf::{Literal, NamedNodeRef, Term};
 use oxttl::TurtleParser;
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
+use spargeo::index::SpatialIndex;
 use wkt::TryFromWkt;
 
 const SF_WITHIN_IRI: &str = "http://www.opengis.net/def/function/geosparql/sfWithin";
@@ -53,7 +59,7 @@ const WKT_LITERAL: NamedNodeRef<'static> = NamedNodeRef::new_unchecked(WKT_LITER
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: spargeo_bench <spargeo|geo> <path-to-turtle>");
+        eprintln!("usage: spargeo_bench <spargeo|geo|index> <path-to-turtle>");
         return ExitCode::from(2);
     }
     let engine = args[1].as_str();
@@ -62,8 +68,9 @@ fn main() -> ExitCode {
     let result = match engine {
         "spargeo" => run_spargeo(path),
         "geo" => run_geo(path),
+        "index" => run_index(path),
         other => {
-            eprintln!("unknown engine '{other}'; expected spargeo or geo");
+            eprintln!("unknown engine '{other}'; expected spargeo, geo or index");
             return ExitCode::from(2);
         }
     };
@@ -204,6 +211,45 @@ fn run_geo(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
 
     Ok(Run {
         engine: "geo",
+        parse_ms,
+        query_ms,
+        points: point_geoms.len(),
+        polygons: polygon_geoms.len(),
+        matches,
+    })
+}
+
+fn run_index(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
+    let parse_start = Instant::now();
+    let (points, polygons) = extract_wkts(path)?;
+
+    let point_geoms: Vec<Geometry> = points
+        .iter()
+        .map(|s| Geometry::try_from_wkt_str(s).map_err(|e| format!("parse point: {e}")))
+        .collect::<Result<_, _>>()?;
+    let polygon_geoms: Vec<Geometry> = polygons
+        .iter()
+        .map(|s| Geometry::try_from_wkt_str(s).map_err(|e| format!("parse polygon: {e}")))
+        .collect::<Result<_, _>>()?;
+
+    // Index the points (the candidate set the query polygons are tested
+    // against). Feature keys are synthetic but stable so the result set
+    // remains deterministic across runs.
+    let mut index = SpatialIndex::new();
+    for (i, geom) in point_geoms.iter().enumerate() {
+        index.insert(format!("p{i}"), geom.clone());
+    }
+    let parse_ms = ms(parse_start.elapsed());
+
+    let query_start = Instant::now();
+    let mut matches = 0usize;
+    for polygon in &polygon_geoms {
+        matches += index.query_within(polygon).len();
+    }
+    let query_ms = ms(query_start.elapsed());
+
+    Ok(Run {
+        engine: "index",
         parse_ms,
         query_ms,
         points: point_geoms.len(),

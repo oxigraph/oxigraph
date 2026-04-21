@@ -10,6 +10,12 @@ Engines under test:
   directly on WKT strings parsed once up front. This is the Rust lower
   bound spargeo could approach if literal parsing were amortised (e.g.
   via the WKB storage proposed in oxigraph issue #1560).
+* ``index`` (native Rust): drops the candidate points into
+  ``spargeo::index::SpatialIndex`` and calls ``query_within`` for each
+  polygon. Measures the ancestor walk plus Hilbert range scan that
+  gathers candidates before ``geo::Relate`` refines the result, so
+  query time should stay near-constant in ``points`` for a fixed
+  polygon set.
 * ``shapely`` (Python): the de facto Python geometry reference. Parses
   WKT once via ``shapely.wkt.loads``, then iterates
   ``polygon.contains(point)`` in a tight loop.
@@ -267,6 +273,7 @@ def plot(summary: dict, path: Path) -> None:
     colors = {
         "spargeo": "#1f77b4",
         "geo": "#2ca02c",
+        "index": "#9467bd",
         "shapely": "#d62728",
     }
     for engine, rows in summary.items():
@@ -332,18 +339,18 @@ def main() -> None:
         default=None,
         help=(
             "restrict to a subset of engines from "
-            "{spargeo, geo, shapely}"
+            "{spargeo, geo, index, shapely}"
         ),
     )
     args = parser.parse_args()
 
-    all_engines = ["spargeo", "geo", "shapely"]
+    all_engines = ["spargeo", "geo", "index", "shapely"]
     selected = args.only if args.only is not None else all_engines
     for name in selected:
         if name not in all_engines:
             parser.error(f"unknown engine '{name}'; expected one of {all_engines}")
 
-    native_engines = {"spargeo", "geo"}
+    native_engines = {"spargeo", "geo", "index"}
     if any(name in native_engines for name in selected):
         if not args.native_bin.exists():
             parser.error(

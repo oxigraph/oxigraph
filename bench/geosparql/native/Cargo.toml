@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 oxrdf = { path = "../../../lib/oxrdf", features = ["oxsdatatypes"] }
 oxttl = { path = "../../../lib/oxttl" }
-spargeo = { path = "../../../lib/spargeo" }
+spargeo = { path = "../../../lib/spargeo", features = ["spatial_index"] }
 geo = ">=0.28, <0.32"
 wkt = "0.14"
 
