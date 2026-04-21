@@ -26,6 +26,8 @@ pub mod numeric_encoder;
 mod rocksdb;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod rocksdb_wrapper;
+#[cfg(feature = "geosparql")]
+pub mod small_bytes;
 pub mod small_string;
 
 pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;

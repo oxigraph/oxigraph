@@ -24,9 +24,16 @@ http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
+# Persistent WKB-encoded storage for GeoSPARQL wktLiteral values. Issue #1560.
+# When enabled, geometry literals are parsed once on insert, stored as binary
+# WKB inline (for 2D points) or in a side blob CF (for polygons and longer
+# geometries), and exposed back as either lexical WKT or a parsed
+# geo::Geometry without the per-call WKT lexer round trip.
+geosparql = ["dep:geo", "dep:wkb", "dep:wkt"]
 
 [dependencies]
 dashmap.workspace = true
+geo = { workspace = true, optional = true }
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true
@@ -42,6 +49,8 @@ spareval = { workspace = true, features = [
   "calendar-ext",
 ] }
 thiserror.workspace = true
+wkb = { workspace = true, optional = true }
+wkt = { workspace = true, optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true
