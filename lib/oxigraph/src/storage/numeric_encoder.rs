@@ -126,6 +126,16 @@ pub enum EncodedTerm {
         value_id: StrHash,
         datatype_id: StrHash,
     },
+    /// WKB-encoded GeoSPARQL `wktLiteral` stored inline. Used when the
+    /// WKB payload fits in [`SmallBytes::CAPACITY`] (31) bytes, which
+    /// covers every 2D point and is the hot path for the
+    /// millions-of-points workload motivating issue #1560.
+    ///
+    /// Larger geometries (polygons, linestrings) continue to fall
+    /// through to [`EncodedTerm::BigTypedLiteral`] for now. The side
+    /// column family variant lands in a follow-up task.
+    #[cfg(feature = "geosparql")]
+    SmallWktLiteral(crate::storage::small_bytes::SmallBytes<32>),
     BooleanLiteral(Boolean),
     FloatLiteral(Float),
     DoubleLiteral(Double),
@@ -318,6 +328,8 @@ impl PartialEq for EncodedTerm {
                         datatype_id: datatype_id_b,
                     },
                 ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
+                #[cfg(feature = "geosparql")]
+                (Self::SmallWktLiteral(a), Self::SmallWktLiteral(b)) => a == b,
                 (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
                 (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(*b),
                 (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(*b),
@@ -434,6 +446,8 @@ impl Hash for EncodedTerm {
                 value_id.hash(state);
                 datatype_id.hash(state);
             }
+            #[cfg(feature = "geosparql")]
+            Self::SmallWktLiteral(bytes) => bytes.hash(state),
             Self::BooleanLiteral(value) => value.hash(state),
             Self::FloatLiteral(value) => value.to_be_bytes().hash(state),
             Self::DoubleLiteral(value) => value.to_be_bytes().hash(state),
@@ -459,6 +473,31 @@ impl Hash for EncodedTerm {
 impl EncodedTerm {
     pub fn is_default_graph(&self) -> bool {
         matches!(self, Self::DefaultGraph)
+    }
+
+    /// Borrow the raw WKB payload of an inline `wktLiteral`.
+    ///
+    /// Returns `None` for every other `EncodedTerm` variant, including
+    /// `wktLiteral` values that spilled into the generic
+    /// [`Self::BigTypedLiteral`] path because their WKB did not fit the
+    /// inline capacity.
+    #[cfg(feature = "geosparql")]
+    pub fn wkb_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::SmallWktLiteral(bytes) => Some(bytes.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// Parse an inline `wktLiteral` straight to a `geo::Geometry<f64>`.
+    ///
+    /// The fast path for spargeo extension functions that would
+    /// otherwise have to route through the WKT lexer on every call.
+    /// Returns `None` for non-geometry variants and for WKB payloads
+    /// the decoder rejects as corrupt.
+    #[cfg(feature = "geosparql")]
+    pub fn as_geometry(&self) -> Option<geo::Geometry<f64>> {
+        crate::storage::wkb_codec::decode_wkb_to_geometry(self.wkb_bytes()?)
     }
 }
 impl From<NamedNodeRef<'_>> for EncodedTerm {
@@ -609,6 +648,21 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             }
             "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
                 parse_day_time_duration_str(value)
+            }
+            #[cfg(feature = "geosparql")]
+            "http://www.opengis.net/ont/geosparql#wktLiteral" => {
+                // Parse the WKT lexical once on insert. If it parses and
+                // the resulting WKB fits inline (every 2D point does in
+                // the 31-byte SmallBytes payload), store it as a
+                // SmallWktLiteral so reads can skip the WKT lexer. If
+                // WKB exceeds the inline cap, or parsing fails, fall
+                // through to the generic typed-literal path so no data
+                // is silently lost.
+                crate::storage::wkb_codec::encode_wkt_value(value).and_then(|bytes| {
+                    crate::storage::small_bytes::SmallBytes::<32>::try_from(bytes.as_slice())
+                        .ok()
+                        .map(Self::SmallWktLiteral)
+                })
             }
             _ => None,
         };
@@ -837,6 +891,8 @@ pub fn insert_term<F: FnMut(&StrHash, &str)>(
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallSmallDirLangStringLiteral { .. }
             | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => (),
+            #[cfg(feature = "geosparql")]
+            EncodedTerm::SmallWktLiteral(..) => (),
             _ => unreachable!("Invalid literal encoding: {encoded:?} for {term}"),
         },
         #[cfg(feature = "rdf-12")]
@@ -1134,6 +1190,22 @@ impl<S: StrLookup> Decoder for S {
                 NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
             )
             .into()),
+            #[cfg(feature = "geosparql")]
+            EncodedTerm::SmallWktLiteral(bytes) => {
+                let wkt = crate::storage::wkb_codec::decode_wkb_to_wkt(bytes.as_slice())
+                    .ok_or_else(|| {
+                        CorruptionError::msg(
+                            "A stored wktLiteral contains WKB bytes that cannot be decoded",
+                        )
+                    })?;
+                Ok(Literal::new_typed_literal(
+                    wkt,
+                    NamedNode::new_unchecked(
+                        "http://www.opengis.net/ont/geosparql#wktLiteral",
+                    ),
+                )
+                .into())
+            }
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),

@@ -32,6 +32,12 @@ const TYPE_BIG_SMALL_LANG_STRING_LITERAL: u8 = 22;
 const TYPE_BIG_BIG_LANG_STRING_LITERAL: u8 = 23;
 const TYPE_SMALL_TYPED_LITERAL: u8 = 24;
 const TYPE_BIG_TYPED_LITERAL: u8 = 25;
+/// Inline WKB payload for a GeoSPARQL `wktLiteral`. Occupies one of
+/// the free slots in the literal block (16-47). Gated behind the
+/// `geosparql` feature so the on-disk layout does not change for
+/// builds that have the feature off.
+#[cfg(feature = "geosparql")]
+const TYPE_SMALL_WKT_LITERAL: u8 = 45;
 const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 28;
 const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 29;
 const TYPE_FLOAT_LITERAL: u8 = 30;
@@ -413,6 +419,18 @@ impl<R: Read> TermReader for R {
                     value_id: StrHash::from_be_bytes(value_buffer),
                 })
             }
+            #[cfg(feature = "geosparql")]
+            TYPE_SMALL_WKT_LITERAL => {
+                // 32 bytes packs the SmallBytes<32> array verbatim: 31 byte
+                // payload plus the trailing length byte. Fits exactly within
+                // WRITTEN_TERM_MAX_SIZE together with the 1-byte tag.
+                let mut buffer = [0; 32];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::SmallWktLiteral(
+                    crate::storage::small_bytes::SmallBytes::<32>::from_be_bytes(buffer)
+                        .map_err(CorruptionError::new)?,
+                ))
+            }
             TYPE_SMALL_STRING_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
@@ -739,6 +757,11 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.extend_from_slice(&datatype_id.to_be_bytes());
             sink.extend_from_slice(&value_id.to_be_bytes());
         }
+        #[cfg(feature = "geosparql")]
+        EncodedTerm::SmallWktLiteral(bytes) => {
+            sink.push(TYPE_SMALL_WKT_LITERAL);
+            sink.extend_from_slice(&bytes.to_be_bytes());
+        }
         EncodedTerm::BooleanLiteral(value) => sink.push(if bool::from(*value) {
             TYPE_BOOLEAN_LITERAL_TRUE
         } else {
@@ -977,5 +1000,47 @@ mod tests {
             write_term(&mut buffer, &encoded);
             assert_eq!(encoded, buffer.as_slice().read_term().unwrap());
         }
+    }
+
+    /// Round-trip a 2D point wktLiteral through the binary encoder.
+    ///
+    /// We cannot fold this into `test_encoding` because the decoded
+    /// lexical form comes out canonicalised by the WKB round trip, so
+    /// comparing against the input `Term` would fail even though the
+    /// stored bytes are stable. Instead we verify that the encoded
+    /// term lands in the inline variant, survives write/read, and
+    /// decodes back to a `wktLiteral` whose value mentions POINT.
+    #[cfg(feature = "geosparql")]
+    #[test]
+    fn small_wkt_literal_binary_roundtrip() {
+        use crate::model::*;
+
+        let store = MemoryStrStore::default();
+        let wkt_datatype =
+            NamedNode::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
+        let term: Term = Literal::new_typed_literal("POINT(10 20)", wkt_datatype.clone()).into();
+
+        let encoded: EncodedTerm = term.as_ref().into();
+        assert!(
+            matches!(encoded, EncodedTerm::SmallWktLiteral(_)),
+            "expected POINT to take the inline SmallWktLiteral path",
+        );
+        store.insert_term(term.as_ref(), &encoded);
+
+        let mut buffer = Vec::new();
+        write_term(&mut buffer, &encoded);
+        assert!(
+            buffer.len() <= WRITTEN_TERM_MAX_SIZE,
+            "encoded SmallWktLiteral must respect WRITTEN_TERM_MAX_SIZE",
+        );
+        let read_back = buffer.as_slice().read_term().unwrap();
+        assert_eq!(encoded, read_back);
+
+        let decoded = store.decode_term(&encoded).unwrap();
+        let Term::Literal(literal) = decoded else {
+            panic!("decoded wktLiteral should be a literal");
+        };
+        assert_eq!(literal.datatype(), wkt_datatype.as_ref());
+        assert!(literal.value().to_uppercase().contains("POINT"));
     }
 }

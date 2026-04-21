@@ -29,6 +29,8 @@ mod rocksdb_wrapper;
 #[cfg(feature = "geosparql")]
 pub mod small_bytes;
 pub mod small_string;
+#[cfg(feature = "geosparql")]
+mod wkb_codec;
 
 pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
