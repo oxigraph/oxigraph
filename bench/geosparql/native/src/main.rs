@@ -29,6 +29,14 @@
 //!   amortisation that oxigraph issue #1560 proposes: identical
 //!   geometry loop to `geo`, but the parse tax is paid in `parse_ms`
 //!   once rather than on every `query_ms` call.
+//! * `reason`: drives OWL 2 RL (or RDFS) forward chaining over a
+//!   synthetic Polish geodata graph generated in-process by the
+//!   `geodata` module. Phases reported separately: `load_ms` for bulk
+//!   ingest, `reason_ms` for `Store::reason`, `query_ms` for the
+//!   post-reasoning spatial filter. Also reports the reasoning
+//!   report counters, peak RSS, and RocksDB directory size before
+//!   and after reasoning. Takes different args:
+//!   `spargeo_bench reason <entities> <profile>`.
 //!
 //! Workload: for each polygon in the fixture, test every point in the
 //! fixture. Total ops = num_polygons * num_points. The engine is timed
@@ -48,16 +56,19 @@
 //! the public API it exposes to the SPARQL evaluator. The `geo` baseline
 //! measures the same algorithm without that tax.
 
+mod geodata;
+
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use geo::{Geometry, Relate};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::NamedNodeRef as OxigraphNamedNodeRef;
+use oxigraph::reasoning::ReasonerConfig;
 use oxigraph::store::Store;
 use oxrdf::{Literal, NamedNodeRef, Term};
 use oxttl::TurtleParser;
@@ -73,19 +84,61 @@ const WKT_LITERAL: NamedNodeRef<'static> = NamedNodeRef::new_unchecked(WKT_LITER
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: spargeo_bench <spargeo|geo|index|wktstore> <path-to-turtle>");
+        eprintln!(
+            "usage:\n  spargeo_bench <spargeo|geo|index|wktstore> <path-to-turtle>\n  spargeo_bench reason <entities> <rdfs|owl2rl|owl2rl-eq|none>"
+        );
         return ExitCode::from(2);
     }
     let engine = args[1].as_str();
-    let path = &args[2];
 
+    if engine == "reason" {
+        if args.len() < 4 {
+            eprintln!("usage: spargeo_bench reason <entities> <rdfs|owl2rl|owl2rl-eq|none>");
+            return ExitCode::from(2);
+        }
+        let entities: usize = match args[2].parse() {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("invalid entity count '{}': {e}", args[2]);
+                return ExitCode::from(2);
+            }
+        };
+        let profile = args[3].as_str();
+        return match run_reason(entities, profile) {
+            Ok(r) => {
+                println!(
+                    "{{\"engine\":\"reason\",\"entities\":{entities},\"profile\":\"{profile}\",\"load_ms\":{load:.3},\"reason_ms\":{reason:.3},\"added\":{added},\"rounds\":{rounds},\"firings\":{firings},\"peak_rss_mb\":{rss:.3},\"on_disk_mb_before\":{db_before:.3},\"on_disk_mb_after\":{db_after:.3},\"query_ms\":{query:.3},\"query_matches\":{matches},\"geometries_scanned\":{scanned}}}",
+                    entities = r.entities,
+                    profile = r.profile,
+                    load = r.load_ms,
+                    reason = r.reason_ms,
+                    added = r.added,
+                    rounds = r.rounds,
+                    firings = r.firings,
+                    rss = r.peak_rss_mb,
+                    db_before = r.on_disk_mb_before,
+                    db_after = r.on_disk_mb_after,
+                    query = r.query_ms,
+                    matches = r.query_matches,
+                    scanned = r.geometries_scanned,
+                );
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("spargeo_bench failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    let path = &args[2];
     let result = match engine {
         "spargeo" => run_spargeo(path),
         "geo" => run_geo(path),
         "index" => run_index(path),
         "wktstore" => run_wktstore(path),
         other => {
-            eprintln!("unknown engine '{other}'; expected spargeo, geo, index or wktstore");
+            eprintln!("unknown engine '{other}'; expected spargeo, geo, index, wktstore or reason");
             return ExitCode::from(2);
         }
     };
@@ -336,4 +389,208 @@ fn run_wktstore(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
 
 fn ms(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
+}
+
+/// Measurements collected by a single `reason` run.
+struct ReasonRun {
+    entities: usize,
+    profile: &'static str,
+    load_ms: f64,
+    reason_ms: f64,
+    added: u64,
+    rounds: u32,
+    firings: u64,
+    peak_rss_mb: f64,
+    on_disk_mb_before: f64,
+    on_disk_mb_after: f64,
+    query_ms: f64,
+    query_matches: usize,
+    geometries_scanned: usize,
+}
+
+/// Drive the reasoning benchmark end-to-end:
+/// load synthetic Polish geodata into a fresh RocksDB-backed store,
+/// optionally run OWL 2 RL (or RDFS) reasoning, then execute a point
+/// in polygon style spatial query against the Warsaw bounding box
+/// via [`Store::object_geometries_for_pattern`].
+///
+/// Profiles:
+/// * `rdfs`       RDFS rules only, equality off.
+/// * `owl2rl`     Full OWL 2 RL, equality off.
+/// * `owl2rl-eq`  Full OWL 2 RL with equality rules enabled.
+/// * `none`       Baseline: skip reasoning. Useful for measuring load
+///                and query cost without any inference.
+fn run_reason(entities: usize, profile: &str) -> Result<ReasonRun, Box<dyn std::error::Error>> {
+    let profile_tag: &'static str = match profile {
+        "rdfs" => "rdfs",
+        "owl2rl" => "owl2rl",
+        "owl2rl-eq" => "owl2rl-eq",
+        "none" => "none",
+        other => return Err(format!("unknown profile '{other}'; expected rdfs, owl2rl, owl2rl-eq or none").into()),
+    };
+
+    let tmp_root = env::temp_dir().join(format!("spargeo_bench_reason_{}", std::process::id()));
+    if tmp_root.exists() {
+        let _ = fs::remove_dir_all(&tmp_root);
+    }
+    fs::create_dir_all(&tmp_root)?;
+
+    // Scope the store so RocksDB closes before we wipe the directory.
+    let (load_ms, reason_ms, added, rounds, firings, on_disk_mb_before, on_disk_mb_after,
+         query_ms, query_matches, geometries_scanned) = {
+        let store = Store::open(&tmp_root)?;
+
+        // Phase 1: stream the T-Box + ABox into the store via the bulk
+        // loader. The full graph is never materialised in memory thanks
+        // to the iterator-based generator.
+        let load_start = Instant::now();
+        let config = geodata::Config { entities, seed: 42 };
+        let mut loader = store.bulk_loader();
+        loader.load_quads(geodata::full_iter(config))?;
+        loader.commit()?;
+        store.flush()?;
+        let load_ms = ms(load_start.elapsed());
+
+        let on_disk_mb_before = dir_size_mb(&tmp_root)?;
+
+        // Phase 2: run reasoning unless the profile is `none`.
+        let (reason_ms, added, rounds, firings) = if profile_tag == "none" {
+            (0.0, 0, 0, 0)
+        } else {
+            let reasoner_cfg = build_reasoner_config(profile_tag);
+            let reason_start = Instant::now();
+            let report = store.reason(&reasoner_cfg)?;
+            let reason_ms = ms(reason_start.elapsed());
+            store.flush()?;
+            (reason_ms, report.added, report.rounds, report.firings)
+        };
+
+        let on_disk_mb_after = dir_size_mb(&tmp_root)?;
+
+        // Phase 3: spatial query. Pull every wktLiteral back via the
+        // fast WKB-backed iterator, count those whose geometry falls
+        // inside the Warsaw bounding box. Staying on
+        // `hasGeometry` as the predicate means the match count is
+        // deterministic across reasoning profiles and can be compared
+        // against the baseline `none` run.
+        let has_geometry = OxigraphNamedNodeRef::new_unchecked(
+            "http://example.com/hasGeometry",
+        );
+        let query_start = Instant::now();
+        let mut matches = 0usize;
+        let mut scanned = 0usize;
+        for geom in store.object_geometries_for_pattern(None, Some(has_geometry), None) {
+            let geom = geom?;
+            scanned += 1;
+            if geometry_intersects_warsaw(&geom) {
+                matches += 1;
+            }
+        }
+        let query_ms = ms(query_start.elapsed());
+
+        (load_ms, reason_ms, added, rounds, firings, on_disk_mb_before, on_disk_mb_after,
+         query_ms, matches, scanned)
+    };
+
+    let peak_rss_mb = peak_rss_mb().unwrap_or(0.0);
+
+    // Best effort cleanup. Ignore errors so a dangling temp dir does
+    // not mask a successful run.
+    let _ = fs::remove_dir_all(&tmp_root);
+
+    Ok(ReasonRun {
+        entities,
+        profile: profile_tag,
+        load_ms,
+        reason_ms,
+        added,
+        rounds,
+        firings,
+        peak_rss_mb,
+        on_disk_mb_before,
+        on_disk_mb_after,
+        query_ms,
+        query_matches,
+        geometries_scanned,
+    })
+}
+
+/// Build a [`ReasonerConfig`] from a bench profile tag.
+fn build_reasoner_config(profile: &str) -> ReasonerConfig {
+    match profile {
+        "rdfs" => ReasonerConfig::rdfs(),
+        "owl2rl" => ReasonerConfig::owl2_rl(),
+        "owl2rl-eq" => ReasonerConfig::owl2_rl().with_equality_rules(true),
+        _ => ReasonerConfig::owl2_rl(),
+    }
+}
+
+/// True when any point of the geometry's bounding rectangle falls
+/// inside the Warsaw bounding box. Axis-aligned check only, which is
+/// sufficient for the bench since all generated shapes are small
+/// relative to the bbox.
+fn geometry_intersects_warsaw(geom: &Geometry) -> bool {
+    use geo::BoundingRect;
+    let Some(rect) = geom.bounding_rect() else {
+        return false;
+    };
+    let min = rect.min();
+    let max = rect.max();
+    // Reject non-overlapping boxes, keep everything else.
+    !(max.x < geodata::WARSAW_LON_MIN
+        || min.x > geodata::WARSAW_LON_MAX
+        || max.y < geodata::WARSAW_LAT_MIN
+        || min.y > geodata::WARSAW_LAT_MAX)
+}
+
+/// Recursively sum the byte size of a directory, returned in MiB.
+fn dir_size_mb(root: &Path) -> Result<f64, Box<dyn std::error::Error>> {
+    let bytes = dir_size_bytes(root)?;
+    Ok(bytes as f64 / (1024.0 * 1024.0))
+}
+
+fn dir_size_bytes(root: &Path) -> Result<u64, Box<dyn std::error::Error>> {
+    let mut total: u64 = 0;
+    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(it) => it,
+            Err(_) => continue,
+        };
+        for entry in entries {
+            let entry = entry?;
+            let metadata = entry.metadata()?;
+            if metadata.is_dir() {
+                stack.push(entry.path());
+            } else {
+                total += metadata.len();
+            }
+        }
+    }
+    Ok(total)
+}
+
+/// Peak resident set size of the current process in MiB. Parses
+/// `/proc/self/status` VmHWM on Linux. Returns `None` on platforms
+/// without that interface or if the file cannot be read.
+fn peak_rss_mb() -> Option<f64> {
+    #[cfg(target_os = "linux")]
+    {
+        let status = fs::read_to_string("/proc/self/status").ok()?;
+        for line in status.lines() {
+            if let Some(rest) = line.strip_prefix("VmHWM:") {
+                let kib: f64 = rest
+                    .split_whitespace()
+                    .next()?
+                    .parse()
+                    .ok()?;
+                return Some(kib / 1024.0);
+            }
+        }
+        None
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }
