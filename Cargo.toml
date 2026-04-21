@@ -22,6 +22,7 @@ members = [
 ]
 exclude = [
   "bench/reasoner/native",
+  "bench/geosparql/native",
 ]
 resolver = "2"
 

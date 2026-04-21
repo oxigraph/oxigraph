@@ -11,6 +11,10 @@ description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+bridge = []
+
 [dependencies]
 geo.workspace = true
 geojson.workspace = true

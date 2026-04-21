@@ -1,0 +1,158 @@
+{
+  "spargeo": [
+    {
+      "target_points": 100,
+      "actual_points": 100,
+      "polygons": 10,
+      "query_ms_median": 1.06,
+      "query_ms_min": 1.027,
+      "query_ms_max": 1.465,
+      "matches": 3,
+      "repeats": 3
+    },
+    {
+      "target_points": 300,
+      "actual_points": 300,
+      "polygons": 10,
+      "query_ms_median": 3.709,
+      "query_ms_min": 3.385,
+      "query_ms_max": 4.066,
+      "matches": 5,
+      "repeats": 3
+    },
+    {
+      "target_points": 1000,
+      "actual_points": 1000,
+      "polygons": 10,
+      "query_ms_median": 9.088,
+      "query_ms_min": 8.964,
+      "query_ms_max": 9.371,
+      "matches": 16,
+      "repeats": 3
+    },
+    {
+      "target_points": 3000,
+      "actual_points": 3000,
+      "polygons": 10,
+      "query_ms_median": 26.388,
+      "query_ms_min": 26.08,
+      "query_ms_max": 26.517,
+      "matches": 54,
+      "repeats": 3
+    },
+    {
+      "target_points": 10000,
+      "actual_points": 10000,
+      "polygons": 10,
+      "query_ms_median": 85.049,
+      "query_ms_min": 84.251,
+      "query_ms_max": 85.61,
+      "matches": 221,
+      "repeats": 3
+    }
+  ],
+  "geo": [
+    {
+      "target_points": 100,
+      "actual_points": 100,
+      "polygons": 10,
+      "query_ms_median": 0.043,
+      "query_ms_min": 0.036,
+      "query_ms_max": 0.212,
+      "matches": 3,
+      "repeats": 3
+    },
+    {
+      "target_points": 300,
+      "actual_points": 300,
+      "polygons": 10,
+      "query_ms_median": 0.1,
+      "query_ms_min": 0.097,
+      "query_ms_max": 0.101,
+      "matches": 5,
+      "repeats": 3
+    },
+    {
+      "target_points": 1000,
+      "actual_points": 1000,
+      "polygons": 10,
+      "query_ms_median": 0.283,
+      "query_ms_min": 0.271,
+      "query_ms_max": 0.302,
+      "matches": 16,
+      "repeats": 3
+    },
+    {
+      "target_points": 3000,
+      "actual_points": 3000,
+      "polygons": 10,
+      "query_ms_median": 0.745,
+      "query_ms_min": 0.735,
+      "query_ms_max": 0.778,
+      "matches": 54,
+      "repeats": 3
+    },
+    {
+      "target_points": 10000,
+      "actual_points": 10000,
+      "polygons": 10,
+      "query_ms_median": 2.44,
+      "query_ms_min": 2.409,
+      "query_ms_max": 2.538,
+      "matches": 221,
+      "repeats": 3
+    }
+  ],
+  "shapely": [
+    {
+      "target_points": 100,
+      "actual_points": 100,
+      "polygons": 10,
+      "query_ms_median": 3.9615000132471323,
+      "query_ms_min": 3.653333056718111,
+      "query_ms_max": 4.239083966240287,
+      "matches": 3,
+      "repeats": 3
+    },
+    {
+      "target_points": 300,
+      "actual_points": 300,
+      "polygons": 10,
+      "query_ms_median": 6.002875044941902,
+      "query_ms_min": 5.939750000834465,
+      "query_ms_max": 6.067165872082114,
+      "matches": 5,
+      "repeats": 3
+    },
+    {
+      "target_points": 1000,
+      "actual_points": 1000,
+      "polygons": 10,
+      "query_ms_median": 19.70391604118049,
+      "query_ms_min": 19.47612501680851,
+      "query_ms_max": 19.848332973197103,
+      "matches": 16,
+      "repeats": 3
+    },
+    {
+      "target_points": 3000,
+      "actual_points": 3000,
+      "polygons": 10,
+      "query_ms_median": 58.60570818185806,
+      "query_ms_min": 58.16045799292624,
+      "query_ms_max": 58.86949994601309,
+      "matches": 54,
+      "repeats": 3
+    },
+    {
+      "target_points": 10000,
+      "actual_points": 10000,
+      "polygons": 10,
+      "query_ms_median": 193.8282500486821,
+      "query_ms_min": 193.2269160170108,
+      "query_ms_max": 197.64370913617313,
+      "matches": 221,
+      "repeats": 3
+    }
+  ]
+}

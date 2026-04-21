@@ -11,7 +11,7 @@ spargeo is a partial [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.h
 
 Its entry point is the [`GEOSPARQL_EXTENSION_FUNCTIONS`] constant that lists GeoSPARQL extension functions ready to be registered in spargebra or oxigraph query evaluators.
 
-Current scope is narrow: the 8 Simple Features topological relation functions, with WKT and GeoJSON inputs under the CRS84 reference system only. No metric, non-topological, accessor, serialization, aggregate, or transformation functions. No Egenhofer or RCC8 topology families. No query rewrite extension.
+Current scope covers the three OGC Simple Features, Egenhofer, and RCC8 topology families, the planar boolean set operations (intersection, union, difference, symmetric difference), the DE-9IM `relate` tester, the topological accessor functions (`dimension`, `coordinateDimension`, `spatialDimension`, `isEmpty`, `isSimple`), the `envelope`, `convexHull`, and `centroid` constructors, the `asText` and `asGeoJSON` serialisers, and partial metric functions (`area`, `length`, `perimeter`, `distance`). WKT and GeoJSON inputs are honoured under the CRS84 reference system only. No aggregate or transformation functions. No GML, KML, DGGS literals. No query rewrite extension. An optional `bridge` cargo feature materialises Simple Features topology triples between features found in an `oxrdf::Graph`.
 
 Coverage vs OGC 22-047r1
 ------------------------
@@ -35,27 +35,27 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 
 | Function | Status |
 |----------|--------|
-| `geof:ehEquals` | missing |
-| `geof:ehDisjoint` | missing |
-| `geof:ehMeet` | missing |
-| `geof:ehOverlap` | missing |
-| `geof:ehCovers` | missing |
-| `geof:ehCoveredBy` | missing |
-| `geof:ehInside` | missing |
-| `geof:ehContains` | missing |
+| `geof:ehEquals` | implemented |
+| `geof:ehDisjoint` | implemented |
+| `geof:ehMeet` | implemented |
+| `geof:ehOverlap` | implemented |
+| `geof:ehCovers` | implemented |
+| `geof:ehCoveredBy` | implemented |
+| `geof:ehInside` | implemented |
+| `geof:ehContains` | implemented |
 
 ### Topology Vocabulary Extension: RCC8
 
 | Function | Status |
 |----------|--------|
-| `geof:rcc8eq` | missing |
-| `geof:rcc8dc` | missing |
-| `geof:rcc8ec` | missing |
-| `geof:rcc8po` | missing |
-| `geof:rcc8tppi` | missing |
-| `geof:rcc8tpp` | missing |
-| `geof:rcc8ntpp` | missing |
-| `geof:rcc8ntppi` | missing |
+| `geof:rcc8eq` | implemented |
+| `geof:rcc8dc` | implemented |
+| `geof:rcc8ec` | implemented |
+| `geof:rcc8po` | implemented |
+| `geof:rcc8tppi` | implemented |
+| `geof:rcc8tpp` | implemented |
+| `geof:rcc8ntpp` | implemented |
+| `geof:rcc8ntppi` | implemented |
 
 ### Non-topological query functions
 
@@ -63,31 +63,31 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 |----------|--------|-------|
 | `geof:distance` | partial | three arg form with units IRI. Haversine, CRS84, point to point only |
 | `geof:buffer` | missing | three arg form with radius and units |
-| `geof:convexHull` | missing | |
+| `geof:convexHull` | partial | planar QuickHull over CRS84 input, not a true spherical hull |
 | `geof:boundary` | missing | |
-| `geof:envelope` | missing | minimum bounding rectangle |
-| `geof:intersection` | missing | |
-| `geof:union` | missing | |
-| `geof:difference` | missing | |
-| `geof:symDifference` | missing | |
-| `geof:getSRID` | missing | |
-| `geof:relate` | missing | DE-9IM intersection matrix pattern |
+| `geof:envelope` | partial | axis aligned bounding rectangle in CRS84 coordinates |
+| `geof:intersection` | partial | planar boolean intersection over CRS84 input |
+| `geof:union` | partial | planar boolean union over CRS84 input |
+| `geof:difference` | partial | planar boolean difference over CRS84 input |
+| `geof:symDifference` | partial | planar symmetric difference over CRS84 input |
+| `geof:getSRID` | partial | always returns the CRS84 URI because only CRS84 is parsed |
+| `geof:relate` | implemented | three arg form with DE-9IM intersection matrix pattern |
 
 ### Accessor functions
 
-| Function | Status |
-|----------|--------|
-| `geof:dimension` | missing |
-| `geof:coordinateDimension` | missing |
-| `geof:spatialDimension` | missing |
-| `geof:isEmpty` | missing |
-| `geof:isSimple` | missing |
-| `geof:hasSerialization` | missing |
-| `geof:asText` | missing |
-| `geof:asGML` | missing |
-| `geof:asGeoJSON` | missing |
-| `geof:asKML` | missing |
-| `geof:asSVG` | missing |
+| Function | Status | Notes |
+|----------|--------|-------|
+| `geof:dimension` | implemented | returns xsd:integer topological dimension |
+| `geof:coordinateDimension` | implemented | always 2 because only CRS84 is parsed |
+| `geof:spatialDimension` | implemented | matches `geof:dimension` because 3D inputs are not supported |
+| `geof:isEmpty` | implemented | |
+| `geof:isSimple` | partial | uses `geo::Validation` as a conservative approximation |
+| `geof:hasSerialization` | missing | |
+| `geof:asText` | partial | returns the WKT rendering as `xsd:string` |
+| `geof:asGML` | missing | |
+| `geof:asGeoJSON` | partial | returns the GeoJSON rendering as `xsd:string` |
+| `geof:asKML` | missing | |
+| `geof:asSVG` | missing | |
 
 ### Metric functions
 
@@ -95,8 +95,8 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 |----------|--------|-------|
 | `geof:area` | partial | geodesic unsigned area, CRS84 only, square_metre and square_kilometre units |
 | `geof:length` | partial | haversine length, CRS84, linear geometries only (Line, LineString, MultiLineString), returns zero for other types |
-| `geof:perimeter` | missing | takes units argument |
-| `geof:centroid` | missing | returns a point geometry |
+| `geof:perimeter` | partial | haversine length around polygon exteriors, CRS84 only, returns zero for non polygonal geometries |
+| `geof:centroid` | partial | arithmetic centroid in CRS84 coordinates, not geodesic |
 
 ### Aggregate functions
 
@@ -135,7 +135,7 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 
 ### Feature and geometry vocabulary
 
-The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo does not introduce or enforce these; it only consumes WKT and GeoJSON literals passed to the topology functions. Using them as RDF IRIs in a graph works today because oxigraph treats them as any other IRI.
+The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo ships these IRI constants in the `vocab` module and a minimal OWL ontology stub at `data/geosparql.ttl` suitable for downstream reasoners. The optional `bridge` feature walks these predicates on an `oxrdf::Graph` and materialises Simple Features topology triples between feature pairs whose geometries satisfy the relation.
 
 ### Query Rewrite Extension
 
@@ -144,18 +144,22 @@ The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`
 | Function form (`FILTER(geof:sfWithin(?g1, ?g2))`) | implemented | via the Simple Features functions above |
 | Property form (`?a geo:sfWithin ?b`) | missing | would require a rewrite pass in the query planner |
 
+### Bridge feature (optional)
+
+The `bridge` cargo feature enables the `spargeo::bridge::GeoBridge` type. Given an `oxrdf::Graph` that carries `geo:hasGeometry` / `geo:asWKT` chains, it materialises the Simple Features topology triples between every feature pair whose geometries satisfy the relation. Symmetric predicates are emitted once, asymmetric pairs (`geo:sfWithin` and `geo:sfContains`) are emitted in both directions. The accompanying ontology stub at `data/geosparql.ttl` declares the GeoSPARQL 1.1 axioms that a downstream reasoner needs to close the graph.
+
 ### Conformance class summary
 
 | Conformance class | Status |
 |-------------------|--------|
-| Core | partial via oxigraph IRI handling only |
+| Core | partial via oxigraph IRI handling plus vocab constants and ontology stub |
 | Topology Vocabulary Extension (SF) | implemented |
-| Topology Vocabulary Extension (Egenhofer) | missing |
-| Topology Vocabulary Extension (RCC8) | missing |
-| Geometry Extension | missing |
+| Topology Vocabulary Extension (Egenhofer) | implemented |
+| Topology Vocabulary Extension (RCC8) | implemented |
+| Geometry Extension | partial via accessor and boolean set functions |
 | Geometry Topology Extension (SF) | implemented |
-| Geometry Topology Extension (Egenhofer) | missing |
-| Geometry Topology Extension (RCC8) | missing |
+| Geometry Topology Extension (Egenhofer) | implemented |
+| Geometry Topology Extension (RCC8) | implemented |
 | RDFS Entailment Extension | missing (upstream reasoner scope) |
 | Query Rewrite Extension | missing |
 
@@ -223,6 +227,35 @@ term work that does not collide with #1560, and the resulting code can
 be reused by the `geosparql` feature inside Oxigraph when #1560 lands.
 Closing the architectural gaps belongs in that upstream effort rather
 than here.
+
+Benchmark
+---------
+
+![engine comparison](../../bench/geosparql/out/geosparql_comparison.png)
+
+The [`bench/geosparql`](../../bench/geosparql) harness measures
+point-in-polygon throughput on synthetic CRS84 data. It runs
+`geof:sfWithin` through `GEOSPARQL_EXTENSION_FUNCTIONS`, compares it
+against the raw `geo` crate as a Rust lower bound, and against
+`shapely` as a Python reference.
+
+Median `query_ms` on a 2023 MacBook Pro, 10 polygons per fixture,
+3 repeats:
+
+| points | spargeo | geo     | shapely |
+|-------:|--------:|--------:|--------:|
+|    100 |   1.1   |  0.04   |   4.0   |
+|    300 |   3.7   |  0.10   |   6.0   |
+|  1 000 |   9.1   |  0.28   |  19.7   |
+|  3 000 |  26.4   |  0.75   |  58.6   |
+| 10 000 |  85.0   |  2.44   | 193.8   |
+
+The ~35x gap between `spargeo` and raw `geo` at 10 000 points is the
+per-call WKT literal parse cost that `GEOSPARQL_EXTENSION_FUNCTIONS`
+pays on every invocation. That gap is a concrete case for the
+WKB-backed literal storage proposed in oxigraph issue #1560. See the
+[benchmark README](../../bench/geosparql/README.md) for the full
+analysis.
 
 ## License
 
