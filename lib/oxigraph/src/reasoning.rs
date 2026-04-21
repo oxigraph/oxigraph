@@ -29,8 +29,8 @@
 //! ```
 
 pub use oxreason::{
-    ReasonError, Reasoner, ReasonerConfig, ReasoningProfile, ReasoningReport, Rule, RuleId,
-    RuleSet,
+    ReasonError, ReasonStreamError, Reasoner, ReasonerConfig, ReasoningProfile, ReasoningReport,
+    Rule, RuleId, RuleSet,
 };
 
 pub use crate::store::ReasoningError;

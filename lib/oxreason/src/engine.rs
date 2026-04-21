@@ -55,8 +55,8 @@ use std::time::{Duration, Instant};
 
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::{
-    Graph, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef,
-    Triple,
+    Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef, Triple,
+    TripleRef,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -68,7 +68,7 @@ use crate::reasoner::{ReasonerConfig, ReasoningProfile};
 /// ~1B distinct terms per kind, which comfortably clears any graph that fits
 /// in memory.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-struct TermId(u32);
+pub(crate) struct TermId(u32);
 
 const KIND_SHIFT: u32 = 30;
 const ID_MASK: u32 = (1 << KIND_SHIFT) - 1;
@@ -139,13 +139,82 @@ impl Interner {
         TermId::named(idx)
     }
 
-    /// Read-only IRI lookup used by `GraphView` clients that want to probe
+    /// Read-only IRI lookup used by `FlatGraph` clients that want to probe
     /// the interner without allocating a new id for a miss. Returns `None`
     /// when the IRI has never been seen in the input graph; rule bodies then
     /// know a (predicate, object) key cannot be in `by_pred_obj` either.
     #[inline]
     fn lookup_named(&self, iri: &str) -> Option<TermId> {
         self.named_by_iri.get(iri).copied().map(TermId::named)
+    }
+
+    /// Read-only blank node lookup. Zero-allocation on hit and on miss.
+    #[inline]
+    fn lookup_blank(&self, id: &str) -> Option<TermId> {
+        self.blank_by_id.get(id).copied().map(TermId::blank)
+    }
+
+    /// Read-only literal lookup. The owned `Literal` is the hash key; callers
+    /// that only have a `LiteralRef` must allocate a single owned `Literal`
+    /// before probing.
+    #[inline]
+    fn lookup_literal(&self, l: &Literal) -> Option<TermId> {
+        self.literal_ids.get(l).copied().map(TermId::literal)
+    }
+
+    /// Read-only subject lookup (named or blank), zero allocation.
+    #[inline]
+    fn lookup_subject(&self, s: &NamedOrBlankNode) -> Option<TermId> {
+        match s {
+            NamedOrBlankNode::NamedNode(n) => self.lookup_named(n.as_str()),
+            NamedOrBlankNode::BlankNode(b) => self.lookup_blank(b.as_str()),
+        }
+    }
+
+    #[inline]
+    fn lookup_subject_ref(&self, s: NamedOrBlankNodeRef<'_>) -> Option<TermId> {
+        match s {
+            NamedOrBlankNodeRef::NamedNode(n) => self.lookup_named(n.as_str()),
+            NamedOrBlankNodeRef::BlankNode(b) => self.lookup_blank(b.as_str()),
+        }
+    }
+
+    /// Read-only term lookup over an owned [`Term`]. Zero allocation.
+    #[inline]
+    fn lookup_term(&self, t: &Term) -> Option<TermId> {
+        match t {
+            Term::NamedNode(n) => self.lookup_named(n.as_str()),
+            Term::BlankNode(b) => self.lookup_blank(b.as_str()),
+            Term::Literal(l) => self.lookup_literal(l),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => None,
+        }
+    }
+
+    /// Read-only term lookup over a [`TermRef`]. Allocates one owned
+    /// [`Literal`] on literal probes because `FxHashMap<Literal, u32>` cannot
+    /// key on a borrow without the unstable `raw_entry_mut` API. Named and
+    /// blank lookups are zero-allocation.
+    #[inline]
+    fn lookup_term_ref(&self, t: TermRef<'_>) -> Option<TermId> {
+        match t {
+            TermRef::NamedNode(n) => self.lookup_named(n.as_str()),
+            TermRef::BlankNode(b) => self.lookup_blank(b.as_str()),
+            TermRef::Literal(lref) => self.lookup_literal(&lref.into_owned()),
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => None,
+        }
+    }
+
+    /// Convenience for the read path: probe all three components of an owned
+    /// triple. Returns `None` if any component is not interned, which is the
+    /// signal a [`FlatGraph`] uses to short-circuit a `contains` probe.
+    #[inline]
+    fn lookup_triple(&self, t: &Triple) -> Option<(TermId, TermId, TermId)> {
+        let s = self.lookup_subject(&t.subject)?;
+        let p = self.lookup_named(t.predicate.as_str())?;
+        let o = self.lookup_term(&t.object)?;
+        Some((s, p, o))
     }
 
     #[inline]
@@ -179,14 +248,6 @@ impl Interner {
     }
 
     #[inline]
-    fn intern_subject_ref(&mut self, s: NamedOrBlankNodeRef<'_>) -> TermId {
-        match s {
-            NamedOrBlankNodeRef::NamedNode(n) => self.intern_named_str(n.as_str()),
-            NamedOrBlankNodeRef::BlankNode(b) => self.intern_blank_str(b.as_str()),
-        }
-    }
-
-    #[inline]
     fn intern_term(&mut self, t: &Term) -> TermId {
         match t {
             Term::NamedNode(n) => self.intern_named_str(n.as_str()),
@@ -194,27 +255,6 @@ impl Interner {
             Term::Literal(l) => self.intern_literal_owned(l),
             #[cfg(feature = "rdf-12")]
             Term::Triple(_) => unreachable!("rdf-12 embedded triples are not supported here"),
-        }
-    }
-
-    #[inline]
-    fn intern_term_ref(&mut self, t: TermRef<'_>) -> TermId {
-        match t {
-            TermRef::NamedNode(n) => self.intern_named_str(n.as_str()),
-            TermRef::BlankNode(b) => self.intern_blank_str(b.as_str()),
-            TermRef::Literal(lref) => {
-                // Fast path: probe by a temporary owned Literal built from
-                // the ref. `into_owned` allocates the value (and, for typed
-                // literals, the datatype IRI) once per probe miss; hits
-                // still have to allocate because `FxHashMap<Literal, u32>`
-                // cannot key on a borrow without `raw_entry_mut`, which is
-                // unstable. Literal-valued triples are a minority on typical
-                // OWL 2 RL workloads, so this cost stays in the noise.
-                let owned = lref.into_owned();
-                self.intern_literal_owned(&owned)
-            }
-            #[cfg(feature = "rdf-12")]
-            TermRef::Triple(_) => unreachable!("rdf-12 embedded triples are not supported here"),
         }
     }
 
@@ -584,7 +624,7 @@ struct TBoxCache {
 }
 
 impl TBoxCache {
-    fn build(graph: &Graph) -> Self {
+    fn build(graph: &FlatGraph) -> Self {
         Self {
             hasvalue_restrictions: collect_hasvalue_restrictions(graph),
             intersection_classes: collect_intersection_classes(graph),
@@ -596,74 +636,285 @@ impl TBoxCache {
     }
 }
 
-/// Reasoner-local secondary index keyed by interned `TermId`.
+/// Reasoner-local triple store keyed by interned `TermId`.
 ///
-/// Maintains two narrow lookup structures that rule bodies use on the hot
-/// path: triples grouped by predicate, and subjects grouped by
-/// (predicate, object). Both are keyed by `TermId` (a `u32`) rather than
-/// an IRI string, so a lookup is a `FxHashMap` probe over `u32` or a
-/// `(u32, u32)` pair instead of a `BTreeSet` range scan keyed by the full
-/// IRI payload.
+/// Replaces `oxrdf::Graph` as the engine's working set. A full OWL 2 RL
+/// closure over LUBM / Polish geodata pushes peak RSS above 2 GiB on
+/// `oxrdf::Graph`; the six BTreeSet indexes carry ~3 KiB per materialised
+/// triple (task #73 measurements). `FlatGraph` drops that to under 1 KiB per
+/// triple by storing the owned `Triple` once and layering three u32-keyed
+/// hash indexes plus the shadow dedup set on top.
 ///
-/// This is a pure secondary index; the source of truth remains the oxrdf
-/// `Graph` passed to `expand`. Every novel triple is mirrored into the
-/// view at the same commit point that touches `graph.insert`. Memory cost
-/// is one owned `NamedOrBlankNode` and one owned `Term` per stored triple
-/// on top of the dataset's BTreeSet indexes. Both inner types are
-/// `Arc<str>`-backed upstream (task #51), so the per-entry clone cost is
-/// a refcount bump, not a `String` allocation.
+/// Layout:
+/// - `triples` is the one and only owned copy of every materialised triple.
+///   A `u32` offset into this vector is the internal handle every index
+///   yields. The vector only grows; triples are never removed because the
+///   reasoner is monotonic.
+/// - `shadow` is the dedup probe. Keyed on the packed `(TermId, TermId,
+///   TermId)` tuple, probed on every commit candidate and on every
+///   `contains` call. 12 bytes per entry vs ~80 bytes for an owned `Triple`
+///   with three `Arc<str>` headers.
+/// - `by_predicate` supports `triples_for_predicate(p)` in O(1) plus a slice
+///   walk. Rule bodies that scan every edge for a given predicate hit this
+///   path on the hot axis.
+/// - `by_pred_obj` supports `subjects_for_predicate_object(p, o)`. Previously
+///   `GraphView::by_pred_obj`; the TermId-keyed form landed in task #56 and
+///   shaved 4-15% off reasoning time. FlatGraph folds it into the primary
+///   store so seeding only walks the input once.
+/// - `by_subj_pred` supports `objects_for_subject_predicate(s, p)`. Used by
+///   the class-expression rules (`cls-svf1`, `prp-spo2`) that probe a
+///   specific edge shape with the subject fixed.
+/// - `interner` maps IRI/blank/literal forms to `TermId`. All indexes key
+///   off its output so every hot-path probe is a `u32` hash, not a
+///   string-keyed BTreeSet descent.
 ///
-/// The previous attempt (task #49) tried to replace the graph with a
-/// hash-backed store and regressed because hashing the Arc-backed IRI
-/// payload six times per novel triple cost more than the BTreeSet
-/// traversals at LUBM scales. Keeping the graph for writes and layering
-/// this view only for rule-body reads concentrates the u32-hash win on
-/// the query path and keeps the BTreeSet inserts untouched.
-#[derive(Default)]
-struct GraphView {
-    /// `(p, o) -> [s, ...]` covering the `subjects_for_predicate_object(p, o)`
-    /// pattern. Literals are legal objects here too, even though the rules
-    /// that currently consume this index happen to only probe resource-shaped
-    /// objects; keying on `TermId` means the literal case costs the same.
-    by_pred_obj: FxHashMap<(TermId, TermId), Vec<NamedOrBlankNode>>,
+/// Task #49 (2026-04-20) tried a reasoner-local hash store backed by
+/// `FxHashMap<TermId, Vec<_>>` indexes and regressed on LUBM because every
+/// insert hashed the Arc-backed IRI six times. FlatGraph avoids that trap
+/// by interning once per novel triple, keying every index on the resulting
+/// u32s, and storing the owned triple exactly once in `triples`.
+pub(crate) struct FlatGraph {
+    /// Primary storage. Every materialised triple lives here exactly once.
+    triples: Vec<Triple>,
+    /// Dedup / contains probe keyed on interned ids.
+    shadow: FxHashSet<(TermId, TermId, TermId)>,
+    /// `predicate -> [index into triples]`.
+    by_predicate: FxHashMap<TermId, Vec<u32>>,
+    /// `(predicate, object) -> [index into triples]`.
+    by_pred_obj: FxHashMap<(TermId, TermId), Vec<u32>>,
+    /// `(subject, predicate) -> [index into triples]`.
+    by_subj_pred: FxHashMap<(TermId, TermId), Vec<u32>>,
+    /// Term interner. Owns the named/blank/literal string storage that the
+    /// `TermId`s in the indexes reference.
+    interner: Interner,
 }
 
-impl GraphView {
-    fn with_capacity(n: usize) -> Self {
+impl FlatGraph {
+    pub(crate) fn with_capacity(n: usize) -> Self {
         Self {
+            triples: Vec::with_capacity(n),
+            shadow: FxHashSet::with_capacity_and_hasher(n * 2, Default::default()),
+            by_predicate: FxHashMap::with_capacity_and_hasher(64, Default::default()),
             by_pred_obj: FxHashMap::with_capacity_and_hasher(n / 4 + 1, Default::default()),
+            by_subj_pred: FxHashMap::with_capacity_and_hasher(n / 4 + 1, Default::default()),
+            interner: Interner::with_capacity(n),
         }
     }
 
-    /// Mirror a triple into the index. Callers hand over already-interned
-    /// ids for the predicate and object plus an owned `Arc<str>`-backed
-    /// subject (refcount-bumped from a graph iterator's
-    /// `.subject.into_owned()`).
-    #[inline]
-    fn insert(&mut self, p_id: TermId, o_id: TermId, subject: NamedOrBlankNode) {
-        self.by_pred_obj
-            .entry((p_id, o_id))
-            .or_default()
-            .push(subject);
+    pub(crate) fn len(&self) -> usize {
+        self.triples.len()
     }
 
-    /// Return all subjects `s` such that `s p o` exists. Empty slice when
-    /// no such triple is present.
+    /// Read-only IRI lookup over the embedded interner. Rule bodies that
+    /// need a `TermId` for a known IRI go through this (for example to key
+    /// into `subjects_for_pred_obj_id`).
     #[inline]
-    fn subjects_for_pred_obj(&self, p: TermId, o: TermId) -> &[NamedOrBlankNode] {
-        self.by_pred_obj
-            .get(&(p, o))
-            .map_or(&[][..], Vec::as_slice)
+    pub(crate) fn lookup_named(&self, iri: &str) -> Option<TermId> {
+        self.interner.lookup_named(iri)
     }
+
+    /// Insert an owned triple. Returns `true` on genuine novelty, `false`
+    /// when the triple was already present. Mirrors
+    /// [`oxrdf::Graph::insert`]'s semantics so rule bodies that port over
+    /// need no change.
+    ///
+    /// On novelty: interns the three components, updates the shadow set and
+    /// all three hash indexes, and pushes the owned `Triple` onto `triples`.
+    /// The owned `Triple` is cloned once from the caller's reference; the
+    /// term internals are `Arc<str>`-backed so each component clone is a
+    /// refcount bump.
+    pub(crate) fn insert(&mut self, triple: &Triple) -> bool {
+        let key = self.interner.intern_triple(triple);
+        if !self.shadow.insert(key) {
+            return false;
+        }
+        let idx = u32::try_from(self.triples.len())
+            .expect("FlatGraph exceeded 2^32 triples; partition the input");
+        self.triples.push(triple.clone());
+        self.by_predicate.entry(key.1).or_default().push(idx);
+        self.by_pred_obj.entry((key.1, key.2)).or_default().push(idx);
+        self.by_subj_pred.entry((key.0, key.1)).or_default().push(idx);
+        true
+    }
+
+    /// Probe whether an owned triple is present. Zero allocation on the
+    /// fast paths; allocates a single owned `Literal` when the object is a
+    /// literal because the interner's literal map cannot key on a borrow.
+    pub(crate) fn contains(&self, triple: &Triple) -> bool {
+        let Some(key) = self.interner.lookup_triple(triple) else {
+            return false;
+        };
+        self.shadow.contains(&key)
+    }
+
+    /// Every triple whose predicate is `predicate`. Empty iterator when
+    /// the predicate IRI has never been interned.
+    pub(crate) fn triples_for_predicate<'a, 'b>(
+        &'a self,
+        predicate: impl Into<NamedNodeRef<'b>>,
+    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+        let p = predicate.into();
+        let idxs: &'a [u32] = self
+            .interner
+            .lookup_named(p.as_str())
+            .and_then(|id| self.by_predicate.get(&id))
+            .map_or(&[][..], Vec::as_slice);
+        idxs.iter().map(move |&i| self.triples[i as usize].as_ref())
+    }
+
+    /// Every triple whose subject is `subject`. Currently a full scan
+    /// filtered by interned subject id: FlatGraph does not carry a
+    /// subject-only index because the hot-path rules (`cax-sco`,
+    /// `prp-dom`, `prp-spo1`, etc.) never need one. The only callers are
+    /// the equality-rule helpers (`eq-rep-s`) which are gated behind
+    /// `ReasonerConfig::with_equality_rules` and off by default, so
+    /// paying a linear probe here is acceptable for now. If the
+    /// equality rules land in a hot production workload, adding a
+    /// `by_subject: FxHashMap<TermId, Vec<u32>>` is the cheap upgrade.
+    pub(crate) fn triples_for_subject<'a, 'b>(
+        &'a self,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+        let s_id = self.interner.lookup_subject_ref(subject.into());
+        self.triples.iter().filter_map(move |t| {
+            let id = match &t.subject {
+                NamedOrBlankNode::NamedNode(n) => self.interner.lookup_named(n.as_str()),
+                NamedOrBlankNode::BlankNode(b) => self.interner.lookup_blank(b.as_str()),
+            };
+            if s_id.is_some() && id == s_id {
+                Some(t.as_ref())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Every triple whose object is `object`. Same cold-path scan
+    /// rationale as `triples_for_subject`: only used by the equality
+    /// rule `eq-rep-o`, which is off by default.
+    pub(crate) fn triples_for_object<'a, 'b>(
+        &'a self,
+        object: impl Into<TermRef<'b>>,
+    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+        let o_id = self.interner.lookup_term_ref(object.into());
+        self.triples.iter().filter_map(move |t| {
+            let id = match &t.object {
+                Term::NamedNode(n) => self.interner.lookup_named(n.as_str()),
+                Term::BlankNode(b) => self.interner.lookup_blank(b.as_str()),
+                Term::Literal(l) => self.interner.lookup_literal(l),
+                #[cfg(feature = "rdf-12")]
+                Term::Triple(_) => None,
+            };
+            if o_id.is_some() && id == o_id {
+                Some(t.as_ref())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Every subject `s` such that `s predicate object` is in the graph.
+    pub(crate) fn subjects_for_predicate_object<'a, 'b>(
+        &'a self,
+        predicate: impl Into<NamedNodeRef<'b>>,
+        object: impl Into<TermRef<'b>>,
+    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+        let p = predicate.into();
+        let o = object.into();
+        let idxs: &'a [u32] = match (
+            self.interner.lookup_named(p.as_str()),
+            self.interner.lookup_term_ref(o),
+        ) {
+            (Some(p_id), Some(o_id)) => self
+                .by_pred_obj
+                .get(&(p_id, o_id))
+                .map_or(&[][..], Vec::as_slice),
+            _ => &[][..],
+        };
+        idxs.iter()
+            .map(move |&i| self.triples[i as usize].subject.as_ref())
+    }
+
+    /// Every object `o` such that `subject predicate o` is in the graph.
+    pub(crate) fn objects_for_subject_predicate<'a, 'b>(
+        &'a self,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
+        predicate: impl Into<NamedNodeRef<'b>>,
+    ) -> impl Iterator<Item = TermRef<'a>> + 'a {
+        let s = subject.into();
+        let p = predicate.into();
+        let idxs: &'a [u32] = match (
+            self.interner.lookup_subject_ref(s),
+            self.interner.lookup_named(p.as_str()),
+        ) {
+            (Some(s_id), Some(p_id)) => self
+                .by_subj_pred
+                .get(&(s_id, p_id))
+                .map_or(&[][..], Vec::as_slice),
+            _ => &[][..],
+        };
+        idxs.iter()
+            .map(move |&i| self.triples[i as usize].object.as_ref())
+    }
+
+    /// View-style lookup used by `cax-sco` and `cax-eqc`: given already
+    /// interned `(predicate, object)` ids, return every subject in that
+    /// bucket. Zero hashing of IRI strings on the inner loop.
+    pub(crate) fn subjects_for_pred_obj_id(
+        &self,
+        p: TermId,
+        o: TermId,
+    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'_>> + '_ {
+        let idxs: &[u32] = self
+            .by_pred_obj
+            .get(&(p, o))
+            .map_or(&[][..], Vec::as_slice);
+        idxs.iter()
+            .map(move |&i| self.triples[i as usize].subject.as_ref())
+    }
+
+    /// Drain every stored triple into a fresh `Vec`, consuming the store.
+    /// Used by the legacy `Reasoner::expand(&mut Graph)` wrapper to rebuild
+    /// an `oxrdf::Graph` after the run.
+    pub(crate) fn into_triples(self) -> Vec<Triple> {
+        self.triples
+    }
+}
+
+/// Reason why `expand` stopped short of a clean saturation.
+///
+/// Either the engine detected an inconsistency (cax-dw and friends) or the
+/// caller-provided sink returned an error on a freshly materialised triple.
+/// The Sink variant is parameterised on the caller's error type so the
+/// public reasoner wrappers can propagate the original error without
+/// erasing its type.
+pub(crate) enum ExpandError<E> {
+    /// The engine found an inconsistency and aborted. Carries the same
+    /// [`Inconsistency`] payload the legacy error path surfaced.
+    Inconsistency(Inconsistency),
+    /// The caller-provided sink rejected a freshly materialised triple.
+    Sink(E),
 }
 
 /// Run the forward chainer to fixpoint on the given graph.
 ///
-/// Returns the final [`RunStats`] on a clean saturation, or an
-/// [`Inconsistency`] describing the first violation found. A clash is
-/// surfaced even when encountered on round zero, so the reasoner fails
-/// fast on pre-existing inconsistencies in the input graph.
-pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunStats, Inconsistency> {
+/// Each genuine new inference is handed to `sink` before the next rule
+/// fires. Sink errors abort the run and surface as
+/// [`ExpandError::Sink`]; engine-level inconsistencies surface as
+/// [`ExpandError::Inconsistency`]. A clash is surfaced even when
+/// encountered on round zero, so the reasoner fails fast on pre-existing
+/// inconsistencies in the input graph.
+///
+/// Callers that only care about materialising into `graph` can pass an
+/// infallible no-op sink; see [`crate::reasoner::Reasoner::expand`].
+pub(crate) fn expand<F, E>(
+    graph: &mut FlatGraph,
+    config: &ReasonerConfig,
+    sink: &mut F,
+) -> Result<RunStats, ExpandError<E>>
+where
+    F: FnMut(&Triple) -> Result<(), E>,
+{
     let profile = config.profile();
     let equality_on = config.equality_rules_enabled();
 
@@ -673,41 +924,10 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     let mut stats = RunStats::default();
     let mut delta: Option<DeltaIndex> = None;
 
-    // Shadow set of every triple in the graph, keyed by interned term ids.
-    // The profiler showed that `graph.insert` (which touches all six BTreeSet
-    // indexes of the underlying dataset) and per-round `FxHashSet<Triple>`
-    // deduplication together consumed ~65-78% of reasoning time. Most
-    // candidate triples a rule produces are already in the graph from a
-    // prior round, so the 6-index insert path would otherwise run and fail
-    // N-1 out of N times.
-    //
-    // The shadow set stores `(TermId, TermId, TermId)` tuples. That is 12
-    // bytes per entry versus ~80 bytes for an owned `Triple` with three
-    // owned `String`-backed terms. The smaller entry reduces memory
-    // pressure, and equality on the hot probe compares three `u32`s
-    // instead of three `String`s. Hashing the u32 tuple is trivial; the
-    // three interner lookups still hash the term strings once each, so
-    // the hash work is comparable to hashing the full `Triple` but the
-    // shadow-set probe itself is essentially free. On a genuine insert
-    // we save the three `String` clones that `Triple::clone` used to do
-    // for the shadow set entry.
-    let mut interner = Interner::with_capacity(graph.len());
-    let mut view = GraphView::with_capacity(graph.len());
-    let mut seen_total = prof.time_block("seen.seed", || {
-        let mut set: FxHashSet<(TermId, TermId, TermId)> =
-            FxHashSet::with_capacity_and_hasher(graph.len() * 2, Default::default());
-        for t in graph.iter() {
-            let s = interner.intern_subject_ref(t.subject);
-            let p = interner.intern_named_str(t.predicate.as_str());
-            let o = interner.intern_term_ref(t.object);
-            set.insert((s, p, o));
-            // Mirror into the secondary index at the same time so seeding
-            // costs one pass, not two. `into_owned` on the ref hands out
-            // an Arc-backed payload.
-            view.insert(p, o, t.subject.into_owned());
-        }
-        set
-    });
+    // `graph` is already interned + indexed + shadow-probed on entry; it is
+    // the drop-in replacement for `oxrdf::Graph` that the rule bodies used
+    // to query. The separate Interner/GraphView/seen_total setup that this
+    // function used to maintain has moved inside `FlatGraph` itself.
 
     // Build the class-expression T-Box cache once up front. It is reused
     // across rounds and only rebuilt when the previous round's delta
@@ -715,11 +935,14 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
     let mut tbox = prof.time_block("tbox.build", || TBoxCache::build(graph));
 
     // Cache the interned id of `rdf:type` once. Rule bodies that query the
-    // view on a (rdf:type, class) key look this up every round otherwise.
+    // index on a (rdf:type, class) key look this up every round otherwise.
     // The graph always contains at least one rdf:type triple on non-trivial
     // OWL 2 RL workloads, so the id is populated after seeding; for the
-    // degenerate empty-graph case we fall through to the interner.
-    let type_id = interner.intern_named_str(rdf::TYPE.as_str());
+    // degenerate empty-graph case we fall through to the interner and get
+    // a freshly minted id.
+    let type_id = graph
+        .lookup_named(rdf::TYPE.as_str())
+        .unwrap_or_else(|| graph.interner.intern_named_str(rdf::TYPE.as_str()));
 
     // Sample once which inconsistency families this graph can trigger.
     // The gate is conservative: if the input has no `owl:disjointWith`
@@ -738,7 +961,7 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         if run_detectors {
             let maybe_clash = prof.time_block("inconsistency", || find_inconsistency(graph, triggers));
             if let Some(clash) = maybe_clash {
-                return Err(clash);
+                return Err(ExpandError::Inconsistency(clash));
             }
         }
 
@@ -749,7 +972,7 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
         let delta_size: u64 = delta_ref.map_or(0, |d| d.by_predicate.values().map(|v| v.len() as u64).sum());
 
         // RDFS compatible rules. Run in both profiles.
-        round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, &view, &interner, type_id, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, type_id, &mut pending)));
         round_firings = round_firings.saturating_add(prof.time("prp-dom", delta_size, || apply_prp_dom(graph, delta_ref, &mut pending)));
         round_firings = round_firings.saturating_add(prof.time("prp-rng", delta_size, || apply_prp_rng(graph, delta_ref, &mut pending)));
         round_firings = round_firings.saturating_add(prof.time("prp-spo1", delta_size, || apply_prp_spo1(graph, delta_ref, &mut pending)));
@@ -760,7 +983,7 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
             round_firings = round_firings.saturating_add(prof.time("prp-symp", delta_size, || apply_prp_symp(graph, delta_ref, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("prp-inv", delta_size, || apply_prp_inv(graph, delta_ref, &mut pending)));
             round_firings = round_firings.saturating_add(prof.time("prp-eqp", delta_size, || apply_prp_eqp(graph, delta_ref, &mut pending)));
-            round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, &view, &interner, type_id, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, type_id, &mut pending)));
 
             // M3 schema rules.
             round_firings = round_firings.saturating_add(prof.time("scm-cls", delta_size, || apply_scm_cls(graph, delta_ref, &mut pending)));
@@ -801,53 +1024,36 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
 
         // Many rules derive the same consequent (for example every
         // cax-sco branch that bridges through a fan-in node pushes the
-        // same `x rdf:type d`). Deduplicating the pending batch before
-        // probing `graph.insert` avoids rehashing and re-comparing those
-        // duplicates against the live graph.
+        // same `x rdf:type d`). The commit loop probes the shadow set
+        // first; duplicates never touch the hash indexes.
         //
-        // The commit path now works in interned-id space. For each pending
-        // triple we compute `(TermId, TermId, TermId)` from the interner,
-        // probe the shadow set once, and only touch `graph.insert` on a
-        // genuine novel triple. Duplicates never reach `graph.insert`, so
-        // the six BTreeSet inserts (which each clone a `String`) only run
-        // when they actually add something.
+        // `FlatGraph::insert` handles intern + shadow probe + index update
+        // + owned push in one call. Returns `true` on genuine novelty, and
+        // we hand every such triple to the sink before pushing it onto the
+        // delta buffer. Errors abort the run: the engine has already
+        // recorded the inference in `graph`, so a re-run from the same
+        // graph would continue from the point of failure.
         let new_triples = {
             let mut new_triples: Vec<Triple> = Vec::new();
-            let mut seen_time = Duration::ZERO;
             let mut insert_time = Duration::ZERO;
             let profile_split = prof.enabled;
             for triple in pending {
                 let t0 = if profile_split { Some(Instant::now()) } else { None };
-                let key = interner.intern_triple(&triple);
-                let already = !seen_total.insert(key);
+                let novel = graph.insert(&triple);
                 if let Some(t) = t0 {
-                    seen_time += t.elapsed();
-                }
-                if already {
-                    continue;
-                }
-                let t1 = if profile_split { Some(Instant::now()) } else { None };
-                graph.insert(&triple);
-                if let Some(t) = t1 {
                     insert_time += t.elapsed();
                 }
-                // Keep the secondary index in sync with the graph. The
-                // owned subject clone here is a refcount bump on the
-                // Arc-backed term internal, not a full string allocation.
-                // `key` already held the three interned ids.
-                view.insert(key.1, key.2, triple.subject.clone());
+                if !novel {
+                    continue;
+                }
+                sink(&triple).map_err(ExpandError::Sink)?;
                 new_triples.push(triple);
             }
             if profile_split {
-                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "seen.probe") {
-                    e.1 += seen_time;
-                } else {
-                    prof.entries.push(("seen.probe", seen_time, 0, 0));
-                }
-                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "graph.insert") {
+                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "flat.insert") {
                     e.1 += insert_time;
                 } else {
-                    prof.entries.push(("graph.insert", insert_time, 0, 0));
+                    prof.entries.push(("flat.insert", insert_time, 0, 0));
                 }
             }
             new_triples
@@ -888,22 +1094,20 @@ pub(crate) fn expand(graph: &mut Graph, config: &ReasonerConfig) -> Result<RunSt
 // existing graph happens later when `pending` is drained.
 
 fn apply_cax_sco(
-    graph: &Graph,
+    graph: &FlatGraph,
     delta: Option<&DeltaIndex>,
-    view: &GraphView,
-    interner: &Interner,
     type_id: TermId,
     pending: &mut Vec<Triple>,
 ) -> u64 {
     // cax-sco: if x rdf:type c and c rdfs:subClassOf d then x rdf:type d.
     //
-    // The graph(type) leg of each branch goes through `GraphView` keyed on
-    // `(TermId, TermId)`. Measured on the solo bench across LUBM 100-10000
-    // (2026-04-20), this shaved 4-15% off total reasoning time vs the
-    // baseline `graph.subjects_for_predicate_object` path: the win is
-    // widest at small sizes where hash cost dominates, and narrows as
-    // `graph.insert` grows to dominate the run. The subClassOf pair walk
-    // itself still uses the BTreeSet-backed graph since it runs once per
+    // The graph(type) leg of each branch goes through
+    // `FlatGraph::subjects_for_pred_obj_id`, keyed on already-interned
+    // `(TermId, TermId)` pairs. Measured on the solo bench across LUBM
+    // 100-10000 (2026-04-20), this shaved 4-15% off total reasoning time vs
+    // the baseline `graph.subjects_for_predicate_object` path: the win is
+    // widest at small sizes where hash cost dominates. The subClassOf pair
+    // walk itself still uses the by-predicate index since it runs once per
     // round and is not the hot axis.
     //
     // Semi-naive structure:
@@ -912,7 +1116,7 @@ fn apply_cax_sco(
     let mut firings: u64 = 0;
 
     // Cache each subClassOf pair together with the interned id of `c`. The
-    // inner loop then hands a u32 straight to the view; the `NamedNode`
+    // inner loop then hands a u32 straight to the index; the `NamedNode`
     // form of `c` is kept only for joining against delta(type) in branch 2.
     // `lookup_named` is expected to hit because every IRI the graph
     // contains was interned at seed time; the `?` is a soundness hedge.
@@ -920,30 +1124,30 @@ fn apply_cax_sco(
         .triples_for_predicate(rdfs::SUB_CLASS_OF)
         .filter_map(|t| {
             let c = named_node_from_subject(t.subject)?;
-            let c_id = interner.lookup_named(c.as_str())?;
+            let c_id = graph.lookup_named(c.as_str())?;
             let d = named_node_from_term(t.object)?;
             Some((c, c_id, d))
         })
         .collect();
 
     let Some(d) = delta else {
-        // Round 1: naive. View lookup is O(1) per pair.
+        // Round 1: naive. Index lookup is O(1) per pair.
         for (_, c_id, dest) in &subclass_pairs {
-            for x in view.subjects_for_pred_obj(type_id, *c_id) {
-                pending.push(Triple::new(x.clone(), rdf::TYPE, dest.clone()));
+            for x in graph.subjects_for_pred_obj_id(type_id, *c_id) {
+                pending.push(Triple::new(x.into_owned(), rdf::TYPE, dest.clone()));
                 firings = firings.saturating_add(1);
             }
         }
         return firings;
     };
 
-    // Branch 1: delta(subClassOf) × graph(type) via the view.
+    // Branch 1: delta(subClassOf) × graph(type) via the index.
     for t in d.for_predicate(rdfs::SUB_CLASS_OF) {
         let Some(c) = owned_subject_named(&t.subject) else { continue };
         let Some(dest) = owned_object_named(&t.object) else { continue };
-        let Some(c_id) = interner.lookup_named(c.as_str()) else { continue };
-        for x in view.subjects_for_pred_obj(type_id, c_id) {
-            pending.push(Triple::new(x.clone(), rdf::TYPE, dest.clone()));
+        let Some(c_id) = graph.lookup_named(c.as_str()) else { continue };
+        for x in graph.subjects_for_pred_obj_id(type_id, c_id) {
+            pending.push(Triple::new(x.into_owned(), rdf::TYPE, dest.clone()));
             firings = firings.saturating_add(1);
         }
     }
@@ -968,7 +1172,7 @@ fn apply_cax_sco(
     firings
 }
 
-fn apply_prp_dom(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_dom(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-dom: if p rdfs:domain c and x p y then x rdf:type c.
     //
     // Semi-naive:
@@ -1022,7 +1226,7 @@ fn apply_prp_dom(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
     firings
 }
 
-fn apply_prp_rng(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_rng(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-rng: if p rdfs:range c and x p y then y rdf:type c.
     // y must not be a literal (literals cannot be subjects of rdf:type).
     //
@@ -1079,7 +1283,7 @@ fn apply_prp_rng(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
     firings
 }
 
-fn apply_prp_spo1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_spo1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-spo1: if p1 rdfs:subPropertyOf p2 and x p1 y then x p2 y.
     //
     // Semi-naive:
@@ -1133,7 +1337,7 @@ fn apply_prp_spo1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_prp_trp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_trp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-trp: if p rdf:type owl:TransitiveProperty, x p y, y p z then x p z.
     //
     // Semi-naive joins the two data antecedents against delta in turn:
@@ -1233,7 +1437,7 @@ fn new_property_types(
         .collect()
 }
 
-fn apply_prp_symp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_symp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-symp: if p rdf:type owl:SymmetricProperty and x p y then y p x.
     // y must be a resource (literal y cannot appear as a subject).
     //
@@ -1294,7 +1498,7 @@ fn apply_prp_symp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_prp_inv(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_inv(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-inv1: if p1 owl:inverseOf p2 and x p1 y then y p2 x.
     // prp-inv2: if p1 owl:inverseOf p2 and x p2 y then y p1 x.
     // Combined because the engine applies both directions off the same fact.
@@ -1356,7 +1560,7 @@ fn apply_prp_inv(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 
 /// For each edge `(x, src, y)` in `graph`, push `(y, dst, x)` onto `pending`.
 fn emit_inverse(
-    graph: &Graph,
+    graph: &FlatGraph,
     src: &NamedNode,
     dst: &NamedNode,
     pending: &mut Vec<Triple>,
@@ -1377,7 +1581,7 @@ fn emit_inverse(
     firings
 }
 
-fn apply_prp_eqp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_eqp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-eqp1: if p1 owl:equivalentProperty p2 and x p1 y then x p2 y.
     // prp-eqp2: if p1 owl:equivalentProperty p2 and x p2 y then x p1 y.
     // Literal objects are fine here: the object keeps its position.
@@ -1433,7 +1637,7 @@ fn apply_prp_eqp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 /// For each edge `(x, src, y)` in `graph`, push `(x, dst, y)` onto `pending`.
 /// Used by prp-eqp (object position stays put, predicate is renamed).
 fn emit_rename(
-    graph: &Graph,
+    graph: &FlatGraph,
     src: &NamedNode,
     dst: &NamedNode,
     pending: &mut Vec<Triple>,
@@ -1451,10 +1655,8 @@ fn emit_rename(
 }
 
 fn apply_cax_eqc(
-    graph: &Graph,
+    graph: &FlatGraph,
     delta: Option<&DeltaIndex>,
-    view: &GraphView,
-    interner: &Interner,
     type_id: TermId,
     pending: &mut Vec<Triple>,
 ) -> u64 {
@@ -1465,17 +1667,18 @@ fn apply_cax_eqc(
     //   Branch 1: delta(equivalentClass) × graph(type).
     //   Branch 2: graph(equivalentClass) × delta(type) (indexed by class).
     //
-    // Like cax-sco the graph(type) leg goes through `GraphView` to key the
-    // lookup on a `(TermId, TermId)` pair rather than the predicate IRI
-    // and class IRI. Each equivalentClass pair is paired with the interned
-    // ids of both classes so the inner loop is pure u32 work.
+    // Like cax-sco the graph(type) leg goes through
+    // `FlatGraph::subjects_for_pred_obj_id` to key the lookup on a
+    // `(TermId, TermId)` pair rather than the predicate IRI and class IRI.
+    // Each equivalentClass pair is paired with the interned ids of both
+    // classes so the inner loop is pure u32 work.
     let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(OWL_EQUIVALENT_CLASS)
         .filter_map(|t| {
             let c1 = named_node_from_subject(t.subject)?;
             let c2 = named_node_from_term(t.object)?;
-            let c1_id = interner.lookup_named(c1.as_str())?;
-            let c2_id = interner.lookup_named(c2.as_str())?;
+            let c1_id = graph.lookup_named(c1.as_str())?;
+            let c2_id = graph.lookup_named(c2.as_str())?;
             Some((c1, c1_id, c2, c2_id))
         })
         .collect();
@@ -1484,8 +1687,8 @@ fn apply_cax_eqc(
 
     let Some(d) = delta else {
         for (c1, c1_id, c2, c2_id) in &pairs {
-            firings = firings.saturating_add(reclassify(view, *c1_id, c2, type_id, pending));
-            firings = firings.saturating_add(reclassify(view, *c2_id, c1, type_id, pending));
+            firings = firings.saturating_add(reclassify(graph, *c1_id, c2, type_id, pending));
+            firings = firings.saturating_add(reclassify(graph, *c2_id, c1, type_id, pending));
         }
         return firings;
     };
@@ -1496,11 +1699,11 @@ fn apply_cax_eqc(
     for t in d.for_predicate(OWL_EQUIVALENT_CLASS) {
         let Some(c1) = owned_subject_named(&t.subject) else { continue };
         let Some(c2) = owned_object_named(&t.object) else { continue };
-        let Some(c1_id) = interner.lookup_named(c1.as_str()) else { continue };
-        let Some(c2_id) = interner.lookup_named(c2.as_str()) else { continue };
+        let Some(c1_id) = graph.lookup_named(c1.as_str()) else { continue };
+        let Some(c2_id) = graph.lookup_named(c2.as_str()) else { continue };
         seen_schema.insert((c1.clone(), c2.clone()));
-        firings = firings.saturating_add(reclassify(view, c1_id, &c2, type_id, pending));
-        firings = firings.saturating_add(reclassify(view, c2_id, &c1, type_id, pending));
+        firings = firings.saturating_add(reclassify(graph, c1_id, &c2, type_id, pending));
+        firings = firings.saturating_add(reclassify(graph, c2_id, &c1, type_id, pending));
     }
 
     // Branch 2: graph(equivalentClass) × delta(type). Index delta typings
@@ -1527,18 +1730,18 @@ fn apply_cax_eqc(
 }
 
 /// For every (x, rdf:type, from) edge in the graph push (x, rdf:type, to).
-/// Goes through `GraphView` so the lookup hashes a `(TermId, TermId)` pair
-/// instead of the predicate plus class IRI.
+/// Goes through `FlatGraph::subjects_for_pred_obj_id` so the lookup hashes
+/// a `(TermId, TermId)` pair instead of the predicate plus class IRI.
 fn reclassify(
-    view: &GraphView,
+    graph: &FlatGraph,
     from_id: TermId,
     to: &NamedNode,
     type_id: TermId,
     pending: &mut Vec<Triple>,
 ) -> u64 {
     let mut firings: u64 = 0;
-    for x in view.subjects_for_pred_obj(type_id, from_id) {
-        pending.push(Triple::new(x.clone(), rdf::TYPE, to.clone()));
+    for x in graph.subjects_for_pred_obj_id(type_id, from_id) {
+        pending.push(Triple::new(x.into_owned(), rdf::TYPE, to.clone()));
         firings = firings.saturating_add(1);
     }
     firings
@@ -1560,7 +1763,7 @@ fn index_delta_types(delta: &DeltaIndex) -> FxHashMap<NamedNode, Vec<NamedOrBlan
 // Schema rules (scm-*). Close the graph under class and property hierarchy
 // axioms. None of these touch instance data.
 
-fn apply_scm_cls(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_cls(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-cls: for every c rdf:type owl:Class, add
     //   c rdfs:subClassOf c
     //   c owl:equivalentClass c
@@ -1592,7 +1795,7 @@ fn apply_scm_cls(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
     firings
 }
 
-fn apply_scm_sco(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_sco(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-sco: transitivity of rdfs:subClassOf.
     //
     // Semi-naive:
@@ -1691,7 +1894,7 @@ fn join_chain_hashed(
     firings
 }
 
-fn apply_scm_op(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_op(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-op: for every p rdf:type owl:ObjectProperty, add
     //   p rdfs:subPropertyOf p
     //   p owl:equivalentProperty p
@@ -1715,7 +1918,7 @@ fn apply_scm_op(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tri
     firings
 }
 
-fn apply_scm_dp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_dp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-dp: same as scm-op but for owl:DatatypeProperty.
     let properties: Vec<NamedNode> = if delta.is_some() {
         new_property_types(delta, OWL_DATATYPE_PROPERTY).into_iter().collect()
@@ -1735,7 +1938,7 @@ fn apply_scm_dp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tri
     firings
 }
 
-fn apply_scm_eqc1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_eqc1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-eqc1: c1 owl:equivalentClass c2 then
     //   c1 rdfs:subClassOf c2, c2 rdfs:subClassOf c1.
     //
@@ -1769,7 +1972,7 @@ fn apply_scm_eqc1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_scm_eqc2(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_eqc2(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-eqc2: c1 rdfs:subClassOf c2 and c2 rdfs:subClassOf c1 then
     //   c1 owl:equivalentClass c2.
     //
@@ -1830,7 +2033,7 @@ fn emit_equivalent_pairs(
     firings
 }
 
-fn apply_scm_eqp1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_eqp1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-eqp1: p1 owl:equivalentProperty p2 then
     //   p1 rdfs:subPropertyOf p2, p2 rdfs:subPropertyOf p1.
     //
@@ -1864,7 +2067,7 @@ fn apply_scm_eqp1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_scm_eqp2(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_eqp2(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-eqp2: p1 rdfs:subPropertyOf p2 and p2 rdfs:subPropertyOf p1 then
     //   p1 owl:equivalentProperty p2.
     //
@@ -1924,7 +2127,7 @@ fn emit_equivalent_property_pairs(
     firings
 }
 
-fn apply_scm_dom1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_dom1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-dom1: p rdfs:domain c1 and c1 rdfs:subClassOf c2 then p rdfs:domain c2.
     //
     // Semi-naive:
@@ -2014,7 +2217,7 @@ fn join_predicate_domain_range(
     firings
 }
 
-fn apply_scm_rng1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_rng1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-rng1: p rdfs:range c1 and c1 rdfs:subClassOf c2 then p rdfs:range c2.
     //
     // Semi-naive:
@@ -2088,7 +2291,7 @@ fn apply_scm_rng1(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
 // they explode graph size on noisy data. Skipped entirely in the Rdfs
 // profile.
 
-fn apply_eq_sym(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_eq_sym(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // eq-sym: if x owl:sameAs y then y owl:sameAs x.
     //
     // Semi-naive: only iterate delta(sameAs) edges.
@@ -2119,7 +2322,7 @@ fn apply_eq_sym(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tri
     firings
 }
 
-fn apply_eq_trans(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_eq_trans(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // eq-trans: if x owl:sameAs y, y owl:sameAs z then x owl:sameAs z.
     // Same snapshot-then-join shape as prp-trp.
     //
@@ -2158,7 +2361,7 @@ fn apply_eq_trans(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_eq_rep_s(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_eq_rep_s(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // eq-rep-s: if x owl:sameAs y and x p o then y p o.
     // The rewritten triple uses y as subject, so y must be a resource.
     //
@@ -2224,7 +2427,7 @@ fn apply_eq_rep_s(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
 /// For each triple `(x, p, o)` in `graph` where `p != owl:sameAs`, push
 /// `(y, p, o)` onto `pending`. Helper for eq-rep-s semi-naive branches.
 fn emit_rewrite_subject(
-    graph: &Graph,
+    graph: &FlatGraph,
     x: &NamedOrBlankNode,
     y: &NamedOrBlankNode,
     pending: &mut Vec<Triple>,
@@ -2246,7 +2449,7 @@ fn emit_rewrite_subject(
     firings
 }
 
-fn apply_eq_rep_p(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_eq_rep_p(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // eq-rep-p: if p1 owl:sameAs p2 and x p1 o then x p2 o.
     // p2 becomes a predicate, so both p1 and p2 must be IRIs.
     //
@@ -2293,7 +2496,7 @@ fn apply_eq_rep_p(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
     firings
 }
 
-fn apply_eq_rep_o(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_eq_rep_o(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // eq-rep-o: if o1 owl:sameAs o2 and x p o1 then x p o2.
     // o1 lives in the object position. Index by object so we avoid scanning
     // the whole graph.
@@ -2359,7 +2562,7 @@ fn apply_eq_rep_o(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<T
 /// For each triple `(x, p, o1)` in `graph` where `p != owl:sameAs`, push
 /// `(x, p, o2)` onto `pending`.
 fn emit_rewrite_object(
-    graph: &Graph,
+    graph: &FlatGraph,
     o1: &NamedOrBlankNode,
     o2: &Term,
     pending: &mut Vec<Triple>,
@@ -2390,7 +2593,7 @@ fn emit_rewrite_object(
 // equality flag because they only produce useful closures once the
 // eq-rep-* family is also running.
 
-fn apply_prp_fp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_fp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-fp: if p rdf:type owl:FunctionalProperty and x p y1 and x p y2
     // then y1 owl:sameAs y2.
     // y1 and y2 must both be resources since owl:sameAs only relates
@@ -2465,7 +2668,7 @@ fn join_same_subject(
     firings
 }
 
-fn apply_prp_ifp(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_ifp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // prp-ifp: if p rdf:type owl:InverseFunctionalProperty and x1 p y and
     // x2 p y then x1 owl:sameAs x2.
     //
@@ -2568,7 +2771,7 @@ struct InconsistencyTriggers {
 }
 
 impl InconsistencyTriggers {
-    fn scan(graph: &Graph) -> Self {
+    fn scan(graph: &FlatGraph) -> Self {
         Self {
             has_disjoint_with: graph
                 .triples_for_predicate(OWL_DISJOINT_WITH)
@@ -2602,7 +2805,7 @@ impl InconsistencyTriggers {
     }
 }
 
-fn find_inconsistency(graph: &Graph, triggers: InconsistencyTriggers) -> Option<Inconsistency> {
+fn find_inconsistency(graph: &FlatGraph, triggers: InconsistencyTriggers) -> Option<Inconsistency> {
     if triggers.has_disjoint_with {
         if let Some(c) = find_cax_dw_clash(graph) {
             return Some(Inconsistency::DisjointClasses(c));
@@ -2631,7 +2834,7 @@ fn find_inconsistency(graph: &Graph, triggers: InconsistencyTriggers) -> Option<
     None
 }
 
-fn find_cax_dw_clash(graph: &Graph) -> Option<DisjointClash> {
+fn find_cax_dw_clash(graph: &FlatGraph) -> Option<DisjointClash> {
     // Build the symmetric disjointness relation once per round.
     let mut pairs: Vec<(NamedNode, NamedNode)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_DISJOINT_WITH) {
@@ -2669,7 +2872,7 @@ fn find_cax_dw_clash(graph: &Graph) -> Option<DisjointClash> {
 }
 
 /// cls-nothing2: if `x rdf:type owl:Nothing` then the graph is inconsistent.
-fn find_cls_nothing2(graph: &Graph) -> Option<Inconsistency> {
+fn find_cls_nothing2(graph: &FlatGraph) -> Option<Inconsistency> {
     let mut first = graph.subjects_for_predicate_object(rdf::TYPE, OWL_NOTHING);
     first
         .next()
@@ -2681,7 +2884,7 @@ fn find_cls_nothing2(graph: &Graph) -> Option<Inconsistency> {
 
 /// prp-irp: if `p rdf:type owl:IrreflexiveProperty` and `x p x` then the
 /// graph is inconsistent.
-fn find_prp_irp(graph: &Graph) -> Option<Inconsistency> {
+fn find_prp_irp(graph: &FlatGraph) -> Option<Inconsistency> {
     let irreflexive: Vec<NamedNode> = graph
         .subjects_for_predicate_object(rdf::TYPE, OWL_IRREFLEXIVE_PROPERTY)
         .filter_map(named_node_from_subject)
@@ -2705,7 +2908,7 @@ fn find_prp_irp(graph: &Graph) -> Option<Inconsistency> {
 
 /// prp-asyp: if `p rdf:type owl:AsymmetricProperty` and both `x p y` and
 /// `y p x` hold then the graph is inconsistent.
-fn find_prp_asyp(graph: &Graph) -> Option<Inconsistency> {
+fn find_prp_asyp(graph: &FlatGraph) -> Option<Inconsistency> {
     let asymmetric: Vec<NamedNode> = graph
         .subjects_for_predicate_object(rdf::TYPE, OWL_ASYMMETRIC_PROPERTY)
         .filter_map(named_node_from_subject)
@@ -2752,7 +2955,7 @@ fn find_prp_asyp(graph: &Graph) -> Option<Inconsistency> {
 
 /// prp-pdw: if `p1 owl:propertyDisjointWith p2`, `x p1 y`, and `x p2 y`
 /// all hold then the graph is inconsistent.
-fn find_prp_pdw(graph: &Graph) -> Option<Inconsistency> {
+fn find_prp_pdw(graph: &FlatGraph) -> Option<Inconsistency> {
     let pairs: Vec<(NamedNode, NamedNode)> = graph
         .triples_for_predicate(OWL_PROPERTY_DISJOINT_WITH)
         .filter_map(|t| {
@@ -2783,7 +2986,7 @@ fn find_prp_pdw(graph: &Graph) -> Option<Inconsistency> {
 // ---------------------------------------------------------------------------
 // M4 schema and class expression rules.
 
-fn apply_scm_spo(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_scm_spo(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
     // scm-spo: transitivity of rdfs:subPropertyOf.
     //
     // Semi-naive:
@@ -2843,7 +3046,7 @@ fn apply_scm_spo(graph: &Graph, delta: Option<&DeltaIndex>, pending: &mut Vec<Tr
 /// subject carrying both `owl:onProperty p` and `owl:hasValue v`. The
 /// class `c` may be a blank node (typical for anonymous restrictions).
 /// Literal values are supported on the value side.
-fn collect_hasvalue_restrictions(graph: &Graph) -> Vec<(NamedOrBlankNode, NamedNode, Term)> {
+fn collect_hasvalue_restrictions(graph: &FlatGraph) -> Vec<(NamedOrBlankNode, NamedNode, Term)> {
     let mut out: Vec<(NamedOrBlankNode, NamedNode, Term)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_HAS_VALUE) {
         let c = t.subject.into_owned();
@@ -2862,7 +3065,7 @@ fn collect_hasvalue_restrictions(graph: &Graph) -> Vec<(NamedOrBlankNode, NamedN
     out
 }
 
-fn apply_cls_hv1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_hv1(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-hv1: c owl:hasValue v, c owl:onProperty p, x rdf:type c => x p v.
     //
     // The restriction list comes from the T-Box cache so we do not walk the
@@ -2883,7 +3086,7 @@ fn apply_cls_hv1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> 
     firings
 }
 
-fn apply_cls_hv2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_hv2(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-hv2: c owl:hasValue v, c owl:onProperty p, x p v => x rdf:type c.
     // Here c can be a blank node (anonymous restriction) so the inferred
     // type keeps its Term shape via NamedOrBlankNode.
@@ -2915,7 +3118,7 @@ fn apply_cls_hv2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> 
 /// Walk an RDF list headed at `head` and return its resource members. A
 /// literal member or a missing rdf:first yields `None`. The list must
 /// terminate in `rdf:nil`; cyclic lists are truncated once a node repeats.
-fn parse_rdf_list(graph: &Graph, head: NamedOrBlankNodeRef<'_>) -> Option<Vec<NamedOrBlankNode>> {
+fn parse_rdf_list(graph: &FlatGraph, head: NamedOrBlankNodeRef<'_>) -> Option<Vec<NamedOrBlankNode>> {
     let nil = rdf::NIL;
     let mut out: Vec<NamedOrBlankNode> = Vec::new();
     let mut current: NamedOrBlankNode = head.into_owned();
@@ -2953,7 +3156,7 @@ fn parse_rdf_list(graph: &Graph, head: NamedOrBlankNodeRef<'_>) -> Option<Vec<Na
 
 /// Collect every (c, members) where `c owl:intersectionOf L` and `L` is a
 /// well-formed RDF list of resources.
-fn collect_intersection_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
+fn collect_intersection_classes(graph: &FlatGraph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
     let mut out: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_INTERSECTION_OF) {
         let Some(head) = term_ref_to_named_or_blank(t.object) else {
@@ -2971,7 +3174,7 @@ fn collect_intersection_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<Nam
 
 /// Collect every (c, members) where `c owl:unionOf L` and `L` is a
 /// well-formed RDF list of resources.
-fn collect_union_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
+fn collect_union_classes(graph: &FlatGraph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> {
     let mut out: Vec<(NamedOrBlankNode, Vec<NamedOrBlankNode>)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_UNION_OF) {
         let Some(head) = term_ref_to_named_or_blank(t.object) else {
@@ -2987,7 +3190,7 @@ fn collect_union_classes(graph: &Graph) -> Vec<(NamedOrBlankNode, Vec<NamedOrBla
     out
 }
 
-fn apply_cls_int1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_int1(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-int1: c owl:intersectionOf (c1 ... cn), x rdf:type ci for all i
     // then x rdf:type c. Per W3C the classes are resources and the list is
     // a well-formed RDF list.
@@ -3035,7 +3238,7 @@ fn apply_cls_int1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) ->
     firings
 }
 
-fn apply_cls_int2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_int2(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-int2: c owl:intersectionOf (c1 ... cn), x rdf:type c
     // then x rdf:type ci for all i.
     let mut firings: u64 = 0;
@@ -3058,7 +3261,7 @@ fn apply_cls_int2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) ->
     firings
 }
 
-fn apply_cls_uni(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_uni(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-uni: c owl:unionOf (c1 ... cn), x rdf:type ci for any one i
     // then x rdf:type c.
     let mut firings: u64 = 0;
@@ -3085,7 +3288,7 @@ fn apply_cls_uni(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> 
 /// both `owl:onProperty p` and `owl:someValuesFrom y`. `y` must be a
 /// resource class (named or blank node); literal fillers are skipped.
 fn collect_somevaluesfrom_restrictions(
-    graph: &Graph,
+    graph: &FlatGraph,
 ) -> Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> {
     let mut out: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_SOME_VALUES_FROM) {
@@ -3110,7 +3313,7 @@ fn collect_somevaluesfrom_restrictions(
 /// both `owl:onProperty p` and `owl:allValuesFrom y`. `y` must be a
 /// resource class.
 fn collect_allvaluesfrom_restrictions(
-    graph: &Graph,
+    graph: &FlatGraph,
 ) -> Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> {
     let mut out: Vec<(NamedOrBlankNode, NamedNode, NamedOrBlankNode)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_ALL_VALUES_FROM) {
@@ -3136,7 +3339,7 @@ fn collect_allvaluesfrom_restrictions(
 /// properties are skipped since they cannot sit in the predicate position
 /// of an oxrdf triple. Chain members that resolve to a blank node are also
 /// skipped (the entire chain is dropped in that case).
-fn collect_property_chains(graph: &Graph) -> Vec<(NamedNode, Vec<NamedNode>)> {
+fn collect_property_chains(graph: &FlatGraph) -> Vec<(NamedNode, Vec<NamedNode>)> {
     let mut out: Vec<(NamedNode, Vec<NamedNode>)> = Vec::new();
     for t in graph.triples_for_predicate(OWL_PROPERTY_CHAIN_AXIOM) {
         let p = match t.subject {
@@ -3170,7 +3373,7 @@ fn collect_property_chains(graph: &Graph) -> Vec<(NamedNode, Vec<NamedNode>)> {
     out
 }
 
-fn apply_cls_svf1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_svf1(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-svf1: c owl:someValuesFrom y, c owl:onProperty p,
     //           u p v, v rdf:type y  =>  u rdf:type c.
     //
@@ -3206,7 +3409,7 @@ fn apply_cls_svf1(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) ->
     firings
 }
 
-fn apply_cls_svf2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_svf2(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-svf2: c owl:someValuesFrom owl:Thing, c owl:onProperty p,
     //           u p v  =>  u rdf:type c.
     //
@@ -3240,7 +3443,7 @@ fn apply_cls_svf2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) ->
     firings
 }
 
-fn apply_cls_avf(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_cls_avf(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // cls-avf: c owl:allValuesFrom y, c owl:onProperty p,
     //          u rdf:type c, u p v  =>  v rdf:type y.
     //
@@ -3270,7 +3473,7 @@ fn apply_cls_avf(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> 
     firings
 }
 
-fn apply_prp_spo2(graph: &Graph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_spo2(graph: &FlatGraph, tbox: &TBoxCache, pending: &mut Vec<Triple>) -> u64 {
     // prp-spo2: p owl:propertyChainAxiom (p1 ... pn),
     //           u1 p1 u2, u2 p2 u3, ..., un pn u(n+1)
     //           =>  u1 p u(n+1).
@@ -3408,10 +3611,43 @@ mod tests {
         ReasonerConfig::owl2_rl().with_equality_rules(true)
     }
 
+    /// Build a `FlatGraph` from the seed triples currently in `graph`.
+    /// Shared helper between `expand_ok` and the few tests that drive
+    /// `expand` directly to inspect its error path.
+    fn flat_from_graph(graph: &Graph) -> FlatGraph {
+        let mut flat = FlatGraph::with_capacity(graph.len());
+        for t in graph.iter() {
+            flat.insert(&t.into_owned());
+        }
+        flat
+    }
+
+    /// Copy every triple from `flat` back into `graph`. Used by `expand_ok`
+    /// to restore the drop-in-place semantics of the old
+    /// `expand(&mut Graph)` API for test assertions that call
+    /// `graph.contains(...)` afterwards.
+    fn drain_flat_into(flat: FlatGraph, graph: &mut Graph) {
+        for t in flat.into_triples() {
+            graph.insert(&t);
+        }
+    }
+
     /// Unwrap the `expand` result for tests that expect a consistent graph.
     #[expect(clippy::expect_used, reason = "engine tests assert the Ok path and panic on regression")]
     fn expand_ok(graph: &mut Graph, config: &ReasonerConfig) -> RunStats {
-        expand(graph, config).expect("expand must succeed on a consistent graph")
+        let mut flat = flat_from_graph(graph);
+        let result = expand(&mut flat, config, &mut |_: &Triple| -> Result<(), std::convert::Infallible> {
+            Ok(())
+        });
+        let stats = match result {
+            Ok(stats) => stats,
+            Err(ExpandError::Inconsistency(i)) => {
+                panic!("expand must succeed on a consistent graph: {}", i.message())
+            }
+            Err(ExpandError::Sink(never)) => match never {},
+        };
+        drain_flat_into(flat, graph);
+        stats
     }
 
     #[test]
@@ -3838,8 +4074,12 @@ mod tests {
         g.insert(&Triple::new(ex("Acme"), rdf::TYPE, ex("Person")));
         g.insert(&Triple::new(ex("Acme"), rdf::TYPE, ex("Organisation")));
 
-        let err = expand(&mut g, &owl_cfg()).unwrap_err();
-        let Inconsistency::DisjointClasses(clash) = err else {
+        let mut flat = flat_from_graph(&g);
+        let err = expand(&mut flat, &owl_cfg(), &mut |_: &Triple| -> Result<(), std::convert::Infallible> {
+            Ok(())
+        })
+        .unwrap_err();
+        let ExpandError::Inconsistency(Inconsistency::DisjointClasses(clash)) = err else {
             panic!("expected DisjointClasses variant");
         };
 

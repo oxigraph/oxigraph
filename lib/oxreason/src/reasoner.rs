@@ -7,10 +7,12 @@
 //! callers) can start wiring against them while the rule engine is being
 //! built.
 
-use oxrdf::{Dataset, Graph};
+use std::convert::Infallible;
+
+use oxrdf::{Dataset, Graph, Triple};
 
 use crate::engine;
-use crate::error::ReasonError;
+use crate::error::{ReasonError, ReasonStreamError};
 use crate::rules::RuleSet;
 
 /// Which family of rules the reasoner applies.
@@ -180,25 +182,109 @@ impl Reasoner {
     /// for the Custom profile because the caller-supplied RuleSet is not
     /// yet plugged into the engine.
     pub fn expand(&self, graph: &mut Graph) -> Result<ReasoningReport, ReasonError> {
+        match self
+            .expand_streaming(graph, |_: &Triple| -> Result<(), Infallible> { Ok(()) })
+        {
+            Ok(report) => Ok(report),
+            Err(ReasonStreamError::Reason(e)) => Err(e),
+            Err(ReasonStreamError::Sink(never)) => match never {},
+        }
+    }
+
+    /// Materialise the reasoning closure of `graph` in place while
+    /// streaming every novel inference to `sink`.
+    ///
+    /// The sink is called once per genuine new triple, after it has been
+    /// inserted into `graph`. Sink errors abort the run and surface as
+    /// [`ReasonStreamError::Sink`]; engine-level inconsistencies surface
+    /// as [`ReasonStreamError::Reason`]. The sink is not invoked for
+    /// triples that were already present in the input graph.
+    ///
+    /// This is the streaming entry point used by
+    /// [`oxigraph::store::Store::reason`]: the sink writes each inference
+    /// into an open transaction, which lets the store avoid a second
+    /// post-expansion pass over the full closure.
+    pub fn expand_streaming<F, E>(
+        &self,
+        graph: &mut Graph,
+        mut sink: F,
+    ) -> Result<ReasoningReport, ReasonStreamError<E>>
+    where
+        F: FnMut(&Triple) -> Result<(), E>,
+    {
         match self.config.profile {
-            ReasoningProfile::Owl2Rl | ReasoningProfile::Rdfs => match engine::expand(graph, &self.config) {
-                Ok(stats) => Ok(ReasoningReport {
-                    added: stats.added,
-                    rounds: stats.rounds,
-                    firings: stats.firings,
-                }),
-                Err(engine::Inconsistency::DisjointClasses(clash)) => Err(ReasonError::Inconsistent {
-                    individual: clash.individual.to_string(),
-                    class_a: clash.class_a.to_string(),
-                    class_b: clash.class_b.to_string(),
-                }),
-                Err(other) => Err(ReasonError::InconsistentAxiom {
-                    message: other.message(),
-                }),
-            },
-            ReasoningProfile::Custom => Err(ReasonError::NotImplemented(
+            ReasoningProfile::Owl2Rl | ReasoningProfile::Rdfs => {
+                // Seed the engine's FlatGraph from the caller's Graph. The
+                // FlatGraph keeps its own hash indexes plus the term
+                // interner; `graph` is only read at this step and written
+                // back at the end.
+                let mut flat = engine::FlatGraph::with_capacity(graph.len());
+                for t in graph.iter() {
+                    flat.insert(&t.into_owned());
+                }
+                let seed_len = flat.len();
+                let run = engine::expand(&mut flat, &self.config, &mut sink);
+
+                // Copy the new triples back into the caller's Graph. The
+                // seed triples are already there, so we only drain the tail
+                // of `flat.into_triples()` past the seed watermark. On error
+                // we still write back whatever was materialised up to the
+                // point of failure, matching the old in-place behaviour.
+                let triples = flat.into_triples();
+                for t in &triples[seed_len..] {
+                    graph.insert(t);
+                }
+
+                map_run_result::<E>(run)
+            }
+            ReasoningProfile::Custom => Err(ReasonStreamError::Reason(ReasonError::NotImplemented(
                 "custom RuleSet evaluation is not wired into the engine yet, see DESIGN.md M2",
-            )),
+            ))),
+        }
+    }
+
+    /// Materialise the reasoning closure starting from an iterator of seed
+    /// triples, streaming every novel inference to `sink`.
+    ///
+    /// Unlike [`Reasoner::expand_streaming`], this does not require the
+    /// caller to first build an [`oxrdf::Graph`] with every seed triple.
+    /// The iterator is drained into the engine's interned FlatGraph
+    /// directly, which keeps peak memory at ~O(|seed| + |inferred|) in
+    /// the interned form rather than paying the cost of an intermediate
+    /// `oxrdf::Graph` with its six BTreeSet indexes.
+    ///
+    /// This is the entry point [`oxigraph::store::Store::reason`] uses to
+    /// stream quads out of RocksDB: a `Map` from the storage cursor into
+    /// owned `Triple`s feeds straight into the reasoner without a second
+    /// pass over the dataset.
+    ///
+    /// Sink errors abort the run and surface as [`ReasonStreamError::Sink`];
+    /// engine-level inconsistencies surface as [`ReasonStreamError::Reason`].
+    /// The sink is only invoked for genuinely new triples; seeds are never
+    /// handed to it, even when they were duplicated within the iterator.
+    pub fn expand_streaming_from<I, F, E>(
+        &self,
+        input: I,
+        mut sink: F,
+    ) -> Result<ReasoningReport, ReasonStreamError<E>>
+    where
+        I: IntoIterator<Item = Triple>,
+        F: FnMut(&Triple) -> Result<(), E>,
+    {
+        match self.config.profile {
+            ReasoningProfile::Owl2Rl | ReasoningProfile::Rdfs => {
+                let iter = input.into_iter();
+                let (lower, _) = iter.size_hint();
+                let mut flat = engine::FlatGraph::with_capacity(lower);
+                for t in iter {
+                    flat.insert(&t);
+                }
+                let run = engine::expand(&mut flat, &self.config, &mut sink);
+                map_run_result::<E>(run)
+            }
+            ReasoningProfile::Custom => Err(ReasonStreamError::Reason(ReasonError::NotImplemented(
+                "custom RuleSet evaluation is not wired into the engine yet, see DESIGN.md M2",
+            ))),
         }
     }
 
@@ -225,6 +311,34 @@ impl Reasoner {
         Err(ReasonError::NotImplemented(
             "Reasoner::expand_dataset is not implemented yet, see DESIGN.md",
         ))
+    }
+}
+
+/// Project an `engine::expand` result onto the public
+/// [`ReasonStreamError`] shape. Shared by every `expand_*` entry point so
+/// the inconsistency mapping stays in one place.
+fn map_run_result<E>(
+    run: Result<engine::RunStats, engine::ExpandError<E>>,
+) -> Result<ReasoningReport, ReasonStreamError<E>> {
+    match run {
+        Ok(stats) => Ok(ReasoningReport {
+            added: stats.added,
+            rounds: stats.rounds,
+            firings: stats.firings,
+        }),
+        Err(engine::ExpandError::Inconsistency(engine::Inconsistency::DisjointClasses(clash))) => {
+            Err(ReasonStreamError::Reason(ReasonError::Inconsistent {
+                individual: clash.individual.to_string(),
+                class_a: clash.class_a.to_string(),
+                class_b: clash.class_b.to_string(),
+            }))
+        }
+        Err(engine::ExpandError::Inconsistency(other)) => Err(ReasonStreamError::Reason(
+            ReasonError::InconsistentAxiom {
+                message: other.message(),
+            },
+        )),
+        Err(engine::ExpandError::Sink(e)) => Err(ReasonStreamError::Sink(e)),
     }
 }
 
@@ -262,6 +376,34 @@ mod tests {
         let mut g = Graph::default();
         let err = reasoner.expand(&mut g).unwrap_err();
         assert!(matches!(err, ReasonError::NotImplemented(_)));
+    }
+
+    #[test]
+    #[expect(clippy::expect_used, reason = "test asserts the Ok path and panics on regression")]
+    fn expand_streaming_from_seeds_without_intermediate_graph() {
+        use oxrdf::{NamedNode, vocab::{rdf, rdfs}};
+
+        let company = NamedNode::new_unchecked("https://example.org/Company");
+        let legal = NamedNode::new_unchecked("https://example.org/LegalPerson");
+        let acme = NamedNode::new_unchecked("https://example.org/Acme");
+
+        let seeds = vec![
+            Triple::new(company.clone(), rdfs::SUB_CLASS_OF, legal.clone()),
+            Triple::new(acme.clone(), rdf::TYPE, company),
+        ];
+
+        let reasoner = Reasoner::new(ReasonerConfig::owl2_rl());
+        let mut inferred: Vec<Triple> = Vec::new();
+        let report = reasoner
+            .expand_streaming_from(seeds, |t: &Triple| -> Result<(), Infallible> {
+                inferred.push(t.clone());
+                Ok(())
+            })
+            .expect("iterator-seeded run must succeed on a consistent seed");
+
+        assert!(report.added >= 1);
+        let expected = Triple::new(acme, rdf::TYPE, legal);
+        assert!(inferred.iter().any(|t| t == &expected));
     }
 
     #[test]

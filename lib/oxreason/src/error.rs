@@ -4,6 +4,8 @@
 //! `#[non_exhaustive]` so new variants can be added without a breaking
 //! change once the rule engine and SHACL validator are implemented.
 
+use std::fmt;
+
 use thiserror::Error;
 
 /// Errors raised by the OWL 2 RL reasoner.
@@ -59,6 +61,46 @@ pub enum ReasonError {
         /// Rule-specific human description of the clash.
         message: String,
     },
+}
+
+/// Errors raised by [`crate::Reasoner::expand_streaming`].
+///
+/// A streaming reasoning run can fail for two reasons: an engine-level
+/// issue (inconsistency, unsupported profile, etc.) surfaces as
+/// [`ReasonStreamError::Reason`] wrapping a regular [`ReasonError`]; an
+/// error from the caller-provided sink (for example an I/O failure while
+/// writing an inferred triple back into storage) surfaces as
+/// [`ReasonStreamError::Sink`] preserving the original sink error type.
+#[derive(Debug)]
+pub enum ReasonStreamError<E> {
+    /// The reasoning engine could not complete the run.
+    Reason(ReasonError),
+    /// The caller-provided sink rejected a freshly materialised triple.
+    Sink(E),
+}
+
+impl<E: fmt::Display> fmt::Display for ReasonStreamError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Reason(e) => write!(f, "{e}"),
+            Self::Sink(e) => write!(f, "reasoning sink error: {e}"),
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for ReasonStreamError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Reason(e) => Some(e),
+            Self::Sink(e) => Some(e),
+        }
+    }
+}
+
+impl<E> From<ReasonError> for ReasonStreamError<E> {
+    fn from(err: ReasonError) -> Self {
+        Self::Reason(err)
+    }
 }
 
 /// Errors raised by the SHACL validator.

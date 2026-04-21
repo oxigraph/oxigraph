@@ -26,7 +26,7 @@
 
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::{BlankNode, Graph, NamedNode, Triple};
-use oxreason::{ReasonError, Reasoner, ReasonerConfig};
+use oxreason::{ReasonError, ReasonStreamError, Reasoner, ReasonerConfig};
 
 fn iri(s: &str) -> NamedNode {
     NamedNode::new_unchecked(s)
@@ -938,4 +938,99 @@ fn prp_spo2_does_not_fire_when_chain_breaks() {
                 == oxrdf::NamedOrBlankNodeRef::NamedNode(ex("Alice").as_ref())
         });
     assert!(!ok, "hasGrandparent must not be materialised for a broken chain");
+}
+
+// ---------------------------------------------------------------------------
+// Streaming sink tests (V2 Phase A).
+//
+// `expand_streaming` hands every novel inference to a caller-provided sink
+// before it moves on to the next rule firing. These tests fix the sink
+// contract: it fires exactly once per genuine new triple, it never fires
+// for triples already present in the input graph, and a sink error aborts
+// the run before any further inferences materialise.
+
+#[test]
+fn expand_streaming_emits_only_new_inferences() {
+    // cax-sco: Acme rdf:type Company and Company rdfs:subClassOf
+    // LegalPerson should yield exactly one inference: Acme rdf:type
+    // LegalPerson. The sink must receive that triple once and only once,
+    // and must never see the originals.
+    let mut g = Graph::default();
+    g.insert(&Triple::new(ex("Company"), rdfs::SUB_CLASS_OF, ex("LegalPerson")));
+    g.insert(&Triple::new(ex("Acme"), rdf::TYPE, ex("Company")));
+
+    let mut sunk: Vec<Triple> = Vec::new();
+    let report = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand_streaming(&mut g, |triple: &Triple| -> Result<(), std::convert::Infallible> {
+            sunk.push(triple.clone());
+            Ok(())
+        })
+        .expect("consistent graph must reason cleanly");
+
+    assert_eq!(report.added, sunk.len() as u64);
+    let expected = Triple::new(ex("Acme"), rdf::TYPE, ex("LegalPerson"));
+    assert!(sunk.contains(&expected), "sink must see the cax-sco inference");
+    assert!(
+        !sunk.contains(&Triple::new(ex("Company"), rdfs::SUB_CLASS_OF, ex("LegalPerson"))),
+        "sink must not see originals",
+    );
+    assert!(
+        !sunk.contains(&Triple::new(ex("Acme"), rdf::TYPE, ex("Company"))),
+        "sink must not see originals",
+    );
+}
+
+#[test]
+fn expand_streaming_counts_match_report_added() {
+    // A prp-trp chain of four produces at least three transitive closure
+    // edges. The sink count must match `report.added` exactly.
+    let has_bo = ex("hasBeneficialOwner");
+    let mut g = Graph::default();
+    g.insert(&Triple::new(has_bo.clone(), rdf::TYPE, owl("TransitiveProperty")));
+    g.insert(&Triple::new(ex("VesselA"), has_bo.clone(), ex("ShellCo")));
+    g.insert(&Triple::new(ex("ShellCo"), has_bo.clone(), ex("Parent")));
+    g.insert(&Triple::new(ex("Parent"), has_bo.clone(), ex("UltimateOwner")));
+
+    let mut count = 0u64;
+    let report = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand_streaming(&mut g, |_: &Triple| -> Result<(), std::convert::Infallible> {
+            count += 1;
+            Ok(())
+        })
+        .expect("consistent graph must reason cleanly");
+
+    assert_eq!(
+        report.added, count,
+        "sink must be invoked exactly report.added times",
+    );
+    assert!(count >= 3, "prp-trp must close at least 3 edges over a chain of four");
+}
+
+#[test]
+fn expand_streaming_propagates_sink_error() {
+    // A sink that rejects the first triple aborts the run with
+    // ReasonStreamError::Sink. The engine has already recorded the
+    // rejected triple in the graph, so a re-run from the same graph
+    // would continue from the point of failure.
+    #[derive(Debug, PartialEq, Eq)]
+    struct Boom;
+    impl std::fmt::Display for Boom {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("boom")
+        }
+    }
+    impl std::error::Error for Boom {}
+
+    let mut g = Graph::default();
+    g.insert(&Triple::new(ex("Company"), rdfs::SUB_CLASS_OF, ex("LegalPerson")));
+    g.insert(&Triple::new(ex("LegalPerson"), rdfs::SUB_CLASS_OF, ex("Entity")));
+    g.insert(&Triple::new(ex("Acme"), rdf::TYPE, ex("Company")));
+
+    let err = Reasoner::new(ReasonerConfig::owl2_rl())
+        .expand_streaming(&mut g, |_: &Triple| Err::<(), _>(Boom))
+        .unwrap_err();
+    match err {
+        ReasonStreamError::Sink(Boom) => {}
+        ReasonStreamError::Reason(other) => panic!("expected Sink error, got Reason({other})"),
+    }
 }

@@ -19,7 +19,7 @@ mod reasoner;
 mod rules;
 mod shacl;
 
-pub use crate::error::{ReasonError, ValidateError};
+pub use crate::error::{ReasonError, ReasonStreamError, ValidateError};
 pub use crate::reasoner::{Reasoner, ReasonerConfig, ReasoningProfile, ReasoningReport};
 pub use crate::rules::{Rule, RuleId, RuleSet};
 pub use crate::shacl::{
