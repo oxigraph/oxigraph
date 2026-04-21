@@ -16,13 +16,18 @@
 //! measured here happens inside Rust: parsing, interning, reasoning, and
 //! the final triple count.
 //!
-//! Note on fairness: parse_ms for `oxreason*` uses `oxttl::TurtleParser`
-//! which loads into an `oxrdf::Graph`. parse_ms for `reasonable` uses
-//! `reasonable::Reasoner::load_file` which loads into the reasonable
-//! native index. These are different representations, but they are both
-//! what the reasoner natively reasons over, so parse_ms is apples to
-//! apples at the engine-consumer level.
+//! Note on fairness: parse_ms for `oxreason` uses `oxttl::TurtleParser`
+//! draining into a `Vec<Triple>`, which is the cheapest container the
+//! iterator-based `expand_streaming_from` entry point accepts and the
+//! one production code uses (the `Store::reason` path streams quads
+//! straight out of the RocksDB cursor into the same entry point).
+//! parse_ms for `reasonable` uses `reasonable::Reasoner::load_file`
+//! which loads into the reasonable native index. These are different
+//! representations, but they are both what the reasoner natively
+//! reasons over, so parse_ms is apples to apples at the engine-consumer
+//! level.
 
+use std::convert::Infallible;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
@@ -30,8 +35,8 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use oxrdf::Graph;
-use oxreason::{Reasoner, ReasonerConfig};
+use oxrdf::Triple;
+use oxreason::{ReasonStreamError, Reasoner, ReasonerConfig};
 use oxttl::TurtleParser;
 
 fn main() -> ExitCode {
@@ -84,23 +89,40 @@ struct Run {
 }
 
 fn run_oxreason(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
+    // Phase B path: parse into a plain `Vec<Triple>`, never build an
+    // `oxrdf::Graph`. `expand_streaming_from` consumes the vec straight
+    // into the engine's interned FlatGraph and streams every inference
+    // back through the sink. This is the path `Store::reason` uses in
+    // production: no six-BTreeSet intermediate, no Graph.insert tree
+    // descent per inferred triple.
     let file = File::open(Path::new(path))?;
     let reader = BufReader::new(file);
 
     let parse_start = Instant::now();
-    let mut graph = Graph::default();
+    let mut seeds: Vec<Triple> = Vec::new();
     let mut parser = TurtleParser::new().for_reader(reader);
     while let Some(triple) = parser.next() {
-        graph.insert(&triple?);
+        seeds.push(triple?);
     }
     let parse_ms = ms(parse_start.elapsed());
-    let triples_in = graph.len();
+    let triples_in = seeds.len();
 
     let config = ReasonerConfig::owl2_rl();
     let r = Reasoner::new(config);
 
     let reason_start = Instant::now();
-    let report = r.expand(&mut graph)?;
+    let mut inferred: u64 = 0;
+    let report = r
+        .expand_streaming_from(seeds, |_t: &Triple| -> Result<(), Infallible> {
+            inferred = inferred.saturating_add(1);
+            Ok(())
+        })
+        .map_err(|e| -> Box<dyn std::error::Error> {
+            match e {
+                ReasonStreamError::Reason(r) => Box::new(r),
+                ReasonStreamError::Sink(never) => match never {},
+            }
+        })?;
     let reason_ms = ms(reason_start.elapsed());
 
     Ok(Run {
@@ -108,7 +130,7 @@ fn run_oxreason(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
         parse_ms,
         reason_ms,
         triples_in,
-        triples_out: graph.len(),
+        triples_out: triples_in + inferred as usize,
         rounds: report.rounds,
         firings: report.firings,
     })

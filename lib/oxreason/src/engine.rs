@@ -552,13 +552,19 @@ pub(crate) struct DeltaIndex {
 }
 
 impl DeltaIndex {
-    fn build(triples: &[Triple]) -> Self {
+    /// Consume the owned triples produced by a round's commit loop and group
+    /// them by predicate IRI. Takes `Vec<Triple>` by value so each triple is
+    /// moved into its bucket instead of cloned: on dense rounds (LUBM
+    /// cax-sco emits hundreds of thousands of `x rdf:type d`) this saves
+    /// one `Triple::clone` per novel triple on top of the clone
+    /// `FlatGraph::insert` already pays.
+    fn build(triples: Vec<Triple>) -> Self {
         let mut by_predicate: FxHashMap<String, Vec<Triple>> = FxHashMap::default();
         for t in triples {
             by_predicate
                 .entry(t.predicate.as_str().to_owned())
                 .or_default()
-                .push(t.clone());
+                .push(t);
         }
         Self { by_predicate }
     }
@@ -676,6 +682,12 @@ impl TBoxCache {
 pub(crate) struct FlatGraph {
     /// Primary storage. Every materialised triple lives here exactly once.
     triples: Vec<Triple>,
+    /// Parallel to `triples`: the interned id triple for the same slot.
+    /// Rule bodies that iterate by-index indexes can read subject/object
+    /// TermIds here without hashing the Arc-backed IRI strings. Costs 12
+    /// bytes per stored triple (`3 * u32`), negligible next to the owned
+    /// `Triple` (~80 bytes) and buys the keyed-insert fast path.
+    triple_ids: Vec<(TermId, TermId, TermId)>,
     /// Dedup / contains probe keyed on interned ids.
     shadow: FxHashSet<(TermId, TermId, TermId)>,
     /// `predicate -> [index into triples]`.
@@ -693,6 +705,7 @@ impl FlatGraph {
     pub(crate) fn with_capacity(n: usize) -> Self {
         Self {
             triples: Vec::with_capacity(n),
+            triple_ids: Vec::with_capacity(n),
             shadow: FxHashSet::with_capacity_and_hasher(n * 2, Default::default()),
             by_predicate: FxHashMap::with_capacity_and_hasher(64, Default::default()),
             by_pred_obj: FxHashMap::with_capacity_and_hasher(n / 4 + 1, Default::default()),
@@ -713,6 +726,19 @@ impl FlatGraph {
         self.interner.lookup_named(iri)
     }
 
+    /// Read-only subject lookup over a [`NamedOrBlankNodeRef`]. Rule bodies
+    /// that need the interned id of a subject they already hold (for
+    /// example to build a consequent's shadow key) go through this instead
+    /// of re-interning via the mutable path. Zero allocation on both named
+    /// and blank subjects.
+    #[inline]
+    pub(crate) fn lookup_subject_ref(
+        &self,
+        s: NamedOrBlankNodeRef<'_>,
+    ) -> Option<TermId> {
+        self.interner.lookup_subject_ref(s)
+    }
+
     /// Insert an owned triple. Returns `true` on genuine novelty, `false`
     /// when the triple was already present. Mirrors
     /// [`oxrdf::Graph::insert`]'s semantics so rule bodies that port over
@@ -725,12 +751,31 @@ impl FlatGraph {
     /// refcount bump.
     pub(crate) fn insert(&mut self, triple: &Triple) -> bool {
         let key = self.interner.intern_triple(triple);
+        self.insert_with_key(triple, key)
+    }
+
+    /// Keyed variant of [`insert`]: skips `intern_triple` because the caller
+    /// already has the interned key in hand. Hot rules whose antecedents were
+    /// probed via `subjects_ids_for_pred_obj_id` can compute the consequent's
+    /// key component-by-component as they build the triple, avoiding three
+    /// string hashes per pending entry on the commit loop.
+    pub(crate) fn insert_keyed(
+        &mut self,
+        triple: &Triple,
+        key: (TermId, TermId, TermId),
+    ) -> bool {
+        self.insert_with_key(triple, key)
+    }
+
+    #[inline]
+    fn insert_with_key(&mut self, triple: &Triple, key: (TermId, TermId, TermId)) -> bool {
         if !self.shadow.insert(key) {
             return false;
         }
         let idx = u32::try_from(self.triples.len())
             .expect("FlatGraph exceeded 2^32 triples; partition the input");
         self.triples.push(triple.clone());
+        self.triple_ids.push(key);
         self.by_predicate.entry(key.1).or_default().push(idx);
         self.by_pred_obj.entry((key.1, key.2)).or_default().push(idx);
         self.by_subj_pred.entry((key.0, key.1)).or_default().push(idx);
@@ -873,6 +918,26 @@ impl FlatGraph {
             .map(move |&i| self.triples[i as usize].subject.as_ref())
     }
 
+    /// Keyed variant of [`subjects_for_pred_obj_id`]: yields each subject
+    /// together with its already-interned [`TermId`]. Rule bodies that need
+    /// the id to build the consequent's key for [`insert_keyed`] read both
+    /// out of the parallel `triple_ids` side-vec in one indexed read, with
+    /// no hash probe on the IRI string.
+    pub(crate) fn subjects_ids_for_pred_obj_id(
+        &self,
+        p: TermId,
+        o: TermId,
+    ) -> impl Iterator<Item = (TermId, NamedOrBlankNodeRef<'_>)> + '_ {
+        let idxs: &[u32] = self
+            .by_pred_obj
+            .get(&(p, o))
+            .map_or(&[][..], Vec::as_slice);
+        idxs.iter().map(move |&i| {
+            let idx = i as usize;
+            (self.triple_ids[idx].0, self.triples[idx].subject.as_ref())
+        })
+    }
+
     /// Drain every stored triple into a fresh `Vec`, consuming the store.
     /// Used by the legacy `Reasoner::expand(&mut Graph)` wrapper to rebuild
     /// an `oxrdf::Graph` after the run.
@@ -966,13 +1031,21 @@ where
         }
 
         let mut pending: Vec<Triple> = Vec::new();
+        // Secondary pending buffer for rules that can hand the commit loop
+        // the interned `(s, p, o)` key alongside the owned triple. Values
+        // arrive here from `apply_cax_sco` (branch 1 + naive case) today;
+        // more rules will migrate as each one is confirmed to win on the
+        // bench. The commit loop routes this list through
+        // `FlatGraph::insert_keyed`, which skips `intern_triple`'s three
+        // Arc<str> hashes per committed triple.
+        let mut pending_keyed: Vec<(Triple, (TermId, TermId, TermId))> = Vec::new();
         let mut round_firings: u64 = 0;
 
         let delta_ref = delta.as_ref();
         let delta_size: u64 = delta_ref.map_or(0, |d| d.by_predicate.values().map(|v| v.len() as u64).sum());
 
         // RDFS compatible rules. Run in both profiles.
-        round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, type_id, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, type_id, &mut pending_keyed)));
         round_firings = round_firings.saturating_add(prof.time("prp-dom", delta_size, || apply_prp_dom(graph, delta_ref, &mut pending)));
         round_firings = round_firings.saturating_add(prof.time("prp-rng", delta_size, || apply_prp_rng(graph, delta_ref, &mut pending)));
         round_firings = round_firings.saturating_add(prof.time("prp-spo1", delta_size, || apply_prp_spo1(graph, delta_ref, &mut pending)));
@@ -1036,7 +1109,22 @@ where
         let new_triples = {
             let mut new_triples: Vec<Triple> = Vec::new();
             let mut insert_time = Duration::ZERO;
+            let mut insert_keyed_time = Duration::ZERO;
             let profile_split = prof.enabled;
+            // Keyed path first: rules that already know the interned key
+            // skip `intern_triple`'s three Arc<str> hashes.
+            for (triple, key) in pending_keyed {
+                let t0 = if profile_split { Some(Instant::now()) } else { None };
+                let novel = graph.insert_keyed(&triple, key);
+                if let Some(t) = t0 {
+                    insert_keyed_time += t.elapsed();
+                }
+                if !novel {
+                    continue;
+                }
+                sink(&triple).map_err(ExpandError::Sink)?;
+                new_triples.push(triple);
+            }
             for triple in pending {
                 let t0 = if profile_split { Some(Instant::now()) } else { None };
                 let novel = graph.insert(&triple);
@@ -1055,6 +1143,11 @@ where
                 } else {
                     prof.entries.push(("flat.insert", insert_time, 0, 0));
                 }
+                if let Some(e) = prof.entries.iter_mut().find(|e| e.0 == "flat.insert_keyed") {
+                    e.1 += insert_keyed_time;
+                } else {
+                    prof.entries.push(("flat.insert_keyed", insert_keyed_time, 0, 0));
+                }
             }
             new_triples
         };
@@ -1068,8 +1161,10 @@ where
 
         // Build the delta for the next round from the triples that were
         // actually new to the graph. Dedup happens at `graph.insert` time
-        // above, so `new_triples` already excludes duplicates.
-        let next_delta = prof.time_block("delta.build", || DeltaIndex::build(&new_triples));
+        // above, so `new_triples` already excludes duplicates. `build`
+        // consumes the Vec to move each triple into its predicate bucket
+        // instead of cloning it again.
+        let next_delta = prof.time_block("delta.build", || DeltaIndex::build(new_triples));
 
         // Rebuild the class-expression cache only if the delta actually
         // touched one of its trigger predicates. In practice no
@@ -1097,44 +1192,49 @@ fn apply_cax_sco(
     graph: &FlatGraph,
     delta: Option<&DeltaIndex>,
     type_id: TermId,
-    pending: &mut Vec<Triple>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
 ) -> u64 {
     // cax-sco: if x rdf:type c and c rdfs:subClassOf d then x rdf:type d.
     //
     // The graph(type) leg of each branch goes through
-    // `FlatGraph::subjects_for_pred_obj_id`, keyed on already-interned
-    // `(TermId, TermId)` pairs. Measured on the solo bench across LUBM
-    // 100-10000 (2026-04-20), this shaved 4-15% off total reasoning time vs
-    // the baseline `graph.subjects_for_predicate_object` path: the win is
-    // widest at small sizes where hash cost dominates. The subClassOf pair
-    // walk itself still uses the by-predicate index since it runs once per
-    // round and is not the hot axis.
+    // `FlatGraph::subjects_ids_for_pred_obj_id`, keyed on already-interned
+    // `(TermId, TermId)` pairs. Every subject the bucket yields arrives
+    // with its `TermId` attached, so the consequent's shadow-probe key can
+    // be assembled component-by-component (`(x_id, type_id, dest_id)`) and
+    // handed straight to `FlatGraph::insert_keyed`, bypassing the three
+    // string hashes that `intern_triple` would otherwise do on each
+    // committed triple. Branch 2 still pushes to the plain `pending` list
+    // because its subjects come from the predicate-keyed delta index and
+    // do not carry an id.
     //
     // Semi-naive structure:
     //   Branch 1: delta(subClassOf) × graph(type).
     //   Branch 2: graph(subClassOf) × delta(type).
     let mut firings: u64 = 0;
 
-    // Cache each subClassOf pair together with the interned id of `c`. The
-    // inner loop then hands a u32 straight to the index; the `NamedNode`
-    // form of `c` is kept only for joining against delta(type) in branch 2.
-    // `lookup_named` is expected to hit because every IRI the graph
-    // contains was interned at seed time; the `?` is a soundness hedge.
-    let subclass_pairs: Vec<(NamedNode, TermId, NamedNode)> = graph
+    // Cache each subClassOf pair together with the interned ids of both `c`
+    // and `d`. The inner loop then hands two u32s straight to the index
+    // and to the keyed pending buffer. The `NamedNode` form of `c` is kept
+    // only for joining against delta(type) in branch 2. `lookup_named` is
+    // expected to hit because every IRI the graph contains was interned at
+    // seed time; the `?` is a soundness hedge.
+    let subclass_pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(rdfs::SUB_CLASS_OF)
         .filter_map(|t| {
             let c = named_node_from_subject(t.subject)?;
             let c_id = graph.lookup_named(c.as_str())?;
             let d = named_node_from_term(t.object)?;
-            Some((c, c_id, d))
+            let d_id = graph.lookup_named(d.as_str())?;
+            Some((c, c_id, d, d_id))
         })
         .collect();
 
     let Some(d) = delta else {
         // Round 1: naive. Index lookup is O(1) per pair.
-        for (_, c_id, dest) in &subclass_pairs {
-            for x in graph.subjects_for_pred_obj_id(type_id, *c_id) {
-                pending.push(Triple::new(x.into_owned(), rdf::TYPE, dest.clone()));
+        for (_, c_id, dest, dest_id) in &subclass_pairs {
+            for (x_id, x) in graph.subjects_ids_for_pred_obj_id(type_id, *c_id) {
+                let triple = Triple::new(x.into_owned(), rdf::TYPE, dest.clone());
+                pending_keyed.push((triple, (x_id, type_id, *dest_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1146,24 +1246,34 @@ fn apply_cax_sco(
         let Some(c) = owned_subject_named(&t.subject) else { continue };
         let Some(dest) = owned_object_named(&t.object) else { continue };
         let Some(c_id) = graph.lookup_named(c.as_str()) else { continue };
-        for x in graph.subjects_for_pred_obj_id(type_id, c_id) {
-            pending.push(Triple::new(x.into_owned(), rdf::TYPE, dest.clone()));
+        let Some(dest_id) = graph.lookup_named(dest.as_str()) else { continue };
+        for (x_id, x) in graph.subjects_ids_for_pred_obj_id(type_id, c_id) {
+            let triple = Triple::new(x.into_owned(), rdf::TYPE, dest.clone());
+            pending_keyed.push((triple, (x_id, type_id, dest_id)));
             firings = firings.saturating_add(1);
         }
     }
 
     // Branch 2: graph(subClassOf) × delta(type).
     // Delta iteration still uses NamedNode-keyed grouping because the delta
-    // index is keyed by predicate IRI, not TermId.
-    let mut new_typings: FxHashMap<NamedNode, Vec<NamedOrBlankNode>> = FxHashMap::default();
+    // index is keyed by predicate IRI, not TermId. Each subject `x` in a
+    // fresh rdf:type triple was interned the round it entered the graph,
+    // so `lookup_subject_ref` hits and the consequent's key can be built
+    // from `(x_id, type_id, dest_id)` for the keyed commit path. Blank or
+    // named subjects whose id cannot be resolved fall back to the plain
+    // pending list (defensive; not expected on well-formed graphs).
+    let mut new_typings: FxHashMap<NamedNode, Vec<(TermId, NamedOrBlankNode)>> =
+        FxHashMap::default();
     for t in d.for_predicate(rdf::TYPE) {
         let Some(c) = owned_object_named(&t.object) else { continue };
-        new_typings.entry(c).or_default().push(t.subject.clone());
+        let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+        new_typings.entry(c).or_default().push((x_id, t.subject.clone()));
     }
-    for (c, _, dest) in &subclass_pairs {
+    for (c, _, dest, dest_id) in &subclass_pairs {
         if let Some(xs) = new_typings.get(c) {
-            for x in xs {
-                pending.push(Triple::new(x.clone(), rdf::TYPE, dest.clone()));
+            for (x_id, x) in xs {
+                let triple = Triple::new(x.clone(), rdf::TYPE, dest.clone());
+                pending_keyed.push((triple, (*x_id, type_id, *dest_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1398,17 +1508,33 @@ fn apply_prp_trp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
 }
 
 /// Emit every (x, p, z) where (x, y) is in `left` and (y, z) is in `right`.
+///
+/// Bucket `right` by its first component so each probe from `left` is O(1)
+/// on average. Pre-refactor this was a nested loop with a per-pair
+/// `named_or_blank_eq`, which is O(|left| * |right|) and became the
+/// dominant cost of `prp-trp` whenever a transitive property had more
+/// than a few hundred edges (on LUBM 100k the profile showed prp-trp at
+/// 190ms of 993ms total from 4848 firings: 39us per firing, 100x the
+/// per-firing cost of cax-sco).
 fn join_square(
     left: &[(NamedOrBlankNode, NamedOrBlankNode)],
     right: &[(NamedOrBlankNode, NamedOrBlankNode)],
     p: &NamedNode,
     pending: &mut Vec<Triple>,
 ) -> u64 {
+    if left.is_empty() || right.is_empty() {
+        return 0;
+    }
+    let mut right_by_first: FxHashMap<&NamedOrBlankNode, Vec<&NamedOrBlankNode>> =
+        FxHashMap::with_capacity_and_hasher(right.len(), Default::default());
+    for (y2, z) in right {
+        right_by_first.entry(y2).or_default().push(z);
+    }
     let mut firings: u64 = 0;
     for (x, y) in left {
-        for (y2, z) in right {
-            if named_or_blank_eq(y, y2) {
-                pending.push(Triple::new(x.clone(), p.clone(), z.clone()));
+        if let Some(zs) = right_by_first.get(y) {
+            for z in zs {
+                pending.push(Triple::new(x.clone(), p.clone(), (*z).clone()));
                 firings = firings.saturating_add(1);
             }
         }
