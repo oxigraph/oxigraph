@@ -29,11 +29,12 @@ rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
 # WKB inline (for 2D points) or in a side blob CF (for polygons and longer
 # geometries), and exposed back as either lexical WKT or a parsed
 # geo::Geometry without the per-call WKT lexer round trip.
-geosparql = ["dep:geo", "dep:wkb", "dep:wkt"]
+geosparql = ["dep:geo", "dep:geo-traits", "dep:wkb", "dep:wkt"]
 
 [dependencies]
 dashmap.workspace = true
 geo = { workspace = true, optional = true }
+geo-traits = { workspace = true, optional = true }
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true

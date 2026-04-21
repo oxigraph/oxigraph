@@ -130,12 +130,22 @@ pub enum EncodedTerm {
     /// WKB payload fits in [`SmallBytes::CAPACITY`] (31) bytes, which
     /// covers every 2D point and is the hot path for the
     /// millions-of-points workload motivating issue #1560.
-    ///
-    /// Larger geometries (polygons, linestrings) continue to fall
-    /// through to [`EncodedTerm::BigTypedLiteral`] for now. The side
-    /// column family variant lands in a follow-up task.
     #[cfg(feature = "geosparql")]
     SmallWktLiteral(crate::storage::small_bytes::SmallBytes<32>),
+    /// GeoSPARQL `wktLiteral` whose WKB payload does not fit in the
+    /// 31-byte [`SmallWktLiteral`] envelope (polygons, linestrings,
+    /// multi-geometries). The `value_id` keys the WKT lexical form in
+    /// the string store so decoding can reconstruct the literal.
+    ///
+    /// A side column family keyed by the same `value_id` is reserved
+    /// for the raw WKB bytes so read-side geometry accessors can skip
+    /// the WKT lexer; that plumbing lands in a follow-up task. Until
+    /// then the decode path reconstructs the literal from the WKT
+    /// lexical form in `id2str`, matching the
+    /// [`EncodedTerm::BigTypedLiteral`] behaviour byte-for-byte on the
+    /// user-visible API.
+    #[cfg(feature = "geosparql")]
+    BigWktLiteral { value_id: StrHash },
     BooleanLiteral(Boolean),
     FloatLiteral(Float),
     DoubleLiteral(Double),
@@ -330,6 +340,15 @@ impl PartialEq for EncodedTerm {
                 ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
                 #[cfg(feature = "geosparql")]
                 (Self::SmallWktLiteral(a), Self::SmallWktLiteral(b)) => a == b,
+                #[cfg(feature = "geosparql")]
+                (
+                    Self::BigWktLiteral {
+                        value_id: value_id_a,
+                    },
+                    Self::BigWktLiteral {
+                        value_id: value_id_b,
+                    },
+                ) => value_id_a == value_id_b,
                 (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
                 (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(*b),
                 (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(*b),
@@ -448,6 +467,8 @@ impl Hash for EncodedTerm {
             }
             #[cfg(feature = "geosparql")]
             Self::SmallWktLiteral(bytes) => bytes.hash(state),
+            #[cfg(feature = "geosparql")]
+            Self::BigWktLiteral { value_id } => value_id.hash(state),
             Self::BooleanLiteral(value) => value.hash(state),
             Self::FloatLiteral(value) => value.to_be_bytes().hash(state),
             Self::DoubleLiteral(value) => value.to_be_bytes().hash(state),
@@ -651,18 +672,30 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             }
             #[cfg(feature = "geosparql")]
             "http://www.opengis.net/ont/geosparql#wktLiteral" => {
-                // Parse the WKT lexical once on insert. If it parses and
-                // the resulting WKB fits inline (every 2D point does in
-                // the 31-byte SmallBytes payload), store it as a
+                // Parse the WKT lexical once on insert. If it parses
+                // and the WKB fits inline (every 2D point does in the
+                // 31-byte SmallBytes payload) store it as a
                 // SmallWktLiteral so reads can skip the WKT lexer. If
-                // WKB exceeds the inline cap, or parsing fails, fall
-                // through to the generic typed-literal path so no data
-                // is silently lost.
-                crate::storage::wkb_codec::encode_wkt_value(value).and_then(|bytes| {
-                    crate::storage::small_bytes::SmallBytes::<32>::try_from(bytes.as_slice())
-                        .ok()
-                        .map(Self::SmallWktLiteral)
-                })
+                // parsing succeeds but the WKB exceeds the inline cap
+                // (polygons, linestrings, multi-geometries) route
+                // through BigWktLiteral so the variant tag still
+                // carries the geo intent even though the payload has
+                // to live in the string store. Parse failures fall
+                // through to the generic typed-literal path so no
+                // data is silently lost.
+                match crate::storage::wkb_codec::encode_wkt_value(value) {
+                    Some(bytes) => {
+                        match crate::storage::small_bytes::SmallBytes::<32>::try_from(
+                            bytes.as_slice(),
+                        ) {
+                            Ok(small) => Some(Self::SmallWktLiteral(small)),
+                            Err(_) => Some(Self::BigWktLiteral {
+                                value_id: StrHash::new(value),
+                            }),
+                        }
+                    }
+                    None => None,
+                }
             }
             _ => None,
         };
@@ -893,6 +926,16 @@ pub fn insert_term<F: FnMut(&StrHash, &str)>(
             | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => (),
             #[cfg(feature = "geosparql")]
             EncodedTerm::SmallWktLiteral(..) => (),
+            #[cfg(feature = "geosparql")]
+            EncodedTerm::BigWktLiteral { value_id } => {
+                // Store the WKT lexical so the decoder can reconstruct
+                // the literal. A follow-up task will also persist the
+                // raw WKB bytes to a side column family keyed by the
+                // same `value_id`, letting geometry accessors skip the
+                // WKT lexer without breaking on-disk compatibility with
+                // stores written before that CF existed.
+                insert_str(value_id, literal.value());
+            }
             _ => unreachable!("Invalid literal encoding: {encoded:?} for {term}"),
         },
         #[cfg(feature = "rdf-12")]
@@ -1206,6 +1249,12 @@ impl<S: StrLookup> Decoder for S {
                 )
                 .into())
             }
+            #[cfg(feature = "geosparql")]
+            EncodedTerm::BigWktLiteral { value_id } => Ok(Literal::new_typed_literal(
+                get_required_str(self, value_id)?,
+                NamedNode::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral"),
+            )
+            .into()),
             EncodedTerm::BooleanLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::FloatLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DoubleLiteral(value) => Ok(Literal::from(*value).into()),
@@ -1287,5 +1336,93 @@ mod tests {
         assert_eq!(size_of::<EncodedTerm>(), 40);
         assert_eq!(size_of::<EncodedQuad>(), 160);
         assert_eq!(align_of::<EncodedTerm>(), 8);
+    }
+
+    /// The inline path must fire for every 2D point (the hot case for
+    /// issue #1560) and must decline for anything whose WKB exceeds
+    /// [`crate::storage::small_bytes::SmallBytes`]`::<32>::CAPACITY`.
+    /// Well-formed geometries that overflow land in `BigWktLiteral` so
+    /// the variant tag keeps the geo intent on disk even when the
+    /// payload has to spill into the string store. Malformed WKT still
+    /// falls through to a generic typed literal so lexical content is
+    /// preserved verbatim.
+    #[cfg(feature = "geosparql")]
+    #[test]
+    fn small_wkt_split_fires_at_inline_capacity_boundary() {
+        use crate::model::LiteralRef;
+
+        let wkt_dt = "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+        // POINT: 21 bytes of WKB, fits in SmallBytes::<32>::CAPACITY = 31.
+        let point = LiteralRef::new_typed_literal("POINT(10 20)", NamedNodeRef::new_unchecked(wkt_dt));
+        let encoded_point: EncodedTerm = point.into();
+        assert!(
+            matches!(encoded_point, EncodedTerm::SmallWktLiteral(_)),
+            "2D POINT should take the inline path: got {encoded_point:?}",
+        );
+
+        // A five-vertex LINESTRING is 9 + 5*16 = 89 bytes of WKB, well
+        // past the 31-byte inline cap, so it must route through the
+        // BigWktLiteral side-store path rather than fall back to a
+        // generic typed literal.
+        let linestring = LiteralRef::new_typed_literal(
+            "LINESTRING(0 0, 10 10, 20 20, 30 30, 40 40)",
+            NamedNodeRef::new_unchecked(wkt_dt),
+        );
+        let encoded_line: EncodedTerm = linestring.into();
+        assert!(
+            matches!(encoded_line, EncodedTerm::BigWktLiteral { .. }),
+            "oversized LINESTRING should take the BigWktLiteral path: got {encoded_line:?}",
+        );
+
+        // Malformed WKT must not be silently dropped and must not
+        // masquerade as a geometry variant: it should fall through to
+        // the generic typed-literal path so the lexical form is
+        // preserved verbatim and downstream code does not think it can
+        // decode WKB out of it.
+        let garbage = LiteralRef::new_typed_literal(
+            "not a geometry",
+            NamedNodeRef::new_unchecked(wkt_dt),
+        );
+        let encoded_garbage: EncodedTerm = garbage.into();
+        assert!(
+            !matches!(
+                encoded_garbage,
+                EncodedTerm::SmallWktLiteral(_) | EncodedTerm::BigWktLiteral { .. },
+            ),
+            "malformed WKT must not enter a geometry variant: got {encoded_garbage:?}",
+        );
+    }
+
+    /// `EncodedTerm::as_geometry` on an inline `wktLiteral` must parse
+    /// the stored WKB back into the same `geo::Geometry` shape that
+    /// the WKT crate would produce from the original lexical form.
+    #[cfg(feature = "geosparql")]
+    #[test]
+    fn as_geometry_matches_original_wkt() {
+        use crate::model::LiteralRef;
+        use geo::Geometry;
+        use wkt::TryFromWkt;
+
+        let wkt_dt = "http://www.opengis.net/ont/geosparql#wktLiteral";
+        let lexical = "POINT(10 20)";
+
+        let encoded: EncodedTerm =
+            LiteralRef::new_typed_literal(lexical, NamedNodeRef::new_unchecked(wkt_dt)).into();
+        let from_encoded = encoded
+            .as_geometry()
+            .expect("inline wktLiteral should decode via the fast accessor");
+        let from_wkt =
+            Geometry::<f64>::try_from_wkt_str(lexical).expect("lexical parses with the wkt crate");
+
+        assert_eq!(
+            from_encoded, from_wkt,
+            "the fast accessor must return the same geometry as a fresh WKT parse",
+        );
+
+        // Non-geometry variants opt out cleanly.
+        let plain: EncodedTerm = LiteralRef::new_simple_literal("not a geometry").into();
+        assert!(plain.as_geometry().is_none());
+        assert!(plain.wkb_bytes().is_none());
     }
 }

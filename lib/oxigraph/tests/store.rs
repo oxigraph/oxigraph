@@ -659,3 +659,90 @@ impl Drop for DirSaver {
         }
     }
 }
+
+/// WKB-encoded `wktLiteral` values must survive a full `Store` round
+/// trip: inserted as WKT, the storage layer parses them once and keeps
+/// WKB bytes, and reads rehydrate the canonical lexical form together
+/// with the `geo:wktLiteral` datatype stamp.
+///
+/// This test covers the public `Store` surface only. Verifying that
+/// the inline vs generic path split actually fires at the right
+/// inline-capacity boundary needs crate-internal access to
+/// `EncodedTerm`, so it lives as a unit test next to the encoder.
+#[cfg(feature = "geosparql")]
+#[test]
+fn test_wkt_literal_store_roundtrip() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    let wkt_datatype =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
+    let subject = NamedNodeRef::new_unchecked("http://example.org/feature/1");
+    let predicate = NamedNodeRef::new_unchecked("http://example.org/hasGeometry");
+
+    let point_lit = LiteralRef::new_typed_literal("POINT(10 20)", wkt_datatype);
+    // Long enough WKT that its WKB blows past SmallBytes::<32>::CAPACITY
+    // (31 bytes), so the insert path has to spill into the generic
+    // typed-literal encoding rather than the inline variant.
+    let linestring_lit = LiteralRef::new_typed_literal(
+        "LINESTRING(0 0, 10 10, 20 20, 30 30, 40 40, 50 50, 60 60, 70 70, 80 80, 90 90)",
+        wkt_datatype,
+    );
+    let polygon_lit = LiteralRef::new_typed_literal(
+        "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))",
+        wkt_datatype,
+    );
+
+    let point_quad =
+        QuadRef::new(subject, predicate, point_lit, GraphNameRef::DefaultGraph);
+    let linestring_quad =
+        QuadRef::new(subject, predicate, linestring_lit, GraphNameRef::DefaultGraph);
+    let polygon_quad =
+        QuadRef::new(subject, predicate, polygon_lit, GraphNameRef::DefaultGraph);
+
+    store.insert(point_quad)?;
+    store.insert(linestring_quad)?;
+    store.insert(polygon_quad)?;
+
+    // contains() encodes its argument through the same
+    // `From<LiteralRef>` path as insert(), so even the SmallWktLiteral
+    // bytes should be byte-stable between writes and lookups.
+    assert!(store.contains(point_quad)?);
+    assert!(store.contains(linestring_quad)?);
+    assert!(store.contains(polygon_quad)?);
+
+    let mut saw_point = false;
+    let mut saw_linestring = false;
+    let mut saw_polygon = false;
+    for quad in store.iter() {
+        let quad = quad?;
+        let Term::Literal(literal) = &quad.object else {
+            panic!("wktLiteral object should decode to a literal: {quad:?}");
+        };
+        assert_eq!(
+            literal.datatype(),
+            wkt_datatype,
+            "datatype must be stamped back as geo:wktLiteral",
+        );
+        let upper = literal.value().to_uppercase();
+        if upper.contains("POINT") {
+            saw_point = true;
+            // Canonical WKB-roundtrip form still mentions the original
+            // coordinates somewhere in the lexical output.
+            assert!(upper.contains("10") && upper.contains("20"));
+        } else if upper.contains("LINESTRING") {
+            saw_linestring = true;
+            // The big path stores lexical form verbatim in the string
+            // store, so the original coordinates must survive intact.
+            assert!(upper.contains("90 90"));
+        } else if upper.contains("POLYGON") {
+            saw_polygon = true;
+        } else {
+            panic!("unexpected wktLiteral value: {}", literal.value());
+        }
+    }
+    assert!(saw_point, "POINT quad should be readable back");
+    assert!(saw_linestring, "LINESTRING quad should be readable back");
+    assert!(saw_polygon, "POLYGON quad should be readable back");
+
+    store.validate()?;
+    Ok(())
+}

@@ -51,6 +51,7 @@ dissimilar = "1"
 dashmap = ">=5.4, <7.0"
 flate2 = "1.0"
 geo = ">=0.28, <0.32"                      # TODO: upgrade when the dependency on old getrandom will be dropped
+geo-traits = ">=0.2, <0.4"                 # Needed for the ToGeoGeometry bridge used by the WKB decoder
 geojson = ">=0.24,<2"
 getrandom = "0.3.4"
 hex = "0.4"

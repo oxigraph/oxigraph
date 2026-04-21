@@ -16,8 +16,10 @@
 //! matches the CRS84 assumption the `spargeo` crate already makes.
 
 use geo::Geometry;
+use geo_traits::to_geo::ToGeoGeometry;
+use wkb::Endianness;
 use wkb::reader::read_wkb;
-use wkb::writer::{write_geometry, WriteOptions};
+use wkb::writer::write_geometry;
 use wkt::{ToWkt, TryFromWkt};
 
 /// Parse a WKT lexical value and return the equivalent WKB bytes.
@@ -28,7 +30,7 @@ use wkt::{ToWkt, TryFromWkt};
 pub(crate) fn encode_wkt_value(value: &str) -> Option<Vec<u8>> {
     let geom: Geometry<f64> = Geometry::try_from_wkt_str(value).ok()?;
     let mut buf = Vec::with_capacity(32);
-    write_geometry(&mut buf, &WriteOptions::default(), &geom).ok()?;
+    write_geometry(&mut buf, &geom, Endianness::LittleEndian).ok()?;
     Some(buf)
 }
 
@@ -36,9 +38,12 @@ pub(crate) fn encode_wkt_value(value: &str) -> Option<Vec<u8>> {
 ///
 /// This is the fast accessor for callers that want the parsed geometry
 /// directly without going through the WKT lexer. Returns `None` for
-/// corrupt buffers.
+/// corrupt buffers. The `wkb` 0.8 reader hands back an opaque
+/// `impl GeometryTrait<T = f64>`, so we materialise it into a concrete
+/// `geo::Geometry<f64>` via the `geo_traits::to_geo` bridge.
 pub(crate) fn decode_wkb_to_geometry(bytes: &[u8]) -> Option<Geometry<f64>> {
-    read_wkb::<Geometry<f64>>(bytes).ok()
+    let trait_obj = read_wkb(bytes).ok()?;
+    Some(trait_obj.to_geometry())
 }
 
 /// Canonicalise WKB bytes back to a lexical WKT string.

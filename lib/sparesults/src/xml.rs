@@ -13,7 +13,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
-#[cfg(feature = "async-tokio")]
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite, BufReader as AsyncBufReader};
@@ -933,7 +932,7 @@ impl XmlInnerSolutionsParser {
 }
 
 fn build_literal(
-    value: impl Into<String>,
+    value: impl Into<Arc<str>>,
     lang: Option<String>,
     #[cfg(feature = "sparql-12")] direction: Option<String>,
     datatype: Option<NamedNode>,

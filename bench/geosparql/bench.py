@@ -16,6 +16,11 @@ Engines under test:
   gathers candidates before ``geo::Relate`` refines the result, so
   query time should stay near-constant in ``points`` for a fixed
   polygon set.
+* ``wktstore`` (native Rust): loads the fixture into an oxigraph store
+  built with the ``geosparql`` Cargo feature and pulls the point
+  geometries back through ``Store::object_geometries_for_pattern``,
+  which skips the WKT lexer for inline WKB literals. Measures the
+  storage-side amortisation that oxigraph issue #1560 proposes.
 * ``shapely`` (Python): the de facto Python geometry reference. Parses
   WKT once via ``shapely.wkt.loads``, then iterates
   ``polygon.contains(point)`` in a tight loop.
@@ -274,6 +279,7 @@ def plot(summary: dict, path: Path) -> None:
         "spargeo": "#1f77b4",
         "geo": "#2ca02c",
         "index": "#9467bd",
+        "wktstore": "#ff7f0e",
         "shapely": "#d62728",
     }
     for engine, rows in summary.items():
@@ -339,18 +345,18 @@ def main() -> None:
         default=None,
         help=(
             "restrict to a subset of engines from "
-            "{spargeo, geo, index, shapely}"
+            "{spargeo, geo, index, wktstore, shapely}"
         ),
     )
     args = parser.parse_args()
 
-    all_engines = ["spargeo", "geo", "index", "shapely"]
+    all_engines = ["spargeo", "geo", "index", "wktstore", "shapely"]
     selected = args.only if args.only is not None else all_engines
     for name in selected:
         if name not in all_engines:
             parser.error(f"unknown engine '{name}'; expected one of {all_engines}")
 
-    native_engines = {"spargeo", "geo", "index"}
+    native_engines = {"spargeo", "geo", "index", "wktstore"}
     if any(name in native_engines for name in selected):
         if not args.native_bin.exists():
             parser.error(

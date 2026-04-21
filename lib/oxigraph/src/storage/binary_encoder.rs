@@ -38,6 +38,16 @@ const TYPE_BIG_TYPED_LITERAL: u8 = 25;
 /// builds that have the feature off.
 #[cfg(feature = "geosparql")]
 const TYPE_SMALL_WKT_LITERAL: u8 = 45;
+/// Side-store counterpart to [`TYPE_SMALL_WKT_LITERAL`]. Holds a
+/// single `StrHash` pointing at the WKT lexical in the string store,
+/// used when the WKB payload exceeds the 31-byte inline cap (polygons,
+/// linestrings, multi-geometries). A follow-up task will pair the same
+/// hash with a WKB side column family; keeping the tag distinct from
+/// [`TYPE_BIG_TYPED_LITERAL`] means on-disk layout already earmarks
+/// the slot, so stores written today stay readable after that CF
+/// lands without a migration.
+#[cfg(feature = "geosparql")]
+const TYPE_BIG_WKT_LITERAL: u8 = 46;
 const TYPE_BOOLEAN_LITERAL_TRUE: u8 = 28;
 const TYPE_BOOLEAN_LITERAL_FALSE: u8 = 29;
 const TYPE_FLOAT_LITERAL: u8 = 30;
@@ -431,6 +441,17 @@ impl<R: Read> TermReader for R {
                         .map_err(CorruptionError::new)?,
                 ))
             }
+            #[cfg(feature = "geosparql")]
+            TYPE_BIG_WKT_LITERAL => {
+                // Single 16-byte StrHash, same shape as BigStringLiteral.
+                // The datatype is implicit in the tag so nothing else has
+                // to go on the wire here.
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(EncodedTerm::BigWktLiteral {
+                    value_id: StrHash::from_be_bytes(buffer),
+                })
+            }
             TYPE_SMALL_STRING_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
@@ -762,6 +783,11 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.push(TYPE_SMALL_WKT_LITERAL);
             sink.extend_from_slice(&bytes.to_be_bytes());
         }
+        #[cfg(feature = "geosparql")]
+        EncodedTerm::BigWktLiteral { value_id } => {
+            sink.push(TYPE_BIG_WKT_LITERAL);
+            sink.extend_from_slice(&value_id.to_be_bytes());
+        }
         EncodedTerm::BooleanLiteral(value) => sink.push(if bool::from(*value) {
             TYPE_BOOLEAN_LITERAL_TRUE
         } else {
@@ -1042,5 +1068,55 @@ mod tests {
         };
         assert_eq!(literal.datatype(), wkt_datatype.as_ref());
         assert!(literal.value().to_uppercase().contains("POINT"));
+    }
+
+    /// Round-trip a wktLiteral whose WKB overflows the inline cap, so
+    /// the encoder must pick `BigWktLiteral` instead of the inline
+    /// variant. Exercises every side of the new binary tag: the
+    /// variant selection in `From<LiteralRef>`, the string-store
+    /// insertion in `insert_term`, the write arm, the read arm, and
+    /// the decoder's reconstruction of the typed literal. The input
+    /// lexical is preserved verbatim because `BigWktLiteral` stores
+    /// the WKT string rather than re-serialising WKB through the
+    /// codec, which lets us compare the decoded term to the input
+    /// directly.
+    #[cfg(feature = "geosparql")]
+    #[test]
+    fn big_wkt_literal_binary_roundtrip() {
+        use crate::model::*;
+
+        let store = MemoryStrStore::default();
+        let wkt_datatype =
+            NamedNode::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
+        // Five-vertex LINESTRING: WKB is 9 + 5*16 = 89 bytes, well
+        // past the 31-byte inline cap.
+        let lexical = "LINESTRING(0 0, 10 10, 20 20, 30 30, 40 40)";
+        let term: Term = Literal::new_typed_literal(lexical, wkt_datatype.clone()).into();
+
+        let encoded: EncodedTerm = term.as_ref().into();
+        assert!(
+            matches!(encoded, EncodedTerm::BigWktLiteral { .. }),
+            "expected oversized LINESTRING to take the BigWktLiteral path: got {encoded:?}",
+        );
+        store.insert_term(term.as_ref(), &encoded);
+
+        let mut buffer = Vec::new();
+        write_term(&mut buffer, &encoded);
+        assert!(
+            buffer.len() <= WRITTEN_TERM_MAX_SIZE,
+            "encoded BigWktLiteral must respect WRITTEN_TERM_MAX_SIZE",
+        );
+        // Tag + 16-byte StrHash, same shape as BigStringLiteral.
+        assert_eq!(buffer.len(), 1 + 16);
+
+        let read_back = buffer.as_slice().read_term().unwrap();
+        assert_eq!(encoded, read_back);
+
+        let decoded = store.decode_term(&encoded).unwrap();
+        let Term::Literal(literal) = decoded else {
+            panic!("decoded wktLiteral should be a literal");
+        };
+        assert_eq!(literal.datatype(), wkt_datatype.as_ref());
+        assert_eq!(literal.value(), lexical);
     }
 }

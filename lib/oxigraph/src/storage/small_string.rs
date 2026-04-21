@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::str::{FromStr, Utf8Error};
+use std::sync::Arc;
 use std::{fmt, str};
 
 /// A small inline string
@@ -126,6 +127,13 @@ impl Hash for SmallString {
 }
 
 impl From<SmallString> for String {
+    #[inline]
+    fn from(value: SmallString) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<SmallString> for Arc<str> {
     #[inline]
     fn from(value: SmallString) -> Self {
         value.as_str().into()

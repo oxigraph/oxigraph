@@ -18,6 +18,14 @@
 //!   polygon. Exercises the ancestor walk plus Hilbert range scan path
 //!   that gathers candidates before `geo::Relate` runs, so query_ms
 //!   should stay near-constant in `points` for a fixed polygon set.
+//! * `wktstore`: loads the fixture into an oxigraph store built with
+//!   the `geosparql` feature so `wktLiteral` values are parsed once
+//!   into WKB at insert time. At query time the bench pulls the
+//!   point geometries back via `Store::object_geometries_for_pattern`,
+//!   which skips the WKT lexer for inline WKB literals. This isolates
+//!   the storage-side cost amortisation that oxigraph issue #1560
+//!   proposes: identical geometry loop to `geo`, but the parse tax is
+//!   paid in `parse_ms` once rather than on every `query_ms` call.
 //!
 //! Workload: for each polygon in the fixture, test every point in the
 //! fixture. Total ops = num_polygons * num_points. The engine is timed
@@ -45,6 +53,9 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use geo::{Geometry, Relate};
+use oxigraph::io::RdfFormat;
+use oxigraph::model::NamedNodeRef as OxigraphNamedNodeRef;
+use oxigraph::store::Store;
 use oxrdf::{Literal, NamedNodeRef, Term};
 use oxttl::TurtleParser;
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
@@ -59,7 +70,7 @@ const WKT_LITERAL: NamedNodeRef<'static> = NamedNodeRef::new_unchecked(WKT_LITER
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: spargeo_bench <spargeo|geo|index> <path-to-turtle>");
+        eprintln!("usage: spargeo_bench <spargeo|geo|index|wktstore> <path-to-turtle>");
         return ExitCode::from(2);
     }
     let engine = args[1].as_str();
@@ -69,8 +80,9 @@ fn main() -> ExitCode {
         "spargeo" => run_spargeo(path),
         "geo" => run_geo(path),
         "index" => run_index(path),
+        "wktstore" => run_wktstore(path),
         other => {
-            eprintln!("unknown engine '{other}'; expected spargeo, geo or index");
+            eprintln!("unknown engine '{other}'; expected spargeo, geo, index or wktstore");
             return ExitCode::from(2);
         }
     };
@@ -250,6 +262,67 @@ fn run_index(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
 
     Ok(Run {
         engine: "index",
+        parse_ms,
+        query_ms,
+        points: point_geoms.len(),
+        polygons: polygon_geoms.len(),
+        matches,
+    })
+}
+
+/// Bench engine that uses the oxigraph store as the geometry source.
+///
+/// The fixture is loaded through [`Store::load_from_reader`] so
+/// `wktLiteral` objects go through the WKB encode path on insert.
+/// At query time point geometries are pulled back via
+/// [`Store::object_geometries_for_pattern`], which returns parsed
+/// `geo::Geometry<f64>` without re-running the WKT lexer for inline
+/// literals. Polygons still come from the raw turtle file because the
+/// `BigWktLiteral` side-CF path is not wired yet, so large geometries
+/// take the generic typed-literal route which does not expose the
+/// geometry directly.
+fn run_wktstore(path: &str) -> Result<Run, Box<dyn std::error::Error>> {
+    let parse_start = Instant::now();
+
+    // Load the fixture into an in-memory store. The geosparql feature
+    // drives the WKB-encoded path for every inline-sized wktLiteral.
+    let store = Store::new()?;
+    let file = File::open(Path::new(path))?;
+    store.load_from_reader(RdfFormat::Turtle, BufReader::new(file))?;
+
+    // Pull the point geometries out of the store via the fast
+    // accessor. This is the path the bench is meant to measure.
+    let as_wkt = OxigraphNamedNodeRef::new_unchecked(AS_WKT_IRI);
+    let point_geoms: Vec<Geometry> = store
+        .object_geometries_for_pattern(None, Some(as_wkt), None)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Polygons are not covered by the inline path (their WKB
+    // overflows SmallBytes::<32>::CAPACITY) and the BigWktLiteral
+    // variant that now holds them only keeps the WKT lexical in
+    // id2str, not the raw WKB. Until the side-CF work for polygon
+    // WKB lands we still gather polygons from the source file and
+    // parse once. The matching amortisation is tracked in task #71.
+    let (_raw_points, polygons) = extract_wkts(path)?;
+    let polygon_geoms: Vec<Geometry> = polygons
+        .iter()
+        .map(|s| Geometry::try_from_wkt_str(s).map_err(|e| format!("parse polygon: {e}")))
+        .collect::<Result<_, _>>()?;
+    let parse_ms = ms(parse_start.elapsed());
+
+    let query_start = Instant::now();
+    let mut matches = 0usize;
+    for polygon in &polygon_geoms {
+        for point in &point_geoms {
+            if point.relate(polygon).is_within() {
+                matches += 1;
+            }
+        }
+    }
+    let query_ms = ms(query_start.elapsed());
+
+    Ok(Run {
+        engine: "wktstore",
         parse_ms,
         query_ms,
         points: point_geoms.len(),
