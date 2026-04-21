@@ -65,7 +65,7 @@ impl GeoBridge {
         for (feature, geom_subject) in pairs {
             let wkt_object = graph
                 .object_for_subject_predicate(geom_subject.as_ref(), vocab::AS_WKT)
-                .map(oxrdf::TermRef::into_owned);
+                .map(TermRef::into_owned);
             let Some(wkt_object) = wkt_object else {
                 continue;
             };

@@ -148,6 +148,10 @@ The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`
 
 The `bridge` cargo feature enables the `spargeo::bridge::GeoBridge` type. Given an `oxrdf::Graph` that carries `geo:hasGeometry` / `geo:asWKT` chains, it materialises the Simple Features topology triples between every feature pair whose geometries satisfy the relation. Symmetric predicates are emitted once, asymmetric pairs (`geo:sfWithin` and `geo:sfContains`) are emitted in both directions. The accompanying ontology stub at `data/geosparql.ttl` declares the GeoSPARQL 1.1 axioms that a downstream reasoner needs to close the graph.
 
+### Spatial index feature (optional)
+
+The `spatial_index` cargo feature enables the `spargeo::index::SpatialIndex` type. Given an `oxrdf::Graph` that carries `geo:hasGeometry` / `geo:asWKT` chains, the index covers every feature's bounding rectangle with an S2 `CellUnion` and keeps a sorted `CellID -> FeatureId` map. `query_within(&Geometry)` and `query_intersects(&Geometry)` answer topology queries by covering the query geometry, gathering candidates through ancestor lookups plus descendant range scans, and refining with `geo::Relate`. The candidate set scales with the covered cell count rather than with the number of indexed features, which is what issue #1560 is asking for on the storage side. This is the in-memory validation step; the RocksDB column family version is tracked separately and belongs upstream.
+
 ### Conformance class summary
 
 | Conformance class | Status |

@@ -10,6 +10,8 @@ mod units;
 pub mod vocab;
 #[cfg(feature = "bridge")]
 pub mod bridge;
+#[cfg(feature = "spatial_index")]
+pub mod index;
 
 use crate::parse::{extract_argument, result_to_wkt_literal, CRS84_URI};
 use crate::units::{extract_units_iri, units_to_factor, UnitKind};

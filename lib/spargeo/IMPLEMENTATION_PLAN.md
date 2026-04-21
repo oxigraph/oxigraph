@@ -79,3 +79,12 @@ Bridge work (after Phase 1 completes)
 - [x] Add `src/vocab.rs` with GeoSPARQL IRI constants and a GeoSPARQL 1.1 ontology stub at `data/geosparql.ttl` declaring `geo:sfWithin` as transitive, `geo:sfContains` as inverseOf `geo:sfWithin`, `geo:sfEquals`/`geo:sfOverlaps`/`geo:sfTouches`/`geo:sfCrosses` as symmetric.
 - [x] Add `src/bridge.rs` with a `GeoBridge` struct exposing `materialize_relations(graph: &mut oxrdf::Graph)`. Walks `geo:hasGeometry` -> `geo:asWKT` chains, extracts geometries via the shared `parse.rs` helpers, runs pairwise `geo::Relate` between each pair of features, and emits Simple Features topology triples into the graph.
 - [x] Gate the bridge behind a `bridge` feature in `Cargo.toml` so minimal builds stay pure functions only.
+
+Spatial index (in-memory, validates cell handling and API shape)
+----------------------------------------------------------------
+
+- [x] Add `s2 = "0.0.13"` to workspace dependencies and an optional `spatial_index = ["dep:s2"]` feature to `lib/spargeo/Cargo.toml`.
+- [x] Add `src/index.rs` with a `SpatialIndex` struct. `from_graph(&Graph)` walks `geo:hasGeometry` -> `geo:asWKT` chains, covers each feature's bounding rect with an S2 `CellUnion` via `RegionCoverer`, and stores a sorted `BTreeMap<CellID, Vec<u32>>`. `query_within(&Geometry)` and `query_intersects(&Geometry)` gather candidates through ancestor lookups plus `range_min..=range_max` descendant scans, then refine with `geo::Relate`.
+- [x] Add `tests/index.rs` integration tests covering within, intersects, disjoint skip, empty graph, and point insert.
+- [ ] (hold) RocksDB column family version. Belongs in oxigraph itself under the `geosparql` feature proposed in issue #1560, not in this crate.
+- [ ] (hold) Query rewrite pass in `spareval` that turns `?f geo:sfWithin ?g` property form into a tuple generator over this index. Depends on the WKB literal storage decision in issue #1560.
