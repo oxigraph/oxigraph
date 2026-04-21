@@ -16,7 +16,7 @@ Phase 1 pure functions
 
 - [x] Add `geof:distance` using `geo::HaversineDistance` for CRS84 input. Three args: two geometry literals plus a length units IRI.
 - [x] Add `geof:area` using `geo::GeodesicArea::geodesic_area_unsigned`. Two args: geometry plus area units IRI.
-- [ ] Add `geof:length` using `geo::HaversineLength` (fallback to `geo::GeodesicLength` where relevant). Two args: line geometry plus length units IRI.
+- [x] Add `geof:length` using `geo::HaversineLength` (fallback to `geo::GeodesicLength` where relevant). Two args: line geometry plus length units IRI.
 - [ ] Add `geof:envelope` using `geo::BoundingRect`. Returns bounding polygon as CRS84 wktLiteral.
 - [ ] Add `geof:centroid` using `geo::Centroid`. Returns point wktLiteral.
 - [ ] Add `geof:convexHull` using `geo::ConvexHull`. Returns polygon wktLiteral.

@@ -9,13 +9,14 @@ mod units;
 
 use crate::parse::extract_argument;
 use crate::units::{extract_units_iri, units_to_factor, UnitKind};
-use geo::{Distance, GeodesicArea, Geometry, Haversine, Point, Relate};
+use geo::{Distance, GeodesicArea, Geometry, Haversine, Length, Point, Relate};
 use oxrdf::{Literal, NamedNodeRef, Term};
 
 /// GeoSPARQL functions in name and implementation pairs
-pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 10] = [
+pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 11] = [
     (geosparql_functions::AREA, geof_area),
     (geosparql_functions::DISTANCE, geof_distance),
+    (geosparql_functions::LENGTH, geof_length),
     (geosparql_functions::SF_CONTAINS, geof_sf_contains),
     (geosparql_functions::SF_CROSSES, geof_sf_crosses),
     (geosparql_functions::SF_DISJOINT, geof_sf_disjoint),
@@ -69,6 +70,29 @@ fn as_point(geom: Geometry) -> Option<Point> {
         Geometry::Point(p) => Some(p),
         _ => None,
     }
+}
+
+/// `geof:length`. Computes the haversine length of a linear geometry under
+/// the CRS84 reference system and returns it as an `xsd:double` expressed in
+/// the target units of measure.
+///
+/// Two arguments are expected: a geometry literal followed by an OGC units
+/// of measure IRI for a length unit. Line, LineString and MultiLineString
+/// inputs produce their geodesic length. Geometries without linear extent
+/// (points, polygons, collections of those) return zero, consistent with
+/// the GeoSPARQL accessor semantics that reserve perimeter for polygons.
+fn geof_length(args: &[Term]) -> Option<Term> {
+    let args: &[Term; 2] = args.try_into().ok()?;
+    let geom = extract_argument(&args[0])?;
+    let units_iri = extract_units_iri(&args[1])?;
+    let factor = units_to_factor(units_iri, UnitKind::Length)?;
+    let metres = match geom {
+        Geometry::Line(l) => Haversine.length(&l),
+        Geometry::LineString(ls) => Haversine.length(&ls),
+        Geometry::MultiLineString(mls) => Haversine.length(&mls),
+        _ => 0.0,
+    };
+    Some(Literal::from(metres / factor).into())
 }
 
 fn geof_sf_equals(args: &[Term]) -> Option<Term> {
@@ -131,6 +155,8 @@ mod geosparql_functions {
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/area");
     pub const DISTANCE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/distance");
+    pub const LENGTH: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/length");
     pub const SF_CONTAINS: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/sfContains");
     pub const SF_CROSSES: NamedNodeRef<'_> =
@@ -306,5 +332,82 @@ mod tests {
     fn area_rejects_wrong_arity() {
         let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
         assert!(geof_area(&[square]).is_none());
+    }
+
+    #[test]
+    fn length_of_london_to_paris_line() {
+        // Single segment from central London to central Paris.
+        let line = wkt_literal("LINESTRING(-0.1278 51.5074, 2.3522 48.8566)");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let value = parse_double(&geof_length(&[line, metres]).expect("computes"));
+        // Haversine length is about 343.5 km. Allow 1 km tolerance.
+        assert!(
+            (value - 343_557.0).abs() < 1_000.0,
+            "got {value}, expected near 343557 metres"
+        );
+    }
+
+    #[test]
+    fn length_is_unit_scaled() {
+        let line = wkt_literal("LINESTRING(0 0, 1 0)");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let kilometres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/kilometre");
+        let in_metres =
+            parse_double(&geof_length(&[line.clone(), metres]).expect("metres"));
+        let in_kilometres =
+            parse_double(&geof_length(&[line, kilometres]).expect("kilometres"));
+        assert!((in_metres / 1000.0 - in_kilometres).abs() < 1e-6);
+    }
+
+    #[test]
+    fn length_of_multi_line_string_sums_parts() {
+        let one = wkt_literal("LINESTRING(0 0, 1 0)");
+        let many = wkt_literal("MULTILINESTRING((0 0, 1 0), (10 10, 10 11))");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let single =
+            parse_double(&geof_length(&[one, metres.clone()]).expect("single"));
+        let combined =
+            parse_double(&geof_length(&[many, metres]).expect("combined"));
+        // Combined length must exceed either single segment.
+        assert!(combined > single);
+        assert!(combined > 0.0);
+    }
+
+    #[test]
+    fn length_of_point_is_zero() {
+        let point = wkt_literal("POINT(10 20)");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let value = parse_double(&geof_length(&[point, metres]).expect("computes"));
+        assert_eq!(value, 0.0);
+    }
+
+    #[test]
+    fn length_of_polygon_is_zero() {
+        let poly = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let value = parse_double(&geof_length(&[poly, metres]).expect("computes"));
+        assert_eq!(value, 0.0);
+    }
+
+    #[test]
+    fn length_rejects_area_units() {
+        let line = wkt_literal("LINESTRING(0 0, 1 0)");
+        let square_metres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
+        );
+        assert!(geof_length(&[line, square_metres]).is_none());
+    }
+
+    #[test]
+    fn length_rejects_unknown_units() {
+        let line = wkt_literal("LINESTRING(0 0, 1 0)");
+        let bad = units_named_node("http://example.org/uom/furlong");
+        assert!(geof_length(&[line, bad]).is_none());
+    }
+
+    #[test]
+    fn length_rejects_wrong_arity() {
+        let line = wkt_literal("LINESTRING(0 0, 1 0)");
+        assert!(geof_length(&[line]).is_none());
     }
 }

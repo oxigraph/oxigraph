@@ -26,8 +26,10 @@ Oxigraph implements the following specifications:
 - [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) and [JSON-LD](https://www.w3.org/TR/json-ld/) RDF serialization formats for both data ingestion and retrieval.
 - [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql-results-json/) and [SPARQL Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql-results-csv-tsv/).
 - [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/).
+- [OWL 2 RL profile](https://www.w3.org/TR/owl2-profiles/#OWL_2_RL) forward chaining and [SHACL Core](https://www.w3.org/TR/shacl/) validation via the separate [`oxreason`](./lib/oxreason) crate (both partial, see its README for per rule coverage).
+- [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.html) topology functions via the separate [`spargeo`](./lib/spargeo) crate (partial, CRS84 only, see its README for per function coverage).
 
-Most implementations are nearly fully conformant with the latest recommendations (1.1 for RDF, SPARQL and JSON-LD) with preliminary support for 1.2 RDF and SPARQL drafts.
+Most implementations are nearly fully conformant with the latest recommendations (1.1 for RDF, SPARQL and JSON-LD) with preliminary support for 1.2 RDF and SPARQL drafts. OWL 2 RL, SHACL, and GeoSPARQL coverage is currently partial; see the respective crate READMEs.
 
 It is split into multiple parts:
 

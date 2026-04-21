@@ -94,7 +94,7 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 | Function | Status | Notes |
 |----------|--------|-------|
 | `geof:area` | partial | geodesic unsigned area, CRS84 only, square_metre and square_kilometre units |
-| `geof:length` | missing | takes units argument |
+| `geof:length` | partial | haversine length, CRS84, linear geometries only (Line, LineString, MultiLineString), returns zero for other types |
 | `geof:perimeter` | missing | takes units argument |
 | `geof:centroid` | missing | returns a point geometry |
 
