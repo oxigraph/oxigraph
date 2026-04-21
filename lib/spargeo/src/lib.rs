@@ -9,11 +9,12 @@ mod units;
 
 use crate::parse::extract_argument;
 use crate::units::{extract_units_iri, units_to_factor, UnitKind};
-use geo::{Distance, Geometry, Haversine, Point, Relate};
+use geo::{Distance, GeodesicArea, Geometry, Haversine, Point, Relate};
 use oxrdf::{Literal, NamedNodeRef, Term};
 
 /// GeoSPARQL functions in name and implementation pairs
-pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 9] = [
+pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 10] = [
+    (geosparql_functions::AREA, geof_area),
     (geosparql_functions::DISTANCE, geof_distance),
     (geosparql_functions::SF_CONTAINS, geof_sf_contains),
     (geosparql_functions::SF_CROSSES, geof_sf_crosses),
@@ -24,6 +25,23 @@ pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) ->
     (geosparql_functions::SF_TOUCHES, geof_sf_touches),
     (geosparql_functions::SF_WITHIN, geof_sf_within),
 ];
+
+/// `geof:area`. Computes the geodesic unsigned area of a geometry under the
+/// CRS84 reference system and returns it as an `xsd:double` expressed in the
+/// target units of measure.
+///
+/// Two arguments are expected: a geometry literal followed by an OGC units of
+/// measure IRI for an area unit. Geometries with zero planar extent (points,
+/// lines, multi points, multi line strings) return zero. Unknown units or
+/// non-area unit IRIs return no binding.
+fn geof_area(args: &[Term]) -> Option<Term> {
+    let args: &[Term; 2] = args.try_into().ok()?;
+    let geom = extract_argument(&args[0])?;
+    let units_iri = extract_units_iri(&args[1])?;
+    let factor = units_to_factor(units_iri, UnitKind::Area)?;
+    let square_metres = geom.geodesic_area_unsigned();
+    Some(Literal::from(square_metres / factor).into())
+}
 
 /// `geof:distance`. Computes the haversine distance between two point
 /// geometries and returns it as an `xsd:double` expressed in the target
@@ -109,6 +127,8 @@ mod geosparql_functions {
     //! [GeoSpatial](https://opengeospatial.github.io/ogc-geosparql/) functions vocabulary.
     use oxrdf::NamedNodeRef;
 
+    pub const AREA: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/area");
     pub const DISTANCE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/distance");
     pub const SF_CONTAINS: NamedNodeRef<'_> =
@@ -207,5 +227,84 @@ mod tests {
         let a = wkt_literal("POINT(0 0)");
         let b = wkt_literal("POINT(1 0)");
         assert!(geof_distance(&[a, b]).is_none());
+    }
+
+    #[test]
+    fn area_of_one_degree_square_near_equator() {
+        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        let square_metres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
+        );
+        let value = parse_double(
+            &geof_area(&[square, square_metres]).expect("computes"),
+        );
+        // A one degree by one degree patch at the equator is about
+        // 12309 square kilometres according to geodesic calculation.
+        assert!(
+            (value - 1.2309e10).abs() < 1.0e8,
+            "got {value}, expected near 1.2309e10 square metres"
+        );
+    }
+
+    #[test]
+    fn area_is_unit_scaled() {
+        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        let square_metres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
+        );
+        let square_kilometres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_kilometre",
+        );
+        let in_m2 = parse_double(
+            &geof_area(&[square.clone(), square_metres]).expect("m2"),
+        );
+        let in_km2 = parse_double(
+            &geof_area(&[square, square_kilometres]).expect("km2"),
+        );
+        assert!((in_m2 / 1_000_000.0 - in_km2).abs() < 1e-3);
+    }
+
+    #[test]
+    fn area_of_point_is_zero() {
+        let point = wkt_literal("POINT(10 20)");
+        let square_metres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
+        );
+        let value = parse_double(
+            &geof_area(&[point, square_metres]).expect("computes"),
+        );
+        assert_eq!(value, 0.0);
+    }
+
+    #[test]
+    fn area_of_line_is_zero() {
+        let line = wkt_literal("LINESTRING(0 0, 1 1, 2 0)");
+        let square_metres = units_named_node(
+            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
+        );
+        let value = parse_double(
+            &geof_area(&[line, square_metres]).expect("computes"),
+        );
+        assert_eq!(value, 0.0);
+    }
+
+    #[test]
+    fn area_rejects_length_units() {
+        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        assert!(geof_area(&[square, metres]).is_none());
+    }
+
+    #[test]
+    fn area_rejects_unknown_units() {
+        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        let bad = units_named_node("http://example.org/uom/acre");
+        assert!(geof_area(&[square, bad]).is_none());
+    }
+
+    #[test]
+    fn area_rejects_wrong_arity() {
+        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+        assert!(geof_area(&[square]).is_none());
     }
 }
