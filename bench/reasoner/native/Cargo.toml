@@ -9,6 +9,10 @@ description = "Rust-only bench harness that times oxreason and reasonable on a T
 name = "reasoner_bench"
 path = "src/main.rs"
 
+[[bin]]
+name = "reasoner_diff"
+path = "src/bin/reasoner_diff.rs"
+
 [dependencies]
 oxrdf = { path = "../../../lib/oxrdf", features = ["oxsdatatypes"] }
 oxreason = { path = "../../../lib/oxreason" }

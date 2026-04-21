@@ -720,7 +720,7 @@ impl FlatGraph {
 
     /// Read-only IRI lookup over the embedded interner. Rule bodies that
     /// need a `TermId` for a known IRI go through this (for example to key
-    /// into `subjects_for_pred_obj_id`).
+    /// into `subjects_ids_for_pred_obj_id`).
     #[inline]
     pub(crate) fn lookup_named(&self, iri: &str) -> Option<TermId> {
         self.interner.lookup_named(iri)
@@ -902,27 +902,46 @@ impl FlatGraph {
             .map(move |&i| self.triples[i as usize].object.as_ref())
     }
 
-    /// View-style lookup used by `cax-sco` and `cax-eqc`: given already
-    /// interned `(predicate, object)` ids, return every subject in that
-    /// bucket. Zero hashing of IRI strings on the inner loop.
-    pub(crate) fn subjects_for_pred_obj_id(
-        &self,
-        p: TermId,
-        o: TermId,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'_>> + '_ {
-        let idxs: &[u32] = self
-            .by_pred_obj
-            .get(&(p, o))
-            .map_or(&[][..], Vec::as_slice);
-        idxs.iter()
-            .map(move |&i| self.triples[i as usize].subject.as_ref())
+    /// Read-only term lookup over a [`TermRef`]. Rule bodies that need to
+    /// resolve the interned id of an object they already hold (the object
+    /// of a delta triple, most often) go through this instead of the
+    /// mutable intern path. Zero allocation on named and blank objects,
+    /// one allocation on literals (the interner cannot key on a borrow
+    /// without the unstable `raw_entry_mut` API).
+    #[inline]
+    pub(crate) fn lookup_term_ref(&self, t: TermRef<'_>) -> Option<TermId> {
+        self.interner.lookup_term_ref(t)
     }
 
-    /// Keyed variant of [`subjects_for_pred_obj_id`]: yields each subject
-    /// together with its already-interned [`TermId`]. Rule bodies that need
-    /// the id to build the consequent's key for [`insert_keyed`] read both
-    /// out of the parallel `triple_ids` side-vec in one indexed read, with
-    /// no hash probe on the IRI string.
+    /// Given an interned predicate id, yield every indexed triple with
+    /// that predicate as a `(&(s_id, p_id, o_id), &Triple)` pair. Rule
+    /// bodies whose consequent needs both the component ids (for the
+    /// keyed shadow probe) and the owned triple content (for the
+    /// `Triple::new` clone) read everything from the parallel
+    /// `triple_ids` / `triples` side-vecs in one indexed read. Zero
+    /// hashing on the iteration path. Used by `prp-dom`, `prp-rng`, and
+    /// `prp-spo1` whose graph legs were previously
+    /// `triples_for_predicate(p)` + per-row `intern_triple` on commit.
+    pub(crate) fn rows_for_pred_id(
+        &self,
+        p: TermId,
+    ) -> impl Iterator<Item = (&(TermId, TermId, TermId), &Triple)> + '_ {
+        let idxs: &[u32] = self
+            .by_predicate
+            .get(&p)
+            .map_or(&[][..], Vec::as_slice);
+        idxs.iter().map(move |&i| {
+            let idx = i as usize;
+            (&self.triple_ids[idx], &self.triples[idx])
+        })
+    }
+
+    /// View-style lookup used by `cax-sco` and `cax-eqc`: given already
+    /// interned `(predicate, object)` ids, yield each subject together with
+    /// its already-interned [`TermId`]. Rule bodies that need the id to
+    /// build the consequent's key for [`insert_keyed`] read both out of the
+    /// parallel `triple_ids` side-vec in one indexed read, with no hash
+    /// probe on the IRI string.
     pub(crate) fn subjects_ids_for_pred_obj_id(
         &self,
         p: TermId,
@@ -1046,9 +1065,9 @@ where
 
         // RDFS compatible rules. Run in both profiles.
         round_firings = round_firings.saturating_add(prof.time("cax-sco", delta_size, || apply_cax_sco(graph, delta_ref, type_id, &mut pending_keyed)));
-        round_firings = round_firings.saturating_add(prof.time("prp-dom", delta_size, || apply_prp_dom(graph, delta_ref, &mut pending)));
-        round_firings = round_firings.saturating_add(prof.time("prp-rng", delta_size, || apply_prp_rng(graph, delta_ref, &mut pending)));
-        round_firings = round_firings.saturating_add(prof.time("prp-spo1", delta_size, || apply_prp_spo1(graph, delta_ref, &mut pending)));
+        round_firings = round_firings.saturating_add(prof.time("prp-dom", delta_size, || apply_prp_dom(graph, delta_ref, type_id, &mut pending_keyed)));
+        round_firings = round_firings.saturating_add(prof.time("prp-rng", delta_size, || apply_prp_rng(graph, delta_ref, type_id, &mut pending_keyed)));
+        round_firings = round_firings.saturating_add(prof.time("prp-spo1", delta_size, || apply_prp_spo1(graph, delta_ref, &mut pending_keyed)));
 
         // OWL rules. Skipped when running the Rdfs profile.
         if profile != ReasoningProfile::Rdfs {
@@ -1282,30 +1301,45 @@ fn apply_cax_sco(
     firings
 }
 
-fn apply_prp_dom(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_dom(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    type_id: TermId,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-dom: if p rdfs:domain c and x p y then x rdf:type c.
+    //
+    // The graph(p) leg goes through `FlatGraph::rows_for_pred_id`, which
+    // hands back each matching triple together with its interned
+    // `(s_id, p_id, o_id)` tuple. The consequent's key
+    // `(x_id, type_id, c_id)` is assembled from that tuple and the pair
+    // cache, and the triple is pushed onto `pending_keyed` so the commit
+    // loop bypasses `intern_triple`'s three Arc<str> hashes.
     //
     // Semi-naive:
     //   Branch 1: delta(domain) joined with graph(p).
     //   Branch 2: graph(domain) joined with delta(p).
     let mut firings: u64 = 0;
-    let pairs: Vec<(NamedNode, NamedNode)> = graph
+
+    // Cache each (p, c) pair together with the interned ids of both. The
+    // inner loop then feeds `rows_for_pred_id(p_id)` directly and pairs
+    // each row's `s_id` with `type_id` and `c_id` for the keyed push.
+    let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(rdfs::DOMAIN)
         .filter_map(|t| {
             let p = named_node_from_subject(t.subject)?;
+            let p_id = graph.lookup_named(p.as_str())?;
             let c = named_node_from_term(t.object)?;
-            Some((p, c))
+            let c_id = graph.lookup_named(c.as_str())?;
+            Some((p, p_id, c, c_id))
         })
         .collect();
 
     let Some(d) = delta else {
-        for (p, c) in &pairs {
-            let subjects: Vec<NamedOrBlankNode> = graph
-                .triples_for_predicate(p.as_ref())
-                .map(|t| t.subject.into_owned())
-                .collect();
-            for x in subjects {
-                pending.push(Triple::new(x, rdf::TYPE, c.clone()));
+        for (_, p_id, c, c_id) in &pairs {
+            for (ids, t) in graph.rows_for_pred_id(*p_id) {
+                let triple = Triple::new(t.subject.clone(), rdf::TYPE, c.clone());
+                pending_keyed.push((triple, (ids.0, type_id, *c_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1315,52 +1349,68 @@ fn apply_prp_dom(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     // Branch 1: delta(domain) × graph(p).
     for t in d.for_predicate(rdfs::DOMAIN) {
         let Some(p) = owned_subject_named(&t.subject) else { continue };
+        let Some(p_id) = graph.lookup_named(p.as_str()) else { continue };
         let Some(c) = owned_object_named(&t.object) else { continue };
-        let subjects: Vec<NamedOrBlankNode> = graph
-            .triples_for_predicate(p.as_ref())
-            .map(|t| t.subject.into_owned())
-            .collect();
-        for x in subjects {
-            pending.push(Triple::new(x, rdf::TYPE, c.clone()));
+        let Some(c_id) = graph.lookup_named(c.as_str()) else { continue };
+        for (ids, row) in graph.rows_for_pred_id(p_id) {
+            let triple = Triple::new(row.subject.clone(), rdf::TYPE, c.clone());
+            pending_keyed.push((triple, (ids.0, type_id, c_id)));
             firings = firings.saturating_add(1);
         }
     }
 
-    // Branch 2: graph(domain) × delta(p).
-    for (p, c) in &pairs {
+    // Branch 2: graph(domain) × delta(p). Delta iteration is still
+    // NamedNode-keyed because `DeltaIndex::by_predicate` is keyed by IRI,
+    // so each delta triple's subject id is resolved via
+    // `lookup_subject_ref`, one hash per triple.
+    for (p, _, c, c_id) in &pairs {
         for t in d.for_predicate(p.as_ref()) {
-            pending.push(Triple::new(t.subject.clone(), rdf::TYPE, c.clone()));
+            let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let triple = Triple::new(t.subject.clone(), rdf::TYPE, c.clone());
+            pending_keyed.push((triple, (x_id, type_id, *c_id)));
             firings = firings.saturating_add(1);
         }
     }
     firings
 }
 
-fn apply_prp_rng(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_rng(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    type_id: TermId,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-rng: if p rdfs:range c and x p y then y rdf:type c.
     // y must not be a literal (literals cannot be subjects of rdf:type).
+    //
+    // Graph leg goes through `rows_for_pred_id(p_id)`. Each row carries
+    // the object's interned id in `ids.2`; if the row's object is a
+    // resource (NamedNode or BlankNode) that id is the consequent's
+    // subject id and the push goes to `pending_keyed`. Literal objects
+    // are skipped because rdf:type cannot take a literal subject.
     //
     // Semi-naive:
     //   Branch 1: delta(range) × graph(p).
     //   Branch 2: graph(range) × delta(p).
     let mut firings: u64 = 0;
-    let pairs: Vec<(NamedNode, NamedNode)> = graph
+
+    let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(rdfs::RANGE)
         .filter_map(|t| {
             let p = named_node_from_subject(t.subject)?;
+            let p_id = graph.lookup_named(p.as_str())?;
             let c = named_node_from_term(t.object)?;
-            Some((p, c))
+            let c_id = graph.lookup_named(c.as_str())?;
+            Some((p, p_id, c, c_id))
         })
         .collect();
 
     let Some(d) = delta else {
-        for (p, c) in &pairs {
-            let objects: Vec<NamedOrBlankNode> = graph
-                .triples_for_predicate(p.as_ref())
-                .filter_map(|t| term_ref_to_named_or_blank(t.object))
-                .collect();
-            for y in objects {
-                pending.push(Triple::new(y, rdf::TYPE, c.clone()));
+        for (_, p_id, c, c_id) in &pairs {
+            for (ids, row) in graph.rows_for_pred_id(*p_id) {
+                let Some(y) = term_ref_to_named_or_blank(row.object.as_ref()) else { continue };
+                let triple = Triple::new(y, rdf::TYPE, c.clone());
+                pending_keyed.push((triple, (ids.2, type_id, *c_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1370,53 +1420,67 @@ fn apply_prp_rng(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     // Branch 1: delta(range) × graph(p).
     for t in d.for_predicate(rdfs::RANGE) {
         let Some(p) = owned_subject_named(&t.subject) else { continue };
+        let Some(p_id) = graph.lookup_named(p.as_str()) else { continue };
         let Some(c) = owned_object_named(&t.object) else { continue };
-        let objects: Vec<NamedOrBlankNode> = graph
-            .triples_for_predicate(p.as_ref())
-            .filter_map(|t| term_ref_to_named_or_blank(t.object))
-            .collect();
-        for y in objects {
-            pending.push(Triple::new(y, rdf::TYPE, c.clone()));
+        let Some(c_id) = graph.lookup_named(c.as_str()) else { continue };
+        for (ids, row) in graph.rows_for_pred_id(p_id) {
+            let Some(y) = term_ref_to_named_or_blank(row.object.as_ref()) else { continue };
+            let triple = Triple::new(y, rdf::TYPE, c.clone());
+            pending_keyed.push((triple, (ids.2, type_id, c_id)));
             firings = firings.saturating_add(1);
         }
     }
 
-    // Branch 2: graph(range) × delta(p).
-    for (p, c) in &pairs {
+    // Branch 2: graph(range) × delta(p). Each delta triple's object id
+    // is resolved via `lookup_term_ref`, one hash per triple. Literal
+    // objects are filtered out by the NamedOrBlankNode conversion.
+    for (p, _, c, c_id) in &pairs {
         for t in d.for_predicate(p.as_ref()) {
-            if let Some(y) = owned_object_named_or_blank(&t.object) {
-                pending.push(Triple::new(y, rdf::TYPE, c.clone()));
-                firings = firings.saturating_add(1);
-            }
+            let Some(y) = owned_object_named_or_blank(&t.object) else { continue };
+            let Some(y_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(y, rdf::TYPE, c.clone());
+            pending_keyed.push((triple, (y_id, type_id, *c_id)));
+            firings = firings.saturating_add(1);
         }
     }
     firings
 }
 
-fn apply_prp_spo1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_spo1(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-spo1: if p1 rdfs:subPropertyOf p2 and x p1 y then x p2 y.
+    //
+    // The graph(p1) leg goes through `rows_for_pred_id(p1_id)`, yielding
+    // each row's `(s_id, p1_id, o_id)` tuple alongside the owned triple.
+    // The consequent's key is `(s_id, p2_id, o_id)`: same subject and
+    // object ids, predicate id swapped for the super-property's. `p2_id`
+    // is resolved once per pair at cache build time, so the hot loop
+    // builds the key with zero hashing.
     //
     // Semi-naive:
     //   Branch 1: delta(subPropertyOf) × graph(p1).
     //   Branch 2: graph(subPropertyOf) × delta(p1).
     let mut firings: u64 = 0;
-    let pairs: Vec<(NamedNode, NamedNode)> = graph
+
+    let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(rdfs::SUB_PROPERTY_OF)
         .filter_map(|t| {
             let p1 = named_node_from_subject(t.subject)?;
+            let p1_id = graph.lookup_named(p1.as_str())?;
             let p2 = named_node_from_term(t.object)?;
-            Some((p1, p2))
+            let p2_id = graph.lookup_named(p2.as_str())?;
+            Some((p1, p1_id, p2, p2_id))
         })
         .collect();
 
     let Some(d) = delta else {
-        for (p1, p2) in &pairs {
-            let matched: Vec<(NamedOrBlankNode, Term)> = graph
-                .triples_for_predicate(p1.as_ref())
-                .map(|t| (t.subject.into_owned(), t.object.into_owned()))
-                .collect();
-            for (x, y) in matched {
-                pending.push(Triple::new(x, p2.clone(), y));
+        for (_, p1_id, p2, p2_id) in &pairs {
+            for (ids, row) in graph.rows_for_pred_id(*p1_id) {
+                let triple = Triple::new(row.subject.clone(), p2.clone(), row.object.clone());
+                pending_keyed.push((triple, (ids.0, *p2_id, ids.2)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1426,21 +1490,25 @@ fn apply_prp_spo1(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut V
     // Branch 1: delta(subPropertyOf) × graph(p1).
     for t in d.for_predicate(rdfs::SUB_PROPERTY_OF) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
+        let Some(p1_id) = graph.lookup_named(p1.as_str()) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
-        let matched: Vec<(NamedOrBlankNode, Term)> = graph
-            .triples_for_predicate(p1.as_ref())
-            .map(|t| (t.subject.into_owned(), t.object.into_owned()))
-            .collect();
-        for (x, y) in matched {
-            pending.push(Triple::new(x, p2.clone(), y));
+        let Some(p2_id) = graph.lookup_named(p2.as_str()) else { continue };
+        for (ids, row) in graph.rows_for_pred_id(p1_id) {
+            let triple = Triple::new(row.subject.clone(), p2.clone(), row.object.clone());
+            pending_keyed.push((triple, (ids.0, p2_id, ids.2)));
             firings = firings.saturating_add(1);
         }
     }
 
-    // Branch 2: graph(subPropertyOf) × delta(p1).
-    for (p1, p2) in &pairs {
+    // Branch 2: graph(subPropertyOf) × delta(p1). Each delta triple's
+    // subject and object ids are resolved via the interner, two hashes
+    // per triple. `p2_id` is already cached.
+    for (p1, _, p2, p2_id) in &pairs {
         for t in d.for_predicate(p1.as_ref()) {
-            pending.push(Triple::new(t.subject.clone(), p2.clone(), t.object.clone()));
+            let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let Some(y_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(t.subject.clone(), p2.clone(), t.object.clone());
+            pending_keyed.push((triple, (x_id, *p2_id, y_id)));
             firings = firings.saturating_add(1);
         }
     }
