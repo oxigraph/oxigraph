@@ -570,27 +570,33 @@ fn dir_size_bytes(root: &Path) -> Result<u64, Box<dyn std::error::Error>> {
     Ok(total)
 }
 
-/// Peak resident set size of the current process in MiB. Parses
-/// `/proc/self/status` VmHWM on Linux. Returns `None` on platforms
-/// without that interface or if the file cannot be read.
+/// Peak resident set size of the current process in MiB.
+///
+/// Calls `getrusage(RUSAGE_SELF)` on Unix and reads `ru_maxrss`. The
+/// POSIX unit for that field is KiB, but macOS diverges and reports
+/// bytes; we branch on `target_os` to convert. Returns `None` on
+/// non-Unix platforms or if the syscall fails.
+#[cfg(unix)]
 fn peak_rss_mb() -> Option<f64> {
-    #[cfg(target_os = "linux")]
-    {
-        let status = fs::read_to_string("/proc/self/status").ok()?;
-        for line in status.lines() {
-            if let Some(rest) = line.strip_prefix("VmHWM:") {
-                let kib: f64 = rest
-                    .split_whitespace()
-                    .next()?
-                    .parse()
-                    .ok()?;
-                return Some(kib / 1024.0);
-            }
-        }
-        None
+    let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
+    if ret != 0 {
+        return None;
     }
-    #[cfg(not(target_os = "linux"))]
+    let raw = usage.ru_maxrss as f64;
+    #[cfg(target_os = "macos")]
     {
-        None
+        // macOS reports ru_maxrss in bytes, not KiB.
+        Some(raw / (1024.0 * 1024.0))
     }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Linux and other Unix variants follow POSIX: KiB.
+        Some(raw / 1024.0)
+    }
+}
+
+#[cfg(not(unix))]
+fn peak_rss_mb() -> Option<f64> {
+    None
 }

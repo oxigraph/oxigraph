@@ -218,13 +218,16 @@ def plot(summary: dict, path: Path) -> None:
         xs = [row["entities"] for row in rows]
         color = PROFILE_COLORS.get(profile)
 
+        # Floor clamp each series so log-scale rendering does not
+        # choke on a non-positive value (e.g. reason_ms is 0 for the
+        # `none` profile, peak_rss_mb is 0 on non-Unix platforms).
         reason_values = [max(row["reason_ms_median"], 0.01) for row in rows]
         ax_reason.plot(xs, reason_values, marker="o", label=profile, color=color)
 
-        rss_values = [row["peak_rss_mb_median"] for row in rows]
+        rss_values = [max(row["peak_rss_mb_median"], 0.01) for row in rows]
         ax_rss.plot(xs, rss_values, marker="o", label=profile, color=color)
 
-        disk_values = [row["on_disk_mb_after_median"] for row in rows]
+        disk_values = [max(row["on_disk_mb_after_median"], 0.01) for row in rows]
         ax_disk.plot(xs, disk_values, marker="o", label=profile, color=color)
 
         added_values = [max(row["added"], 1) for row in rows]
