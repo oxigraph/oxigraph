@@ -7,6 +7,8 @@
 
 pub mod io;
 pub mod model;
+#[cfg(feature = "reasoning")]
+pub mod reasoning;
 pub mod sparql;
 mod storage;
 pub mod store;

@@ -1115,6 +1115,117 @@ impl Store {
         }
     }
 
+    /// Runs OWL 2 RL forward-chaining reasoning over this store.
+    ///
+    /// By default the reasoner reads the store's default graph, materialises
+    /// the closure in memory, and writes the expanded graph back into the
+    /// default graph in a single transaction. If
+    /// [`ReasonerConfig::into_named_graph`] is set, inferred triples are
+    /// written into the supplied named graph instead, leaving the default
+    /// graph untouched.
+    ///
+    /// This is the V1 out-of-the-box integration: the source graph is
+    /// rehydrated into an in-memory [`oxrdf::Graph`] before reasoning. A
+    /// future V2 will seed the reasoner directly from storage iteration to
+    /// avoid the materialisation cost on very large graphs.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::reasoning::ReasonerConfig;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let alice = NamedNodeRef::new("http://example.com/alice")?;
+    /// let person = NamedNodeRef::new("http://example.com/Person")?;
+    /// let agent = NamedNodeRef::new("http://example.com/Agent")?;
+    /// let ty = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+    /// let sub_class = NamedNodeRef::new("http://www.w3.org/2000/01/rdf-schema#subClassOf")?;
+    ///
+    /// store.insert(QuadRef::new(alice, ty, person, GraphNameRef::DefaultGraph))?;
+    /// store.insert(QuadRef::new(person, sub_class, agent, GraphNameRef::DefaultGraph))?;
+    ///
+    /// let report = store.reason(&ReasonerConfig::owl2_rl())?;
+    /// assert!(report.added >= 1);
+    /// assert!(store.contains(QuadRef::new(alice, ty, agent, GraphNameRef::DefaultGraph))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[cfg(feature = "reasoning")]
+    pub fn reason(
+        &self,
+        config: &oxreason::ReasonerConfig,
+    ) -> Result<oxreason::ReasoningReport, ReasoningError> {
+        use oxrdf::Graph;
+
+        let mut graph = Graph::new();
+        for quad in self.quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
+        {
+            let quad = quad?;
+            graph.insert(TripleRef::new(
+                quad.subject.as_ref(),
+                quad.predicate.as_ref(),
+                quad.object.as_ref(),
+            ));
+        }
+
+        let original_len = graph.len();
+        let reasoner = oxreason::Reasoner::new(config.clone());
+        let report = reasoner.expand(&mut graph)?;
+
+        let target_graph: GraphName = config
+            .target_named_graph()
+            .cloned()
+            .map(GraphName::from)
+            .unwrap_or(GraphName::DefaultGraph);
+        let writes_to_named = !matches!(target_graph, GraphName::DefaultGraph);
+
+        if report.added == 0 && !writes_to_named {
+            return Ok(report);
+        }
+
+        let mut transaction = self.storage.start_transaction()?;
+        let target_ref = target_graph.as_ref();
+        if writes_to_named {
+            // Fresh triples only: avoid copying the original graph into the
+            // target named graph. We build a hash set of the originals for
+            // O(1) membership checks.
+            use std::collections::HashSet;
+            let mut originals: HashSet<Triple> = HashSet::with_capacity(original_len);
+            for quad in
+                self.quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
+            {
+                let q = quad?;
+                originals.insert(Triple::new(q.subject, q.predicate, q.object));
+            }
+            for triple in graph.iter() {
+                if originals.contains(&triple.into_owned()) {
+                    continue;
+                }
+                transaction.insert(QuadRef::new(
+                    triple.subject,
+                    triple.predicate,
+                    triple.object,
+                    target_ref,
+                ));
+            }
+        } else {
+            // Writing back to the default graph: insert the full expanded
+            // set. RocksDB insert is idempotent on quad keys, so originals
+            // are no-ops and only new triples actually materialise.
+            for triple in graph.iter() {
+                transaction.insert(QuadRef::new(
+                    triple.subject,
+                    triple.predicate,
+                    triple.object,
+                    target_ref,
+                ));
+            }
+        }
+        transaction.commit()?;
+
+        Ok(report)
+    }
+
     /// Validate that all the store invariants held in the data
     #[doc(hidden)]
     pub fn validate(&self) -> Result<(), StorageError> {
@@ -1124,6 +1235,23 @@ impl Store {
     pub(super) fn storage(&self) -> &Storage {
         &self.storage
     }
+}
+
+/// An error raised while running reasoning against a [`Store`].
+///
+/// Wraps either an underlying storage failure during source graph iteration
+/// or inference write-back, or an error from the oxreason engine itself
+/// (`NotImplemented` for unsupported profiles, `Inconsistent` when an
+/// inconsistency is detected, etc.).
+#[cfg(feature = "reasoning")]
+#[derive(Debug, thiserror::Error)]
+pub enum ReasoningError {
+    /// Error reading from or writing to the store during reasoning.
+    #[error(transparent)]
+    Storage(#[from] StorageError),
+    /// Error raised by the reasoning engine.
+    #[error(transparent)]
+    Reason(#[from] oxreason::ReasonError),
 }
 
 impl fmt::Display for Store {

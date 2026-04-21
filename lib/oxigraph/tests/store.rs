@@ -805,3 +805,102 @@ fn test_wkt_literal_side_cf_roundtrip() -> Result<(), Box<dyn Error>> {
     store.validate()?;
     Ok(())
 }
+
+/// Store::reason runs OWL 2 RL forward chaining over the default graph and
+/// writes the closure back. With a minimal subClassOf T-Box plus a typed
+/// individual, the reasoner must materialise the transitive supertype via
+/// cax-sco.
+#[cfg(feature = "reasoning")]
+#[test]
+fn test_store_reason_default_graph_materialises_closure() -> Result<(), Box<dyn Error>> {
+    use oxigraph::reasoning::ReasonerConfig;
+
+    let store = Store::new()?;
+    let alice = NamedNodeRef::new_unchecked("http://example.com/alice");
+    let person = NamedNodeRef::new_unchecked("http://example.com/Person");
+    let agent = NamedNodeRef::new_unchecked("http://example.com/Agent");
+    let ty = NamedNodeRef::new_unchecked(
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    );
+    let sub_class = NamedNodeRef::new_unchecked(
+        "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+    );
+
+    store.insert(QuadRef::new(alice, ty, person, GraphNameRef::DefaultGraph))?;
+    store.insert(QuadRef::new(
+        person,
+        sub_class,
+        agent,
+        GraphNameRef::DefaultGraph,
+    ))?;
+
+    let report = store.reason(&ReasonerConfig::owl2_rl())?;
+    assert!(
+        report.added >= 1,
+        "expected cax-sco to materialise at least one triple, got {}",
+        report.added
+    );
+    assert!(store.contains(QuadRef::new(
+        alice,
+        ty,
+        agent,
+        GraphNameRef::DefaultGraph,
+    ))?);
+    // Original triples remain in the default graph.
+    assert!(store.contains(QuadRef::new(
+        alice,
+        ty,
+        person,
+        GraphNameRef::DefaultGraph,
+    ))?);
+
+    store.validate()?;
+    Ok(())
+}
+
+/// When ReasonerConfig::into_named_graph is set, inferred triples land in
+/// the target named graph and the default graph stays untouched.
+#[cfg(feature = "reasoning")]
+#[test]
+fn test_store_reason_target_named_graph_isolates_inferences() -> Result<(), Box<dyn Error>>
+{
+    use oxigraph::reasoning::ReasonerConfig;
+
+    let store = Store::new()?;
+    let alice = NamedNodeRef::new_unchecked("http://example.com/alice");
+    let person = NamedNodeRef::new_unchecked("http://example.com/Person");
+    let agent = NamedNodeRef::new_unchecked("http://example.com/Agent");
+    let inferences =
+        NamedNodeRef::new_unchecked("http://example.com/graph/inferences");
+    let ty = NamedNodeRef::new_unchecked(
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    );
+    let sub_class = NamedNodeRef::new_unchecked(
+        "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+    );
+
+    store.insert(QuadRef::new(alice, ty, person, GraphNameRef::DefaultGraph))?;
+    store.insert(QuadRef::new(
+        person,
+        sub_class,
+        agent,
+        GraphNameRef::DefaultGraph,
+    ))?;
+
+    let config = ReasonerConfig::owl2_rl().into_named_graph(inferences.into_owned());
+    let _report = store.reason(&config)?;
+
+    assert!(store.contains(QuadRef::new(alice, ty, agent, inferences))?);
+    // Original alice rdf:type person did NOT leak into the inference graph.
+    assert!(!store.contains(QuadRef::new(alice, ty, person, inferences))?);
+    // Default graph is untouched: no rdf:type agent there.
+    assert!(!store.contains(QuadRef::new(
+        alice,
+        ty,
+        agent,
+        GraphNameRef::DefaultGraph,
+    ))?);
+
+    store.validate()?;
+    Ok(())
+}

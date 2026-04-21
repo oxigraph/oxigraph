@@ -30,6 +30,14 @@ rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
 # geometries), and exposed back as either lexical WKT or a parsed
 # geo::Geometry without the per-call WKT lexer round trip.
 geosparql = ["dep:geo", "dep:geo-traits", "dep:wkb", "dep:wkt"]
+# OWL 2 RL reasoning over a Store. When enabled, `Store::reason` becomes
+# available and dispatches into the oxreason crate. This is the V1
+# out-of-the-box integration: the default graph (or a caller-supplied
+# named graph) is materialised into an in-memory `oxrdf::Graph`, the
+# reasoner runs on it, and inferred triples are written back via a
+# regular transaction. A future V2 will skip the materialisation and
+# seed the reasoner directly from `StorageReader` iteration.
+reasoning = ["dep:oxreason"]
 
 [dependencies]
 dashmap.workspace = true
@@ -38,6 +46,7 @@ geo-traits = { workspace = true, optional = true }
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true
+oxreason = { workspace = true, optional = true }
 oxsdatatypes.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
