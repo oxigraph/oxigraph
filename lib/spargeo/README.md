@@ -61,7 +61,7 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 
 | Function | Status | Notes |
 |----------|--------|-------|
-| `geof:distance` | missing | three arg form with units IRI |
+| `geof:distance` | partial | three arg form with units IRI. Haversine, CRS84, point to point only |
 | `geof:buffer` | missing | three arg form with radius and units |
 | `geof:convexHull` | missing | |
 | `geof:boundary` | missing | |
