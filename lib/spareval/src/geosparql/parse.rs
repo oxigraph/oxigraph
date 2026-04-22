@@ -5,7 +5,7 @@
 //! `geoJSONLiteral` inputs restricted to the CRS84 reference system.
 //! Serialization always produces CRS84 `wktLiteral` output.
 
-use crate::geosparql;
+use super::geosparql;
 use geo::Geometry;
 use geojson::GeoJson;
 use oxrdf::{Literal, Term};

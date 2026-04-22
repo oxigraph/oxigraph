@@ -13,15 +13,14 @@ rust-version.workspace = true
 
 [features]
 default = []
-bridge = []
-spatial_index = ["dep:s2"]
+bridge = ["dep:geo"]
+spatial_index = ["dep:s2", "dep:geo"]
 
 [dependencies]
-geo.workspace = true
-geojson.workspace = true
+geo = { workspace = true, optional = true }
 oxrdf.workspace = true
 s2 = { workspace = true, optional = true }
-wkt.workspace = true
+spareval = { workspace = true, features = ["geosparql"] }
 
 [lints]
 workspace = true

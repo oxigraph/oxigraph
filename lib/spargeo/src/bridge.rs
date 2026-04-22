@@ -13,7 +13,7 @@
 //! builds which only want the extension function list stay free of graph
 //! manipulation machinery.
 
-use crate::parse::extract_argument;
+use spareval::geosparql::parse::extract_argument;
 use crate::vocab;
 use geo::{Geometry, Relate};
 use oxrdf::{

@@ -19,9 +19,12 @@ sep-0006 = ["sparopt/sep-0006"]
 calendar-ext = [
   "sep-0002",
 ] # Extended calendar arithmetic: gYear, gYearMonth, gMonth, gMonthDay, gDay
+geosparql = ["dep:geo", "dep:geojson", "dep:wkt"]
 
 
 [dependencies]
+geo = { workspace = true, optional = true }
+geojson = { workspace = true, optional = true }
 hex.workspace = true
 json-event-parser.workspace = true
 md-5.workspace = true
@@ -37,6 +40,7 @@ spargebra.workspace = true
 sparopt.workspace = true
 sparesults.workspace = true
 thiserror.workspace = true
+wkt = { workspace = true, optional = true }
 
 [lints]
 workspace = true

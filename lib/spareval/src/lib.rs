@@ -12,6 +12,9 @@ mod model;
 mod service;
 mod update;
 
+#[cfg(feature = "geosparql")]
+pub mod geosparql;
+
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
@@ -251,6 +254,22 @@ impl QueryEvaluator {
         evaluator: impl Fn(&[Term]) -> Option<Term> + Send + Sync + 'static,
     ) -> Self {
         self.custom_functions.insert(name, Arc::new(evaluator));
+        self
+    }
+
+    /// Registers all 44 GeoSPARQL 1.1 extension functions on this evaluator.
+    ///
+    /// Available under the `geosparql` feature. Equivalent to registering
+    /// every `(name, fn)` pair in [`geosparql::GEOSPARQL_EXTENSION_FUNCTIONS`]
+    /// individually via [`Self::with_custom_function`].
+    #[cfg(feature = "geosparql")]
+    #[inline]
+    #[must_use]
+    pub fn with_geosparql_functions(mut self) -> Self {
+        for (name, implementation) in geosparql::GEOSPARQL_EXTENSION_FUNCTIONS {
+            self.custom_functions
+                .insert(name.into_owned(), Arc::new(implementation));
+        }
         self
     }
 

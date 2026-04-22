@@ -14,7 +14,7 @@
 //! This module is gated behind the `spatial_index` cargo feature so
 //! minimal builds stay free of the S2 dependency.
 
-use crate::parse::extract_argument;
+use spareval::geosparql::parse::extract_argument;
 use crate::vocab;
 use geo::{BoundingRect, Geometry, Relate};
 use oxrdf::{Graph, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef};
