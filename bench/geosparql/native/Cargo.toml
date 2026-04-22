@@ -1,0 +1,21 @@
+[package]
+name = "spargeo-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Rust-only bench harness that times spargeo and the underlying geo crate on a GeoSPARQL point-in-polygon workload"
+
+[[bin]]
+name = "spargeo_bench"
+path = "src/main.rs"
+
+[dependencies]
+oxrdf = { path = "../../../lib/oxrdf", features = ["oxsdatatypes"] }
+oxttl = { path = "../../../lib/oxttl" }
+spargeo = { path = "../../../lib/spargeo", features = ["spatial_index"] }
+geo = ">=0.28, <0.32"
+wkt = "0.14"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

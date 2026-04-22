@@ -4,6 +4,7 @@
 @prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
 @prefix qt:    <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
 @prefix ut:    <http://www.w3.org/2009/sparql/tests/test-update#> .
+@prefix geof:  <http://www.opengis.net/def/function/geosparql/> .
 
 <>  rdf:type mf:Manifest ;
     rdfs:label "Oxigraph GeoSPARQL tests" ;
@@ -14,9 +15,46 @@
         :sf_crosses
         :sf_disjoint
         :sf_equals
+        :sf_intersects
         :sf_overlaps
         :sf_touches
         :sf_within
+        :eh_equals
+        :eh_disjoint
+        :eh_contains
+        :eh_inside
+        :eh_covers
+        :eh_covered_by
+        :eh_meet
+        :eh_overlap
+        :rcc8_eq
+        :rcc8_dc
+        :rcc8_ec
+        :rcc8_po
+        :rcc8_ntpp
+        :rcc8_ntppi
+        :rcc8_tpp
+        :rcc8_tppi
+        :relate
+        :is_empty
+        :is_simple
+        :dimension
+        :coordinate_dimension
+        :spatial_dimension
+        :as_text
+        :as_geojson
+        :get_srid
+        :envelope
+        :centroid
+        :convex_hull
+        :intersection
+        :union
+        :difference
+        :sym_difference
+        :area
+        :distance
+        :length
+        :perimeter
     ) .
 
 :wkt_default_spatial_reference_system rdf:type mf:QueryEvaluationTest ;
@@ -26,35 +64,264 @@
 
 :sf_contains rdf:type mf:QueryEvaluationTest ;
     mf:name "sfContains behaviors" ;
+    mf:feature geof:sfContains ;
     mf:action [ qt:query <sf_contains.rq> ] ;
     mf:result <sf_contains.srx> .
 
 :sf_crosses rdf:type mf:QueryEvaluationTest ;
     mf:name "sfCrosses behaviors" ;
+    mf:feature geof:sfCrosses ;
     mf:action [ qt:query <sf_crosses.rq> ] ;
     mf:result <sf_crosses.srx> .
 
 :sf_disjoint rdf:type mf:QueryEvaluationTest ;
     mf:name "sfDisjoint behaviors" ;
+    mf:feature geof:sfDisjoint ;
     mf:action [ qt:query <sf_disjoint.rq> ] ;
     mf:result <sf_disjoint.srx> .
 
 :sf_equals rdf:type mf:QueryEvaluationTest ;
     mf:name "sfEquals behaviors" ;
+    mf:feature geof:sfEquals ;
     mf:action [ qt:query <sf_equals.rq> ] ;
     mf:result <sf_equals.srx> .
 
+:sf_intersects rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfIntersects behaviors" ;
+    mf:feature geof:sfIntersects ;
+    mf:action [ qt:query <sf_intersects.rq> ] ;
+    mf:result <sf_intersects.srx> .
+
 :sf_overlaps rdf:type mf:QueryEvaluationTest ;
     mf:name "sfOverlaps behaviors" ;
+    mf:feature geof:sfOverlaps ;
     mf:action [ qt:query <sf_overlaps.rq> ] ;
     mf:result <sf_overlaps.srx> .
 
 :sf_touches rdf:type mf:QueryEvaluationTest ;
     mf:name "sfTouches behaviors" ;
+    mf:feature geof:sfTouches ;
     mf:action [ qt:query <sf_touches.rq> ] ;
     mf:result <sf_touches.srx> .
 
 :sf_within rdf:type mf:QueryEvaluationTest ;
     mf:name "sfWithin behaviors" ;
+    mf:feature geof:sfWithin ;
     mf:action [ qt:query <sf_within.rq> ] ;
     mf:result <sf_within.srx> .
+
+:eh_equals rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehEquals behaviors" ;
+    mf:feature geof:ehEquals ;
+    mf:action [ qt:query <eh_equals.rq> ] ;
+    mf:result <eh_equals.srx> .
+
+:eh_disjoint rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehDisjoint behaviors" ;
+    mf:feature geof:ehDisjoint ;
+    mf:action [ qt:query <eh_disjoint.rq> ] ;
+    mf:result <eh_disjoint.srx> .
+
+:eh_contains rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehContains behaviors" ;
+    mf:feature geof:ehContains ;
+    mf:action [ qt:query <eh_contains.rq> ] ;
+    mf:result <eh_contains.srx> .
+
+:eh_inside rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehInside behaviors" ;
+    mf:feature geof:ehInside ;
+    mf:action [ qt:query <eh_inside.rq> ] ;
+    mf:result <eh_inside.srx> .
+
+:eh_covers rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehCovers behaviors" ;
+    mf:feature geof:ehCovers ;
+    mf:action [ qt:query <eh_covers.rq> ] ;
+    mf:result <eh_covers.srx> .
+
+:eh_covered_by rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehCoveredBy behaviors" ;
+    mf:feature geof:ehCoveredBy ;
+    mf:action [ qt:query <eh_covered_by.rq> ] ;
+    mf:result <eh_covered_by.srx> .
+
+:eh_meet rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehMeet behaviors" ;
+    mf:feature geof:ehMeet ;
+    mf:action [ qt:query <eh_meet.rq> ] ;
+    mf:result <eh_meet.srx> .
+
+:eh_overlap rdf:type mf:QueryEvaluationTest ;
+    mf:name "ehOverlap behaviors" ;
+    mf:feature geof:ehOverlap ;
+    mf:action [ qt:query <eh_overlap.rq> ] ;
+    mf:result <eh_overlap.srx> .
+
+:rcc8_eq rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8eq behaviors" ;
+    mf:feature geof:rcc8eq ;
+    mf:action [ qt:query <rcc8_eq.rq> ] ;
+    mf:result <rcc8_eq.srx> .
+
+:rcc8_dc rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8dc behaviors" ;
+    mf:feature geof:rcc8dc ;
+    mf:action [ qt:query <rcc8_dc.rq> ] ;
+    mf:result <rcc8_dc.srx> .
+
+:rcc8_ec rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8ec behaviors" ;
+    mf:feature geof:rcc8ec ;
+    mf:action [ qt:query <rcc8_ec.rq> ] ;
+    mf:result <rcc8_ec.srx> .
+
+:rcc8_po rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8po behaviors" ;
+    mf:feature geof:rcc8po ;
+    mf:action [ qt:query <rcc8_po.rq> ] ;
+    mf:result <rcc8_po.srx> .
+
+:rcc8_ntpp rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8ntpp behaviors" ;
+    mf:feature geof:rcc8ntpp ;
+    mf:action [ qt:query <rcc8_ntpp.rq> ] ;
+    mf:result <rcc8_ntpp.srx> .
+
+:rcc8_ntppi rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8ntppi behaviors" ;
+    mf:feature geof:rcc8ntppi ;
+    mf:action [ qt:query <rcc8_ntppi.rq> ] ;
+    mf:result <rcc8_ntppi.srx> .
+
+:rcc8_tpp rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8tpp behaviors" ;
+    mf:feature geof:rcc8tpp ;
+    mf:action [ qt:query <rcc8_tpp.rq> ] ;
+    mf:result <rcc8_tpp.srx> .
+
+:rcc8_tppi rdf:type mf:QueryEvaluationTest ;
+    mf:name "rcc8tppi behaviors" ;
+    mf:feature geof:rcc8tppi ;
+    mf:action [ qt:query <rcc8_tppi.rq> ] ;
+    mf:result <rcc8_tppi.srx> .
+
+:relate rdf:type mf:QueryEvaluationTest ;
+    mf:name "relate with DE-9IM pattern" ;
+    mf:feature geof:relate ;
+    mf:action [ qt:query <relate.rq> ] ;
+    mf:result <relate.srx> .
+
+:is_empty rdf:type mf:QueryEvaluationTest ;
+    mf:name "isEmpty accessor" ;
+    mf:feature geof:isEmpty ;
+    mf:action [ qt:query <is_empty.rq> ] ;
+    mf:result <is_empty.srx> .
+
+:is_simple rdf:type mf:QueryEvaluationTest ;
+    mf:name "isSimple accessor" ;
+    mf:feature geof:isSimple ;
+    mf:action [ qt:query <is_simple.rq> ] ;
+    mf:result <is_simple.srx> .
+
+:dimension rdf:type mf:QueryEvaluationTest ;
+    mf:name "dimension accessor across point, line, polygon" ;
+    mf:feature geof:dimension ;
+    mf:action [ qt:query <dimension.rq> ] ;
+    mf:result <dimension.srx> .
+
+:coordinate_dimension rdf:type mf:QueryEvaluationTest ;
+    mf:name "coordinateDimension accessor" ;
+    mf:feature geof:coordinateDimension ;
+    mf:action [ qt:query <coordinate_dimension.rq> ] ;
+    mf:result <coordinate_dimension.srx> .
+
+:spatial_dimension rdf:type mf:QueryEvaluationTest ;
+    mf:name "spatialDimension accessor" ;
+    mf:feature geof:spatialDimension ;
+    mf:action [ qt:query <spatial_dimension.rq> ] ;
+    mf:result <spatial_dimension.srx> .
+
+:as_text rdf:type mf:QueryEvaluationTest ;
+    mf:name "asText serializes point as WKT" ;
+    mf:feature geof:asText ;
+    mf:action [ qt:query <as_text.rq> ] ;
+    mf:result <as_text.srx> .
+
+:as_geojson rdf:type mf:QueryEvaluationTest ;
+    mf:name "asGeoJSON serializes geometry as JSON object" ;
+    mf:feature geof:asGeoJSON ;
+    mf:action [ qt:query <as_geojson.rq> ] ;
+    mf:result <as_geojson.srx> .
+
+:get_srid rdf:type mf:QueryEvaluationTest ;
+    mf:name "getSRID returns CRS84 for any CRS84 literal" ;
+    mf:feature geof:getSRID ;
+    mf:action [ qt:query <get_srid.rq> ] ;
+    mf:result <get_srid.srx> .
+
+:envelope rdf:type mf:QueryEvaluationTest ;
+    mf:name "envelope returns minimum bounding rectangle" ;
+    mf:feature geof:envelope ;
+    mf:action [ qt:query <envelope.rq> ] ;
+    mf:result <envelope.srx> .
+
+:centroid rdf:type mf:QueryEvaluationTest ;
+    mf:name "centroid returns geometric center" ;
+    mf:feature geof:centroid ;
+    mf:action [ qt:query <centroid.rq> ] ;
+    mf:result <centroid.srx> .
+
+:convex_hull rdf:type mf:QueryEvaluationTest ;
+    mf:name "convexHull returns smallest enclosing convex polygon" ;
+    mf:feature geof:convexHull ;
+    mf:action [ qt:query <convex_hull.rq> ] ;
+    mf:result <convex_hull.srx> .
+
+:intersection rdf:type mf:QueryEvaluationTest ;
+    mf:name "intersection of two overlapping squares" ;
+    mf:feature geof:intersection ;
+    mf:action [ qt:query <intersection.rq> ] ;
+    mf:result <intersection.srx> .
+
+:union rdf:type mf:QueryEvaluationTest ;
+    mf:name "union of two overlapping squares" ;
+    mf:feature geof:union ;
+    mf:action [ qt:query <union.rq> ] ;
+    mf:result <union.srx> .
+
+:difference rdf:type mf:QueryEvaluationTest ;
+    mf:name "difference of two overlapping squares" ;
+    mf:feature geof:difference ;
+    mf:action [ qt:query <difference.rq> ] ;
+    mf:result <difference.srx> .
+
+:sym_difference rdf:type mf:QueryEvaluationTest ;
+    mf:name "symDifference of two overlapping squares" ;
+    mf:feature geof:symDifference ;
+    mf:action [ qt:query <sym_difference.rq> ] ;
+    mf:result <sym_difference.srx> .
+
+:area rdf:type mf:QueryEvaluationTest ;
+    mf:name "area of unit-edge polygon within tolerance" ;
+    mf:feature geof:area ;
+    mf:action [ qt:query <area.rq> ] ;
+    mf:result <area.srx> .
+
+:distance rdf:type mf:QueryEvaluationTest ;
+    mf:name "distance between two points within tolerance" ;
+    mf:feature geof:distance ;
+    mf:action [ qt:query <distance.rq> ] ;
+    mf:result <distance.srx> .
+
+:length rdf:type mf:QueryEvaluationTest ;
+    mf:name "length of polyline within tolerance" ;
+    mf:feature geof:length ;
+    mf:action [ qt:query <length.rq> ] ;
+    mf:result <length.srx> .
+
+:perimeter rdf:type mf:QueryEvaluationTest ;
+    mf:name "perimeter of polygon within tolerance" ;
+    mf:feature geof:perimeter ;
+    mf:action [ qt:query <perimeter.rq> ] ;
+    mf:result <perimeter.srx> .

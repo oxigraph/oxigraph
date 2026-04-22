@@ -11,10 +11,16 @@ description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+bridge = []
+spatial_index = ["dep:s2"]
+
 [dependencies]
 geo.workspace = true
 geojson.workspace = true
 oxrdf.workspace = true
+s2 = { workspace = true, optional = true }
 wkt.workspace = true
 
 [lints]
