@@ -22,6 +22,9 @@ oxrdf.workspace = true
 s2 = { workspace = true, optional = true }
 spareval = { workspace = true, features = ["geosparql"] }
 
+[dev-dependencies]
+wkt.workspace = true
+
 [lints]
 workspace = true
 

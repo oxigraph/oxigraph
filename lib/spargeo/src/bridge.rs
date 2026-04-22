@@ -57,7 +57,7 @@ impl GeoBridge {
                 let geom = match triple.object {
                     TermRef::NamedNode(n) => NamedOrBlankNode::NamedNode(n.into_owned()),
                     TermRef::BlankNode(b) => NamedOrBlankNode::BlankNode(b.into_owned()),
-                    TermRef::Literal(_) => return None,
+                    _ => return None,
                 };
                 Some((feature, geom))
             })

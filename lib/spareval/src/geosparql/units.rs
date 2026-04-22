@@ -28,7 +28,10 @@ use oxrdf::Term;
 pub enum UnitKind {
     /// Linear distance, base unit metre.
     Length,
-    /// Angular measure, base unit radian.
+    /// Angular measure, base unit radian. Reserved for future angular
+    /// functions such as `geof:azimuth`; no built-in function emits this
+    /// kind yet.
+    #[expect(dead_code, reason = "Angular unit kind is reserved for future use")]
     Angle,
     /// Planar area, base unit square metre.
     Area,

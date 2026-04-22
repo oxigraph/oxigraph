@@ -1732,7 +1732,7 @@ dependencies = [
  "csv",
  "dashmap",
  "geo",
- "geo-traits 0.3.0",
+ "geo-traits 0.2.0",
  "getrandom 0.3.4",
  "js-sys",
  "libc",
@@ -2696,6 +2696,8 @@ dependencies = [
 name = "spareval"
 version = "0.2.6"
 dependencies = [
+ "geo",
+ "geojson",
  "hex",
  "json-event-parser",
  "md-5",
@@ -2711,6 +2713,7 @@ dependencies = [
  "spargebra",
  "sparopt",
  "thiserror 2.0.18",
+ "wkt",
 ]
 
 [[package]]
@@ -2730,9 +2733,9 @@ name = "spargeo"
 version = "0.5.4"
 dependencies = [
  "geo",
- "geojson",
  "oxrdf",
  "s2",
+ "spareval",
  "wkt",
 ]
 
