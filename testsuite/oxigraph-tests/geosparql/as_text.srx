@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="geom"/>
+        <variable name="result"/>
+    </head>
+    <results>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Point(3 4)</literal>
+            </binding>
+            <binding name="result">
+                <literal>POINT(3 4)</literal>
+            </binding>
+        </result>
+    </results>
+</sparql>

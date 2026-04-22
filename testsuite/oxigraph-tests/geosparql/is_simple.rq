@@ -1,0 +1,8 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?geom (geof:isSimple(?geom) AS ?result) WHERE {
+    VALUES ?geom {
+        "Point(1 2)"^^geo:wktLiteral
+    }
+}

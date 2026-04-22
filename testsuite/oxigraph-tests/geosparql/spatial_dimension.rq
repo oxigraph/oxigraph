@@ -1,0 +1,8 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?geom (geof:spatialDimension(?geom) AS ?result) WHERE {
+    VALUES ?geom {
+        "Polygon((0 0, 1 0, 1 1, 0 1, 0 0))"^^geo:wktLiteral
+    }
+}
