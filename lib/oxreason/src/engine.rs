@@ -1071,10 +1071,10 @@ where
 
         // OWL rules. Skipped when running the Rdfs profile.
         if profile != ReasoningProfile::Rdfs {
-            round_firings = round_firings.saturating_add(prof.time("prp-trp", delta_size, || apply_prp_trp(graph, delta_ref, &mut pending)));
-            round_firings = round_firings.saturating_add(prof.time("prp-symp", delta_size, || apply_prp_symp(graph, delta_ref, &mut pending)));
-            round_firings = round_firings.saturating_add(prof.time("prp-inv", delta_size, || apply_prp_inv(graph, delta_ref, &mut pending)));
-            round_firings = round_firings.saturating_add(prof.time("prp-eqp", delta_size, || apply_prp_eqp(graph, delta_ref, &mut pending)));
+            round_firings = round_firings.saturating_add(prof.time("prp-trp", delta_size, || apply_prp_trp(graph, delta_ref, &mut pending_keyed)));
+            round_firings = round_firings.saturating_add(prof.time("prp-symp", delta_size, || apply_prp_symp(graph, delta_ref, &mut pending_keyed)));
+            round_firings = round_firings.saturating_add(prof.time("prp-inv", delta_size, || apply_prp_inv(graph, delta_ref, &mut pending_keyed)));
+            round_firings = round_firings.saturating_add(prof.time("prp-eqp", delta_size, || apply_prp_eqp(graph, delta_ref, &mut pending_keyed)));
             round_firings = round_firings.saturating_add(prof.time("cax-eqc", delta_size, || apply_cax_eqc(graph, delta_ref, type_id, &mut pending_keyed)));
 
             // M3 schema rules.
@@ -1515,7 +1515,11 @@ fn apply_prp_spo1(
     firings
 }
 
-fn apply_prp_trp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_trp(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-trp: if p rdf:type owl:TransitiveProperty, x p y, y p z then x p z.
     //
     // Semi-naive joins the two data antecedents against delta in turn:
@@ -1524,10 +1528,21 @@ fn apply_prp_trp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     // If the TransitiveProperty declaration itself is new in this round, every
     // edge counts as "new" for this property and the branches collapse to the
     // naive square join.
-    let transitive_properties: Vec<NamedNode> = graph
+    //
+    // Edge tuples carry the interned ids of both endpoints so
+    // `join_square_keyed` can bucket `right` by `y_id` (u32 probe) and
+    // emit consequents straight into `pending_keyed` without touching
+    // `intern_triple`. Graph edges pick their ids out of
+    // `rows_for_pred_id` for free; delta edges resolve their subject and
+    // object ids once per triple via the interner.
+    let transitive_properties: Vec<(NamedNode, TermId)> = graph
         .subjects_for_predicate_object(rdf::TYPE, OWL_TRANSITIVE_PROPERTY)
         .filter_map(|s| match s {
-            NamedOrBlankNodeRef::NamedNode(n) => Some(n.into_owned()),
+            NamedOrBlankNodeRef::NamedNode(n) => {
+                let owned = n.into_owned();
+                let n_id = graph.lookup_named(owned.as_str())?;
+                Some((owned, n_id))
+            }
             NamedOrBlankNodeRef::BlankNode(_) => None,
         })
         .collect();
@@ -1538,71 +1553,76 @@ fn apply_prp_trp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
         new_property_types(delta, OWL_TRANSITIVE_PROPERTY);
 
     let mut firings: u64 = 0;
-    for p in transitive_properties {
-        // Snapshot all (x, p, y) triples first to avoid nested borrows.
-        let edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = graph
-            .triples_for_predicate(p.as_ref())
-            .filter_map(|t| {
-                let x = t.subject.into_owned();
-                let y = term_ref_to_named_or_blank(t.object)?;
-                Some((x, y))
+    for (p, p_id) in transitive_properties {
+        // Edges carry (x_id, y_id, x, y). Literal objects are skipped
+        // because the consequent y-p-z can never be introduced by a
+        // literal y anyway.
+        let edges: Vec<(TermId, TermId, NamedOrBlankNode, NamedOrBlankNode)> = graph
+            .rows_for_pred_id(p_id)
+            .filter_map(|(ids, row)| {
+                let y = term_ref_to_named_or_blank(row.object.as_ref())?;
+                Some((ids.0, ids.2, row.subject.clone(), y))
             })
             .collect();
 
         let Some(d) = delta else {
             // Round 1: naive square join.
-            firings = firings.saturating_add(join_square(&edges, &edges, &p, pending));
+            firings = firings.saturating_add(join_square_keyed(&edges, &edges, &p, p_id, pending_keyed));
             continue;
         };
 
-        let delta_edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = if newly_transitive.contains(&p) {
-            edges.clone()
-        } else {
-            d.for_predicate(p.as_ref())
-                .iter()
-                .filter_map(|t| {
-                    let y = owned_object_named_or_blank(&t.object)?;
-                    Some((t.subject.clone(), y))
-                })
-                .collect()
-        };
+        let delta_edges: Vec<(TermId, TermId, NamedOrBlankNode, NamedOrBlankNode)> =
+            if newly_transitive.contains(&p) {
+                edges.clone()
+            } else {
+                d.for_predicate(p.as_ref())
+                    .iter()
+                    .filter_map(|t| {
+                        let y = owned_object_named_or_blank(&t.object)?;
+                        let x_id = graph.lookup_subject_ref(t.subject.as_ref())?;
+                        let y_id = graph.lookup_term_ref(t.object.as_ref())?;
+                        Some((x_id, y_id, t.subject.clone(), y))
+                    })
+                    .collect()
+            };
 
         // Branch 1: delta × graph.
-        firings = firings.saturating_add(join_square(&delta_edges, &edges, &p, pending));
+        firings = firings.saturating_add(join_square_keyed(&delta_edges, &edges, &p, p_id, pending_keyed));
         // Branch 2: graph × delta.
-        firings = firings.saturating_add(join_square(&edges, &delta_edges, &p, pending));
+        firings = firings.saturating_add(join_square_keyed(&edges, &delta_edges, &p, p_id, pending_keyed));
     }
     firings
 }
 
 /// Emit every (x, p, z) where (x, y) is in `left` and (y, z) is in `right`.
 ///
-/// Bucket `right` by its first component so each probe from `left` is O(1)
-/// on average. Pre-refactor this was a nested loop with a per-pair
-/// `named_or_blank_eq`, which is O(|left| * |right|) and became the
-/// dominant cost of `prp-trp` whenever a transitive property had more
-/// than a few hundred edges (on LUBM 100k the profile showed prp-trp at
-/// 190ms of 993ms total from 4848 firings: 39us per firing, 100x the
-/// per-firing cost of cax-sco).
-fn join_square(
-    left: &[(NamedOrBlankNode, NamedOrBlankNode)],
-    right: &[(NamedOrBlankNode, NamedOrBlankNode)],
+/// Buckets `right` by `y_id` so each probe from `left` is a u32 hash
+/// lookup. The pre-interner variant keyed the bucket on `NamedOrBlankNode`
+/// and hashed owned IRIs on every probe; moving to `TermId` keys makes
+/// the join O(n) in cheap u32 compares and hands the commit loop the
+/// fully-formed `(x_id, p_id, z_id)` tuple so `FlatGraph::insert_keyed`
+/// skips `intern_triple`'s three Arc<str> hashes per consequent.
+fn join_square_keyed(
+    left: &[(TermId, TermId, NamedOrBlankNode, NamedOrBlankNode)],
+    right: &[(TermId, TermId, NamedOrBlankNode, NamedOrBlankNode)],
     p: &NamedNode,
-    pending: &mut Vec<Triple>,
+    p_id: TermId,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
 ) -> u64 {
     if left.is_empty() || right.is_empty() {
         return 0;
     }
-    let mut right_by_first: FxHashMap<&NamedOrBlankNode, Vec<&NamedOrBlankNode>> =
+    let mut right_by_first: FxHashMap<TermId, Vec<(TermId, &NamedOrBlankNode)>> =
         FxHashMap::with_capacity_and_hasher(right.len(), Default::default());
-    for (y2, z) in right {
-        right_by_first.entry(y2).or_default().push(z);
+    for (y2_id, z_id, _y2, z) in right {
+        right_by_first.entry(*y2_id).or_default().push((*z_id, z));
     }
     let mut firings: u64 = 0;
-    for (x, y) in left {
-        if let Some(zs) = right_by_first.get(y) {
-            for z in zs {
-                pending.push(Triple::new(x.clone(), p.clone(), (*z).clone()));
+    for (x_id, y_id, x, _y) in left {
+        if let Some(zs) = right_by_first.get(y_id) {
+            for (z_id, z) in zs {
+                let triple = Triple::new(x.clone(), p.clone(), (*z).clone());
+                pending_keyed.push((triple, (*x_id, p_id, *z_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1631,32 +1651,40 @@ fn new_property_types(
         .collect()
 }
 
-fn apply_prp_symp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_symp(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-symp: if p rdf:type owl:SymmetricProperty and x p y then y p x.
     // y must be a resource (literal y cannot appear as a subject).
     //
     // Semi-naive:
     //   Branch 1: delta(schema) × graph(p) for properties newly declared symmetric.
     //   Branch 2: graph(schema) × delta(p) for fresh edges over known symmetric p.
-    let symmetric_properties: Vec<NamedNode> = graph
+    //
+    // Graph legs iterate `rows_for_pred_id(p_id)`, which hands back each
+    // triple alongside its `(s_id, p_id, o_id)` interned key. The
+    // consequent `(y, p, x)` is keyed as `(o_id, p_id, s_id)` (subject
+    // and object swap) and pushed to `pending_keyed` so the commit loop
+    // skips `intern_triple`'s three Arc<str> hashes.
+    let symmetric_properties: Vec<(NamedNode, TermId)> = graph
         .subjects_for_predicate_object(rdf::TYPE, OWL_SYMMETRIC_PROPERTY)
-        .filter_map(named_node_from_subject)
+        .filter_map(|s| {
+            let n = named_node_from_subject(s)?;
+            let n_id = graph.lookup_named(n.as_str())?;
+            Some((n, n_id))
+        })
         .collect();
 
     let mut firings: u64 = 0;
 
     let Some(d) = delta else {
-        for p in &symmetric_properties {
-            let edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = graph
-                .triples_for_predicate(p.as_ref())
-                .filter_map(|t| {
-                    let x = t.subject.into_owned();
-                    let y = term_ref_to_named_or_blank(t.object)?;
-                    Some((x, y))
-                })
-                .collect();
-            for (x, y) in edges {
-                pending.push(Triple::new(y, p.clone(), x));
+        for (p, p_id) in &symmetric_properties {
+            for (ids, row) in graph.rows_for_pred_id(*p_id) {
+                let Some(y) = term_ref_to_named_or_blank(row.object.as_ref()) else { continue };
+                let triple = Triple::new(y, p.clone(), row.subject.clone());
+                pending_keyed.push((triple, (ids.2, *p_id, ids.0)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1665,26 +1693,25 @@ fn apply_prp_symp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut V
 
     let newly_symmetric = new_property_types(delta, OWL_SYMMETRIC_PROPERTY);
 
-    for p in &symmetric_properties {
+    for (p, p_id) in &symmetric_properties {
         if newly_symmetric.contains(p) {
             // New schema: every existing edge is a candidate.
-            let edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = graph
-                .triples_for_predicate(p.as_ref())
-                .filter_map(|t| {
-                    let x = t.subject.into_owned();
-                    let y = term_ref_to_named_or_blank(t.object)?;
-                    Some((x, y))
-                })
-                .collect();
-            for (x, y) in edges {
-                pending.push(Triple::new(y, p.clone(), x));
+            for (ids, row) in graph.rows_for_pred_id(*p_id) {
+                let Some(y) = term_ref_to_named_or_blank(row.object.as_ref()) else { continue };
+                let triple = Triple::new(y, p.clone(), row.subject.clone());
+                pending_keyed.push((triple, (ids.2, *p_id, ids.0)));
                 firings = firings.saturating_add(1);
             }
         } else {
-            // Existing schema: only delta edges are new.
+            // Existing schema: only delta edges are new. Resolve the
+            // subject and object ids via the interner, one pair of
+            // hashes per delta triple.
             for t in d.for_predicate(p.as_ref()) {
                 let Some(y) = owned_object_named_or_blank(&t.object) else { continue };
-                pending.push(Triple::new(y, p.clone(), t.subject.clone()));
+                let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+                let Some(y_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+                let triple = Triple::new(y, p.clone(), t.subject.clone());
+                pending_keyed.push((triple, (y_id, *p_id, x_id)));
                 firings = firings.saturating_add(1);
             }
         }
@@ -1692,7 +1719,11 @@ fn apply_prp_symp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut V
     firings
 }
 
-fn apply_prp_inv(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_inv(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-inv1: if p1 owl:inverseOf p2 and x p1 y then y p2 x.
     // prp-inv2: if p1 owl:inverseOf p2 and x p2 y then y p1 x.
     // Combined because the engine applies both directions off the same fact.
@@ -1701,21 +1732,28 @@ fn apply_prp_inv(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     //   Branch 1: delta(inverseOf) × graph(p1, p2) (new schema, full data scan).
     //   Branch 2: graph(inverseOf) × delta(p1) (fires prp-inv1).
     //   Branch 3: graph(inverseOf) × delta(p2) (fires prp-inv2).
-    let pairs: Vec<(NamedNode, NamedNode)> = graph
+    //
+    // Pair cache carries interned ids for both properties so the graph
+    // legs go through `emit_inverse_keyed`, which iterates
+    // `rows_for_pred_id` and synthesises the swapped key
+    // `(o_id, dst_id, s_id)` straight from each row's interned tuple.
+    let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(OWL_INVERSE_OF)
         .filter_map(|t| {
             let p1 = named_node_from_subject(t.subject)?;
             let p2 = named_node_from_term(t.object)?;
-            Some((p1, p2))
+            let p1_id = graph.lookup_named(p1.as_str())?;
+            let p2_id = graph.lookup_named(p2.as_str())?;
+            Some((p1, p1_id, p2, p2_id))
         })
         .collect();
 
     let mut firings: u64 = 0;
 
     let Some(d) = delta else {
-        for (p1, p2) in &pairs {
-            firings = firings.saturating_add(emit_inverse(graph, p1, p2, pending));
-            firings = firings.saturating_add(emit_inverse(graph, p2, p1, pending));
+        for (p1, p1_id, p2, p2_id) in &pairs {
+            firings = firings.saturating_add(emit_inverse_keyed(graph, *p1_id, p2, *p2_id, pending_keyed));
+            firings = firings.saturating_add(emit_inverse_keyed(graph, *p2_id, p1, *p1_id, pending_keyed));
         }
         return firings;
     };
@@ -1725,57 +1763,68 @@ fn apply_prp_inv(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     for t in d.for_predicate(OWL_INVERSE_OF) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
+        let Some(p1_id) = graph.lookup_named(p1.as_str()) else { continue };
+        let Some(p2_id) = graph.lookup_named(p2.as_str()) else { continue };
         seen_schema.insert((p1.clone(), p2.clone()));
-        firings = firings.saturating_add(emit_inverse(graph, &p1, &p2, pending));
-        firings = firings.saturating_add(emit_inverse(graph, &p2, &p1, pending));
+        firings = firings.saturating_add(emit_inverse_keyed(graph, p1_id, &p2, p2_id, pending_keyed));
+        firings = firings.saturating_add(emit_inverse_keyed(graph, p2_id, &p1, p1_id, pending_keyed));
     }
 
-    // Branches 2 and 3: graph schema × delta data.
-    for (p1, p2) in &pairs {
+    // Branches 2 and 3: graph schema × delta data. Each delta triple's
+    // subject and object ids are resolved via the interner, one hash
+    // each.
+    for (p1, p1_id, p2, p2_id) in &pairs {
         // Skip schema pairs we already fully saturated in Branch 1.
         if seen_schema.contains(&(p1.clone(), p2.clone())) {
             continue;
         }
-        // prp-inv1 over delta(p1).
+        // prp-inv1 over delta(p1). Consequent: (y, p2, x).
         for t in d.for_predicate(p1.as_ref()) {
             let Some(y) = owned_object_named_or_blank(&t.object) else { continue };
-            pending.push(Triple::new(y, p2.clone(), t.subject.clone()));
+            let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let Some(y_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(y, p2.clone(), t.subject.clone());
+            pending_keyed.push((triple, (y_id, *p2_id, x_id)));
             firings = firings.saturating_add(1);
         }
-        // prp-inv2 over delta(p2).
+        // prp-inv2 over delta(p2). Consequent: (y, p1, x).
         for t in d.for_predicate(p2.as_ref()) {
             let Some(y) = owned_object_named_or_blank(&t.object) else { continue };
-            pending.push(Triple::new(y, p1.clone(), t.subject.clone()));
+            let Some(x_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let Some(y_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(y, p1.clone(), t.subject.clone());
+            pending_keyed.push((triple, (y_id, *p1_id, x_id)));
             firings = firings.saturating_add(1);
         }
     }
     firings
 }
 
-/// For each edge `(x, src, y)` in `graph`, push `(y, dst, x)` onto `pending`.
-fn emit_inverse(
+/// For each row `(x, src, y)` in `graph.rows_for_pred_id(src_id)`, push
+/// `((y, dst, x), (y_id, dst_id, x_id))` onto `pending_keyed`. Skips
+/// `intern_triple`'s three Arc<str> hashes per emit.
+fn emit_inverse_keyed(
     graph: &FlatGraph,
-    src: &NamedNode,
+    src_id: TermId,
     dst: &NamedNode,
-    pending: &mut Vec<Triple>,
+    dst_id: TermId,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
 ) -> u64 {
-    let edges: Vec<(NamedOrBlankNode, NamedOrBlankNode)> = graph
-        .triples_for_predicate(src.as_ref())
-        .filter_map(|t| {
-            let x = t.subject.into_owned();
-            let y = term_ref_to_named_or_blank(t.object)?;
-            Some((x, y))
-        })
-        .collect();
     let mut firings: u64 = 0;
-    for (x, y) in edges {
-        pending.push(Triple::new(y, dst.clone(), x));
+    for (ids, row) in graph.rows_for_pred_id(src_id) {
+        let Some(y) = term_ref_to_named_or_blank(row.object.as_ref()) else { continue };
+        let triple = Triple::new(y, dst.clone(), row.subject.clone());
+        pending_keyed.push((triple, (ids.2, dst_id, ids.0)));
         firings = firings.saturating_add(1);
     }
     firings
 }
 
-fn apply_prp_eqp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Vec<Triple>) -> u64 {
+fn apply_prp_eqp(
+    graph: &FlatGraph,
+    delta: Option<&DeltaIndex>,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
     // prp-eqp1: if p1 owl:equivalentProperty p2 and x p1 y then x p2 y.
     // prp-eqp2: if p1 owl:equivalentProperty p2 and x p2 y then x p1 y.
     // Literal objects are fine here: the object keeps its position.
@@ -1784,21 +1833,28 @@ fn apply_prp_eqp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     //   Branch 1: delta(schema) × graph(p1, p2).
     //   Branch 2: graph(schema) × delta(p1) (fires prp-eqp1).
     //   Branch 3: graph(schema) × delta(p2) (fires prp-eqp2).
-    let pairs: Vec<(NamedNode, NamedNode)> = graph
+    //
+    // Pair cache resolves interned ids once. Graph legs iterate
+    // `rows_for_pred_id`, lifting `(s_id, o_id)` straight off each row
+    // and committing `(s_id, dst_id, o_id)` keyed triples. Delta legs
+    // hash subject and object once each.
+    let pairs: Vec<(NamedNode, TermId, NamedNode, TermId)> = graph
         .triples_for_predicate(OWL_EQUIVALENT_PROPERTY)
         .filter_map(|t| {
             let p1 = named_node_from_subject(t.subject)?;
             let p2 = named_node_from_term(t.object)?;
-            Some((p1, p2))
+            let p1_id = graph.lookup_named(p1.as_str())?;
+            let p2_id = graph.lookup_named(p2.as_str())?;
+            Some((p1, p1_id, p2, p2_id))
         })
         .collect();
 
     let mut firings: u64 = 0;
 
     let Some(d) = delta else {
-        for (p1, p2) in &pairs {
-            firings = firings.saturating_add(emit_rename(graph, p1, p2, pending));
-            firings = firings.saturating_add(emit_rename(graph, p2, p1, pending));
+        for (p1, p1_id, p2, p2_id) in &pairs {
+            firings = firings.saturating_add(emit_rename_keyed(graph, *p1_id, p2, *p2_id, pending_keyed));
+            firings = firings.saturating_add(emit_rename_keyed(graph, *p2_id, p1, *p1_id, pending_keyed));
         }
         return firings;
     };
@@ -1807,29 +1863,91 @@ fn apply_prp_eqp(graph: &FlatGraph, delta: Option<&DeltaIndex>, pending: &mut Ve
     for t in d.for_predicate(OWL_EQUIVALENT_PROPERTY) {
         let Some(p1) = owned_subject_named(&t.subject) else { continue };
         let Some(p2) = owned_object_named(&t.object) else { continue };
+        let Some(p1_id) = graph.lookup_named(p1.as_str()) else { continue };
+        let Some(p2_id) = graph.lookup_named(p2.as_str()) else { continue };
         seen_schema.insert((p1.clone(), p2.clone()));
-        firings = firings.saturating_add(emit_rename(graph, &p1, &p2, pending));
-        firings = firings.saturating_add(emit_rename(graph, &p2, &p1, pending));
+        firings = firings.saturating_add(emit_rename_keyed(graph, p1_id, &p2, p2_id, pending_keyed));
+        firings = firings.saturating_add(emit_rename_keyed(graph, p2_id, &p1, p1_id, pending_keyed));
     }
 
-    for (p1, p2) in &pairs {
+    for (p1, p1_id, p2, p2_id) in &pairs {
         if seen_schema.contains(&(p1.clone(), p2.clone())) {
             continue;
         }
+        // prp-eqp1 over delta(p1). Rewrite to p2.
         for t in d.for_predicate(p1.as_ref()) {
-            pending.push(Triple::new(t.subject.clone(), p2.clone(), t.object.clone()));
+            let Some(s_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let Some(o_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(t.subject.clone(), p2.clone(), t.object.clone());
+            pending_keyed.push((triple, (s_id, *p2_id, o_id)));
             firings = firings.saturating_add(1);
         }
+        // prp-eqp2 over delta(p2). Rewrite to p1.
         for t in d.for_predicate(p2.as_ref()) {
-            pending.push(Triple::new(t.subject.clone(), p1.clone(), t.object.clone()));
+            let Some(s_id) = graph.lookup_subject_ref(t.subject.as_ref()) else { continue };
+            let Some(o_id) = graph.lookup_term_ref(t.object.as_ref()) else { continue };
+            let triple = Triple::new(t.subject.clone(), p1.clone(), t.object.clone());
+            pending_keyed.push((triple, (s_id, *p1_id, o_id)));
             firings = firings.saturating_add(1);
         }
     }
     firings
 }
 
-/// For each edge `(x, src, y)` in `graph`, push `(x, dst, y)` onto `pending`.
-/// Used by prp-eqp (object position stays put, predicate is renamed).
+/// For each row `(x, src, y)` in `graph.rows_for_pred_id(src_id)`, push
+/// `((x, dst, y), (x_id, dst_id, y_id))` onto `pending_keyed`. Used by
+/// prp-eqp where the object position stays put and the predicate is
+/// renamed. Skips `intern_triple`'s three Arc<str> hashes per emit.
+fn emit_rename_keyed(
+    graph: &FlatGraph,
+    src_id: TermId,
+    dst: &NamedNode,
+    dst_id: TermId,
+    pending_keyed: &mut Vec<(Triple, (TermId, TermId, TermId))>,
+) -> u64 {
+    let mut firings: u64 = 0;
+    for (ids, row) in graph.rows_for_pred_id(src_id) {
+        let triple = Triple::new(row.subject.clone(), dst.clone(), row.object.clone());
+        pending_keyed.push((triple, (ids.0, dst_id, ids.2)));
+        firings = firings.saturating_add(1);
+    }
+    firings
+}
+
+/// Unkeyed square-join helper retained for the equality rule family
+/// (`eq-trans` and friends), which stays on the original `pending` path
+/// until someone benches keyed conversions for rules that are off by
+/// default and not part of LUBM's hot path.
+fn join_square(
+    left: &[(NamedOrBlankNode, NamedOrBlankNode)],
+    right: &[(NamedOrBlankNode, NamedOrBlankNode)],
+    p: &NamedNode,
+    pending: &mut Vec<Triple>,
+) -> u64 {
+    if left.is_empty() || right.is_empty() {
+        return 0;
+    }
+    let mut right_by_first: FxHashMap<&NamedOrBlankNode, Vec<&NamedOrBlankNode>> =
+        FxHashMap::with_capacity_and_hasher(right.len(), Default::default());
+    for (y2, z) in right {
+        right_by_first.entry(y2).or_default().push(z);
+    }
+    let mut firings: u64 = 0;
+    for (x, y) in left {
+        if let Some(zs) = right_by_first.get(y) {
+            for z in zs {
+                pending.push(Triple::new(x.clone(), p.clone(), (*z).clone()));
+                firings = firings.saturating_add(1);
+            }
+        }
+    }
+    firings
+}
+
+/// Unkeyed predicate-rename helper retained for `eq-rep-p`. Same
+/// rationale as `join_square`: equality rules are off-by-default and
+/// outside LUBM's profile, so conversion waits on a benchmark-led reason
+/// to do it.
 fn emit_rename(
     graph: &FlatGraph,
     src: &NamedNode,
