@@ -72,12 +72,3 @@ pub const SF_DISJOINT: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#sfDisjoint");
 pub const SF_INTERSECTS: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#sfIntersects");
-
-/// GeoSPARQL 1.1 ontology stub shipped with the crate.
-///
-/// This is not a complete ontology. It carries just enough axioms for a
-/// downstream reasoner to understand that Simple Features topological
-/// predicates are symmetric and that `geo:sfContains` inverts
-/// `geo:sfWithin`, which is what the bridge module relies on when it
-/// materialises relations from paired geometries.
-pub const GEOSPARQL_TTL: &str = include_str!("../data/geosparql.ttl");

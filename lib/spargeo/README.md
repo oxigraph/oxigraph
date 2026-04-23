@@ -134,7 +134,7 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 
 ### Feature and geometry vocabulary
 
-The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo ships these IRI constants in the `vocab` module and a minimal OWL ontology stub at `data/geosparql.ttl` suitable for downstream reasoners.
+The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo ships these IRI constants in the `vocab` module.
 
 ### Query Rewrite Extension
 

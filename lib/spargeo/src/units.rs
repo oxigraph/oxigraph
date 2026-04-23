@@ -44,7 +44,10 @@ pub fn length_iri_to_metre_factor(iri: &str) -> Option<f64> {
 /// represents.
 ///
 /// Returns `None` for any IRI that is not a recognised OGC angle unit.
-#[expect(dead_code, reason = "Reserved for future angle measuring functions")]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "Reserved for future angle measuring functions")
+)]
 pub fn angle_iri_to_radian_factor(iri: &str) -> Option<f64> {
     let local = iri.strip_prefix(OGC_UOM_PREFIX)?;
     match local {
@@ -83,6 +86,7 @@ pub fn extract_units_iri(term: &Term) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::expect_used)]
     use super::*;
     use oxrdf::{Literal as OxLiteral, NamedNode};
 

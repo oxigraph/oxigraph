@@ -98,15 +98,15 @@ fn geof_distance(args: &[Term]) -> Option<Term> {
     let right = extract_argument(&args[1])?;
     let units_iri = extract_units_iri(&args[2])?;
     let factor = length_iri_to_metre_factor(units_iri)?;
-    let p1 = as_point(left)?;
-    let p2 = as_point(right)?;
+    let p1 = as_point(&left)?;
+    let p2 = as_point(&right)?;
     let meters = Haversine.distance(p1, p2);
     Some(Literal::from(meters / factor).into())
 }
 
-fn as_point(geom: Geometry) -> Option<Point> {
+fn as_point(geom: &Geometry) -> Option<Point> {
     match geom {
-        Geometry::Point(p) => Some(p),
+        Geometry::Point(p) => Some(*p),
         _ => None,
     }
 }
@@ -153,7 +153,7 @@ fn pick_output_kind(args: &[Term]) -> GeometryLiteralKind {
     }
 }
 
-fn geometry_to_literal(geom: Geometry, kind: GeometryLiteralKind) -> Literal {
+fn geometry_to_literal(geom: &Geometry, kind: GeometryLiteralKind) -> Literal {
     match kind {
         GeometryLiteralKind::Wkt => result_to_wkt_literal(geom),
         GeometryLiteralKind::GeoJson => result_to_geojson_literal(geom),
@@ -184,7 +184,7 @@ fn geof_envelope(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let rect = geom.bounding_rect()?;
-    Some(geometry_to_literal(Geometry::Polygon(rect.to_polygon()), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::Polygon(rect.to_polygon()), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/centroid>.
@@ -194,7 +194,7 @@ fn geof_centroid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let point = geom.centroid()?;
-    Some(geometry_to_literal(Geometry::Point(point), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::Point(point), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/convexHull>.
@@ -204,7 +204,7 @@ fn geof_convex_hull(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let hull = geom.convex_hull();
-    Some(geometry_to_literal(Geometry::Polygon(hull), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::Polygon(hull), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/getSRID>.
@@ -279,7 +279,7 @@ fn geof_spatial_dimension(args: &[Term]) -> Option<Term> {
 fn geof_as_geojson(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
-    Some(result_to_geojson_literal(geom).into())
+    Some(result_to_geojson_literal(&geom).into())
 }
 
 /// Extract a `Polygon` or `MultiPolygon` as a `MultiPolygon` for boolean
@@ -300,7 +300,7 @@ fn geof_intersection(args: &[Term]) -> Option<Term> {
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.intersection(&b);
-    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/union>.
@@ -311,7 +311,7 @@ fn geof_union(args: &[Term]) -> Option<Term> {
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.union(&b);
-    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/difference>.
@@ -322,7 +322,7 @@ fn geof_difference(args: &[Term]) -> Option<Term> {
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.difference(&b);
-    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/symDifference>.
@@ -333,7 +333,7 @@ fn geof_sym_difference(args: &[Term]) -> Option<Term> {
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.xor(&b);
-    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
+    Some(geometry_to_literal(&Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/relate>.

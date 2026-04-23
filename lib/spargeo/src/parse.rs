@@ -59,20 +59,21 @@ pub fn parse_geo_json_literal(value: &str) -> Option<Geometry> {
 /// The produced value is prefixed with the CRS84 reference system URI so
 /// that downstream consumers can round trip the literal through
 /// [`parse_wkt_literal`] without loss of the coordinate reference system.
-pub fn result_to_wkt_literal(geom: Geometry) -> Literal {
+pub fn result_to_wkt_literal(geom: &Geometry) -> Literal {
     let wkt_body = geom.wkt_string();
     let value = format!("<{CRS84_URI}> {wkt_body}");
     Literal::new_typed_literal(value, geosparql::WKT_LITERAL)
 }
 
 /// Serialize a geometry as a `geoJSONLiteral`.
-pub fn result_to_geojson_literal(geom: Geometry) -> Literal {
-    let gj = GeoJsonGeometry::from(&geom);
+pub fn result_to_geojson_literal(geom: &Geometry) -> Literal {
+    let gj = GeoJsonGeometry::from(geom);
     Literal::new_typed_literal(gj.to_string(), geosparql::GEO_JSON_LITERAL)
 }
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::expect_used, clippy::panic)]
     use super::*;
     use oxrdf::Literal as OxLiteral;
 
@@ -137,7 +138,7 @@ mod tests {
     #[test]
     fn result_literal_roundtrips_through_parse() {
         let original = parse_wkt_literal("POINT(3 4)").expect("parses");
-        let literal = result_to_wkt_literal(original);
+        let literal = result_to_wkt_literal(&original);
         assert_eq!(literal.datatype(), geosparql::WKT_LITERAL);
         assert!(literal.value().starts_with('<'));
         let parsed = parse_wkt_literal(literal.value()).expect("roundtrip parses");
