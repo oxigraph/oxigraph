@@ -11,7 +11,7 @@ pub mod vocab;
 
 use crate::parse::{CRS84_URI, extract_argument, result_to_geojson_literal, result_to_wkt_literal};
 use crate::units::{
-    area_iri_to_square_metre_factor, extract_units_iri, length_iri_to_metre_factor,
+    area_iri_to_square_meter_factor, extract_units_iri, length_iri_to_meter_factor,
 };
 use geo::algorithm::Validation;
 use geo::coordinate_position::CoordPos;
@@ -78,26 +78,22 @@ pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) ->
 ];
 
 /// <http://www.opengis.net/def/function/geosparql/area>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:area>.
 fn geof_area(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let units_iri = extract_units_iri(&args[1])?;
-    let factor = area_iri_to_square_metre_factor(units_iri)?;
+    let factor = area_iri_to_square_meter_factor(units_iri)?;
     let square_metres = geom.geodesic_area_unsigned();
     Some(Literal::from(square_metres / factor).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/distance>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:distance>.
 fn geof_distance(args: &[Term]) -> Option<Term> {
     let args: &[Term; 3] = args.try_into().ok()?;
     let left = extract_argument(&args[0])?;
     let right = extract_argument(&args[1])?;
     let units_iri = extract_units_iri(&args[2])?;
-    let factor = length_iri_to_metre_factor(units_iri)?;
+    let factor = length_iri_to_meter_factor(units_iri)?;
     let p1 = as_point(&left)?;
     let p2 = as_point(&right)?;
     let meters = Haversine.distance(p1, p2);
@@ -161,13 +157,11 @@ fn geometry_to_literal(geom: &Geometry, kind: GeometryLiteralKind) -> Literal {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/length>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:length>.
 fn geof_length(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let units_iri = extract_units_iri(&args[1])?;
-    let factor = length_iri_to_metre_factor(units_iri)?;
+    let factor = length_iri_to_meter_factor(units_iri)?;
     let metres = match geom {
         Geometry::Line(l) => Haversine.length(&l),
         Geometry::LineString(ls) => Haversine.length(&ls),
@@ -178,8 +172,6 @@ fn geof_length(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/envelope>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:envelope>.
 fn geof_envelope(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -188,8 +180,6 @@ fn geof_envelope(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/centroid>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:centroid>.
 fn geof_centroid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -198,8 +188,6 @@ fn geof_centroid(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/convexHull>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:convexHull>.
 fn geof_convex_hull(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -208,8 +196,6 @@ fn geof_convex_hull(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/getSRID>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:getSRID>.
 fn geof_get_srid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     extract_argument(&args[0])?;
@@ -217,8 +203,6 @@ fn geof_get_srid(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/isEmpty>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:isEmpty>.
 fn geof_is_empty(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -226,8 +210,6 @@ fn geof_is_empty(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/isSimple>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:isSimple>.
 fn geof_is_simple(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -247,8 +229,6 @@ fn dim_to_int(d: Dimensions) -> i64 {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/dimension>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:dimension>.
 fn geof_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -256,8 +236,6 @@ fn geof_dimension(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/coordinateDimension>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:coordinateDimension>.
 fn geof_coordinate_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     extract_argument(&args[0])?;
@@ -265,8 +243,6 @@ fn geof_coordinate_dimension(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/spatialDimension>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:spatialDimension>.
 fn geof_spatial_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -274,8 +250,6 @@ fn geof_spatial_dimension(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/asGeoJSON>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:asGeoJSON>.
 fn geof_as_geojson(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -293,8 +267,6 @@ fn as_multi_polygon(geom: Geometry) -> Option<MultiPolygon> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/intersection>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:intersection>.
 fn geof_intersection(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
@@ -304,8 +276,6 @@ fn geof_intersection(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/union>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:union>.
 fn geof_union(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
@@ -315,8 +285,6 @@ fn geof_union(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/difference>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:difference>.
 fn geof_difference(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
@@ -326,8 +294,6 @@ fn geof_difference(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/symDifference>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:symDifference>.
 fn geof_sym_difference(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
@@ -337,8 +303,6 @@ fn geof_sym_difference(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/relate>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:relate>.
 fn geof_relate(args: &[Term]) -> Option<Term> {
     let args: &[Term; 3] = args.try_into().ok()?;
     let a = extract_argument(&args[0])?;
@@ -354,13 +318,11 @@ fn geof_relate(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/perimeter>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:perimeter>.
 fn geof_perimeter(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let units_iri = extract_units_iri(&args[1])?;
-    let factor = length_iri_to_metre_factor(units_iri)?;
+    let factor = length_iri_to_meter_factor(units_iri)?;
     let metres = polygonal_perimeter(&geom);
     Some(Literal::from(metres / factor).into())
 }
@@ -384,50 +346,36 @@ fn polygon_perimeter(p: &Polygon) -> f64 {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehEquals>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehEquals>.
 fn geof_eh_equals(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_equal_topo())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehDisjoint>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehDisjoint>.
 fn geof_eh_disjoint(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_disjoint())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehMeet>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehMeet>.
 fn geof_eh_meet(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_touches())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehOverlap>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehOverlap>.
 fn geof_eh_overlap(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_overlaps())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehCovers>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehCovers>.
 fn geof_eh_covers(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_covers())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehCoveredBy>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehCoveredBy>.
 fn geof_eh_covered_by(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_coveredby())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehInside>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehInside>.
 fn geof_eh_inside(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -436,8 +384,6 @@ fn geof_eh_inside(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/ehContains>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:ehContains>.
 fn geof_eh_contains(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -446,29 +392,21 @@ fn geof_eh_contains(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8eq>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8eq>.
 fn geof_rcc8_eq(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_equal_topo())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8dc>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8dc>.
 fn geof_rcc8_dc(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_disjoint())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8ec>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8ec>.
 fn geof_rcc8_ec(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_touches())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8po>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8po>.
 fn geof_rcc8_po(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_overlaps())
 }
@@ -478,8 +416,6 @@ fn boundaries_touch(matrix: &geo::relate::IntersectionMatrix) -> bool {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8tpp>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8tpp>.
 fn geof_rcc8_tpp(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -488,8 +424,6 @@ fn geof_rcc8_tpp(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8ntpp>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8ntpp>.
 fn geof_rcc8_ntpp(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -498,8 +432,6 @@ fn geof_rcc8_ntpp(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8tppi>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8tppi>.
 fn geof_rcc8_tppi(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -508,8 +440,6 @@ fn geof_rcc8_tppi(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/rcc8ntppi>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:rcc8ntppi>.
 fn geof_rcc8_ntppi(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| {
         let m = a.relate(&b);
@@ -518,57 +448,41 @@ fn geof_rcc8_ntppi(args: &[Term]) -> Option<Term> {
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfEquals>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfEquals>.
 fn geof_sf_equals(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_equal_topo())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfDisjoint>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfDisjoint>.
 fn geof_sf_disjoint(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_disjoint())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfIntersects>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfIntersects>.
 fn geof_sf_intersects(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_intersects())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfTouches>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfTouches>.
 fn geof_sf_touches(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_touches())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfCrosses>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfCrosses>.
 fn geof_sf_crosses(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_crosses())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfWithin>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfWithin>.
 fn geof_sf_within(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_within())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfContains>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfContains>.
 fn geof_sf_contains(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_contains())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/sfOverlaps>.
-///
-/// See <https://defs.opengis.net/prez/catalogs/ogc-cat:datamodels/col/catalog:geosparql/it1/function:geosparql/it2/ogcf:sfOverlaps>.
 fn geof_sf_overlaps(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_overlaps())
 }

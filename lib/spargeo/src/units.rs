@@ -12,9 +12,9 @@
 //!
 //! Base units used by this crate:
 //!
-//! * length base is the metre (see [`length_iri_to_metre_factor`]).
+//! * length base is the metre (see [`length_iri_to_meter_factor`]).
 //! * angle base is the radian (see [`angle_iri_to_radian_factor`]).
-//! * area base is the square metre (see [`area_iri_to_square_metre_factor`]).
+//! * area base is the square metre (see [`area_iri_to_square_meter_factor`]).
 //!
 //! Each conversion function accepts both the canonical OGC British spellings
 //! (`metre`, `kilometre`, `square_metre`, `square_kilometre`) and the US
@@ -31,7 +31,7 @@ const OGC_UOM_PREFIX: &str = "http://www.opengis.net/def/uom/OGC/1.0/";
 /// represents.
 ///
 /// Returns `None` for any IRI that is not a recognised OGC length unit.
-pub fn length_iri_to_metre_factor(iri: &str) -> Option<f64> {
+pub fn length_iri_to_meter_factor(iri: &str) -> Option<f64> {
     let local = iri.strip_prefix(OGC_UOM_PREFIX)?;
     match local {
         "metre" | "meter" => Some(1.0),
@@ -61,7 +61,7 @@ pub fn angle_iri_to_radian_factor(iri: &str) -> Option<f64> {
 /// represents.
 ///
 /// Returns `None` for any IRI that is not a recognised OGC area unit.
-pub fn area_iri_to_square_metre_factor(iri: &str) -> Option<f64> {
+pub fn area_iri_to_square_meter_factor(iri: &str) -> Option<f64> {
     let local = iri.strip_prefix(OGC_UOM_PREFIX)?;
     match local {
         "square_metre" | "square_meter" => Some(1.0),
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn metre_is_base_length() {
-        let factor = length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre")
+        let factor = length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/metre")
             .expect("known length unit");
         assert_eq!(factor, 1.0);
     }
@@ -100,15 +100,15 @@ mod tests {
     #[test]
     fn meter_alias_matches_metre() {
         let metre =
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre").unwrap();
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/metre").unwrap();
         let meter =
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/meter").unwrap();
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/meter").unwrap();
         assert_eq!(metre, meter);
     }
 
     #[test]
     fn kilometre_is_one_thousand_metres() {
-        let factor = length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre")
+        let factor = length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre")
             .expect("known length unit");
         assert_eq!(factor, 1000.0);
     }
@@ -116,9 +116,9 @@ mod tests {
     #[test]
     fn kilometer_alias_matches_kilometre() {
         let kilometre =
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre").unwrap();
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre").unwrap();
         let kilometer =
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometer").unwrap();
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometer").unwrap();
         assert_eq!(kilometre, kilometer);
     }
 
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn square_metre_is_base_area() {
         let factor =
-            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
+            area_iri_to_square_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
                 .expect("known area unit");
         assert_eq!(factor, 1.0);
     }
@@ -147,17 +147,17 @@ mod tests {
     #[test]
     fn square_meter_alias_matches_square_metre() {
         let metre =
-            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
+            area_iri_to_square_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
                 .unwrap();
         let meter =
-            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_meter")
+            area_iri_to_square_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/square_meter")
                 .unwrap();
         assert_eq!(metre, meter);
     }
 
     #[test]
     fn square_kilometre_is_one_million_square_metres() {
-        let factor = area_iri_to_square_metre_factor(
+        let factor = area_iri_to_square_meter_factor(
             "http://www.opengis.net/def/uom/OGC/1.0/square_kilometre",
         )
         .expect("known area unit");
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn length_iri_is_not_an_area_iri() {
         assert!(
-            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre",)
+            area_iri_to_square_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/metre",)
                 .is_none()
         );
     }
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn area_iri_is_not_a_length_iri() {
         assert!(
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre",)
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre",)
                 .is_none()
         );
     }
@@ -183,19 +183,19 @@ mod tests {
     #[test]
     fn angle_iri_is_not_a_length_iri() {
         assert!(
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/radian",).is_none()
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/radian",).is_none()
         );
     }
 
     #[test]
     fn unknown_prefix_returns_none() {
-        assert!(length_iri_to_metre_factor("http://example.org/uom/metre",).is_none());
+        assert!(length_iri_to_meter_factor("http://example.org/uom/metre",).is_none());
     }
 
     #[test]
     fn unknown_local_name_returns_none() {
         assert!(
-            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/parsec",).is_none()
+            length_iri_to_meter_factor("http://www.opengis.net/def/uom/OGC/1.0/parsec",).is_none()
         );
     }
 
