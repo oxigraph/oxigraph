@@ -176,7 +176,13 @@ fn geof_envelope(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let rect = geom.bounding_rect()?;
-    Some(geometry_to_literal(&Geometry::Polygon(rect.to_polygon()), pick_output_kind(args)).into())
+    Some(
+        geometry_to_literal(
+            &Geometry::Polygon(rect.to_polygon()),
+            pick_output_kind(args),
+        )
+        .into(),
+    )
 }
 
 /// <http://www.opengis.net/def/function/geosparql/centroid>.
