@@ -9,9 +9,7 @@ mod units;
 
 pub mod vocab;
 
-use crate::parse::{
-    extract_argument, result_to_geojson_literal, result_to_wkt_literal, CRS84_URI,
-};
+use crate::parse::{CRS84_URI, extract_argument, result_to_geojson_literal, result_to_wkt_literal};
 use crate::units::{
     area_iri_to_square_metre_factor, extract_units_iri, length_iri_to_metre_factor,
 };
@@ -26,12 +24,16 @@ use oxrdf::vocab::xsd;
 use oxrdf::{Literal, NamedNodeRef, Term};
 
 /// GeoSPARQL functions in name and implementation pairs
-pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 43] = [
+pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>);
+    43] = [
     (geosparql_functions::AREA, geof_area),
     (geosparql_functions::AS_GEO_JSON, geof_as_geojson),
     (geosparql_functions::CENTROID, geof_centroid),
     (geosparql_functions::CONVEX_HULL, geof_convex_hull),
-    (geosparql_functions::COORDINATE_DIMENSION, geof_coordinate_dimension),
+    (
+        geosparql_functions::COORDINATE_DIMENSION,
+        geof_coordinate_dimension,
+    ),
     (geosparql_functions::DIFFERENCE, geof_difference),
     (geosparql_functions::DIMENSION, geof_dimension),
     (geosparql_functions::DISTANCE, geof_distance),
@@ -67,7 +69,10 @@ pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) ->
     (geosparql_functions::SF_OVERLAPS, geof_sf_overlaps),
     (geosparql_functions::SF_TOUCHES, geof_sf_touches),
     (geosparql_functions::SF_WITHIN, geof_sf_within),
-    (geosparql_functions::SPATIAL_DIMENSION, geof_spatial_dimension),
+    (
+        geosparql_functions::SPATIAL_DIMENSION,
+        geof_spatial_dimension,
+    ),
     (geosparql_functions::SYM_DIFFERENCE, geof_sym_difference),
     (geosparql_functions::UNION, geof_union),
 ];

@@ -90,10 +90,8 @@ mod tests {
 
     #[test]
     fn parse_wkt_with_crs84() {
-        let geom = parse_wkt_literal(
-            "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(10 20)",
-        )
-        .expect("parses");
+        let geom = parse_wkt_literal("<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(10 20)")
+            .expect("parses");
         match geom {
             Geometry::Point(p) => {
                 assert_eq!(p.x(), 10.0);

@@ -88,85 +88,66 @@ mod tests {
 
     #[test]
     fn metre_is_base_length() {
-        let factor = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/metre",
-        )
-        .expect("known length unit");
+        let factor = length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre")
+            .expect("known length unit");
         assert_eq!(factor, 1.0);
     }
 
     #[test]
     fn meter_alias_matches_metre() {
-        let metre = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/metre",
-        )
-        .unwrap();
-        let meter = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/meter",
-        )
-        .unwrap();
+        let metre =
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre").unwrap();
+        let meter =
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/meter").unwrap();
         assert_eq!(metre, meter);
     }
 
     #[test]
     fn kilometre_is_one_thousand_metres() {
-        let factor = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/kilometre",
-        )
-        .expect("known length unit");
+        let factor = length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre")
+            .expect("known length unit");
         assert_eq!(factor, 1000.0);
     }
 
     #[test]
     fn kilometer_alias_matches_kilometre() {
-        let kilometre = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/kilometre",
-        )
-        .unwrap();
-        let kilometer = length_iri_to_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/kilometer",
-        )
-        .unwrap();
+        let kilometre =
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometre").unwrap();
+        let kilometer =
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/kilometer").unwrap();
         assert_eq!(kilometre, kilometer);
     }
 
     #[test]
     fn radian_is_base_angle() {
-        let factor = angle_iri_to_radian_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/radian",
-        )
-        .expect("known angle unit");
+        let factor = angle_iri_to_radian_factor("http://www.opengis.net/def/uom/OGC/1.0/radian")
+            .expect("known angle unit");
         assert_eq!(factor, 1.0);
     }
 
     #[test]
     fn degree_is_pi_over_one_eighty() {
-        let factor = angle_iri_to_radian_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/degree",
-        )
-        .expect("known angle unit");
+        let factor = angle_iri_to_radian_factor("http://www.opengis.net/def/uom/OGC/1.0/degree")
+            .expect("known angle unit");
         assert!((factor - std::f64::consts::PI / 180.0).abs() < 1e-15);
     }
 
     #[test]
     fn square_metre_is_base_area() {
-        let factor = area_iri_to_square_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        )
-        .expect("known area unit");
+        let factor =
+            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
+                .expect("known area unit");
         assert_eq!(factor, 1.0);
     }
 
     #[test]
     fn square_meter_alias_matches_square_metre() {
-        let metre = area_iri_to_square_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        )
-        .unwrap();
-        let meter = area_iri_to_square_metre_factor(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_meter",
-        )
-        .unwrap();
+        let metre =
+            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre")
+                .unwrap();
+        let meter =
+            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_meter")
+                .unwrap();
         assert_eq!(metre, meter);
     }
 
@@ -182,57 +163,41 @@ mod tests {
     #[test]
     fn length_iri_is_not_an_area_iri() {
         assert!(
-            area_iri_to_square_metre_factor(
-                "http://www.opengis.net/def/uom/OGC/1.0/metre",
-            )
-            .is_none()
+            area_iri_to_square_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/metre",)
+                .is_none()
         );
     }
 
     #[test]
     fn area_iri_is_not_a_length_iri() {
         assert!(
-            length_iri_to_metre_factor(
-                "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-            )
-            .is_none()
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/square_metre",)
+                .is_none()
         );
     }
 
     #[test]
     fn angle_iri_is_not_a_length_iri() {
         assert!(
-            length_iri_to_metre_factor(
-                "http://www.opengis.net/def/uom/OGC/1.0/radian",
-            )
-            .is_none()
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/radian",).is_none()
         );
     }
 
     #[test]
     fn unknown_prefix_returns_none() {
-        assert!(
-            length_iri_to_metre_factor(
-                "http://example.org/uom/metre",
-            )
-            .is_none()
-        );
+        assert!(length_iri_to_metre_factor("http://example.org/uom/metre",).is_none());
     }
 
     #[test]
     fn unknown_local_name_returns_none() {
         assert!(
-            length_iri_to_metre_factor(
-                "http://www.opengis.net/def/uom/OGC/1.0/parsec",
-            )
-            .is_none()
+            length_iri_to_metre_factor("http://www.opengis.net/def/uom/OGC/1.0/parsec",).is_none()
         );
     }
 
     #[test]
     fn extract_units_iri_from_named_node() {
-        let node =
-            NamedNode::new_unchecked("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let node = NamedNode::new_unchecked("http://www.opengis.net/def/uom/OGC/1.0/metre");
         let term = Term::NamedNode(node);
         assert_eq!(
             extract_units_iri(&term),
@@ -255,9 +220,7 @@ mod tests {
 
     #[test]
     fn extract_units_iri_rejects_simple_literal() {
-        let lit = OxLiteral::new_simple_literal(
-            "http://www.opengis.net/def/uom/OGC/1.0/metre",
-        );
+        let lit = OxLiteral::new_simple_literal("http://www.opengis.net/def/uom/OGC/1.0/metre");
         assert!(extract_units_iri(&Term::Literal(lit)).is_none());
     }
 
