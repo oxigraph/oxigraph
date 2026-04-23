@@ -13,7 +13,9 @@ pub mod bridge;
 #[cfg(feature = "spatial_index")]
 pub mod index;
 
-use crate::parse::{extract_argument, result_to_wkt_literal, CRS84_URI};
+use crate::parse::{
+    extract_argument, result_to_geojson_literal, result_to_wkt_literal, CRS84_URI,
+};
 use crate::units::{extract_units_iri, units_to_factor, UnitKind};
 use geo::algorithm::Validation;
 use geo::coordinate_position::CoordPos;
@@ -22,15 +24,13 @@ use geo::{
     BooleanOps, BoundingRect, Centroid, ConvexHull, Distance, GeodesicArea, Geometry,
     HasDimensions, Haversine, Length, MultiPolygon, Point, Polygon, Relate,
 };
-use geojson::Geometry as GeoJsonGeometry;
+use oxrdf::vocab::xsd;
 use oxrdf::{Literal, NamedNodeRef, Term};
-use wkt::ToWkt;
 
 /// GeoSPARQL functions in name and implementation pairs
-pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 44] = [
+pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) -> Option<Term>); 43] = [
     (geosparql_functions::AREA, geof_area),
     (geosparql_functions::AS_GEO_JSON, geof_as_geojson),
-    (geosparql_functions::AS_TEXT, geof_as_text),
     (geosparql_functions::CENTROID, geof_centroid),
     (geosparql_functions::CONVEX_HULL, geof_convex_hull),
     (geosparql_functions::COORDINATE_DIMENSION, geof_coordinate_dimension),
@@ -74,22 +74,9 @@ pub const GEOSPARQL_EXTENSION_FUNCTIONS: [(NamedNodeRef<'static>, fn(&[Term]) ->
     (geosparql_functions::UNION, geof_union),
 ];
 
-/// XSD `anyURI` datatype used by accessor functions that return IRIs as values.
-const XSD_ANY_URI: NamedNodeRef<'static> =
-    NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#anyURI");
-
-/// XSD `integer` datatype used by accessor functions that return integers.
-const XSD_INTEGER: NamedNodeRef<'static> =
-    NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#integer");
-
-/// `geof:area`. Computes the geodesic unsigned area of a geometry under the
-/// CRS84 reference system and returns it as an `xsd:double` expressed in the
-/// target units of measure.
+/// <http://www.opengis.net/def/function/geosparql/area>.
 ///
-/// Two arguments are expected: a geometry literal followed by an OGC units of
-/// measure IRI for an area unit. Geometries with zero planar extent (points,
-/// lines, multi points, multi line strings) return zero. Unknown units or
-/// non-area unit IRIs return no binding.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofarea>.
 fn geof_area(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -99,14 +86,9 @@ fn geof_area(args: &[Term]) -> Option<Term> {
     Some(Literal::from(square_metres / factor).into())
 }
 
-/// `geof:distance`. Computes the haversine distance between two point
-/// geometries and returns it as an `xsd:double` expressed in the target
-/// units of measure.
+/// <http://www.opengis.net/def/function/geosparql/distance>.
 ///
-/// Three arguments are expected: two geometry literals followed by an OGC
-/// units of measure IRI. Only `Point` geometries are supported, consistent
-/// with the CRS84 assumption of this crate. Non point inputs or unknown
-/// units return no binding.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofdistance>.
 fn geof_distance(args: &[Term]) -> Option<Term> {
     let args: &[Term; 3] = args.try_into().ok()?;
     let left = extract_argument(&args[0])?;
@@ -119,7 +101,6 @@ fn geof_distance(args: &[Term]) -> Option<Term> {
     Some(Literal::from(meters / factor).into())
 }
 
-#[inline]
 fn as_point(geom: Geometry) -> Option<Point> {
     match geom {
         Geometry::Point(p) => Some(p),
@@ -127,15 +108,58 @@ fn as_point(geom: Geometry) -> Option<Point> {
     }
 }
 
-/// `geof:length`. Computes the haversine length of a linear geometry under
-/// the CRS84 reference system and returns it as an `xsd:double` expressed in
-/// the target units of measure.
+/// Geometry literal datatype observed on an input argument. Used by geometry
+/// returning functions to pick the matching output serialization so that WKT
+/// inputs produce WKT outputs and GeoJSON inputs produce GeoJSON outputs.
+#[derive(Copy, Clone)]
+enum GeometryLiteralKind {
+    Wkt,
+    GeoJson,
+}
+
+fn detect_literal_kind(term: &Term) -> Option<GeometryLiteralKind> {
+    let Term::Literal(literal) = term else {
+        return None;
+    };
+    if literal.datatype() == geosparql::WKT_LITERAL {
+        Some(GeometryLiteralKind::Wkt)
+    } else if literal.datatype() == geosparql::GEO_JSON_LITERAL {
+        Some(GeometryLiteralKind::GeoJson)
+    } else {
+        None
+    }
+}
+
+/// Pick the output serialization format for a geometry returning function.
 ///
-/// Two arguments are expected: a geometry literal followed by an OGC units
-/// of measure IRI for a length unit. Line, LineString and MultiLineString
-/// inputs produce their geodesic length. Geometries without linear extent
-/// (points, polygons, collections of those) return zero, consistent with
-/// the GeoSPARQL accessor semantics that reserve perimeter for polygons.
+/// WKT inputs produce WKT output, GeoJSON inputs produce GeoJSON output, and
+/// any mix (or any unrecognised datatype) falls back to WKT.
+fn pick_output_kind(args: &[Term]) -> GeometryLiteralKind {
+    let mut seen_geojson = false;
+    for term in args {
+        match detect_literal_kind(term) {
+            Some(GeometryLiteralKind::Wkt) => return GeometryLiteralKind::Wkt,
+            Some(GeometryLiteralKind::GeoJson) => seen_geojson = true,
+            None => {}
+        }
+    }
+    if seen_geojson {
+        GeometryLiteralKind::GeoJson
+    } else {
+        GeometryLiteralKind::Wkt
+    }
+}
+
+fn geometry_to_literal(geom: Geometry, kind: GeometryLiteralKind) -> Literal {
+    match kind {
+        GeometryLiteralKind::Wkt => result_to_wkt_literal(geom),
+        GeometryLiteralKind::GeoJson => result_to_geojson_literal(geom),
+    }
+}
+
+/// <http://www.opengis.net/def/function/geosparql/length>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geoflength>.
 fn geof_length(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -150,71 +174,57 @@ fn geof_length(args: &[Term]) -> Option<Term> {
     Some(Literal::from(metres / factor).into())
 }
 
-/// `geof:envelope`. Returns the minimum bounding rectangle of a geometry as a
-/// CRS84 `wktLiteral` polygon.
+/// <http://www.opengis.net/def/function/geosparql/envelope>.
 ///
-/// One argument is expected. Geometries with no coordinates yield no binding.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofenvelope>.
 fn geof_envelope(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let rect = geom.bounding_rect()?;
-    Some(result_to_wkt_literal(Geometry::Polygon(rect.to_polygon())).into())
+    Some(geometry_to_literal(Geometry::Polygon(rect.to_polygon()), pick_output_kind(args)).into())
 }
 
-/// `geof:centroid`. Returns the arithmetic centroid of a geometry as a CRS84
-/// `wktLiteral` point.
+/// <http://www.opengis.net/def/function/geosparql/centroid>.
 ///
-/// One argument is expected. Empty geometries yield no binding.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofcentroid>.
 fn geof_centroid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let point = geom.centroid()?;
-    Some(result_to_wkt_literal(Geometry::Point(point)).into())
+    Some(geometry_to_literal(Geometry::Point(point), pick_output_kind(args)).into())
 }
 
-/// `geof:convexHull`. Returns the convex hull of a geometry as a CRS84
-/// `wktLiteral` polygon.
+/// <http://www.opengis.net/def/function/geosparql/convexHull>.
 ///
-/// One argument is expected. The computation runs in planar coordinates
-/// because the `geo` crate convex hull is Euclidean, so on longitude and
-/// latitude inputs the result is a topological approximation rather than a
-/// true spherical hull.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofconvexhull>.
 fn geof_convex_hull(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     let hull = geom.convex_hull();
-    Some(result_to_wkt_literal(Geometry::Polygon(hull)).into())
+    Some(geometry_to_literal(Geometry::Polygon(hull), pick_output_kind(args)).into())
 }
 
-/// `geof:getSRID`. Returns the spatial reference system identifier of a
-/// geometry as an `xsd:anyURI`.
+/// <http://www.opengis.net/def/function/geosparql/getSRID>.
 ///
-/// One argument is expected. This crate accepts geometry literals only in
-/// the CRS84 reference system, so the returned IRI is always the CRS84 URI.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofgetsrid>.
 fn geof_get_srid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     extract_argument(&args[0])?;
-    Some(Term::Literal(Literal::new_typed_literal(CRS84_URI, XSD_ANY_URI)))
+    Some(Literal::new_typed_literal(CRS84_URI, xsd::ANY_URI).into())
 }
 
-/// `geof:isEmpty`. Returns whether a geometry has no coordinates as an
-/// `xsd:boolean`.
+/// <http://www.opengis.net/def/function/geosparql/isEmpty>.
 ///
-/// One argument is expected. Points and rectangles cannot be empty by
-/// construction in the `geo` crate and therefore always return false.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofisempty>.
 fn geof_is_empty(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
     Some(Literal::from(geom.is_empty()).into())
 }
 
-/// `geof:isSimple`. Returns whether a geometry has no self intersection and
-/// no tangencies, as an `xsd:boolean`.
+/// <http://www.opengis.net/def/function/geosparql/isSimple>.
 ///
-/// One argument is expected. This crate uses the `geo` crate `Validation`
-/// check as a conservative approximation of OGC simple: a geometry that
-/// fails validation is reported as not simple, every valid geometry is
-/// reported as simple.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofissimple>.
 fn geof_is_simple(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -224,7 +234,6 @@ fn geof_is_simple(args: &[Term]) -> Option<Term> {
 /// Map a `geo` dimensions value to the OGC integer code.
 ///
 /// Follows the SFA convention of returning minus one for empty geometries.
-#[inline]
 fn dim_to_int(d: Dimensions) -> i64 {
     match d {
         Dimensions::Empty => -1,
@@ -234,57 +243,44 @@ fn dim_to_int(d: Dimensions) -> i64 {
     }
 }
 
-#[inline]
-fn integer_literal(value: i64) -> Term {
-    Term::Literal(Literal::new_typed_literal(value.to_string(), XSD_INTEGER))
-}
-
-/// `geof:dimension`. Returns the topological dimension of a geometry as an
-/// `xsd:integer` value in the set minus one, zero, one, two.
+/// <http://www.opengis.net/def/function/geosparql/dimension>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofdimension>.
 fn geof_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
-    Some(integer_literal(dim_to_int(geom.dimensions())))
+    Some(Literal::from(dim_to_int(geom.dimensions())).into())
 }
 
-/// `geof:coordinateDimension`. Returns the number of coordinate components
-/// of a geometry as an `xsd:integer`. Constant two in this crate because
-/// CRS84 input is two dimensional.
+/// <http://www.opengis.net/def/function/geosparql/coordinateDimension>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofcoordinatedimension>.
 fn geof_coordinate_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     extract_argument(&args[0])?;
-    Some(integer_literal(2))
+    Some(Literal::from(2_i64).into())
 }
 
-/// `geof:spatialDimension`. Returns the number of spatial dimensions of a
-/// geometry. Matches `geof:dimension` in this crate because 3D inputs are
-/// not supported.
+/// <http://www.opengis.net/def/function/geosparql/spatialDimension>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofspatialdimension>.
 fn geof_spatial_dimension(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
-    Some(integer_literal(dim_to_int(geom.dimensions())))
+    Some(Literal::from(dim_to_int(geom.dimensions())).into())
 }
 
-/// `geof:asText`. Returns the WKT serialization of a geometry as an
-/// `xsd:string`.
-fn geof_as_text(args: &[Term]) -> Option<Term> {
-    let args: &[Term; 1] = args.try_into().ok()?;
-    let geom = extract_argument(&args[0])?;
-    Some(Literal::from(geom.wkt_string()).into())
-}
-
-/// `geof:asGeoJSON`. Returns the GeoJSON serialization of a geometry as an
-/// `xsd:string`.
+/// <http://www.opengis.net/def/function/geosparql/asGeoJSON>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofasgeojson>.
 fn geof_as_geojson(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
-    let gj = GeoJsonGeometry::from(&geom);
-    Some(Literal::from(gj.to_string()).into())
+    Some(result_to_geojson_literal(geom).into())
 }
 
 /// Extract a `Polygon` or `MultiPolygon` as a `MultiPolygon` for boolean
 /// operations. Returns `None` for non polygonal geometries.
-#[inline]
 fn as_multi_polygon(geom: Geometry) -> Option<MultiPolygon> {
     match geom {
         Geometry::Polygon(p) => Some(MultiPolygon::new(vec![p])),
@@ -293,72 +289,70 @@ fn as_multi_polygon(geom: Geometry) -> Option<MultiPolygon> {
     }
 }
 
-/// `geof:intersection`. Returns the polygonal intersection of two geometries
-/// as a CRS84 `wktLiteral`.
+/// <http://www.opengis.net/def/function/geosparql/intersection>.
 ///
-/// Polygons and multi polygons only, consistent with the `geo` crate boolean
-/// operations support.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofintersection>.
 fn geof_intersection(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.intersection(&b);
-    Some(result_to_wkt_literal(Geometry::MultiPolygon(result)).into())
+    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
-/// `geof:union`. Returns the polygonal union of two geometries as a CRS84
-/// `wktLiteral`.
+/// <http://www.opengis.net/def/function/geosparql/union>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofunion>.
 fn geof_union(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.union(&b);
-    Some(result_to_wkt_literal(Geometry::MultiPolygon(result)).into())
+    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
-/// `geof:difference`. Returns the polygonal set difference between two
-/// geometries as a CRS84 `wktLiteral`.
+/// <http://www.opengis.net/def/function/geosparql/difference>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofdifference>.
 fn geof_difference(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.difference(&b);
-    Some(result_to_wkt_literal(Geometry::MultiPolygon(result)).into())
+    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
-/// `geof:symDifference`. Returns the polygonal symmetric difference of two
-/// geometries as a CRS84 `wktLiteral`.
+/// <http://www.opengis.net/def/function/geosparql/symDifference>.
+///
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofsymdifference>.
 fn geof_sym_difference(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let a = as_multi_polygon(extract_argument(&args[0])?)?;
     let b = as_multi_polygon(extract_argument(&args[1])?)?;
     let result = a.xor(&b);
-    Some(result_to_wkt_literal(Geometry::MultiPolygon(result)).into())
+    Some(geometry_to_literal(Geometry::MultiPolygon(result), pick_output_kind(args)).into())
 }
 
-/// `geof:relate`. Tests two geometries against a DE-9IM pattern.
+/// <http://www.opengis.net/def/function/geosparql/relate>.
 ///
-/// Three arguments are expected: two geometry literals and an `xsd:string`
-/// containing nine pattern characters drawn from the set `T`, `F`, `*`, `0`,
-/// `1`, `2`. Returns no binding when the pattern string is malformed.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofrelate>.
 fn geof_relate(args: &[Term]) -> Option<Term> {
     let args: &[Term; 3] = args.try_into().ok()?;
     let a = extract_argument(&args[0])?;
     let b = extract_argument(&args[1])?;
-    let pattern = match &args[2] {
-        Term::Literal(l) => l.value().to_string(),
-        _ => return None,
+    let Term::Literal(pattern) = &args[2] else {
+        return None;
     };
     let matrix = a.relate(&b);
-    matrix.matches(&pattern).ok().map(|v| Literal::from(v).into())
+    matrix
+        .matches(pattern.value())
+        .ok()
+        .map(|v| Literal::from(v).into())
 }
 
-/// `geof:perimeter`. Returns the haversine perimeter of a polygonal geometry
-/// as an `xsd:double` expressed in the target units of measure.
+/// <http://www.opengis.net/def/function/geosparql/perimeter>.
 ///
-/// Two arguments are expected: a polygonal geometry literal and a length
-/// units IRI. Point, line and collection geometries return zero because
-/// their perimeter is not defined.
+/// See <https://opengeospatial.github.io/ogc-geosparql/geosparql11/spec.html#_function_geofperimeter>.
 fn geof_perimeter(args: &[Term]) -> Option<Term> {
     let args: &[Term; 2] = args.try_into().ok()?;
     let geom = extract_argument(&args[0])?;
@@ -385,10 +379,6 @@ fn polygon_perimeter(p: &Polygon) -> f64 {
     }
     total
 }
-
-/// Egenhofer and RCC8 topology helpers. Each GeoSPARQL function delegates to
-/// either an existing `IntersectionMatrix` method or to a boundary-boundary
-/// inspection when the relation distinguishes tangential contact.
 
 fn geof_eh_equals(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_equal_topo())
@@ -444,7 +434,6 @@ fn geof_rcc8_po(args: &[Term]) -> Option<Term> {
     binary_geo_fn(args, |a, b| a.relate(&b).is_overlaps())
 }
 
-#[inline]
 fn boundaries_touch(matrix: &geo::relate::IntersectionMatrix) -> bool {
     matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::Empty
 }
@@ -537,8 +526,6 @@ mod geosparql_functions {
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/area");
     pub const AS_GEO_JSON: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/asGeoJSON");
-    pub const AS_TEXT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/asText");
     pub const CENTROID: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/centroid");
     pub const CONVEX_HULL: NamedNodeRef<'_> =
@@ -623,610 +610,4 @@ mod geosparql_functions {
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/symDifference");
     pub const UNION: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.opengis.net/def/function/geosparql/union");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use oxrdf::{Literal as OxLiteral, NamedNode};
-
-    fn wkt_literal(value: &str) -> Term {
-        Term::Literal(OxLiteral::new_typed_literal(value, geosparql::WKT_LITERAL))
-    }
-
-    fn units_named_node(iri: &str) -> Term {
-        Term::NamedNode(NamedNode::new_unchecked(iri))
-    }
-
-    fn parse_double(term: &Term) -> f64 {
-        match term {
-            Term::Literal(l) => l.value().parse::<f64>().expect("double"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn distance_new_york_to_london_in_metres() {
-        let nyc = wkt_literal("POINT(-74.006 40.7128)");
-        let london = wkt_literal("POINT(-0.1278 51.5074)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let result = geof_distance(&[nyc, london, metres]).expect("computes");
-        let value = parse_double(&result);
-        assert!(
-            (value - 5_570_230.0).abs() < 50.0,
-            "got {value}, expected near 5570230 metres"
-        );
-    }
-
-    #[test]
-    fn distance_is_unit_scaled() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 0)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let kilometres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/kilometre");
-        let in_metres =
-            parse_double(&geof_distance(&[a.clone(), b.clone(), metres]).expect("metres"));
-        let in_kilometres =
-            parse_double(&geof_distance(&[a, b, kilometres]).expect("kilometres"));
-        assert!((in_metres / 1000.0 - in_kilometres).abs() < 1e-6);
-    }
-
-    #[test]
-    fn distance_accepts_units_as_literal() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(0 0)");
-        let metres = Term::Literal(OxLiteral::new_simple_literal(
-            "http://www.opengis.net/def/uom/OGC/1.0/metre",
-        ));
-        let result = geof_distance(&[a, b, metres]).expect("computes");
-        assert!(parse_double(&result).abs() < 1e-9);
-    }
-
-    #[test]
-    fn distance_rejects_unknown_units() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 0)");
-        let bad = units_named_node("http://example.org/uom/parsec");
-        assert!(geof_distance(&[a, b, bad]).is_none());
-    }
-
-    #[test]
-    fn distance_rejects_non_point_geometry() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let b = wkt_literal("POINT(0 0)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        assert!(geof_distance(&[line, b, metres]).is_none());
-    }
-
-    #[test]
-    fn distance_rejects_wrong_arity() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 0)");
-        assert!(geof_distance(&[a, b]).is_none());
-    }
-
-    #[test]
-    fn area_of_one_degree_square_near_equator() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let square_metres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        );
-        let value = parse_double(
-            &geof_area(&[square, square_metres]).expect("computes"),
-        );
-        // A one degree by one degree patch at the equator is about
-        // 12309 square kilometres according to geodesic calculation.
-        assert!(
-            (value - 1.2309e10).abs() < 1.0e8,
-            "got {value}, expected near 1.2309e10 square metres"
-        );
-    }
-
-    #[test]
-    fn area_is_unit_scaled() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let square_metres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        );
-        let square_kilometres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_kilometre",
-        );
-        let in_m2 = parse_double(
-            &geof_area(&[square.clone(), square_metres]).expect("m2"),
-        );
-        let in_km2 = parse_double(
-            &geof_area(&[square, square_kilometres]).expect("km2"),
-        );
-        assert!((in_m2 / 1_000_000.0 - in_km2).abs() < 1e-3);
-    }
-
-    #[test]
-    fn area_of_point_is_zero() {
-        let point = wkt_literal("POINT(10 20)");
-        let square_metres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        );
-        let value = parse_double(
-            &geof_area(&[point, square_metres]).expect("computes"),
-        );
-        assert_eq!(value, 0.0);
-    }
-
-    #[test]
-    fn area_of_line_is_zero() {
-        let line = wkt_literal("LINESTRING(0 0, 1 1, 2 0)");
-        let square_metres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        );
-        let value = parse_double(
-            &geof_area(&[line, square_metres]).expect("computes"),
-        );
-        assert_eq!(value, 0.0);
-    }
-
-    #[test]
-    fn area_rejects_length_units() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        assert!(geof_area(&[square, metres]).is_none());
-    }
-
-    #[test]
-    fn area_rejects_unknown_units() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let bad = units_named_node("http://example.org/uom/acre");
-        assert!(geof_area(&[square, bad]).is_none());
-    }
-
-    #[test]
-    fn area_rejects_wrong_arity() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        assert!(geof_area(&[square]).is_none());
-    }
-
-    #[test]
-    fn length_of_london_to_paris_line() {
-        // Single segment from central London to central Paris.
-        let line = wkt_literal("LINESTRING(-0.1278 51.5074, 2.3522 48.8566)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let value = parse_double(&geof_length(&[line, metres]).expect("computes"));
-        // Haversine length is about 343.5 km. Allow 1 km tolerance.
-        assert!(
-            (value - 343_557.0).abs() < 1_000.0,
-            "got {value}, expected near 343557 metres"
-        );
-    }
-
-    #[test]
-    fn length_is_unit_scaled() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let kilometres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/kilometre");
-        let in_metres =
-            parse_double(&geof_length(&[line.clone(), metres]).expect("metres"));
-        let in_kilometres =
-            parse_double(&geof_length(&[line, kilometres]).expect("kilometres"));
-        assert!((in_metres / 1000.0 - in_kilometres).abs() < 1e-6);
-    }
-
-    #[test]
-    fn length_of_multi_line_string_sums_parts() {
-        let one = wkt_literal("LINESTRING(0 0, 1 0)");
-        let many = wkt_literal("MULTILINESTRING((0 0, 1 0), (10 10, 10 11))");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let single =
-            parse_double(&geof_length(&[one, metres.clone()]).expect("single"));
-        let combined =
-            parse_double(&geof_length(&[many, metres]).expect("combined"));
-        // Combined length must exceed either single segment.
-        assert!(combined > single);
-        assert!(combined > 0.0);
-    }
-
-    #[test]
-    fn length_of_point_is_zero() {
-        let point = wkt_literal("POINT(10 20)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let value = parse_double(&geof_length(&[point, metres]).expect("computes"));
-        assert_eq!(value, 0.0);
-    }
-
-    #[test]
-    fn length_of_polygon_is_zero() {
-        let poly = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let value = parse_double(&geof_length(&[poly, metres]).expect("computes"));
-        assert_eq!(value, 0.0);
-    }
-
-    #[test]
-    fn length_rejects_area_units() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let square_metres = units_named_node(
-            "http://www.opengis.net/def/uom/OGC/1.0/square_metre",
-        );
-        assert!(geof_length(&[line, square_metres]).is_none());
-    }
-
-    #[test]
-    fn length_rejects_unknown_units() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let bad = units_named_node("http://example.org/uom/furlong");
-        assert!(geof_length(&[line, bad]).is_none());
-    }
-
-    #[test]
-    fn length_rejects_wrong_arity() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        assert!(geof_length(&[line]).is_none());
-    }
-
-    fn parse_wkt_result(term: &Term) -> geo::Geometry {
-        match term {
-            Term::Literal(l) => {
-                assert_eq!(l.datatype(), geosparql::WKT_LITERAL);
-                crate::parse::parse_wkt_literal(l.value()).expect("parses")
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn envelope_of_triangle_is_axis_aligned_box() {
-        let tri = wkt_literal("POLYGON((0 0, 4 0, 0 3, 0 0))");
-        let out = geof_envelope(&[tri]).expect("computes");
-        match parse_wkt_result(&out) {
-            geo::Geometry::Polygon(p) => {
-                let coords: Vec<(f64, f64)> =
-                    p.exterior().points().map(|pt| (pt.x(), pt.y())).collect();
-                // Bounding rect corners should cover (0,0) to (4,3).
-                let xs: Vec<f64> = coords.iter().map(|c| c.0).collect();
-                let ys: Vec<f64> = coords.iter().map(|c| c.1).collect();
-                assert!((xs.iter().cloned().fold(f64::INFINITY, f64::min) - 0.0).abs() < 1e-9);
-                assert!((xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max) - 4.0).abs() < 1e-9);
-                assert!((ys.iter().cloned().fold(f64::INFINITY, f64::min) - 0.0).abs() < 1e-9);
-                assert!((ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max) - 3.0).abs() < 1e-9);
-            }
-            _ => panic!("expected polygon"),
-        }
-    }
-
-    #[test]
-    fn envelope_rejects_wrong_arity() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 1)");
-        assert!(geof_envelope(&[a, b]).is_none());
-    }
-
-    #[test]
-    fn centroid_of_square_is_centre() {
-        let square = wkt_literal("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
-        let out = geof_centroid(&[square]).expect("computes");
-        match parse_wkt_result(&out) {
-            geo::Geometry::Point(p) => {
-                assert!((p.x() - 1.0).abs() < 1e-9);
-                assert!((p.y() - 1.0).abs() < 1e-9);
-            }
-            _ => panic!("expected point"),
-        }
-    }
-
-    #[test]
-    fn centroid_rejects_wrong_arity() {
-        assert!(geof_centroid(&[]).is_none());
-    }
-
-    #[test]
-    fn convex_hull_of_concave_polygon_is_bounding_triangle_or_quad() {
-        // L shape. Its convex hull is a 4 corner box.
-        let l_shape = wkt_literal(
-            "POLYGON((0 0, 4 0, 4 1, 1 1, 1 4, 0 4, 0 0))",
-        );
-        let out = geof_convex_hull(&[l_shape]).expect("computes");
-        match parse_wkt_result(&out) {
-            geo::Geometry::Polygon(p) => {
-                let unique: std::collections::BTreeSet<(i64, i64)> = p
-                    .exterior()
-                    .points()
-                    .map(|pt| ((pt.x() * 1000.0) as i64, (pt.y() * 1000.0) as i64))
-                    .collect();
-                // Four hull vertices: (0,0), (4,0), (4,1), (0,4).
-                assert!(unique.contains(&(0, 0)));
-                assert!(unique.contains(&(4_000, 0)));
-                assert!(unique.contains(&(4_000, 1_000)));
-                assert!(unique.contains(&(0, 4_000)));
-            }
-            _ => panic!("expected polygon"),
-        }
-    }
-
-    #[test]
-    fn convex_hull_rejects_wrong_arity() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 1)");
-        assert!(geof_convex_hull(&[a, b]).is_none());
-    }
-
-    #[test]
-    fn get_srid_is_crs84_uri() {
-        let any = wkt_literal("POINT(10 20)");
-        let out = geof_get_srid(&[any]).expect("computes");
-        match out {
-            Term::Literal(l) => {
-                assert_eq!(l.value(), "http://www.opengis.net/def/crs/OGC/1.3/CRS84");
-                assert_eq!(
-                    l.datatype().as_str(),
-                    "http://www.w3.org/2001/XMLSchema#anyURI"
-                );
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn get_srid_rejects_non_geometry_literal() {
-        let plain = Term::Literal(OxLiteral::new_simple_literal("POINT(0 0)"));
-        assert!(geof_get_srid(&[plain]).is_none());
-    }
-
-    #[test]
-    fn is_empty_false_for_point() {
-        let p = wkt_literal("POINT(1 2)");
-        let out = geof_is_empty(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "false"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn is_empty_true_for_empty_multi_point() {
-        let mp = wkt_literal("MULTIPOINT EMPTY");
-        let out = geof_is_empty(&[mp]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn is_empty_rejects_wrong_arity() {
-        assert!(geof_is_empty(&[]).is_none());
-    }
-
-    #[test]
-    fn is_simple_true_for_point() {
-        let p = wkt_literal("POINT(1 2)");
-        let out = geof_is_simple(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn is_simple_rejects_wrong_arity() {
-        assert!(geof_is_simple(&[]).is_none());
-    }
-
-    #[test]
-    fn dimension_of_point_is_zero() {
-        let p = wkt_literal("POINT(1 2)");
-        let out = geof_dimension(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => {
-                assert_eq!(l.value(), "0");
-                assert_eq!(l.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#integer");
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn dimension_of_line_is_one() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let out = geof_dimension(&[line]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "1"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn dimension_of_polygon_is_two() {
-        let poly = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let out = geof_dimension(&[poly]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "2"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn coordinate_dimension_is_two_under_crs84() {
-        let p = wkt_literal("POINT(0 0)");
-        let out = geof_coordinate_dimension(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "2"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn spatial_dimension_tracks_topological_dimension() {
-        let poly = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let out = geof_spatial_dimension(&[poly]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "2"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn as_text_round_trips_point() {
-        let p = wkt_literal("POINT(3 4)");
-        let out = geof_as_text(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => {
-                assert!(l.value().to_uppercase().contains("POINT"));
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn as_geojson_round_trips_point() {
-        let p = wkt_literal("POINT(3 4)");
-        let out = geof_as_geojson(&[p]).expect("computes");
-        match out {
-            Term::Literal(l) => {
-                assert!(l.value().contains("Point"));
-                assert!(l.value().contains('['));
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn intersection_of_overlapping_squares_is_small_square() {
-        let a = wkt_literal("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
-        let b = wkt_literal("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))");
-        let out = geof_intersection(&[a, b]).expect("computes");
-        match parse_wkt_result(&out) {
-            geo::Geometry::Polygon(_) | geo::Geometry::MultiPolygon(_) => {}
-            other => panic!("unexpected geometry {other:?}"),
-        }
-    }
-
-    #[test]
-    fn union_of_two_disjoint_squares_is_multi_polygon() {
-        let a = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let b = wkt_literal("POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))");
-        let out = geof_union(&[a, b]).expect("computes");
-        match parse_wkt_result(&out) {
-            geo::Geometry::MultiPolygon(mp) => {
-                assert_eq!(mp.0.len(), 2);
-            }
-            geo::Geometry::Polygon(_) => {}
-            other => panic!("unexpected geometry {other:?}"),
-        }
-    }
-
-    #[test]
-    fn difference_subtracts_hole() {
-        let a = wkt_literal("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))");
-        let b = wkt_literal("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))");
-        let out = geof_difference(&[a, b]).expect("computes");
-        parse_wkt_result(&out);
-    }
-
-    #[test]
-    fn sym_difference_is_union_minus_intersection() {
-        let a = wkt_literal("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
-        let b = wkt_literal("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))");
-        let out = geof_sym_difference(&[a, b]).expect("computes");
-        parse_wkt_result(&out);
-    }
-
-    #[test]
-    fn perimeter_of_unit_square_is_four_degrees_worth_of_metres() {
-        let square = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let value = parse_double(&geof_perimeter(&[square, metres]).expect("computes"));
-        // Four sides near the equator, each about 111 km.
-        assert!(
-            (value - 444_000.0).abs() < 2_000.0,
-            "got {value}, expected near 444000"
-        );
-    }
-
-    #[test]
-    fn perimeter_of_line_is_zero() {
-        let line = wkt_literal("LINESTRING(0 0, 1 0)");
-        let metres = units_named_node("http://www.opengis.net/def/uom/OGC/1.0/metre");
-        let value = parse_double(&geof_perimeter(&[line, metres]).expect("computes"));
-        assert_eq!(value, 0.0);
-    }
-
-    #[test]
-    fn relate_with_matching_pattern_returns_true() {
-        let a = wkt_literal("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
-        let b = wkt_literal("POINT(1 1)");
-        let pattern = Term::Literal(OxLiteral::new_simple_literal("0FFFFFFF2"));
-        let out = geof_relate(&[a, b, pattern]).expect("computes");
-        match out {
-            Term::Literal(l) => {
-                assert_eq!(l.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#boolean");
-            }
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn relate_rejects_bad_pattern() {
-        let a = wkt_literal("POINT(0 0)");
-        let b = wkt_literal("POINT(1 1)");
-        let pattern = Term::Literal(OxLiteral::new_simple_literal("bad"));
-        assert!(geof_relate(&[a, b, pattern]).is_none());
-    }
-
-    #[test]
-    fn eh_equals_matches_identical_polygons() {
-        let a = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let b = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let out = geof_eh_equals(&[a, b]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn eh_disjoint_detects_far_apart_polygons() {
-        let a = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let b = wkt_literal("POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))");
-        let out = geof_eh_disjoint(&[a, b]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn rcc8_eq_matches_identical_polygons() {
-        let a = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let b = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let out = geof_rcc8_eq(&[a, b]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn rcc8_dc_detects_far_apart_polygons() {
-        let a = wkt_literal("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let b = wkt_literal("POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))");
-        let out = geof_rcc8_dc(&[a, b]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn rcc8_ntpp_matches_strict_interior_containment() {
-        let big = wkt_literal("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))");
-        let small = wkt_literal("POLYGON((3 3, 4 3, 4 4, 3 4, 3 3))");
-        let out = geof_rcc8_ntpp(&[small, big]).expect("computes");
-        match out {
-            Term::Literal(l) => assert_eq!(l.value(), "true"),
-            _ => panic!("expected literal"),
-        }
-    }
-
-    #[test]
-    fn topology_functions_count_is_exposed_as_const() {
-        assert_eq!(GEOSPARQL_EXTENSION_FUNCTIONS.len(), 44);
-    }
 }

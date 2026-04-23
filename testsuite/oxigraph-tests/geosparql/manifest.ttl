@@ -41,7 +41,6 @@
         :dimension
         :coordinate_dimension
         :spatial_dimension
-        :as_text
         :as_geojson
         :get_srid
         :envelope
@@ -241,12 +240,6 @@
     mf:feature geof:spatialDimension ;
     mf:action [ qt:query <spatial_dimension.rq> ] ;
     mf:result <spatial_dimension.srx> .
-
-:as_text rdf:type mf:QueryEvaluationTest ;
-    mf:name "asText serializes point as WKT" ;
-    mf:feature geof:asText ;
-    mf:action [ qt:query <as_text.rq> ] ;
-    mf:result <as_text.srx> .
 
 :as_geojson rdf:type mf:QueryEvaluationTest ;
     mf:name "asGeoJSON serializes geometry as JSON object" ;

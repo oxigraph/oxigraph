@@ -7,7 +7,7 @@
 
 use crate::geosparql;
 use geo::Geometry;
-use geojson::GeoJson;
+use geojson::{GeoJson, Geometry as GeoJsonGeometry};
 use oxrdf::{Literal, Term};
 use std::str::FromStr;
 use wkt::{ToWkt, TryFromWkt};
@@ -20,7 +20,6 @@ pub const CRS84_URI: &str = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 ///
 /// Supports `geosparql:wktLiteral` and `geosparql:geoJSONLiteral`. Returns
 /// `None` for any other term shape or datatype, or when parsing fails.
-#[inline]
 pub fn extract_argument(term: &Term) -> Option<Geometry> {
     let Term::Literal(literal) = term else {
         return None;
@@ -64,6 +63,12 @@ pub fn result_to_wkt_literal(geom: Geometry) -> Literal {
     let wkt_body = geom.wkt_string();
     let value = format!("<{CRS84_URI}> {wkt_body}");
     Literal::new_typed_literal(value, geosparql::WKT_LITERAL)
+}
+
+/// Serialize a geometry as a `geoJSONLiteral`.
+pub fn result_to_geojson_literal(geom: Geometry) -> Literal {
+    let gj = GeoJsonGeometry::from(&geom);
+    Literal::new_typed_literal(gj.to_string(), geosparql::GEO_JSON_LITERAL)
 }
 
 #[cfg(test)]

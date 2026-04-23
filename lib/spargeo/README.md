@@ -11,7 +11,7 @@ spargeo is a partial [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.h
 
 Its entry point is the [`GEOSPARQL_EXTENSION_FUNCTIONS`] constant that lists GeoSPARQL extension functions ready to be registered in spargebra or oxigraph query evaluators.
 
-Current scope covers the three OGC Simple Features, Egenhofer, and RCC8 topology families, the planar boolean set operations (intersection, union, difference, symmetric difference), the DE-9IM `relate` tester, the topological accessor functions (`dimension`, `coordinateDimension`, `spatialDimension`, `isEmpty`, `isSimple`), the `envelope`, `convexHull`, and `centroid` constructors, the `asText` and `asGeoJSON` serialisers, and partial metric functions (`area`, `length`, `perimeter`, `distance`). WKT and GeoJSON inputs are honoured under the CRS84 reference system only. No aggregate or transformation functions. No GML, KML, DGGS literals. No query rewrite extension. An optional `bridge` cargo feature materialises Simple Features topology triples between features found in an `oxrdf::Graph`.
+Current scope covers the three OGC Simple Features, Egenhofer, and RCC8 topology families, the planar boolean set operations (intersection, union, difference, symmetric difference), the DE-9IM `relate` tester, the topological accessor functions (`dimension`, `coordinateDimension`, `spatialDimension`, `isEmpty`, `isSimple`), the `envelope`, `convexHull`, and `centroid` constructors, the `asGeoJSON` serialiser, and partial metric functions (`area`, `length`, `perimeter`, `distance`). WKT and GeoJSON inputs are honoured under the CRS84 reference system only. Geometry returning functions echo the input datatype so that WKT inputs yield `geo:wktLiteral` outputs and GeoJSON inputs yield `geo:geoJSONLiteral` outputs. No aggregate or transformation functions. No GML, KML, DGGS literals. No query rewrite extension. An optional `bridge` cargo feature materialises Simple Features topology triples between features found in an `oxrdf::Graph`.
 
 Coverage vs OGC 22-047r1
 ------------------------
@@ -83,9 +83,8 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 | `geof:isEmpty` | implemented | |
 | `geof:isSimple` | partial | uses `geo::Validation` as a conservative approximation |
 | `geof:hasSerialization` | missing | |
-| `geof:asText` | partial | returns the WKT rendering as `xsd:string` |
 | `geof:asGML` | missing | |
-| `geof:asGeoJSON` | partial | returns the GeoJSON rendering as `xsd:string` |
+| `geof:asGeoJSON` | implemented | returns the GeoJSON rendering as `geo:geoJSONLiteral` |
 | `geof:asKML` | missing | |
 | `geof:asSVG` | missing | |
 
@@ -190,8 +189,8 @@ query evaluation layers. Each is a pure function over parsed geometries.
   crate directly.
 * Accessor functions: `dimension`, `coordinateDimension`,
   `spatialDimension`, `isEmpty`, `isSimple`, `hasSerialization`,
-  `asText`, `asGML`, `asGeoJSON`, `asKML`, `asSVG`. Serialization to
-  text formats is a `geo` crate plus format crate job.
+  `asGML`, `asKML`, `asSVG`. Serialization to text formats is a `geo`
+  crate plus format crate job.
 * Metric functions: `area`, `length`, `perimeter`, `centroid`. Area and
   length need a distance calculation strategy (planar vs spherical),
   parameterised by the units IRI.

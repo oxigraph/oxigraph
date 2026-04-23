@@ -1,8 +1,0 @@
-PREFIX geo: <http://www.opengis.net/ont/geosparql#>
-PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
-
-SELECT ?geom (geof:asText(?geom) AS ?result) WHERE {
-    VALUES ?geom {
-        "Point(3 4)"^^geo:wktLiteral
-    }
-}

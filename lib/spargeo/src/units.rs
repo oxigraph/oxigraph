@@ -44,7 +44,6 @@ const OGC_UOM_PREFIX: &str = "http://www.opengis.net/def/uom/OGC/1.0/";
 /// base unit depends on [`UnitKind`]. Returns `None` when the IRI is not
 /// recognised for the requested kind, which lets callers reject bad
 /// arguments without panicking.
-#[inline]
 pub fn units_to_factor(iri: &str, kind: UnitKind) -> Option<f64> {
     let local = iri.strip_prefix(OGC_UOM_PREFIX)?;
     match kind {
@@ -71,7 +70,6 @@ pub fn units_to_factor(iri: &str, kind: UnitKind) -> Option<f64> {
 /// The GeoSPARQL specification defines units arguments as `xsd:anyURI`
 /// but implementations in the wild also pass them as plain `NamedNode`
 /// terms. This helper accepts either shape and returns the IRI string.
-#[inline]
 pub fn extract_units_iri(term: &Term) -> Option<&str> {
     match term {
         Term::NamedNode(node) => Some(node.as_str()),
