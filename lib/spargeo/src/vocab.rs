@@ -1,9 +1,8 @@
 //! GeoSPARQL 1.1 vocabulary constants.
 //!
-//! Re-exports every IRI this crate needs beyond the wkt and geoJSON literal
-//! datatypes already exposed by [`crate::geosparql`]. The goal is to let
-//! downstream consumers such as the optional bridge module reference core
-//! GeoSPARQL predicates without hard coding the IRI strings.
+//! Exposes the `geo:` namespace prefix plus the core class and property IRIs
+//! used by the GeoSPARQL 1.1 ontology. Downstream consumers can reference
+//! these constants instead of hard coding the IRI strings.
 
 use oxrdf::NamedNodeRef;
 
