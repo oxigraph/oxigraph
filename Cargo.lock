@@ -87,6 +87,15 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "approx"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
@@ -159,6 +168,17 @@ name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
+
+[[package]]
+name = "bigdecimal"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6773ddc0eafc0e509fb60e48dff7f450f8e674a0686ae8605e8d9901bd5eefa"
+dependencies = [
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
 
 [[package]]
 name = "bindgen"
@@ -271,6 +291,16 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
+name = "cgmath"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a98d30140e3296250832bbaaff83b27dcd6fa3cc70fb6f1f3e5c9c0023b5317"
+dependencies = [
+ "approx 0.4.0",
+ "num-traits",
+]
 
 [[package]]
 name = "ciborium"
@@ -844,7 +874,7 @@ version = "0.7.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94776032c45f950d30a13af6113c2ad5625316c9abfbccee4dd5a6695f8fe0f5"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "num-traits",
  "rayon",
  "rstar 0.10.0",
@@ -1549,10 +1579,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
+name = "num-bigint"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6673768db2d862beb9b39a78fdcb1a69439615d5794a1be50caa9bc92c81967"
+
+[[package]]
+name = "num-integer"
+version = "0.1.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "num-traits"
@@ -1667,7 +1716,7 @@ dependencies = [
  "spareval",
  "spargebra",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1749,7 +1798,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "ryu-js",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -1777,7 +1826,7 @@ dependencies = [
  "oxrdfxml",
  "oxttl",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -2387,6 +2436,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd29631678d6fb0903b69223673e122c32e9ae559d0960a38d574695ebc0ea15"
 
 [[package]]
+name = "s2"
+version = "0.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23434007bcef0196e3f083834576ac004241f354001a22c61d2f2208c780e8df"
+dependencies = [
+ "bigdecimal",
+ "cgmath",
+ "lazy_static",
+ "libm",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2614,6 +2675,7 @@ dependencies = [
  "geo",
  "geojson",
  "oxrdf",
+ "s2",
  "wkt",
 ]
 
@@ -2654,7 +2716,7 @@ version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "num-traits",
 ]
 
