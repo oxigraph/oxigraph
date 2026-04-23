@@ -11,7 +11,7 @@ spargeo is a partial [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.h
 
 Its entry point is the [`GEOSPARQL_EXTENSION_FUNCTIONS`] constant that lists GeoSPARQL extension functions ready to be registered in spargebra or oxigraph query evaluators.
 
-Current scope covers the three OGC Simple Features, Egenhofer, and RCC8 topology families, the planar boolean set operations (intersection, union, difference, symmetric difference), the DE-9IM `relate` tester, the topological accessor functions (`dimension`, `coordinateDimension`, `spatialDimension`, `isEmpty`, `isSimple`), the `envelope`, `convexHull`, and `centroid` constructors, the `asGeoJSON` serialiser, and partial metric functions (`area`, `length`, `perimeter`, `distance`). WKT and GeoJSON inputs are honoured under the CRS84 reference system only. Geometry returning functions echo the input datatype so that WKT inputs yield `geo:wktLiteral` outputs and GeoJSON inputs yield `geo:geoJSONLiteral` outputs. No aggregate or transformation functions. No GML, KML, DGGS literals. No query rewrite extension. An optional `bridge` cargo feature materialises Simple Features topology triples between features found in an `oxrdf::Graph`.
+Current scope covers the three OGC Simple Features, Egenhofer, and RCC8 topology families, the planar boolean set operations (intersection, union, difference, symmetric difference), the DE-9IM `relate` tester, the topological accessor functions (`dimension`, `coordinateDimension`, `spatialDimension`, `isEmpty`, `isSimple`), the `envelope`, `convexHull`, and `centroid` constructors, the `asGeoJSON` serialiser, and partial metric functions (`area`, `length`, `perimeter`, `distance`). WKT and GeoJSON inputs are honoured under the CRS84 reference system only. Geometry returning functions echo the input datatype so that WKT inputs yield `geo:wktLiteral` outputs and GeoJSON inputs yield `geo:geoJSONLiteral` outputs. No aggregate or transformation functions. No GML, KML, DGGS literals. No query rewrite extension.
 
 Coverage vs OGC 22-047r1
 ------------------------
@@ -134,7 +134,7 @@ Function IRIs live under `http://www.opengis.net/def/function/geosparql/` and ar
 
 ### Feature and geometry vocabulary
 
-The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo ships these IRI constants in the `vocab` module and a minimal OWL ontology stub at `data/geosparql.ttl` suitable for downstream reasoners. The optional `bridge` feature walks these predicates on an `oxrdf::Graph` and materialises Simple Features topology triples between feature pairs whose geometries satisfy the relation.
+The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`, `geo:SpatialObject`, and properties such as `geo:hasGeometry`, `geo:hasDefaultGeometry`, `geo:defaultGeometry`, plus the serialization properties `geo:asWKT`, `geo:asGML`, `geo:asGeoJSON`, `geo:asKML`, `geo:hasSerialization`. spargeo ships these IRI constants in the `vocab` module and a minimal OWL ontology stub at `data/geosparql.ttl` suitable for downstream reasoners.
 
 ### Query Rewrite Extension
 
@@ -142,14 +142,6 @@ The Core conformance class defines classes such as `geo:Feature`, `geo:Geometry`
 |------------|--------|-------|
 | Function form (`FILTER(geof:sfWithin(?g1, ?g2))`) | implemented | via the Simple Features functions above |
 | Property form (`?a geo:sfWithin ?b`) | missing | would require a rewrite pass in the query planner |
-
-### Bridge feature (optional)
-
-The `bridge` cargo feature enables the `spargeo::bridge::GeoBridge` type. Given an `oxrdf::Graph` that carries `geo:hasGeometry` / `geo:asWKT` chains, it materialises the Simple Features topology triples between every feature pair whose geometries satisfy the relation. Symmetric predicates are emitted once, asymmetric pairs (`geo:sfWithin` and `geo:sfContains`) are emitted in both directions. The accompanying ontology stub at `data/geosparql.ttl` declares the GeoSPARQL 1.1 axioms that a downstream reasoner needs to close the graph.
-
-### Spatial index feature (optional)
-
-The `spatial_index` cargo feature enables the `spargeo::index::SpatialIndex` type. Given an `oxrdf::Graph` that carries `geo:hasGeometry` / `geo:asWKT` chains, the index covers every feature's bounding rectangle with an S2 `CellUnion` and keeps a sorted `CellID -> FeatureId` map. `query_within(&Geometry)` and `query_intersects(&Geometry)` answer topology queries by covering the query geometry, gathering candidates through ancestor lookups plus descendant range scans, and refining with `geo::Relate`. The candidate set scales with the covered cell count rather than with the number of indexed features, which is what issue #1560 is asking for on the storage side. This is the in-memory validation step; the RocksDB column family version is tracked separately and belongs upstream.
 
 ### Conformance class summary
 
