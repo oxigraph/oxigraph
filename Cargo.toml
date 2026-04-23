@@ -19,7 +19,6 @@ members = [
   "python",
   "testsuite",
 ]
-exclude = ["bench/geosparql/native"]
 resolver = "2"
 
 [workspace.package]

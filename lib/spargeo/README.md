@@ -231,35 +231,6 @@ be reused by the `geosparql` feature inside Oxigraph when #1560 lands.
 Closing the architectural gaps belongs in that upstream effort rather
 than here.
 
-Benchmark
----------
-
-![engine comparison](../../bench/geosparql/out/geosparql_comparison.png)
-
-The [`bench/geosparql`](../../bench/geosparql) harness measures
-point-in-polygon throughput on synthetic CRS84 data. It runs
-`geof:sfWithin` through `GEOSPARQL_EXTENSION_FUNCTIONS`, compares it
-against the raw `geo` crate as a Rust lower bound, and against
-`shapely` as a Python reference.
-
-Median `query_ms` on a 2023 MacBook Pro, 10 polygons per fixture,
-3 repeats:
-
-| points | spargeo | geo     | shapely |
-|-------:|--------:|--------:|--------:|
-|    100 |   1.1   |  0.04   |   4.0   |
-|    300 |   3.7   |  0.10   |   6.0   |
-|  1 000 |   9.1   |  0.28   |  19.7   |
-|  3 000 |  26.4   |  0.75   |  58.6   |
-| 10 000 |  85.0   |  2.44   | 193.8   |
-
-The ~35x gap between `spargeo` and raw `geo` at 10 000 points is the
-per-call WKT literal parse cost that `GEOSPARQL_EXTENSION_FUNCTIONS`
-pays on every invocation. That gap is a concrete case for the
-WKB-backed literal storage proposed in oxigraph issue #1560. See the
-[benchmark README](../../bench/geosparql/README.md) for the full
-analysis.
-
 ## License
 
 This project is licensed under either of
