@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right ?pattern (geof:relate(?left, ?right, ?pattern) AS ?result) WHERE {
+    VALUES (?left ?right ?pattern) {
+        ("Polygon((0 0, 2 0, 2 2, 0 2, 0 0))"^^geo:wktLiteral "Point(1 1)"^^geo:wktLiteral "T********")
+        ("Polygon((0 0, 2 0, 2 2, 0 2, 0 0))"^^geo:wktLiteral "Point(5 5)"^^geo:wktLiteral "T********")
+    }
+}
