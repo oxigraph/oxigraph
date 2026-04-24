@@ -9,7 +9,6 @@ IGNORE_PACKAGES = {"oxigraph-js", "oxigraph-testsuite", "pyoxigraph", "sparql-sm
 ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
     "oxhttp",
-    "rustc-hash",
     "geo",
     "wkt",
     "quick-xml",
@@ -28,7 +27,7 @@ errors = set()
 
 
 def parse_version(version):
-    return tuple(int(e) for e in version.split("-")[0].split("."))
+    return tuple(int(e) for e in version.split("-")[0].split("+")[0].split("."))
 
 
 for package_id in cargo_metadata["workspace_default_members"]:
@@ -64,11 +63,11 @@ for package_id in cargo_metadata["workspace_default_members"]:
             )
             if debian_version is None:
                 errors.add(
-                    f"The debian package {debian_package['package']} does not support {target_debian_suite}"
+                    f"The Debian package {debian_package['package']} does not support {target_debian_suite}"
                 )
                 continue
 
-            # We check the debian version is compatible with the req version
+            # We check the Debian version is compatible with the req version
             parsed_debian_version = parse_version(debian_version["version"])
             for range_element in dependency["req"].split(","):
                 range_element = range_element.strip()
@@ -82,35 +81,35 @@ for package_id in cargo_metadata["workspace_default_members"]:
                                 break  # Done
                             if actual < expected:
                                 errors.add(
-                                    f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                                    f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                                 )
                                 break
                         else:
                             if actual != expected:
                                 errors.add(
-                                    f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                                    f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                                 )
                             if expected != 0:
                                 first_found = True
                 elif range_element.startswith(">="):
                     if not parsed_debian_version >= parse_version(range_element[2:]):
                         errors.add(
-                            f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                            f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                         )
                 elif range_element.startswith(">"):
                     if not parsed_debian_version > parse_version(range_element[1:]):
                         errors.add(
-                            f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                            f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                         )
                 elif range_element.startswith("<="):
                     if not parsed_debian_version <= parse_version(range_element[2:]):
                         errors.add(
-                            f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                            f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                         )
                 elif range_element.startswith("<"):
                     if not parsed_debian_version < parse_version(range_element[1:]):
                         errors.add(
-                            f"The debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
+                            f"The Debian package {debian_package['package']} version {debian_version['version']} is not compatible with requirement {range_element}"
                         )
                 else:
                     errors.add(
