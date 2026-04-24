@@ -24,9 +24,10 @@ use rand::random;
 use rayon_core::ThreadPoolBuilder;
 #[cfg(feature = "geosparql")]
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 #[cfg(target_os = "linux")]
 use std::env;
 use std::ffi::OsStr;
@@ -864,28 +865,24 @@ fn handle_request(
             .body(LOGO.into())
             .map_err(internal_server_error),
         ("/query", "GET") => {
-            let query = url_query(request);
-            if query.is_empty() {
-                let format = rdf_content_negotiation(request)?;
-                let description = generate_service_description(
-                    format,
-                    EndpointKind::Query,
-                    union_default_graph,
-                    &request_original_target_url(request)?.to_string(),
-                );
-                Response::builder()
-                    .header(CONTENT_TYPE, format.media_type())
-                    .body(description.into())
-                    .map_err(internal_server_error)
-            } else {
+            if request.uri().query().is_some() {
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    &[url_query(request)],
+                    url_query_parameters(request),
                     None,
                     request,
                     union_default_graph,
                     timeout,
+                )
+            } else {
+                service_description_response(
+                    request,
+                    EndpointKind {
+                        query: true,
+                        update: false,
+                    },
+                    union_default_graph,
                 )
             }
         }
@@ -893,22 +890,21 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-query" {
-                let query = limited_string_body(request)?;
+                let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    &[url_query(request)],
-                    Some(query),
+                    url_query_parameters(request),
+                    Some(body),
                     request,
                     union_default_graph,
                     timeout,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
-                let buffer = limited_body(request)?;
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    &[url_query(request), &buffer],
+                    url_query_and_body_parameters(request)?,
                     None,
                     request,
                     union_default_graph,
@@ -922,17 +918,14 @@ fn handle_request(
             if read_only {
                 return Err(the_server_is_read_only());
             }
-            let format = rdf_content_negotiation(request)?;
-            let description = generate_service_description(
-                format,
-                EndpointKind::Update,
+            service_description_response(
+                request,
+                EndpointKind {
+                    query: false,
+                    update: true,
+                },
                 union_default_graph,
-                &request_original_target_url(request)?.to_string(),
-            );
-            Response::builder()
-                .header(CONTENT_TYPE, format.media_type())
-                .body(description.into())
-                .map_err(internal_server_error)
+            )
         }
         ("/update", "POST") => {
             if read_only {
@@ -941,23 +934,111 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-update" {
-                let update = limited_string_body(request)?;
+                let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
-                    &[url_query(request)],
-                    Some(update),
+                    url_query_parameters(request),
+                    Some(body),
                     request,
                     union_default_graph,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
-                let buffer = limited_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
-                    &[url_query(request), &buffer],
+                    url_query_and_body_parameters(request)?,
                     None,
                     request,
                     union_default_graph,
                 )
+            } else {
+                Err(unsupported_media_type(&content_type))
+            }
+        }
+        ("/sparql", "GET") => {
+            if request.uri().query().is_some() {
+                configure_and_evaluate_sparql_query(
+                    &store,
+                    sparql_evaluator,
+                    url_query_parameters(request),
+                    None,
+                    request,
+                    union_default_graph,
+                    timeout,
+                )
+            } else {
+                service_description_response(
+                    request,
+                    EndpointKind {
+                        query: true,
+                        update: !read_only,
+                    },
+                    union_default_graph,
+                )
+            }
+        }
+        ("/sparql", method @ ("POST" | "QUERY")) => {
+            let is_query = method == "QUERY";
+            let content_type =
+                content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
+            if content_type == "application/sparql-query" {
+                let body = limited_string_body(request)?;
+                configure_and_evaluate_sparql_query(
+                    &store,
+                    sparql_evaluator,
+                    url_query_parameters(request),
+                    Some(body),
+                    request,
+                    union_default_graph,
+                    timeout,
+                )
+            } else if content_type == "application/sparql-update" && !is_query {
+                if read_only {
+                    return Err(the_server_is_read_only());
+                }
+                let body = limited_string_body(request)?;
+                configure_and_evaluate_sparql_update(
+                    &store,
+                    url_query_parameters(request),
+                    Some(body),
+                    request,
+                    union_default_graph,
+                )
+            } else if content_type == "application/x-www-form-urlencoded" {
+                let args = url_query_and_body_parameters(request)?;
+                match (args.contains_key("query"), args.contains_key("update")) {
+                    (true, true) => Err(bad_request(
+                        "Both 'query' and 'update' cannot be set at the same time",
+                    )),
+                    (true, false) => configure_and_evaluate_sparql_query(
+                        &store,
+                        sparql_evaluator,
+                        args,
+                        None,
+                        request,
+                        union_default_graph,
+                        timeout,
+                    ),
+                    (false, true) => {
+                        if is_query {
+                            return Err(bad_request(
+                                "SPARQL updates are not compatible with the QUERY HTTP method",
+                            ));
+                        }
+                        if read_only {
+                            return Err(the_server_is_read_only());
+                        }
+                        configure_and_evaluate_sparql_update(
+                            &store,
+                            args,
+                            None,
+                            request,
+                            union_default_graph,
+                        )
+                    }
+                    (false, false) => Err(bad_request(
+                        "'query' or 'update' must be set to define the SPARQL operation to execute",
+                    )),
+                }
             } else {
                 Err(unsupported_media_type(&content_type))
             }
@@ -1177,14 +1258,35 @@ fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, Ht
         .into())
 }
 
-fn url_query(request: &Request<Body>) -> &[u8] {
-    request.uri().query().unwrap_or_default().as_bytes()
+fn url_has_query_parameter(request: &Request<Body>, param: &str) -> bool {
+    form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
+        .any(|(k, _)| k == param)
 }
 
-fn url_query_parameter<'a>(request: &'a Request<Body>, param: &str) -> Option<Cow<'a, str>> {
-    form_urlencoded::parse(url_query(request))
-        .find(|(k, _)| k == param)
-        .map(|(_, v)| v)
+fn url_query_parameters(request: &Request<Body>) -> HashMap<String, String> {
+    form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect()
+}
+
+fn url_query_and_body_parameters(
+    request: &mut Request<Body>,
+) -> Result<HashMap<String, String>, HttpError> {
+    let body = limited_body(request)?;
+    let mut args = url_query_parameters(request);
+    for (k, v) in form_urlencoded::parse(&body) {
+        match args.entry(k.to_string()) {
+            Entry::Occupied(_) => {
+                return Err(bad_request(format!(
+                    "'{k}' cannot be set both in the body and the URL query"
+                )));
+            }
+            Entry::Vacant(e) => {
+                e.insert(v.into_owned());
+            }
+        }
+    }
+    Ok(args)
 }
 
 fn limited_string_body(request: &mut Request<Body>) -> Result<String, HttpError> {
@@ -1230,7 +1332,7 @@ fn limited_body(request: &mut Request<Body>) -> Result<Vec<u8>, HttpError> {
 fn configure_and_evaluate_sparql_query(
     store: &Store,
     evaluator: SparqlEvaluator,
-    encoded: &[&[u8]],
+    args: HashMap<String, String>,
     mut query: Option<String>,
     request: &Request<Body>,
     default_use_default_graph_as_union: bool,
@@ -1239,20 +1341,18 @@ fn configure_and_evaluate_sparql_query(
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
     let mut use_default_graph_as_union = false;
-    for encoded in encoded {
-        for (k, v) in form_urlencoded::parse(encoded) {
-            match k.as_ref() {
-                "query" => {
-                    if query.is_some() {
-                        return Err(bad_request("Multiple query parameters provided"));
-                    }
-                    query = Some(v.into_owned())
+    for (k, v) in args {
+        match k.as_ref() {
+            "query" => {
+                if query.is_some() {
+                    return Err(bad_request("Multiple query parameters provided"));
                 }
-                "default-graph-uri" => default_graph_uris.push(v.into_owned()),
-                "union-default-graph" => use_default_graph_as_union = true,
-                "named-graph-uri" => named_graph_uris.push(v.into_owned()),
-                _ => (),
+                query = Some(v)
             }
+            "default-graph-uri" => default_graph_uris.push(v),
+            "union-default-graph" => use_default_graph_as_union = true,
+            "named-graph-uri" => named_graph_uris.push(v),
+            _ => (),
         }
     }
     if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
@@ -1392,7 +1492,7 @@ fn default_sparql_evaluator() -> SparqlEvaluator {
 
 fn configure_and_evaluate_sparql_update(
     store: &Store,
-    encoded: &[&[u8]],
+    args: HashMap<String, String>,
     mut update: Option<String>,
     request: &Request<Body>,
     default_use_default_graph_as_union: bool,
@@ -1400,20 +1500,18 @@ fn configure_and_evaluate_sparql_update(
     let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
-    for encoded in encoded {
-        for (k, v) in form_urlencoded::parse(encoded) {
-            match k.as_ref() {
-                "update" => {
-                    if update.is_some() {
-                        return Err(bad_request("Multiple update parameters provided"));
-                    }
-                    update = Some(v.into_owned())
+    for (k, v) in args {
+        match k.as_ref() {
+            "update" => {
+                if update.is_some() {
+                    return Err(bad_request("Multiple update parameters provided"));
                 }
-                "using-graph-uri" => default_graph_uris.push(v.into_owned()),
-                "using-union-graph" => use_default_graph_as_union = true,
-                "using-named-graph-uri" => named_graph_uris.push(v.into_owned()),
-                _ => (),
+                update = Some(v)
             }
+            "using-graph-uri" => default_graph_uris.push(v),
+            "using-union-graph" => use_default_graph_as_union = true,
+            "using-named-graph-uri" => named_graph_uris.push(v),
+            _ => (),
         }
     }
     if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
@@ -1491,8 +1589,8 @@ fn evaluate_sparql_update(
 
 fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpError> {
     if request.uri().path() == "/store" {
-        if let Some(graph) = url_query_parameter(request, "graph") {
-            if url_query_parameter(request, "default").is_some() {
+        if let Some(graph) = url_query_parameters(request).remove("graph") {
+            if url_has_query_parameter(request, "default") {
                 Err(bad_request(
                     "Both graph and default parameters should not be set at the same time",
                 ))
@@ -1501,7 +1599,7 @@ fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpE
                     request, &graph,
                 )?)))
             }
-        } else if url_query_parameter(request, "default").is_some() {
+        } else if url_has_query_parameter(request, "default") {
             Ok(Some(NamedGraphName::DefaultGraph))
         } else {
             Ok(None)
@@ -1656,6 +1754,24 @@ fn content_type(request: &Request<Body>) -> Option<String> {
     )
 }
 
+fn service_description_response(
+    request: &Request<Body>,
+    kind: EndpointKind,
+    union_default_graph: bool,
+) -> Result<Response<Body>, HttpError> {
+    let format = rdf_content_negotiation(request)?;
+    let description = generate_service_description(
+        format,
+        kind,
+        union_default_graph,
+        &request_original_target_url(request)?.to_string(),
+    );
+    Response::builder()
+        .header(CONTENT_TYPE, format.media_type())
+        .body(description.into())
+        .map_err(internal_server_error)
+}
+
 fn web_load_graph(
     store: &Store,
     request: &mut Request<Body>,
@@ -1670,13 +1786,13 @@ fn web_load_graph(
     let mut parser = RdfParser::from_format(format)
         .without_named_graphs()
         .with_default_graph(to_graph_name.clone());
-    if url_query_parameter(request, "lenient").is_some() {
+    if url_has_query_parameter(request, "lenient") {
         parser = parser.lenient();
     }
     if let Some(base_iri) = base_iri {
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
-    if url_query_parameter(request, "no_transaction").is_some() {
+    if url_has_query_parameter(request, "no_transaction") {
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
@@ -1695,10 +1811,10 @@ fn web_load_dataset(
     format: RdfFormat,
 ) -> Result<(), HttpError> {
     let mut parser = RdfParser::from_format(format);
-    if url_query_parameter(request, "lenient").is_some() {
+    if url_has_query_parameter(request, "lenient") {
         parser = parser.lenient();
     }
-    if url_query_parameter(request, "no_transaction").is_some() {
+    if url_has_query_parameter(request, "no_transaction") {
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
@@ -1722,7 +1838,7 @@ fn web_bulk_loader<'a>(store: &'a Store, request: &Request<Body>) -> BulkLoader<
             ((size as f64) / elapsed.as_secs_f64()).round()
         )
     });
-    if url_query_parameter(request, "lenient").is_some() {
+    if url_has_query_parameter(request, "lenient") {
         loader = loader.on_parse_error(move |e| {
             eprintln!("Parsing error: {e}");
             Ok(())
@@ -2719,6 +2835,93 @@ mod tests {
         let request = Request::builder()
             .method(Method::POST)
             .uri("http://localhost/update")
+            .header(CONTENT_TYPE, "application/sparql-update")
+            .body(
+                "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+            )?;
+        ServerTest::check_status(
+            ServerTest::new()?.exec_read_only(request),
+            StatusCode::FORBIDDEN,
+        )
+    }
+
+    #[test]
+    fn get_sparql() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/sparql?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/csv")
+            .body(())?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_sparql_description() -> Result<()> {
+        let request = Request::builder()
+            .uri("http://localhost/sparql")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        ServerTest::new()?.test_status(request, StatusCode::OK)
+    }
+
+    #[test]
+    fn post_sparql_query() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
+            .header(CONTENT_TYPE, "application/sparql-query")
+            .header(ACCEPT, "text/csv")
+            .body("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn post_sparql_update() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
+            .header(CONTENT_TYPE, "application/sparql-update")
+            .body("INSERT DATA {}")?;
+        ServerTest::new()?.test_status(request, StatusCode::NO_CONTENT)
+    }
+
+    #[test]
+    fn post_sparql_query_form() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
+            .header(ACCEPT, "text/csv")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body("query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}")?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn post_sparql_update_form() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body("update=INSERT%20DATA%20{}")?;
+        ServerTest::new()?.test_status(request, StatusCode::NO_CONTENT)
+    }
+
+    #[test]
+    fn post_sparql_wrong_form() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body("")?;
+        ServerTest::new()?.test_status(request, StatusCode::BAD_REQUEST)
+    }
+
+    #[test]
+    fn post_sparql_update_read_only() -> Result<()> {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/sparql")
             .header(CONTENT_TYPE, "application/sparql-update")
             .body(
                 "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",

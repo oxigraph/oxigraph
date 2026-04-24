@@ -52,10 +52,10 @@ mod sd {
     );
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
-pub enum EndpointKind {
-    Query,
-    Update,
+#[derive(Clone, Copy)]
+pub struct EndpointKind {
+    pub query: bool,
+    pub update: bool,
 }
 
 pub fn generate_service_description(
@@ -85,13 +85,26 @@ pub fn generate_service_description(
             }
         }),
     ));
-    for language in match kind {
-        EndpointKind::Query => [sd::SPARQL_10_QUERY, sd::SPARQL_11_QUERY].as_slice(),
-        EndpointKind::Update => [sd::SPARQL_11_UPDATE].as_slice(),
-    } {
-        graph.push(TripleRef::new(&root, sd::SUPPORTED_LANGUAGE, *language));
+    if kind.query {
+        graph.push(TripleRef::new(
+            &root,
+            sd::SUPPORTED_LANGUAGE,
+            sd::SPARQL_10_QUERY,
+        ));
+        graph.push(TripleRef::new(
+            &root,
+            sd::SUPPORTED_LANGUAGE,
+            sd::SPARQL_11_QUERY,
+        ));
     }
-    if kind == EndpointKind::Query {
+    if kind.update {
+        graph.push(TripleRef::new(
+            &root,
+            sd::SUPPORTED_LANGUAGE,
+            sd::SPARQL_11_UPDATE,
+        ));
+    }
+    if kind.query {
         for format in [
             QueryResultsFormat::Json,
             QueryResultsFormat::Xml,
@@ -124,7 +137,7 @@ pub fn generate_service_description(
         feature = "rustls-native",
         feature = "rustls-webpki"
     ))]
-    if kind == EndpointKind::Query {
+    if kind.query {
         graph.push(TripleRef::new(
             &root,
             sd::FEATURE,

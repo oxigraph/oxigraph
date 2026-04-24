@@ -12,10 +12,11 @@
 <script>
     const url = window.location.href.endsWith('/') ? window.location.href.slice(0, -1) : window.location.href;
     new Yasgui(document.getElementById("yasgui"), {
-        requestConfig: { endpoint: url + "/query" },
+        requestConfig: { endpoint: url + "/sparql" },
         endpointCatalogueOptions: {
             getData: function () {
                 return [
+                    { endpoint: url + "/sparql" },
                     { endpoint: url + "/query" },
                     { endpoint: url + "/update" },
                 ];
