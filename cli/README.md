@@ -71,6 +71,7 @@ It provides the following REST actions:
   curl -X POST -H 'Content-Type: application/sparql-update' \
     --data 'DELETE WHERE { <http://example.com/s> ?p ?o }' http://localhost:7878/update
   ```
+* `/sparql` allows both SPARQL queries and update (see it as the union of `/query` and `/update`).
 * `/store` allows to retrieve and change the server content using the [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/).
   For example:
   ```sh
