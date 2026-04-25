@@ -197,10 +197,10 @@ impl Reasoner {
     /// as [`ReasonStreamError::Reason`]. The sink is not invoked for
     /// triples that were already present in the input graph.
     ///
-    /// This is the streaming entry point used by
-    /// [`oxigraph::store::Store::reason`]: the sink writes each inference
-    /// into an open transaction, which lets the store avoid a second
-    /// post-expansion pass over the full closure.
+    /// This is the streaming entry point used by `oxigraph::store::Store::reason`
+    /// when the `reasoning` feature is enabled on the `oxigraph` crate: the
+    /// sink writes each inference into an open transaction, which lets the
+    /// store avoid a second post-expansion pass over the full closure.
     pub fn expand_streaming<F, E>(
         &self,
         graph: &mut Graph,
@@ -252,7 +252,7 @@ impl Reasoner {
     /// the interned form rather than paying the cost of an intermediate
     /// `oxrdf::Graph` with its six BTreeSet indexes.
     ///
-    /// This is the entry point [`oxigraph::store::Store::reason`] uses to
+    /// This is the entry point `oxigraph::store::Store::reason` uses to
     /// stream quads out of RocksDB: a `Map` from the storage cursor into
     /// owned `Triple`s feeds straight into the reasoner without a second
     /// pass over the dataset.
