@@ -24,7 +24,7 @@ rdf-12 = ["oxigraph/rdf-12"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 rustls-native = ["oxigraph/http-client-rustls-native"]
 rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
-geosparql = ["dep:spargeo"]
+geosparql = ["dep:spargeo", "oxigraph/geosparql"]
 
 [dependencies]
 anyhow.workspace = true

@@ -17,8 +17,6 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyTuple;
-#[cfg(feature = "geosparql")]
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -85,10 +83,6 @@ pub fn sparql_evaluator_from_python(
     custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
 ) -> PyResult<SparqlEvaluator> {
     let mut evaluator = SparqlEvaluator::default();
-    #[cfg(feature = "geosparql")]
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
 
     if let Some(custom_functions) = custom_functions {
         for (name, function) in custom_functions {

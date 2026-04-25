@@ -18,7 +18,7 @@ doc = false
 
 [features]
 default = ["geosparql", "rdf-12"]
-geosparql = ["dep:spargeo"]
+geosparql = ["oxigraph/geosparql"]
 rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
@@ -26,7 +26,6 @@ console_error_panic_hook.workspace = true
 js-sys.workspace = true
 oxigraph = { workspace = true, features = ["js"] }
 oxrdfio = { workspace = true, features = ["async-tokio"] }
-spargeo = { workspace = true, optional = true }
 tokio.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true

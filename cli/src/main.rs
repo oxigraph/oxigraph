@@ -22,8 +22,6 @@ use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
-#[cfg(feature = "geosparql")]
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::HashMap;
@@ -301,7 +299,7 @@ pub fn main() -> anyhow::Result<()> {
                 io::read_to_string(stdin().lock())?
             };
             let store = Store::open_read_only(location)?;
-            let mut evaluator = default_sparql_evaluator();
+            let mut evaluator = SparqlEvaluator::new();
             if let Some(base) = query_base {
                 evaluator = evaluator.with_base_iri(&base)?;
             }
@@ -453,7 +451,7 @@ pub fn main() -> anyhow::Result<()> {
                 io::read_to_string(stdin().lock())?
             };
             let store = Store::open(location)?;
-            let mut evaluator = default_sparql_evaluator();
+            let mut evaluator = SparqlEvaluator::new();
             if let Some(base) = update_base {
                 evaluator = evaluator.with_base_iri(&base)?;
             }
@@ -748,7 +746,7 @@ fn serve(
     union_default_graph: bool,
     timeout_s: Option<u64>,
 ) -> anyhow::Result<()> {
-    let sparql_evaluator = default_sparql_evaluator();
+    let sparql_evaluator = SparqlEvaluator::new();
     let timeout = timeout_s.map(Duration::from_secs);
     let mut server = if cors {
         Server::new(cors_middleware(move |request| {
@@ -1480,16 +1478,6 @@ fn evaluate_sparql_query(
     }
 }
 
-fn default_sparql_evaluator() -> SparqlEvaluator {
-    #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
-    let mut evaluator = SparqlEvaluator::new();
-    #[cfg(feature = "geosparql")]
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
-    evaluator
-}
-
 fn configure_and_evaluate_sparql_update(
     store: &Store,
     args: HashMap<String, String>,
@@ -1536,7 +1524,7 @@ fn evaluate_sparql_update(
     named_graph_uris: Vec<String>,
     request: &Request<Body>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut prepared = default_sparql_evaluator()
+    let mut prepared = SparqlEvaluator::new()
         .with_base_iri(base_url(request).as_str())
         .map_err(bad_request)?
         .parse_update(update)
@@ -3382,7 +3370,7 @@ mod tests {
             handle_request(
                 &mut request.map(Into::into),
                 self.store.clone(),
-                default_sparql_evaluator(),
+                SparqlEvaluator::new(),
                 false,
                 false,
                 None,
@@ -3394,7 +3382,7 @@ mod tests {
             handle_request(
                 &mut request.map(Into::into),
                 self.store.clone(),
-                default_sparql_evaluator(),
+                SparqlEvaluator::new(),
                 true,
                 false,
                 None,

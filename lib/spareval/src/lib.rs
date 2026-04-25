@@ -65,7 +65,7 @@ use std::{fmt, io};
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct QueryEvaluator {
     service_handler: ServiceHandlerRegistry,
     custom_functions: CustomFunctionRegistry,
@@ -73,6 +73,29 @@ pub struct QueryEvaluator {
     without_optimizations: bool,
     run_stats: bool,
     cancellation_token: Option<CancellationToken>,
+}
+
+impl Default for QueryEvaluator {
+    fn default() -> Self {
+        Self {
+            service_handler: ServiceHandlerRegistry::default(),
+            custom_functions: default_custom_functions(),
+            custom_aggregate_functions: CustomAggregateFunctionRegistry::default(),
+            without_optimizations: false,
+            run_stats: false,
+            cancellation_token: None,
+        }
+    }
+}
+
+fn default_custom_functions() -> CustomFunctionRegistry {
+    #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
+    let mut registry = CustomFunctionRegistry::default();
+    #[cfg(feature = "geosparql")]
+    for (name, implementation) in spargeo::GEOSPARQL_EXTENSION_FUNCTIONS {
+        registry.insert(name.into_owned(), Arc::new(implementation));
+    }
+    registry
 }
 
 impl QueryEvaluator {
