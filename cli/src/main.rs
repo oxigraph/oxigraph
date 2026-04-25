@@ -1478,7 +1478,6 @@ fn evaluate_sparql_query(
     }
 }
 
-
 fn configure_and_evaluate_sparql_update(
     store: &Store,
     args: HashMap<String, String>,
