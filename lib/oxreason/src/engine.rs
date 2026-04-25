@@ -41,6 +41,66 @@
 //! are still materialised in place; batched writes and interning land in
 //! later milestones.
 //!
+//! ## Algorithm reference and code map
+//!
+//! The fixpoint loop in [`expand`] is a direct implementation of the
+//! semi-naive Datalog evaluation algorithm described in Abiteboul, Hull,
+//! Vianu, *Foundations of Databases* (1995), chapter 13, section 13.1.
+//! The original delta-driven body evaluation is from Bancilhon and
+//! Ramakrishnan, *An Amateur's Introduction to Recursive Query Processing
+//! Strategies*, SIGMOD 1986. Pseudocode straight from the textbook:
+//!
+//! ```text
+//! input  : program P, EDB tuples I
+//! output : least fixpoint of P over I
+//!
+//! T   := I
+//! ΔT  := T_P(I) - I              // round 0 derivations
+//! while ΔT ≠ ∅:
+//!     T'  := T ∪ ΔT
+//!     ΔT' := T_P^Δ(T, ΔT) - T'   // re-derive using only rules with a body atom in ΔT
+//!     T   := T'
+//!     ΔT  := ΔT'
+//! return T
+//! ```
+//!
+//! Mapping textbook → code, all line numbers in [`expand`]:
+//!
+//! - `T := I`: `graph: &mut FlatGraph` arrives interned with the input.
+//! - Round counter: `stats.rounds = stats.rounds.saturating_add(1)`.
+//! - `ΔT` (previous round's delta): `let delta_ref = delta.as_ref();`
+//!   It is `None` on round 1 (degenerates to a naive scan of `T`) and
+//!   `Some(DeltaIndex)` thereafter.
+//! - `T_P^Δ(T, ΔT)`: each `apply_<rule>(graph, delta_ref, ...)` call.
+//!   The rule body restricts at least one antecedent to `delta_ref`
+//!   when it is `Some`, and falls back to a full scan of `graph` when
+//!   it is `None`.
+//! - Buffer of derived tuples (rule output, before subtraction): the
+//!   `pending` and `pending_keyed` Vecs.
+//! - Subtraction `- T'`: `graph.insert(&triple)` and
+//!   `graph.insert_keyed(..)` probe the shadow set first; duplicates
+//!   return `false` and never touch the indexes.
+//! - `T := T'`: the same `insert*` call appends to `FlatGraph` and
+//!   collects the genuinely new triples into `new_triples`.
+//! - `ΔT' := …`: `DeltaIndex::build(new_triples)` builds the next
+//!   round's delta from this round's novel additions.
+//! - `ΔT ≠ ∅`: `if round_added == 0 { return Ok(stats); }` exits the
+//!   loop on a quiescent round.
+//!
+//! Three engineering additions sit on top of the textbook core, all
+//! domain-specific to OWL 2 RL rather than to Datalog:
+//!
+//! 1. [`find_inconsistency`] runs before every rule application so an
+//!    OWL 2 RL clash (`cax-dw`, `prp-irp`, `prp-asyp`, `prp-pdw`,
+//!    `cls-nothing2`) aborts the run before more vacuous consequences
+//!    accumulate. Pure Datalog is monotone, so the textbook does not
+//!    model inconsistencies.
+//! 2. [`TBoxCache::build`] precomputes class-expression metadata once
+//!    per round and is rebuilt only when the previous delta changed it.
+//! 3. [`InconsistencyTriggers::scan`] guards the per-round detector
+//!    behind a one-time scan of the input, so the detector is skipped
+//!    on graphs whose predicate alphabet cannot generate a clash.
+//!
 //! Restrictions relative to full OWL 2 RL:
 //!
 //! 1. Classes and properties referenced by the schema rules must be IRIs.
