@@ -1699,7 +1699,6 @@ dependencies = [
  "js-sys",
  "oxigraph",
  "oxrdfio",
- "spargeo",
  "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1721,7 +1720,6 @@ dependencies = [
  "oxttl",
  "spareval",
  "spargebra",
- "spargeo",
  "sparopt",
  "time",
 ]
@@ -2059,7 +2057,6 @@ version = "0.5.7"
 dependencies = [
  "oxigraph",
  "pyo3",
- "spargeo",
 ]
 
 [[package]]
@@ -2591,6 +2588,7 @@ dependencies = [
  "sha2",
  "sparesults",
  "spargebra",
+ "spargeo",
  "sparopt",
  "thiserror 2.0.18",
 ]

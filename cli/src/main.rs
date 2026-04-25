@@ -22,8 +22,6 @@ use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
-#[cfg(feature = "geosparql")]
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::HashMap;
@@ -1481,13 +1479,7 @@ fn evaluate_sparql_query(
 }
 
 fn default_sparql_evaluator() -> SparqlEvaluator {
-    #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
-    let mut evaluator = SparqlEvaluator::new();
-    #[cfg(feature = "geosparql")]
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
-    evaluator
+    SparqlEvaluator::new()
 }
 
 fn configure_and_evaluate_sparql_update(

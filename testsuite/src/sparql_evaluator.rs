@@ -20,7 +20,6 @@ use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::algebra::GraphPattern;
 use spargebra::{Query, SparqlParser};
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -179,11 +178,8 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         .parse_query(&query.to_string())
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
 
-    let mut evaluator = QueryEvaluator::new()
+    let evaluator = QueryEvaluator::new()
         .with_default_service_handler(StaticServiceHandler::new(&test.service_data)?);
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
 
     // FROM and FROM NAMED support. We make sure the data is in the store
     if let Some(query_dataset) = query.dataset() {

@@ -22,14 +22,13 @@ doc = false
 default = ["geosparql", "rdf-12"]
 abi3 = ["pyo3/abi3-py38"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
-geosparql = ["dep:spargeo"]
+geosparql = ["oxigraph/geosparql"]
 rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
 pyo3 = { workspace = true, features = [
   "extension-module",
 ] } # TODO: remove the feature in a few months
-spargeo = { workspace = true, optional = true }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
 oxigraph = { workspace = true, default-features = true, features = [
