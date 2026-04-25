@@ -194,6 +194,10 @@ flowchart TD
 SHACL coverage
 --------------
 
+Targets the SHACL Core conformance class of the [W3C SHACL Recommendation
+(2017-07-20)](https://www.w3.org/TR/shacl/). SHACL-SPARQL and SHACL 1.2
+draft features are out of scope for now.
+
 Implemented: `sh:minCount`.
 
 Not yet implemented: `sh:maxCount`, `sh:class`, `sh:datatype`, `sh:nodeKind`,
