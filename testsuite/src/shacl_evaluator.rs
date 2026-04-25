@@ -64,7 +64,13 @@ fn evaluate_shacl_test(test: &Test) -> Result<()> {
         let focus_term: Term = match focus_triple.object {
             TermRef::NamedNode(n) => n.into_owned().into(),
             TermRef::BlankNode(b) => b.into_owned().into(),
-            _ => bail!("ox:focusNode must point at an IRI or blank node, got {focus_triple}"),
+            TermRef::Literal(_) => {
+                bail!("ox:focusNode must point at an IRI or blank node, got {focus_triple}")
+            }
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => {
+                bail!("ox:focusNode must point at an IRI or blank node, got {focus_triple}")
+            }
         };
         let component = expected
             .object_for_subject_predicate(focus_triple.subject, OX_VIOLATES_CONSTRAINT)
@@ -76,7 +82,11 @@ fn evaluate_shacl_test(test: &Test) -> Result<()> {
             })?;
         let component_iri = match component {
             TermRef::NamedNode(n) => n.into_owned(),
-            _ => bail!(
+            TermRef::BlankNode(_) | TermRef::Literal(_) => bail!(
+                "ox:violatesConstraint must point at an IRI, got {component} for focus {focus_term}"
+            ),
+            #[cfg(feature = "rdf-12")]
+            TermRef::Triple(_) => bail!(
                 "ox:violatesConstraint must point at an IRI, got {component} for focus {focus_term}"
             ),
         };

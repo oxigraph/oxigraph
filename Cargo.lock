@@ -1658,6 +1658,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxrdfio",
+ "oxreason",
  "oxrocksdb-sys",
  "oxsdatatypes",
  "rand",

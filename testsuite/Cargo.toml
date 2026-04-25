@@ -10,7 +10,7 @@ publish = false
 
 [features]
 default = ["rdf-12"]
-rdf-12 = ["oxigraph/rdf-12", "oxreason/rdf-12"]
+rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
 anyhow.workspace = true
