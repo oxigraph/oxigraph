@@ -236,7 +236,7 @@ impl Reasoner {
             }
             ReasoningProfile::Custom => {
                 Err(ReasonStreamError::Reason(ReasonError::NotImplemented(
-                    "custom RuleSet evaluation is not wired into the engine yet, see DESIGN.md M2",
+                    "custom RuleSet evaluation is not wired into the engine yet",
                 )))
             }
         }
@@ -283,7 +283,7 @@ impl Reasoner {
             }
             ReasoningProfile::Custom => {
                 Err(ReasonStreamError::Reason(ReasonError::NotImplemented(
-                    "custom RuleSet evaluation is not wired into the engine yet, see DESIGN.md M2",
+                    "custom RuleSet evaluation is not wired into the engine yet",
                 )))
             }
         }
@@ -300,7 +300,7 @@ impl Reasoner {
         _dst: &mut Dataset,
     ) -> Result<ReasoningReport, ReasonError> {
         Err(ReasonError::NotImplemented(
-            "Reasoner::expand_into is not implemented yet, see DESIGN.md",
+            "Reasoner::expand_into is not implemented yet",
         ))
     }
 
@@ -310,7 +310,7 @@ impl Reasoner {
     #[expect(clippy::unused_self, reason = "stub until M3 lands dataset support")]
     pub fn expand_dataset(&self, _dataset: &mut Dataset) -> Result<ReasoningReport, ReasonError> {
         Err(ReasonError::NotImplemented(
-            "Reasoner::expand_dataset is not implemented yet, see DESIGN.md",
+            "Reasoner::expand_dataset is not implemented yet",
         ))
     }
 }

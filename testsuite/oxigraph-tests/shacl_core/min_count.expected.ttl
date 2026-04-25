@@ -1,0 +1,9 @@
+@prefix : <https://example.org/ontology#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ox: <https://github.com/oxigraph/oxigraph/tests#> .
+
+# Acme must surface as a sh:MinCountConstraintComponent violation.
+# Bravo carries an entityName so it must not appear here.
+
+[] ox:focusNode :Acme ;
+    ox:violatesConstraint sh:MinCountConstraintComponent .

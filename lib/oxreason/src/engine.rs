@@ -1,7 +1,7 @@
 //! Forward chaining engine (M1 plus M2 plus M3 plus M4).
 //!
 //! M1 implements the five schema rules `cax-sco`, `prp-dom`, `prp-rng`,
-//! `prp-spo1`, `prp-trp` from `DESIGN.md` section 9.
+//! `prp-spo1`, `prp-trp`.
 //!
 //! M2 extends the set with the remaining OWL 2 RL object property and
 //! equivalence rules that do not require class expression support:

@@ -11,9 +11,6 @@
 //! either back into the graph or through a streaming sink. [`Validator`]
 //! checks SHACL Core constraints against a data graph and produces a
 //! validation report.
-//!
-//! See `DESIGN.md` next to this file for the rule coverage matrix, the
-//! semi-naive evaluation model, and the public API contract.
 
 mod engine;
 mod error;

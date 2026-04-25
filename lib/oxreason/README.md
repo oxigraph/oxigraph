@@ -8,8 +8,7 @@ semi-naive evaluation, and five inconsistency detectors. Rule body lookups
 for `cax-sco` and `cax-eqc` go through a reasoner-local `GraphView`
 secondary index keyed by interned `TermId` (u32) so hot-path probes hash
 u32 pairs instead of IRI strings. SHACL validator is scaffolded with
-`sh:minCount` landed. See `DESIGN.md` for the milestone plan and
-`TESTING.md` for the per rule integration test layout under `tests/`.
+`sh:minCount` landed.
 
 Quick API shape
 ---------------

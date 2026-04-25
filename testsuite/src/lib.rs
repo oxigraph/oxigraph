@@ -7,6 +7,7 @@ pub mod manifest;
 pub mod parser_evaluator;
 pub mod reasoning_evaluator;
 pub mod report;
+pub mod shacl_evaluator;
 pub mod sparql_evaluator;
 mod vocab;
 
@@ -15,6 +16,7 @@ use crate::evaluator::TestEvaluator;
 use crate::manifest::TestManifest;
 use crate::parser_evaluator::register_parser_tests;
 use crate::reasoning_evaluator::register_reasoning_tests;
+use crate::shacl_evaluator::register_shacl_tests;
 use crate::sparql_evaluator::register_sparql_tests;
 use anyhow::Result;
 
@@ -25,6 +27,7 @@ pub fn check_testsuite(manifest_url: &str, ignored_tests: &[&str]) -> Result<()>
     register_canonicalization_tests(&mut evaluator);
     register_sparql_tests(&mut evaluator);
     register_reasoning_tests(&mut evaluator);
+    register_shacl_tests(&mut evaluator);
 
     let manifest = TestManifest::new([manifest_url]);
     let results = evaluator.evaluate(manifest)?;
