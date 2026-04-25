@@ -17,12 +17,9 @@ default = []
 # Reserved for follow up milestones.
 owl2-rl = []
 shacl-core = []
-# Forward oxrdf's RDF 1.2 triple term support so the rule engine's
-# pattern matches on `TermRef::Triple` compile under the same flag.
-rdf-12 = ["oxrdf/rdf-12"]
 
 [dependencies]
-oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxrdf = { workspace = true, features = ["oxsdatatypes", "rdf-12"] }
 oxsdatatypes.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true

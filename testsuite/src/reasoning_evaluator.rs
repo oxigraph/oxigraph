@@ -12,7 +12,6 @@ use crate::files::load_graph;
 use crate::manifest::Test;
 use anyhow::{Context, Result, bail};
 use oxigraph::io::RdfFormat;
-use oxigraph::model::Graph;
 use oxreason::{Reasoner, ReasonerConfig};
 
 /// Custom test type for OWL 2 RL closure-equivalence tests.
@@ -43,7 +42,7 @@ fn evaluate_reasoning_test(test: &Test) -> Result<()> {
         .with_context(|| format!("Reasoner::expand failed on {input_url}"))?;
 
     let mut missing = Vec::new();
-    for triple in expected.iter() {
+    for triple in &expected {
         if !input.contains(triple) {
             missing.push(triple.to_string());
         }

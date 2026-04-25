@@ -1717,6 +1717,7 @@ dependencies = [
  "oxiri",
  "oxjsonld",
  "oxrdf",
+ "oxreason",
  "oxttl",
  "spareval",
  "spargebra",

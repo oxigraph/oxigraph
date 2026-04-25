@@ -193,7 +193,6 @@ impl Interner {
             Term::NamedNode(n) => self.lookup_named(n.as_str()),
             Term::BlankNode(b) => self.lookup_blank(b.as_str()),
             Term::Literal(l) => self.lookup_literal(l),
-            #[cfg(feature = "rdf-12")]
             Term::Triple(_) => None,
         }
     }
@@ -208,7 +207,6 @@ impl Interner {
             TermRef::NamedNode(n) => self.lookup_named(n.as_str()),
             TermRef::BlankNode(b) => self.lookup_blank(b.as_str()),
             TermRef::Literal(lref) => self.lookup_literal(&lref.into_owned()),
-            #[cfg(feature = "rdf-12")]
             TermRef::Triple(_) => None,
         }
     }
@@ -260,7 +258,6 @@ impl Interner {
             Term::NamedNode(n) => self.intern_named_str(n.as_str()),
             Term::BlankNode(b) => self.intern_blank_str(b.as_str()),
             Term::Literal(l) => self.intern_literal_owned(l),
-            #[cfg(feature = "rdf-12")]
             Term::Triple(_) => unreachable!("rdf-12 embedded triples are not supported here"),
         }
     }
@@ -850,7 +847,6 @@ impl FlatGraph {
                 Term::NamedNode(n) => self.interner.lookup_named(n.as_str()),
                 Term::BlankNode(b) => self.interner.lookup_blank(b.as_str()),
                 Term::Literal(l) => self.interner.lookup_literal(l),
-                #[cfg(feature = "rdf-12")]
                 Term::Triple(_) => None,
             };
             (o_id.is_some() && id == o_id).then(|| t.as_ref())
@@ -3727,9 +3723,7 @@ fn parse_rdf_list(
             .and_then(|t| match t {
                 TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
                 TermRef::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.into_owned())),
-                TermRef::Literal(_) => None,
-                #[cfg(feature = "rdf-12")]
-                TermRef::Triple(_) => None,
+                TermRef::Literal(_) | TermRef::Triple(_) => None,
             })?;
         out.push(first);
         // rest
@@ -3739,9 +3733,7 @@ fn parse_rdf_list(
             .and_then(|t| match t {
                 TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
                 TermRef::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.into_owned())),
-                TermRef::Literal(_) => None,
-                #[cfg(feature = "rdf-12")]
-                TermRef::Triple(_) => None,
+                TermRef::Literal(_) | TermRef::Triple(_) => None,
             })?;
         current = rest;
     }
@@ -4140,9 +4132,7 @@ fn term_ref_to_named_or_blank(term: TermRef<'_>) -> Option<NamedOrBlankNode> {
     match term {
         TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
         TermRef::BlankNode(n) => Some(NamedOrBlankNode::BlankNode(n.into_owned())),
-        TermRef::Literal(_) => None,
-        #[cfg(feature = "rdf-12")]
-        TermRef::Triple(_) => None,
+        TermRef::Literal(_) | TermRef::Triple(_) => None,
     }
 }
 
@@ -4176,9 +4166,7 @@ fn owned_object_named_or_blank(term: &Term) -> Option<NamedOrBlankNode> {
     match term {
         Term::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.clone())),
         Term::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.clone())),
-        Term::Literal(_) => None,
-        #[cfg(feature = "rdf-12")]
-        Term::Triple(_) => None,
+        Term::Literal(_) | Term::Triple(_) => None,
     }
 }
 
