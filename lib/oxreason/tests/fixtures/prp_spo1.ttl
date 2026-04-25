@@ -1,0 +1,8 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# prp-spo1: if P1 rdfs:subPropertyOf P2 and x P1 y then x P2 y.
+
+:hasParent rdfs:subPropertyOf :hasAncestor .
+
+:Alice :hasParent :Bob .

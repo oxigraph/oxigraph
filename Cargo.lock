@@ -1792,6 +1792,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxreason"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "oxrdf",
+ "oxsdatatypes",
+ "oxttl",
+ "rustc-hash",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "oxrocksdb-sys"
 version = "0.5.7"
 dependencies = [

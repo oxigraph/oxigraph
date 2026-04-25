@@ -1,0 +1,11 @@
+@prefix : <https://example.org/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# cax-sco: if x a C and C rdfs:subClassOf D then x a D.
+
+:Company rdfs:subClassOf :LegalPerson .
+:LegalPerson rdfs:subClassOf :Entity .
+
+:Acme a :Company .
