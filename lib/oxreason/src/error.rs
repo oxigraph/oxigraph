@@ -5,7 +5,6 @@
 //! change once the rule engine and SHACL validator are implemented.
 
 use std::fmt;
-
 use thiserror::Error;
 
 /// Errors raised by the OWL 2 RL reasoner.

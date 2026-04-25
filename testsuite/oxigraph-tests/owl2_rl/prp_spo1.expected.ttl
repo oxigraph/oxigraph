@@ -1,0 +1,6 @@
+@prefix : <https://example.org/ontology#> .
+
+# prp-spo1 propagates `:Alice :hasParent :Bob` along
+# `:hasParent rdfs:subPropertyOf :hasAncestor`.
+
+:Alice :hasAncestor :Bob .

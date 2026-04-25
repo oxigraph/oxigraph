@@ -20,16 +20,15 @@
     reason = "this is a bench harness binary; stdout carries the JSON result line and stderr carries usage and error messages"
 )]
 
+use oxrdf::Graph;
+use oxreason::{Reasoner, ReasonerConfig, ReasoningProfile};
+use oxttl::TurtleParser;
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
-
-use oxrdf::Graph;
-use oxreason::{Reasoner, ReasonerConfig, ReasoningProfile};
-use oxttl::TurtleParser;
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();

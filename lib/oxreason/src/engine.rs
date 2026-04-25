@@ -51,16 +51,14 @@
 //!    The `materialise_into_named_graph` config knob is honoured by
 //!    `Reasoner::expand_into`, which is still stubbed.
 
-use std::time::{Duration, Instant};
-
+use crate::reasoner::{ReasonerConfig, ReasoningProfile};
 use oxrdf::vocab::{rdf, rdfs};
 use oxrdf::{
     Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef, Triple,
     TripleRef,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-
-use crate::reasoner::{ReasonerConfig, ReasoningProfile};
+use std::time::{Duration, Instant};
 
 /// Packed interner ID: 2 kind bits (top) plus 30 bits of per-kind index.
 /// Fits in a single `u32`, so the shadow set becomes a hash over three u32

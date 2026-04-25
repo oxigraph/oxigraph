@@ -1,0 +1,43 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:    <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix :      <https://github.com/oxigraph/oxigraph/tests/owl2_rl/manifest#> .
+@prefix ox:    <https://github.com/oxigraph/oxigraph/tests#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Oxigraph OWL 2 RL reasoning tests" ;
+    rdfs:comment "Closure subset tests for oxreason's OWL 2 RL forward chainer. Each entry loads an input graph, runs Reasoner::expand under the OWL 2 RL profile, and asserts that every triple in the expected closure is also in the inferred closure." ;
+    mf:entries
+    (
+        :cax_sco
+        :prp_dom
+        :prp_rng
+        :prp_spo1
+        :prp_trp
+    ) .
+
+:cax_sco rdf:type ox:ReasoningEvaluationTest ;
+    mf:name "cax-sco transitively closes a subclass chain" ;
+    mf:action [ qt:data <cax_sco.input.ttl> ] ;
+    mf:result <cax_sco.expected.ttl> .
+
+:prp_dom rdf:type ox:ReasoningEvaluationTest ;
+    mf:name "prp-dom infers domain class from a property assertion" ;
+    mf:action [ qt:data <prp_dom.input.ttl> ] ;
+    mf:result <prp_dom.expected.ttl> .
+
+:prp_rng rdf:type ox:ReasoningEvaluationTest ;
+    mf:name "prp-rng infers range class from a property assertion" ;
+    mf:action [ qt:data <prp_rng.input.ttl> ] ;
+    mf:result <prp_rng.expected.ttl> .
+
+:prp_spo1 rdf:type ox:ReasoningEvaluationTest ;
+    mf:name "prp-spo1 propagates a fact along subPropertyOf" ;
+    mf:action [ qt:data <prp_spo1.input.ttl> ] ;
+    mf:result <prp_spo1.expected.ttl> .
+
+:prp_trp rdf:type ox:ReasoningEvaluationTest ;
+    mf:name "prp-trp closes a transitive property chain" ;
+    mf:action [ qt:data <prp_trp.input.ttl> ] ;
+    mf:result <prp_trp.expected.ttl> .

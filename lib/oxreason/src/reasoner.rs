@@ -8,13 +8,11 @@
 //! that fire a sink callback per inferred triple without materialising the
 //! closure into a graph.
 
-use std::convert::Infallible;
-
-use oxrdf::{Dataset, Graph, Triple};
-
 use crate::engine;
 use crate::error::{ReasonError, ReasonStreamError};
 use crate::rules::RuleSet;
+use oxrdf::{Dataset, Graph, Triple};
+use std::convert::Infallible;
 
 /// Which family of rules the reasoner applies.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -392,10 +390,8 @@ mod tests {
         reason = "test asserts the Ok path and panics on regression"
     )]
     fn expand_streaming_from_seeds_without_intermediate_graph() {
-        use oxrdf::{
-            NamedNode,
-            vocab::{rdf, rdfs},
-        };
+        use oxrdf::NamedNode;
+        use oxrdf::vocab::{rdf, rdfs};
 
         let company = NamedNode::new_unchecked("https://example.org/Company");
         let legal = NamedNode::new_unchecked("https://example.org/LegalPerson");

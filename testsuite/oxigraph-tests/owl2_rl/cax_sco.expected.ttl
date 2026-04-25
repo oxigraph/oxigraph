@@ -1,0 +1,9 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# cax-sco closes the chain Company -> LegalPerson -> Entity, so an
+# instance of Company must end up as an instance of all three.
+
+:Acme rdf:type :Company .
+:Acme rdf:type :LegalPerson .
+:Acme rdf:type :Entity .

@@ -21,11 +21,10 @@
 //!    output. Unknown components flip to explicit errors once each is
 //!    implemented.
 
+use crate::error::ValidateError;
 use oxrdf::vocab::rdf;
 use oxrdf::{Graph, NamedNode, NamedNodeRef, NamedOrBlankNode, Term, TermRef};
 use rustc_hash::FxHashSet;
-
-use crate::error::ValidateError;
 
 /// `http://www.w3.org/ns/shacl#property`
 const SH_PROPERTY: NamedNodeRef<'static> =

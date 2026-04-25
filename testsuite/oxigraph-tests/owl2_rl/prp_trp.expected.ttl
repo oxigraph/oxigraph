@@ -1,0 +1,7 @@
+@prefix : <https://example.org/ontology#> .
+
+# prp-trp closes a transitive property chain through ShellCo and Parent.
+
+:VesselA :hasBeneficialOwner :Parent .
+:VesselA :hasBeneficialOwner :UltimateOwner .
+:ShellCo :hasBeneficialOwner :UltimateOwner .
