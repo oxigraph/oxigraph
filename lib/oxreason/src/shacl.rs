@@ -288,7 +288,9 @@ fn property_shape_edges(shapes: &Graph) -> Vec<(NamedOrBlankNode, NamedOrBlankNo
             let pshape = match t.object {
                 TermRef::NamedNode(n) => NamedOrBlankNode::NamedNode(n.into_owned()),
                 TermRef::BlankNode(b) => NamedOrBlankNode::BlankNode(b.into_owned()),
-                TermRef::Literal(_) | TermRef::Triple(_) => return None,
+                TermRef::Literal(_) => return None,
+                #[cfg(feature = "rdf-12")]
+                TermRef::Triple(_) => return None,
             };
             Some((shape, pshape))
         })
@@ -343,7 +345,9 @@ fn target_node_as_named_or_blank(term: TermRef<'_>) -> Option<NamedOrBlankNode> 
     match term {
         TermRef::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.into_owned())),
         TermRef::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.into_owned())),
-        TermRef::Literal(_) | TermRef::Triple(_) => None,
+        TermRef::Literal(_) => None,
+        #[cfg(feature = "rdf-12")]
+        TermRef::Triple(_) => None,
     }
 }
 
