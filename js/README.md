@@ -11,44 +11,28 @@ Oxigraph is a graph database written in Rust implementing the [SPARQL](https://w
 
 Oxigraph for JavaScript is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) and [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) capabilities.
 
-The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
+The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) and [JSON-LD](https://www.w3.org/TR/json-ld/).
 
-It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
+It is distributed using an [NPM package](https://www.npmjs.com/package/oxigraph) that is compatible with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
 
 To install:
 ```bash
 npm install oxigraph
 ```
 
-To load with Node.JS:
-```js
-const oxigraph = require('oxigraph');
-```
-
-or with ES modules:
+And then import:
 ```js
 import oxigraph from './node_modules/oxigraph/node.js';
 ```
 
-To load on an HTML web page (for [WebPack 5](https://webpack.js.org/) remove the `<script>` tag and put the code in a JS file):
-```html
-<script type="module">
-    import init, * as oxigraph from './node_modules/oxigraph/web.js'
+Note that a bundler compatible with WebAssembly like Vite or WebPack is likely required to make the package work.
 
-    (async function () {
-        await init(); // Required to compile the WebAssembly code.
-
-        // We can use here Oxigraph methods
-    })()
-</script>
-```
-
-## Node.JS Example
+## Example
 
 Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in  SPARQL:
 
 ```js
-const oxigraph = require('oxigraph');
+import * as oxigraph from "../pkg/oxigraph.js";
 const store = new oxigraph.Store();
 const ex = oxigraph.namedNode("http://example/");
 const schemaName = oxigraph.namedNode("http://schema.org/name");
@@ -57,32 +41,6 @@ for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http:
     console.log(binding.get("name").value);
 }
 ```
-
-## Web Example
-
-Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in
-SPARQL:
-
-```html
-
-<script type="module">
-    import init, * as oxigraph from './node_modules/oxigraph/web.js'
-
-    (async function () {
-        await init(); // Required to compile the WebAssembly.
-
-        const store = new oxigraph.Store();
-        const ex = oxigraph.namedNode("http://example/");
-        const schemaName = oxigraph.namedNode("http://schema.org/name");
-        store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
-        for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
-            console.log(binding.get("name").value);
-        }
-    })()
-</script>
-```
-
-This example works with WebPack too if you remove the `<script>` tag and put the code in a JS file.
 
 ## API
 
@@ -312,6 +270,10 @@ store.dump({
 ```
 
 ## Migration guide
+
+### From 0.5 to 0.6
+* The package is now build from bundlers and not for plain Node.JS or web browsers. 
+  If you don't use a bundler you can still avoid using one by directly importing the `oxigraph_bg.wasm` and `oxigraph_bg.js` files.
 
 ### From 0.2 to 0.3
 * The `MemoryStore` class is now called `Store` (there is no other kind of stores...).

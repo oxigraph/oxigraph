@@ -13,15 +13,15 @@
         "fzstd": "^0.1.1",
         "typescript": "~6.0",
         "vitest": "^4.0.0",
+        "vite-plugin-wasm": "^3.6.0",
         "wasm-pack": "^0.14.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
-        "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
-        "build-node": "wasm-pack build --release --target nodejs --weak-refs --reference-types",
+        "test": "wasm-pack build --debug --weak-refs --reference-types && vitest",
+        "build": "wasm-pack build --release --weak-refs --reference-types",
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
-        "bench": "npm run build-node && vitest bench"
+        "bench": "npm run build && vitest bench"
     }
 }
