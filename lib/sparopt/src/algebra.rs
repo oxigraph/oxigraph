@@ -1217,14 +1217,14 @@ impl GraphPattern {
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
                                 e, inner, graph_name,
                             );
-                            OrderExpression::Asc(Expression::Variable(v))
+                            OrderExpression::Asc(v)
                         }
                         AlOrderExpression::Desc(e) => {
                             let v;
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
                                 e, inner, graph_name,
                             );
-                            OrderExpression::Desc(Expression::Variable(v))
+                            OrderExpression::Desc(v)
                         }
                     });
                 }
@@ -1644,16 +1644,16 @@ impl From<&AggregateExpression> for AlAggregateExpression {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order
-    Asc(Expression),
+    Asc(Variable),
     /// Descending order
-    Desc(Expression),
+    Desc(Variable),
 }
 
 impl From<&OrderExpression> for AlOrderExpression {
     fn from(expression: &OrderExpression) -> Self {
         match expression {
-            OrderExpression::Asc(e) => Self::Asc(e.into()),
-            OrderExpression::Desc(e) => Self::Desc(e.into()),
+            OrderExpression::Asc(e) => Self::Asc(e.clone().into()),
+            OrderExpression::Desc(e) => Self::Desc(e.clone().into()),
         }
     }
 }

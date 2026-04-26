@@ -1,6 +1,4 @@
-use crate::algebra::{
-    Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm, OrderExpression,
-};
+use crate::algebra::{Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm};
 use crate::type_inference::{
     VariableType, VariableTypes, infer_expression_type, infer_graph_pattern_types,
 };
@@ -123,22 +121,7 @@ impl Optimizer {
                 bindings,
             } => GraphPattern::values(variables, bindings),
             GraphPattern::OrderBy { inner, expression } => {
-                let inner = Self::normalize_pattern(*inner, input_types);
-                let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
-                GraphPattern::order_by(
-                    inner,
-                    expression
-                        .into_iter()
-                        .map(|e| match e {
-                            OrderExpression::Asc(e) => {
-                                OrderExpression::Asc(Self::normalize_expression(e, &inner_types))
-                            }
-                            OrderExpression::Desc(e) => {
-                                OrderExpression::Desc(Self::normalize_expression(e, &inner_types))
-                            }
-                        })
-                        .collect(),
-                )
+                GraphPattern::order_by(Self::normalize_pattern(*inner, input_types), expression)
             }
             GraphPattern::Project { inner, variables } => {
                 GraphPattern::project(Self::normalize_pattern(*inner, input_types), variables)
