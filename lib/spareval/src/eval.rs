@@ -1518,25 +1518,18 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 let child = child?;
                 let by = expression
                     .iter()
-                    .map(|comp| {
-                        Ok(match comp {
-                            OrderExpression::Asc(expression) => {
-                                ComparatorFunction::Asc(self.expression_evaluator(
-                                    expression,
-                                    encoded_variables,
-                                    stat_children,
-                                )?)
+                    .filter_map(|comp| {
+                        Some(match comp {
+                            OrderExpression::Asc(variable) => {
+                                (true, slice_key(encoded_variables, variable)?)
                             }
-                            OrderExpression::Desc(expression) => {
-                                ComparatorFunction::Desc(self.expression_evaluator(
-                                    expression,
-                                    encoded_variables,
-                                    stat_children,
-                                )?)
+                            OrderExpression::Desc(variable) => {
+                                (false, slice_key(encoded_variables, variable)?)
                             }
                         })
                     })
-                    .collect::<Result<Vec<_>, QueryEvaluationError>>()?;
+                    .collect::<Vec<_>>();
+                let dataset = self.dataset.clone();
                 Rc::new(move |from| {
                     let mut errors = Vec::default();
                     let mut values = child(from)
@@ -1549,24 +1542,34 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         })
                         .collect::<Vec<_>>();
                     values.sort_unstable_by(|a, b| {
-                        for comp in &by {
-                            match comp {
-                                ComparatorFunction::Asc(expression) => {
-                                    match cmp_terms(expression(a).as_ref(), expression(b).as_ref())
-                                    {
-                                        Ordering::Greater => return Ordering::Greater,
-                                        Ordering::Less => return Ordering::Less,
-                                        Ordering::Equal => (),
-                                    }
+                        for (is_asc, variable_key) in &by {
+                            match cmp_terms(
+                                a.get(*variable_key)
+                                    .and_then(|term| {
+                                        dataset.externalize_expression_term(term.clone()).ok()
+                                    })
+                                    .as_ref(),
+                                b.get(*variable_key)
+                                    .and_then(|term| {
+                                        dataset.externalize_expression_term(term.clone()).ok()
+                                    })
+                                    .as_ref(),
+                            ) {
+                                Ordering::Greater => {
+                                    return if *is_asc {
+                                        Ordering::Greater
+                                    } else {
+                                        Ordering::Less
+                                    };
                                 }
-                                ComparatorFunction::Desc(expression) => {
-                                    match cmp_terms(expression(a).as_ref(), expression(b).as_ref())
-                                    {
-                                        Ordering::Greater => return Ordering::Less,
-                                        Ordering::Less => return Ordering::Greater,
-                                        Ordering::Equal => (),
-                                    }
+                                Ordering::Less => {
+                                    return if *is_asc {
+                                        Ordering::Less
+                                    } else {
+                                        Ordering::Greater
+                                    };
                                 }
+                                Ordering::Equal => (),
                             }
                         }
                         Ordering::Equal
@@ -4337,11 +4340,6 @@ impl<
             }
         }
     }
-}
-
-enum ComparatorFunction<'a, T> {
-    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
-    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
 }
 
 struct InternalTupleSet<T> {
