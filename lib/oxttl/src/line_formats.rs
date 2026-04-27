@@ -1,6 +1,6 @@
 //! Shared parser implementation for N-Triples and N-Quads.
 
-use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
+use crate::lexer::{N3Lexer, N3LexerOptions, N3Token};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
@@ -145,7 +145,9 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
                     N3Token::String(value) => {
                         self.stack
-                            .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
+                            .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot {
+                                value: value.into(),
+                            });
                         self
                     }
                     #[cfg(feature = "rdf-12")]
@@ -370,7 +372,7 @@ impl NQuadsRecognizer {
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::NTriples, lenient),
+                N3Lexer::new(lenient),
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
