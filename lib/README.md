@@ -10,6 +10,6 @@ It is composed on a main library, [`oxigraph`](./oxigraph) and a set of smaller 
   * [`oxjsonld`](./oxjsonld), JSON-LD parsing and serialization.
 * [`spargebra`](./spargebra), a SPARQL parser.
 * [`sparesults`](./sparesults), parsers and serializers for SPARQL result formats (the `sparql::results` module of the `oxigraph` crate).
-* [`sparopt`](./sparesults), a SPARQL optimizer.
+* [`sparopt`](./sparopt), a SPARQL optimizer.
 * [`spareval`](./spareval), a SPARQL evaluator.
 * [`oxsdatatypes`](./oxsdatatypes), an implementation of some XML Schema datatypes.
