@@ -4,11 +4,11 @@ on:
   pull_request:
     branches:
       - main
-      - next
+      - "0.5"
   push:
     branches:
       - main
-      - next
+      - "0.5"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
