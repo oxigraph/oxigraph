@@ -57,6 +57,13 @@ oxrocksdb_writebatch_wi_get_into_buffer_cf(
     size_t keylen, char* buffer, size_t buffer_size, size_t* vallen,
     unsigned char* found, char** errptr);
 
+extern ROCKSDB_LIBRARY_API oxrocksdb_pinnable_handle_t*
+oxrocksdb_writebatch_wi_get_pinned_cf_v2(
+    rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
+    const rocksdb_readoptions_t* options,
+    rocksdb_column_family_handle_t* column_family, const char* key,
+    size_t keylen, char** errptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_readoptions_t*
 oxrocksdb_readoptions_create_copy(rocksdb_readoptions_t*);
 
