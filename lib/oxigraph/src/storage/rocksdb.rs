@@ -730,8 +730,7 @@ impl<'a> RocksDbStorageReader<'a> {
     }
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        self.storage
-            .db
+        self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 
@@ -925,8 +924,7 @@ impl Iterator for RocksDbDecodingGraphIterator<'_> {
 impl StrLookup for RocksDbStorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
-            .storage
-            .db
+            .reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
             .map(|v| String::from_utf8(v.into()))
             .transpose()
