@@ -179,6 +179,25 @@ unsigned char oxrocksdb_writebatch_wi_get_into_buffer_cf(
   }
 }
 
+oxrocksdb_pinnable_handle_t* oxrocksdb_writebatch_wi_get_pinned_cf_v2(
+    rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
+    const rocksdb_readoptions_t* options,
+    rocksdb_column_family_handle_t* column_family, const char* key,
+    size_t keylen, char** errptr) {
+  oxrocksdb_pinnable_handle_t* handle = new (oxrocksdb_pinnable_handle_t);
+  Status s =
+      wbwi->rep->GetFromBatchAndDB(db->rep, options->rep, column_family->rep,
+                                   Slice(key, keylen), &handle->rep);
+  if (!s.ok()) {
+    delete handle;
+    if (!s.IsNotFound()) {
+      SaveError(errptr, s);
+    }
+    return nullptr;
+  }
+  return handle;
+}
+
 rocksdb_readoptions_t* oxrocksdb_readoptions_create_copy(
     rocksdb_readoptions_t* options) {
   return new rocksdb_readoptions_t(*options);
