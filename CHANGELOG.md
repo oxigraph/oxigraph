@@ -1,3 +1,13 @@
+# [0.5.8] - 2026-04-28
+
+### Added
+- HTTP server: `/sparql` path that serves both SPARQL queries and updates.
+- GeoSPARQL: a significant set of new functions.
+
+### Changed
+- RocksDB backend: fixes some transactions where reading-your-own-writes was not working correctly.
+
+
 # [0.5.7] - 2026-04-19
 
 ### Changed
