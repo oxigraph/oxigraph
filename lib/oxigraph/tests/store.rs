@@ -612,6 +612,29 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_read_your_own_write_transaction() -> Result<(), Box<dyn Error>> {
+    let store_dir = TempDir::new()?;
+
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        GraphNameRef::DefaultGraph,
+    );
+
+    let store = Store::open(&store_dir)?;
+    let mut transaction = store.start_transaction()?;
+    transaction.insert(quad);
+    assert_eq!(
+        transaction.iter().collect::<Result<Vec<_>, _>>()?,
+        [quad.into_owned()]
+    );
+
+    Ok(())
+}
+
 #[cfg(all(
     target_os = "linux",
     target_pointer_width = "64",
