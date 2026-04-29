@@ -13,13 +13,13 @@
         "fzstd": "^0.1.1",
         "typescript": "~6.0",
         "vitest": "^4.0.0",
-        "vite-plugin-wasm": "^3.6.0",
-        "wasm-pack": "^0.14.0"
+        "vite-plugin-wasm": "^3.6.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "wasm-pack build --debug --weak-refs --reference-types && vitest",
-        "build": "wasm-pack build --release --weak-refs --reference-types",
+        "test": "npm run build-debug && vitest",
+        "build": "python build_package.py",
+        "build-debug": "python build_package.py --debug",
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
         "bench": "npm run build && vitest bench"

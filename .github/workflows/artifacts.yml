@@ -297,6 +297,8 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
+        with:
+          target: wasm32-unknown-unknown
       - uses: actions/setup-node@v6
         with:
           node-version: 24
