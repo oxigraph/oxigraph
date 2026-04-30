@@ -1,0 +1,8 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# prp-dom: if P rdfs:domain C and x P y then x a C.
+
+:owns rdfs:domain :Entity .
+
+:Alice :owns :Bike .

@@ -1,0 +1,20 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# CompanyShape requires every Company instance to declare at least one
+# entityName. Acme has none and must violate sh:minCount; Bravo has one
+# and must not.
+
+:CompanyShape a sh:NodeShape ;
+    sh:targetClass :Company ;
+    sh:property [
+        sh:path :entityName ;
+        sh:minCount 1
+    ] .
+
+:Acme a :Company .
+
+:Bravo a :Company ;
+    :entityName "Bravo Corp" .

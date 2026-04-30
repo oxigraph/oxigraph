@@ -1,0 +1,7 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# prp-dom infers Alice rdf:type Entity from `:owns rdfs:domain :Entity`
+# and `:Alice :owns :Bike`.
+
+:Alice rdf:type :Entity .

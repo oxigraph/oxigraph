@@ -1,0 +1,8 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# prp-rng: if P rdfs:range C and x P y then y a C.
+
+:owns rdfs:range :Asset .
+
+:Alice :owns :Bike .

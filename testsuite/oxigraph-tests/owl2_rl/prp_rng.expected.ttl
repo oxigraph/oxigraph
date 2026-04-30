@@ -1,0 +1,7 @@
+@prefix : <https://example.org/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# prp-rng infers Bike rdf:type Asset from `:owns rdfs:range :Asset`
+# and `:Alice :owns :Bike`.
+
+:Bike rdf:type :Asset .

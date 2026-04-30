@@ -1658,6 +1658,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxrdfio",
+ "oxreason",
  "oxrocksdb-sys",
  "oxsdatatypes",
  "rand",
@@ -1717,6 +1718,7 @@ dependencies = [
  "oxiri",
  "oxjsonld",
  "oxrdf",
+ "oxreason",
  "oxttl",
  "spareval",
  "spargebra",
@@ -1789,6 +1791,17 @@ dependencies = [
  "quick-xml",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "oxreason"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "oxrdf",
+ "oxsdatatypes",
+ "oxttl",
+ "rustc-hash",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

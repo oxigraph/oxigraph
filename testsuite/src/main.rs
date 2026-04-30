@@ -4,7 +4,9 @@ use clap::Parser;
 use oxigraph_testsuite::evaluator::TestEvaluator;
 use oxigraph_testsuite::manifest::TestManifest;
 use oxigraph_testsuite::parser_evaluator::register_parser_tests;
+use oxigraph_testsuite::reasoning_evaluator::register_reasoning_tests;
 use oxigraph_testsuite::report::build_report;
+use oxigraph_testsuite::shacl_evaluator::register_shacl_tests;
 use oxigraph_testsuite::sparql_evaluator::register_sparql_tests;
 
 #[derive(Parser)]
@@ -20,6 +22,8 @@ fn main() -> Result<()> {
     let mut evaluator = TestEvaluator::default();
     register_parser_tests(&mut evaluator);
     register_sparql_tests(&mut evaluator);
+    register_reasoning_tests(&mut evaluator);
+    register_shacl_tests(&mut evaluator);
     let manifest = TestManifest::new(matches.manifest);
     let results = evaluator.evaluate(manifest)?;
     print!("{}", build_report(results));
