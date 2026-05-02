@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { bench, describe } from "vitest";
-import { parse } from "../pkg/oxigraph.js";
+import { parse } from "../pkg";
 import { readData } from "./bench_data";
 
 const explore_1000_nt = await readData("explore-1000.nt.zst");

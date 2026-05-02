@@ -1,7 +1,9 @@
 use crate::format_err;
 use crate::io::{BytesInput, buffer_from_js_value, convert_base_iri, rdf_format};
 use crate::model::*;
-use js_sys::{Array, Map, Reflect, try_iter};
+use crate::reflect::*;
+use crate::utils::{to_option, to_option_ref};
+use js_sys::{Array, Map, try_iter};
 use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
@@ -9,65 +11,10 @@ use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
-// We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
-// instead of any and improve compatibility with RDF/JS Dataset interfaces (https://rdf.js.org/dataset-spec/).
-#[wasm_bindgen(typescript_custom_section)]
-const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
-export class Store {
-    readonly size: number;
-
-    constructor(quads?: Iterable<Quad>);
-
-    add(quad: Quad): void;
-
-    delete(quad: Quad): void;
-
-    dump(
-        options: {
-            format: string;
-            from_graph_name?: BlankNode | DefaultGraph | NamedNode;
-        }
-    ): string;
-
-    has(quad: Quad): boolean;
-
-    load(
-        input: string | UInt8Array | Iterable<string | UInt8Array>,
-        options: {
-            base_iri?: NamedNode | string;
-            format: string;
-            no_transaction?: boolean;
-            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
-            unchecked?: boolean;
-            lenient?: boolean;
-        }
-    ): void;
-
-    match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
-
-    query(
-        query: string,
-        options?: {
-            base_iri?: NamedNode | string;
-            results_format?: string;
-            default_graph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
-            named_graphs?: Iterable<BlankNode | NamedNode>;
-            use_default_graph_as_union?: boolean;
-        }
-    ): boolean | Map<string, Term>[] | Quad[] | string;
-
-    update(
-        update: string,
-        options?: {
-            base_iri?: NamedNode | string;
-        }
-    ): void;
-}
-"###;
-
 #[wasm_bindgen(js_name = Store, skip_typescript)]
 pub struct JsStore {
     store: Store,
+    data_factory: DataFactory,
 }
 
 #[wasm_bindgen(js_class = Store)]
@@ -78,8 +25,9 @@ impl JsStore {
 
         let store = Self {
             store: Store::new().map_err(JsError::from)?,
+            data_factory: default_data_factory(),
         };
-        if !quads.is_undefined() && !quads.is_null() {
+        if let Some(quads) = to_option_ref(quads) {
             if let Some(quads) = try_iter(quads)? {
                 for quad in quads {
                     store.add(&quad?)?;
@@ -90,23 +38,19 @@ impl JsStore {
     }
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store
-            .insert(&FROM_JS.with(|c| c.to_quad(quad))?)
-            .map_err(JsError::from)?;
+        self.store.insert(&to_quad(quad)?).map_err(JsError::from)?;
         Ok(())
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store
-            .remove(&FROM_JS.with(|c| c.to_quad(quad))?)
-            .map_err(JsError::from)?;
+        self.store.remove(&to_quad(quad)?).map_err(JsError::from)?;
         Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
         Ok(self
             .store
-            .contains(&FROM_JS.with(|c| c.to_quad(quad))?)
+            .contains(&to_quad(quad)?)
             .map_err(JsError::from)?)
     }
 
@@ -122,40 +66,22 @@ impl JsStore {
         predicate: &JsValue,
         object: &JsValue,
         graph_name: &JsValue,
-    ) -> Result<Vec<JsQuad>, JsValue> {
+    ) -> Result<Vec<JsValue>, JsValue> {
+        let subject = to_option_ref(subject)
+            .map(to_named_or_blank_node)
+            .transpose()?;
+        let predicate = to_option_ref(predicate).map(to_named_node).transpose()?;
+        let object = to_option_ref(object).map(to_term).transpose()?;
+        let graph_name = to_option_ref(graph_name).map(to_graph_name).transpose()?;
         Ok(self
             .store
             .quads_for_pattern(
-                if let Some(subject) = FROM_JS.with(|c| c.to_optional_term(subject))? {
-                    Some(subject.try_into()?)
-                } else {
-                    None
-                }
-                .as_ref()
-                .map(<&NamedOrBlankNode>::into),
-                if let Some(predicate) = FROM_JS.with(|c| c.to_optional_term(predicate))? {
-                    Some(NamedNode::try_from(predicate)?)
-                } else {
-                    None
-                }
-                .as_ref()
-                .map(<&NamedNode>::into),
-                if let Some(object) = FROM_JS.with(|c| c.to_optional_term(object))? {
-                    Some(object.try_into()?)
-                } else {
-                    None
-                }
-                .as_ref()
-                .map(<&Term>::into),
-                if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(graph_name))? {
-                    Some(graph_name.try_into()?)
-                } else {
-                    None
-                }
-                .as_ref()
-                .map(<&GraphName>::into),
+                subject.as_ref().map(NamedOrBlankNode::as_ref),
+                predicate.as_ref().map(NamedNode::as_ref),
+                object.as_ref().map(Term::as_ref),
+                graph_name.as_ref().map(GraphName::as_ref),
             )
-            .map(|v| v.map(JsQuad::from))
+            .map(|v| v.map(|q| from_quad(&self.data_factory, q.as_ref())))
             .collect::<Result<Vec<_>, _>>()
             .map_err(JsError::from)?)
     }
@@ -167,41 +93,37 @@ impl JsStore {
         let mut results_format = None;
         let mut default_graph = None;
         let mut named_graphs = None;
-        if !options.is_undefined() {
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+        if let Some(options) = to_option_ref(options) {
+            base_iri = convert_base_iri(&reflect_get(options, &BASE_IRI)?)?;
 
-            let js_default_graph = Reflect::get(options, &JsValue::from_str("default_graph"))?;
-            default_graph = if js_default_graph.is_undefined() || js_default_graph.is_null() {
-                None
-            } else if let Some(iter) = try_iter(&js_default_graph)? {
-                Some(
-                    iter.map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
-                        .collect::<Result<Vec<GraphName>, _>>()?,
-                )
-            } else {
-                Some(vec![
-                    FROM_JS.with(|c| c.to_term(&js_default_graph))?.try_into()?,
-                ])
-            };
+            default_graph =
+                if let Some(default_graph) = to_option(reflect_get(options, &DEFAULT_GRAPH)?) {
+                    Some(if let Some(iter) = try_iter(&default_graph)? {
+                        iter.map(|term| to_graph_name(&term?))
+                            .collect::<Result<Vec<_>, _>>()?
+                    } else {
+                        vec![to_graph_name(&default_graph)?]
+                    })
+                } else {
+                    None
+                };
 
-            let js_named_graphs = Reflect::get(options, &JsValue::from_str("named_graphs"))?;
-            named_graphs = if js_named_graphs.is_null() || js_named_graphs.is_undefined() {
-                None
-            } else {
-                Some(
-                    try_iter(&Reflect::get(options, &JsValue::from_str("named_graphs"))?)?
-                        .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
-                        .map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
-                        .collect::<Result<Vec<NamedOrBlankNode>, _>>()?,
-                )
-            };
+            named_graphs =
+                if let Some(named_graphs) = to_option(reflect_get(options, &NAMED_GRAPHS)?) {
+                    Some(
+                        try_iter(&named_graphs)?
+                            .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
+                            .map(|term| to_named_or_blank_node(&term?))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    )
+                } else {
+                    None
+                };
 
             use_default_graph_as_union =
-                Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
-                    .is_truthy();
+                reflect_get(options, &USED_DEFAULT_GRAPH_AS_UNION)?.is_truthy();
 
-            let js_results_format = Reflect::get(options, &JsValue::from_str("results_format"))?;
-            if !js_results_format.is_undefined() && !js_results_format.is_null() {
+            if let Some(js_results_format) = to_option(reflect_get(options, &RESULTS_FORMAT)?) {
                 results_format = Some(
                     js_results_format
                         .as_string()
@@ -258,7 +180,7 @@ impl JsStore {
                         for (variable, value) in solution.iter() {
                             result.set(
                                 &variable.as_str().into(),
-                                &JsTerm::from(value.clone()).into(),
+                                &from_term(&self.data_factory, value.as_ref()),
                             );
                         }
                         results.push(&result.into());
@@ -282,14 +204,10 @@ impl JsStore {
                 } else {
                     let results = Array::new();
                     for triple in triples {
-                        results.push(
-                            &JsQuad::from(
-                                triple
-                                    .map_err(JsError::from)?
-                                    .in_graph(GraphName::DefaultGraph),
-                            )
-                            .into(),
-                        );
+                        results.push(&from_triple(
+                            &self.data_factory,
+                            triple.map_err(JsError::from)?.as_ref(),
+                        ));
                     }
                     results.into()
                 }
@@ -316,8 +234,8 @@ impl JsStore {
     pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut base_iri = None;
-        if !options.is_undefined() {
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+        if let Some(options) = to_option_ref(options) {
+            base_iri = convert_base_iri(&reflect_get(options, &BASE_IRI)?)?;
         }
 
         let mut evaluator = SparqlEvaluator::new();
@@ -337,28 +255,26 @@ impl JsStore {
         // Parsing options
         let mut format = None;
         let mut base_iri = None;
-        let mut to_graph_name = None;
+        let mut to_graph_name_rs = None;
         let mut lenient = false;
         let mut no_transaction = false;
-        if !options.is_undefined() {
-            if let Some(format_str) =
-                Reflect::get(options, &JsValue::from_str("format"))?.as_string()
-            {
+        if let Some(options) = to_option_ref(options) {
+            if let Some(format_str) = reflect_get(options, &FORMAT)?.as_string() {
                 format = Some(rdf_format(&format_str)?);
             }
-            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
-            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
-            to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
-            lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
-            no_transaction =
-                Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
+            base_iri = convert_base_iri(&reflect_get(options, &BASE_IRI)?)?;
+            to_graph_name_rs = to_option_ref(&reflect_get(options, &TO_GRAPH_NAME)?)
+                .map(to_graph_name)
+                .transpose()?;
+            lenient = reflect_get(options, &LENIENT)?.is_truthy();
+            no_transaction = reflect_get(options, &NO_TRANSACTION)?.is_truthy();
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {{format: 'nt'}}"))?;
 
         let mut parser = RdfParser::from_format(format);
-        if let Some(to_graph_name) = to_graph_name {
-            parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
+        if let Some(to_graph_name) = to_graph_name_rs {
+            parser = parser.with_default_graph(to_graph_name);
         }
         if let Some(base_iri) = base_iri {
             parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
@@ -401,25 +317,21 @@ impl JsStore {
     pub fn dump(&self, options: &JsValue) -> Result<String, JsValue> {
         // Serialization options
         let mut format = None;
-        let mut from_graph_name = None;
-        if !options.is_undefined() {
-            if let Some(format_str) =
-                Reflect::get(options, &JsValue::from_str("format"))?.as_string()
-            {
+        let mut from_graph_name_rs = None;
+        if let Some(options) = to_option_ref(options) {
+            if let Some(format_str) = reflect_get(options, &FORMAT)?.as_string() {
                 format = Some(rdf_format(&format_str)?);
             }
-            let from_graph_name_js = Reflect::get(options, &JsValue::from_str("from_graph_name"))?;
-            from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
+            from_graph_name_rs = to_option_ref(&reflect_get(options, &FROM_GRAPH_NAME)?)
+                .map(to_graph_name)
+                .transpose()?;
         }
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
 
-        let buffer = if let Some(from_graph_name) = from_graph_name {
-            self.store.dump_graph_to_writer(
-                &GraphName::try_from(from_graph_name)?,
-                format,
-                Vec::new(),
-            )
+        let buffer = if let Some(from_graph_name) = from_graph_name_rs {
+            self.store
+                .dump_graph_to_writer(&from_graph_name, format, Vec::new())
         } else {
             self.store.dump_to_writer(format, Vec::new())
         }
