@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { webcrypto } from "node:crypto";
 import dataModel from "@rdfjs/data-model";
 import { describe, it, vi } from "vitest";
-import { parse } from "../pkg/oxigraph.js";
+import { parse } from "../pkg";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
 vi.stubGlobal("crypto", webcrypto);

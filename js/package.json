@@ -2,10 +2,13 @@
     "name": "oxigraph_tests",
     "description": "Oxigraph JS build and tests",
     "private": true,
+    "dependencies": {
+        "@rdfjs/data-model": "^2.1.0",
+        "@rdfjs/types": "^2.0.1"
+    },
     "devDependencies": {
         "@biomejs/biome": "^2.0.0",
         "@codspeed/vitest-plugin": "^5.0.1",
-        "@rdfjs/data-model": "^2.1.0",
         "@tsconfig/node18": "^18.2.4",
         "@tsconfig/strictest": "^2.0.5",
         "@types/node": "^24.0.0",

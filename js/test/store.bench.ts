@@ -1,5 +1,5 @@
 import { bench, describe } from "vitest";
-import { Store } from "../pkg/oxigraph.js";
+import { Store } from "../pkg";
 import { readData } from "./bench_data";
 
 const explore_1000_nt = await readData("explore-1000.nt.zst");

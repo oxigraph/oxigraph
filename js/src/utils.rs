@@ -99,3 +99,19 @@ pub fn make_async_iterator_iterable(value: impl Into<JsValue>) -> Result<JsValue
     )?;
     Ok(value)
 }
+
+pub fn to_option_ref(value: &JsValue) -> Option<&JsValue> {
+    if value.is_undefined() || value.is_null() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+pub fn to_option(value: JsValue) -> Option<JsValue> {
+    if value.is_undefined() || value.is_null() {
+        None
+    } else {
+        Some(value)
+    }
+}

@@ -22,7 +22,7 @@ npm install oxigraph
 
 And then import:
 ```js
-import oxigraph from './node_modules/oxigraph/node.js';
+import { Store } from "oxigraph";
 ```
 
 Note that a bundler compatible with WebAssembly like Vite or WebPack is likely required to make the package work.
@@ -32,11 +32,12 @@ Note that a bundler compatible with WebAssembly like Vite or WebPack is likely r
 Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in  SPARQL:
 
 ```js
-import * as oxigraph from "../pkg/oxigraph.js";
-const store = new oxigraph.Store();
-const ex = oxigraph.namedNode("http://example/");
-const schemaName = oxigraph.namedNode("http://schema.org/name");
-store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
+import { Store } from "oxigraph";
+import dataModel from "@rdfjs/data-model";
+const store = new Store();
+const ex = dataModel.namedNode("http://example/");
+const schemaName = dataModel.namedNode("http://schema.org/name");
+store.add(dataModel.triple(ex, schemaName, dataModel.literal("example")));
 for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
@@ -45,23 +46,7 @@ for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http:
 ## API
 
 Oxigraph currently provides a simple JS API.
-
-### RDF data model
-
-Oxigraph implements the [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
-
-For that, the `oxigraph` module implements the [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface).
-
-Example:
-```js
-const oxigraph = require('oxigraph');
-const ex = oxigraph.namedNode("http://example.com");
-const blank = oxigraph.blankNode();
-const foo = oxigraph.literal("foo");
-const quad = oxigraph.quad(blank, ex, foo);
-```
-
-All terms overrides the the `toString()` method to return a N-Quads/SPARQL-like representation of the terms.
+It relies on the [RDF/JS DataModel API](https://rdf.js.org/data-model-spec/) to represent RDF terms and its ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model) implementation.
 
 ### I/O
 
@@ -110,15 +95,17 @@ A store contains an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-
 Creates a new store.
 
 ```js
-const oxigraph = require('oxigraph');
-const store = new oxigraph.Store();
+import { Store } from "oxigraph";
+const store = new Store();
 ```
 
 If provided, the `Store` will be initialized with a sequence of quads.
 
 ```js
-const oxigraph = require('oxigraph');
-const store = new oxigraph.Store([oxigraph.quad(blank, ex, foo)]);
+import {Store} from "oxigraph";
+import dataModel from "@rdfjs/data-model";
+
+const store = new Store([dataModel.quad(blank, ex, foo)]);
 ```
 
 #### `Store.prototype.add(Quad quad)`
@@ -150,7 +137,7 @@ Returns an array with all the quads matching a given quad pattern.
 
 Example to get all quads in the default graph with `ex` for subject:
 ```js
-store.match(ex, null, null, oxigraph.defaultGraph());
+store.match(ex, null, null, dataModel.defaultGraph());
 ```
 
 Example to get all quads:
@@ -173,7 +160,7 @@ for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
 
 Example of CONSTRUCT query:
 ```js
-const filteredStore = new oxigraph.Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
+const filteredStore = new Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
 ```
 
 Example of ASK query:
@@ -187,11 +174,11 @@ It is also possible to provide some options in an object given as second argumen
 
 ```js
 console.log(store.query("ASK { <s> ?p ?o }", {
-  base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
-  use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
-  default_graph: [oxigraph.defaultGraph(), oxigraph.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
-  named_graphs: [oxigraph.namedNode("http://example.com"), oxigraph.blankNode("b")], // we restrict the available named graphs to the two listed
-  results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
+    base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
+    use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
+    default_graph: [dataModel.defaultGraph(), dataModel.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
+    named_graphs: [dataModel.namedNode("http://example.com"), dataModel.blankNode("b")], // we restrict the available named graphs to the two listed
+    results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
 }));
 ```
 
@@ -240,7 +227,7 @@ store.load(
     {
         format: "text/turtle",
         base_iri: "http://example.com",
-        to_graph_name: oxigraph.namedNode("http://example.com/graph")
+        to_graph_name: dataModel.namedNode("http://example.com/graph")
     }
 );
 ```
@@ -265,7 +252,7 @@ Example of building a Turtle file from the named graph `<http://example.com/grap
 ```js
 store.dump({
     format: "text/turtle",
-    from_graph_name: oxigraph.namedNode("http://example.com/graph")
+    from_graph_name: dataModel.namedNode("http://example.com/graph")
 });
 ```
 
@@ -274,6 +261,9 @@ store.dump({
 ### From 0.5 to 0.6
 * The package is now build from bundlers and not for plain Node.JS or web browsers. 
   If you don't use a bundler you can still avoid using one by directly importing the `oxigraph_bg.wasm` and `oxigraph_bg.js` files.
+  To import Oxigraph use `import { Store } from "oxigraph"`
+* Oxigraph does not implement RDF/JS DataModel anymore.
+  Use another library like ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model). 
 
 ### From 0.2 to 0.3
 * The `MemoryStore` class is now called `Store` (there is no other kind of stores...).
