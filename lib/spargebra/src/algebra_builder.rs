@@ -268,23 +268,35 @@ impl<'a> AlgebraBuilder<'a> {
 
         let select_expressions = match select_clause.bindings.inner {
             ast::SelectVariables::Star => None,
-            ast::SelectVariables::Explicit(bindings) => {
-                Some(
-                    bindings
-                        .into_iter()
-                        .map(|binding| {
-                            let (expression, variable) = binding.inner;
-                            // TODO: if expression is an aggregate, do not introduce an intermediate variable
-                            Ok(binding.span.make_wrapped((
-                                expression
-                                    .map(|e| self.build_expression(e, &mut aggregates))
-                                    .transpose()?,
-                                Self::build_variable(variable),
-                            )))
-                        })
-                        .collect::<Result<Vec<_>, AlgebraBuilderError>>()?,
-                )
-            }
+            ast::SelectVariables::Explicit(bindings) => Some(
+                bindings
+                    .into_iter()
+                    .map(|binding| {
+                        let (expression, variable) = binding.inner;
+                        let variable = Self::build_variable(variable);
+                        Ok(binding.span.make_wrapped(
+                            if let Some(Spanned {
+                                inner: ast::Expression::Aggregate(aggregate),
+                                span,
+                            }) = expression
+                            {
+                                aggregates.push((
+                                    variable.clone(),
+                                    self.build_aggregate(span.make_wrapped(aggregate))?,
+                                ));
+                                (None, variable)
+                            } else {
+                                (
+                                    expression
+                                        .map(|e| self.build_expression(e, &mut aggregates))
+                                        .transpose()?,
+                                    variable,
+                                )
+                            },
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, AlgebraBuilderError>>()?,
+            ),
         };
 
         let having_expression = solution_modifier

@@ -111,12 +111,6 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
 fn sparql12_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql12/manifest.ttl",
-        &[
-            // TODO: https://github.com/w3c/sparql-query/issues/282
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-03",
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-06",
-            // We do not prevent nested aggregate functions
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax/manifest#nested-aggregate-functions",
-        ],
+        &[],
     )
 }
