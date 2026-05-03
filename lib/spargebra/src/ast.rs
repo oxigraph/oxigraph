@@ -49,7 +49,7 @@ pub struct SelectClause<'a> {
 #[derive(Clone)]
 pub enum SelectVariables<'a> {
     Star,
-    Explicit(Vec<Spanned<(Option<Spanned<Expression<'a>>>, Var<'a>)>>),
+    Explicit(Vec<Spanned<(Option<Spanned<Expression<'a>>>, Spanned<Var<'a>>)>>),
 }
 
 #[derive(Clone, Copy)]
@@ -92,7 +92,7 @@ pub enum GraphClause<'a> {
 
 #[derive(Clone)]
 pub struct SolutionModifier<'a> {
-    pub group_clause: Vec<(Spanned<Expression<'a>>, Option<Var<'a>>)>,
+    pub group_clause: Vec<(Spanned<Expression<'a>>, Option<Spanned<Var<'a>>>)>,
     pub having_clause: Vec<Spanned<Expression<'a>>>,
     pub order_clause: Vec<OrderCondition<'a>>,
     pub limit_offset_clauses: Option<LimitOffsetClauses>,
@@ -112,7 +112,7 @@ pub struct LimitOffsetClauses {
 
 #[derive(Clone)]
 pub struct ValuesClause<'a> {
-    pub variables: Spanned<Vec<Var<'a>>>,
+    pub variables: Vec<Spanned<Var<'a>>>,
     pub values: Spanned<Vec<Vec<DataBlockValue<'a>>>>,
 }
 
@@ -138,7 +138,7 @@ pub enum GraphPatternElement<'a> {
     Union(Vec<GraphPattern<'a>>),
     Minus(Box<GraphPattern<'a>>),
     Values(ValuesClause<'a>),
-    Bind(Spanned<Expression<'a>>, Var<'a>),
+    Bind(Spanned<Expression<'a>>, Spanned<Var<'a>>),
     Service {
         silent: bool,
         name: VarOrIri<'a>,
@@ -157,7 +157,7 @@ pub enum GraphPatternElement<'a> {
 #[cfg(feature = "sparql-12")]
 #[derive(Clone, Copy)]
 pub enum VarOrReifierId<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
     BlankNode(Spanned<BlankNode<'a>>),
 }
@@ -167,14 +167,14 @@ pub type PropertyList<'a> = Vec<(Verb<'a>, Vec<Object<'a>>)>;
 
 #[derive(Clone, Copy)]
 pub enum Verb<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
     A,
 }
 
 #[derive(Clone)]
 pub enum VarOrPath<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Path(Path<'a>),
 }
 
@@ -216,8 +216,8 @@ pub enum PathOneInPropertySet<'a> {
 #[derive(Clone)]
 pub enum GraphNodePath<'a> {
     VarOrTerm(VarOrTerm<'a>),
-    Collection(Vec<GraphNodePath<'a>>),
-    BlankNodePropertyList(PropertyListPath<'a>),
+    Collection(Spanned<Vec<GraphNodePath<'a>>>),
+    BlankNodePropertyList(Spanned<PropertyListPath<'a>>),
     #[cfg(feature = "sparql-12")]
     ReifiedTriple(ReifiedTriple<'a>),
 }
@@ -225,8 +225,8 @@ pub enum GraphNodePath<'a> {
 #[derive(Clone)]
 pub enum GraphNode<'a> {
     VarOrTerm(VarOrTerm<'a>),
-    Collection(Vec<GraphNode<'a>>),
-    BlankNodePropertyList(PropertyList<'a>),
+    Collection(Spanned<Vec<GraphNode<'a>>>),
+    BlankNodePropertyList(Spanned<PropertyList<'a>>),
     #[cfg(feature = "sparql-12")]
     ReifiedTriple(ReifiedTriple<'a>),
 }
@@ -247,14 +247,14 @@ pub enum Annotation<'a> {
 
 #[derive(Clone, Copy)]
 pub enum VarOrIri<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
 }
 
 #[derive(Clone)]
 #[cfg_attr(not(feature = "sparql-12"), derive(Copy))]
 pub enum VarOrTerm<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
     Literal(Literal<'a>),
     BlankNode(Spanned<BlankNode<'a>>),
@@ -307,7 +307,7 @@ pub struct ReifiedTriple<'a> {
 #[cfg(feature = "sparql-12")]
 #[derive(Clone)]
 pub enum ReifiedTripleSubjectOrObject<'a> {
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
     Literal(Literal<'a>),
     BlankNode(Spanned<BlankNode<'a>>),
@@ -336,13 +336,13 @@ pub enum Expression<'a> {
     UnaryPlus(Box<Spanned<Self>>),
     UnaryMinus(Box<Spanned<Self>>),
     Not(Box<Spanned<Self>>),
-    Bound(Var<'a>),
+    Bound(Spanned<Var<'a>>),
     Aggregate(Aggregate<'a>),
     Iri(Iri<'a>),
     Literal(Literal<'a>),
     #[cfg(feature = "sparql-12")]
     TripleTerm(ExprTripleTerm<'a>),
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     BuiltIn(BuiltInName, Vec<Spanned<Self>>),
     Function(Iri<'a>, ArgList<'a>),
     Exists(Box<GraphPattern<'a>>),
@@ -361,7 +361,7 @@ pub struct ExprTripleTerm<'a> {
 #[derive(Clone)]
 pub enum ExprTripleTermSubject<'a> {
     Iri(Iri<'a>),
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
 }
 
 #[cfg(feature = "sparql-12")]
@@ -369,7 +369,7 @@ pub enum ExprTripleTermSubject<'a> {
 pub enum ExprTripleTermObject<'a> {
     Iri(Iri<'a>),
     Literal(Literal<'a>),
-    Var(Var<'a>),
+    Var(Spanned<Var<'a>>),
     TripleTerm(Box<ExprTripleTerm<'a>>),
 }
 

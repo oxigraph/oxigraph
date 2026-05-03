@@ -372,7 +372,7 @@ fn solution_modifier<'src>(
 fn group_clause<'src>(
     expression: impl CParser<'src, Spanned<Expression<'src>>>,
     group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Vec<(Spanned<Expression<'src>>, Option<Var<'src>>)>> {
+) -> impl CParser<'src, Vec<(Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>)>> {
     keyword("GROUP")
         .ignore_then(keyword("BY"))
         .ignore_then(
@@ -388,7 +388,7 @@ fn group_clause<'src>(
 fn group_condition<'src>(
     expression: impl CParser<'src, Spanned<Expression<'src>>>,
     group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, (Spanned<Expression<'src>>, Option<Var<'src>>)> {
+) -> impl CParser<'src, (Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>)> {
     choice((
         built_in_call(expression.clone(), group_graph_pattern.clone()).map(|e| (e, None)),
         function_call(expression.clone()).map(|e| (e, None)),
@@ -1003,13 +1003,12 @@ fn data_block<'src>() -> impl CParser<'src, ValuesClause<'src>> {
 fn inline_data_one_var<'src>() -> impl CParser<
     'src,
     (
-        Spanned<Vec<Var<'src>>>,
+        Vec<Spanned<Var<'src>>>,
         Spanned<Vec<Vec<DataBlockValue<'src>>>>,
     ),
 > {
     var()
         .map(|v| vec![v])
-        .spanned()
         .then(
             data_block_value()
                 .map(|v| vec![v])
@@ -1025,7 +1024,7 @@ fn inline_data_one_var<'src>() -> impl CParser<
 fn inline_data_full<'src>() -> impl CParser<
     'src,
     (
-        Spanned<Vec<Var<'src>>>,
+        Vec<Spanned<Var<'src>>>,
         Spanned<Vec<Vec<DataBlockValue<'src>>>>,
     ),
 > {
@@ -1033,7 +1032,6 @@ fn inline_data_full<'src>() -> impl CParser<
         .repeated()
         .collect()
         .delimited_by(operator("("), operator(")"))
-        .spanned()
         .then(
             data_block_value()
                 .repeated()
@@ -1401,6 +1399,7 @@ fn blank_node_property_list<'src>(
 ) -> impl CParser<'src, GraphNode<'src>> {
     property_list_not_empty
         .delimited_by(operator("["), operator("]"))
+        .spanned()
         .map(GraphNode::BlankNodePropertyList)
 }
 
@@ -1420,6 +1419,7 @@ fn blank_node_property_list_path<'src>(
 ) -> impl CParser<'src, GraphNodePath<'src>> {
     property_list_path_not_empty
         .delimited_by(operator("["), operator("]"))
+        .spanned()
         .map(GraphNodePath::BlankNodePropertyList)
 }
 
@@ -1432,6 +1432,7 @@ fn collection<'src>(
         .at_least(1)
         .collect()
         .delimited_by(operator("("), operator(")"))
+        .spanned()
         .map(GraphNode::Collection)
         .boxed()
 }
@@ -1445,6 +1446,7 @@ fn collection_path<'src>(
         .at_least(1)
         .collect()
         .delimited_by(operator("("), operator(")"))
+        .spanned()
         .map(GraphNodePath::Collection)
         .boxed()
 }
@@ -1654,12 +1656,13 @@ fn var_or_iri<'src>() -> impl CParser<'src, VarOrIri<'src>> {
 }
 
 // [126]   	Var 	  ::=   	VAR1 | VAR2
-fn var<'src>() -> impl CParser<'src, Var<'src>> {
+fn var<'src>() -> impl CParser<'src, Spanned<Var<'src>>> {
     select! {
         Token::Var1(v) => Var(&v[1..]),
         Token::Var2(v) => Var(&v[1..]),
     }
     .labelled("a variable")
+    .spanned()
 }
 
 // [127]   	Expression 	  ::=   	ConditionalOrExpression

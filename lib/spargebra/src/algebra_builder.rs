@@ -325,7 +325,7 @@ impl<'a> AlgebraBuilder<'a> {
                         "Aggregation functions cannot be used in GROUP BY",
                     ));
                 }
-                let variable = variable.map(|v| Self::build_variable(v));
+                let variable = variable.map(Self::build_variable);
                 if let Some(variable) = variable {
                     // Explicit renaming
                     p = GraphPattern::Extend {
@@ -485,11 +485,26 @@ impl<'a> AlgebraBuilder<'a> {
         &self,
         values_clause: ast::ValuesClause<'_>,
     ) -> Result<GraphPattern, AlgebraBuilderError> {
+        if let Some((vl, vr)) = values_clause
+            .variables
+            .iter()
+            .enumerate()
+            .find_map(|(i, vl)| {
+                let vr = values_clause.variables[i + 1..]
+                    .iter()
+                    .find(|vr| vl.inner.0 == vr.inner.0)?;
+                Some((vl, vr))
+            })
+        {
+            return Err(AlgebraBuilderError::new(
+                SimpleSpan::new((), vl.span.start..vr.span.end),
+                format!("Variable {} is repeated, this is not allowed", vl.inner.0),
+            ));
+        }
         let variables = values_clause
             .variables
-            .inner
             .into_iter()
-            .map(|v| Self::build_variable(v))
+            .map(Self::build_variable)
             .collect::<Vec<_>>();
         let bindings = values_clause
             .values
@@ -502,16 +517,6 @@ impl<'a> AlgebraBuilder<'a> {
                     .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if let Some((_, v)) = variables
-            .iter()
-            .enumerate()
-            .find(|(i, vl)| variables[i + 1..].contains(vl))
-        {
-            return Err(AlgebraBuilderError::new(
-                values_clause.variables.span,
-                format!("{v} is repeated, this is not allowed"),
-            ));
-        }
         if bindings.iter().any(|vs| vs.len() != variables.len()) {
             return Err(AlgebraBuilderError::new(
                 values_clause.values.span,
@@ -1289,7 +1294,7 @@ impl<'a> AlgebraBuilder<'a> {
             ast::GraphNode::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
             ast::GraphNode::Collection(elements) => {
                 let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
-                for element in elements.into_iter().rev() {
+                for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node(element, patterns)?;
                     let new_blank_node = TermPattern::from(BlankNode::default());
                     patterns.push(TriplePattern::new(
@@ -1308,7 +1313,7 @@ impl<'a> AlgebraBuilder<'a> {
             }
             ast::GraphNode::BlankNodePropertyList(property_list) => {
                 let subject = TermPattern::from(BlankNode::default());
-                self.build_property_list(&subject, property_list, patterns)?;
+                self.build_property_list(&subject, property_list.inner, patterns)?;
                 Ok(subject)
             }
             #[cfg(feature = "sparql-12")]
@@ -1325,7 +1330,7 @@ impl<'a> AlgebraBuilder<'a> {
             ast::GraphNodePath::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
             ast::GraphNodePath::Collection(elements) => {
                 let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
-                for element in elements.into_iter().rev() {
+                for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node_path(element, patterns)?;
                     let new_blank_node = TermPattern::from(BlankNode::default());
                     patterns.push(TripleOrPathPattern::Triple(TriplePattern::new(
@@ -1344,7 +1349,7 @@ impl<'a> AlgebraBuilder<'a> {
             }
             ast::GraphNodePath::BlankNodePropertyList(property_list) => {
                 let subject = TermPattern::from(BlankNode::default());
-                self.build_property_list_path(&subject, property_list, patterns)?;
+                self.build_property_list_path(&subject, property_list.inner, patterns)?;
                 Ok(subject)
             }
             #[cfg(feature = "sparql-12")]
@@ -1516,7 +1521,7 @@ impl<'a> AlgebraBuilder<'a> {
         })
     }
 
-    fn build_variable(var: ast::Var<'_>) -> Variable {
+    fn build_variable(var: Spanned<ast::Var<'_>>) -> Variable {
         Variable::new_unchecked(var.0)
     }
 
@@ -1824,45 +1829,60 @@ impl<'a> AlgebraBuilder<'a> {
         &self,
         quads: ast::QuadPatterns<'_>,
     ) -> Result<Vec<GroundQuadPattern>, AlgebraBuilderError> {
-        self.build_quad_patterns(quads)?
+        let mut visitor = FindBlankNodeOrVariable::default();
+        visitor.visit_quads(&quads);
+        if let Some(blank_node) = visitor.blank_node {
+            return Err(AlgebraBuilderError::new(
+                blank_node.span,
+                "Blank nodes are not allowed in the DELETE part of updates",
+            ));
+        }
+        Ok(self
+            .build_quad_patterns(quads)?
             .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, ()>>()
-            .map_err(|()| {
-                AlgebraBuilderError::new(
-                    SimpleSpan::new((), 0..0),
-                    "Blank nodes are not allowed in the DELETE part of updates",
-                )
-            }) // TODO: very bad
+            .map(|p| p.try_into().unwrap())
+            .collect())
     }
 
     fn build_quads(&self, quads: ast::QuadPatterns<'_>) -> Result<Vec<Quad>, AlgebraBuilderError> {
-        self.build_quad_patterns(quads)?
+        let mut visitor = FindBlankNodeOrVariable::default();
+        visitor.visit_quads(&quads);
+        if let Some(variable) = visitor.variable {
+            return Err(AlgebraBuilderError::new(
+                variable.span,
+                "Variables are not allowed in INSERT DATA",
+            ));
+        }
+        Ok(self
+            .build_quad_patterns(quads)?
             .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, ()>>()
-            .map_err(|()| {
-                AlgebraBuilderError::new(
-                    SimpleSpan::new((), 0..0),
-                    "Variables are not allowed in INSERT DATA",
-                )
-            }) // TODO: very bad
+            .map(|p| p.try_into().unwrap())
+            .collect())
     }
 
     fn build_ground_quads(
         &self,
         quads: ast::QuadPatterns<'_>,
     ) -> Result<Vec<GroundQuad>, AlgebraBuilderError> {
-        self.build_quads(quads)?
+        let mut visitor = FindBlankNodeOrVariable::default();
+        visitor.visit_quads(&quads);
+        if let Some(variable) = visitor.variable {
+            return Err(AlgebraBuilderError::new(
+                variable.span,
+                "Variables are not allowed in DELETE DATA",
+            ));
+        }
+        if let Some(blank_node) = visitor.blank_node {
+            return Err(AlgebraBuilderError::new(
+                blank_node.span,
+                "Blank nodes are not allowed in DELETE DATA",
+            ));
+        }
+        Ok(self
+            .build_quads(quads)?
             .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, ()>>()
-            .map_err(|()| {
-                AlgebraBuilderError::new(
-                    SimpleSpan::new((), 0..0),
-                    "Blank nodes and variables are not allowed in DELETE DATA",
-                )
-            }) // TODO: very bad
+            .map(|p| p.try_into().unwrap())
+            .collect())
     }
 
     fn build_quad_patterns(
@@ -2026,13 +2046,17 @@ impl<'a> From<ast::GraphNode<'a>> for ast::GraphNodePath<'a> {
     fn from(node: ast::GraphNode<'a>) -> Self {
         match node {
             ast::GraphNode::VarOrTerm(n) => Self::VarOrTerm(n),
-            ast::GraphNode::Collection(c) => {
-                Self::Collection(c.into_iter().map(Into::into).collect())
-            }
+            ast::GraphNode::Collection(c) => Self::Collection(
+                c.span
+                    .make_wrapped(c.inner.into_iter().map(Into::into).collect()),
+            ),
             ast::GraphNode::BlankNodePropertyList(pl) => Self::BlankNodePropertyList(
-                pl.into_iter()
-                    .map(|(p, os)| (p.into(), os.into_iter().map(Into::into).collect()))
-                    .collect(),
+                pl.span.make_wrapped(
+                    pl.inner
+                        .into_iter()
+                        .map(|(p, os)| (p.into(), os.into_iter().map(Into::into).collect()))
+                        .collect(),
+                ),
             ),
             #[cfg(feature = "sparql-12")]
             ast::GraphNode::ReifiedTriple(t) => Self::ReifiedTriple(t),
@@ -2366,8 +2390,8 @@ fn find_update_operation_blank_node_ids_and_validate_syntax_restrictions<'a>(
             let mut blank_nodes = HashMap::new();
             for (_, triples) in quads {
                 for (subject, property_list) in triples {
-                    add_graph_node_blank_node_ids(subject, &mut blank_nodes);
-                    add_property_list_blank_node_ids(property_list, &mut blank_nodes);
+                    blank_nodes.visit_graph_node(subject);
+                    blank_nodes.visit_property_list(property_list);
                 }
             }
             Ok(blank_nodes)
@@ -2424,14 +2448,8 @@ fn find_graph_pattern_blank_node_ids_and_validate_syntax_restrictions<'a>(
                     }
                     ast::GraphPatternElement::Triples(triples) => {
                         for (subject, predicate_objects) in triples {
-                            add_graph_node_path_blank_node_ids(
-                                subject,
-                                &mut current_bgp_blank_nodes,
-                            );
-                            add_property_list_path_blank_node_ids(
-                                predicate_objects,
-                                &mut current_bgp_blank_nodes,
-                            );
+                            current_bgp_blank_nodes.visit_graph_node_path(subject);
+                            current_bgp_blank_nodes.visit_property_list_path(predicate_objects);
                         }
                     }
                     #[cfg(feature = "sep-0006")]
@@ -2484,157 +2502,233 @@ fn extend_blank_node_ids_if_not_overlapping<'a>(
     Ok(())
 }
 
-fn add_graph_node_path_blank_node_ids<'a>(
-    graph_node_path: &ast::GraphNodePath<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    match graph_node_path {
-        ast::GraphNodePath::VarOrTerm(var_or_term) => {
-            add_var_or_term_blank_node_ids(var_or_term, blank_node_ids)
-        }
-        ast::GraphNodePath::Collection(nodes) => {
-            for node in nodes {
-                add_graph_node_path_blank_node_ids(node, blank_node_ids);
+trait TermVisitor<'a> {
+    fn on_blank_node(&mut self, _blank_node: &Spanned<ast::BlankNode<'a>>) {}
+    fn on_variable(&mut self, _variable: &Spanned<ast::Var<'a>>) {}
+
+    fn visit_quads(&mut self, quads: &ast::QuadPatterns<'a>) {
+        for (graph_name, triples) in quads {
+            if let Some(graph_name) = graph_name {
+                self.visit_var_or_iri(graph_name);
+            }
+            for (subject, predicate_object) in triples {
+                self.visit_graph_node(subject);
+                self.visit_property_list(predicate_object);
             }
         }
-        ast::GraphNodePath::BlankNodePropertyList(property_list) => {
-            add_property_list_path_blank_node_ids(property_list, blank_node_ids)
-        }
-        #[cfg(feature = "sparql-12")]
-        ast::GraphNodePath::ReifiedTriple(triple) => {
-            add_reified_triple_blank_node_ids(triple, blank_node_ids)
-        }
     }
-}
 
-fn add_graph_node_blank_node_ids<'a>(
-    graph_node: &ast::GraphNode<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    match graph_node {
-        ast::GraphNode::VarOrTerm(var_or_term) => {
-            add_var_or_term_blank_node_ids(var_or_term, blank_node_ids)
-        }
-        ast::GraphNode::Collection(nodes) => {
-            for node in nodes {
-                add_graph_node_blank_node_ids(node, blank_node_ids);
+    fn visit_graph_node_path(&mut self, graph_node_path: &ast::GraphNodePath<'a>) {
+        match graph_node_path {
+            ast::GraphNodePath::VarOrTerm(var_or_term) => self.visit_var_or_term(var_or_term),
+            ast::GraphNodePath::Collection(nodes) => {
+                // We use blank nodes for collections
+                self.on_blank_node(&nodes.span.make_wrapped(ast::BlankNode(None)));
+                for node in &nodes.inner {
+                    self.visit_graph_node_path(node);
+                }
             }
-        }
-        ast::GraphNode::BlankNodePropertyList(property_list) => {
-            add_property_list_blank_node_ids(property_list, blank_node_ids)
-        }
-        #[cfg(feature = "sparql-12")]
-        ast::GraphNode::ReifiedTriple(triple) => {
-            add_reified_triple_blank_node_ids(triple, blank_node_ids)
-        }
-    }
-}
-
-fn add_property_list_path_blank_node_ids<'a>(
-    property_list_path: &ast::PropertyListPath<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    for (_, objects) in property_list_path {
-        for object in objects {
-            add_graph_node_path_blank_node_ids(&object.graph_node, blank_node_ids);
+            ast::GraphNodePath::BlankNodePropertyList(property_list) => {
+                // This is an anonymous blank node
+                self.on_blank_node(&property_list.span.make_wrapped(ast::BlankNode(None)));
+                self.visit_property_list_path(&property_list.inner)
+            }
             #[cfg(feature = "sparql-12")]
-            for annotation in &object.annotations {
-                match &annotation.inner {
-                    ast::AnnotationPath::Reifier(_) => (),
-                    ast::AnnotationPath::AnnotationBlock(property_list) => {
-                        add_property_list_path_blank_node_ids(property_list, blank_node_ids)
+            ast::GraphNodePath::ReifiedTriple(triple) => self.visit_reified_triple(triple),
+        }
+    }
+
+    fn visit_graph_node(&mut self, graph_node: &ast::GraphNode<'a>) {
+        match graph_node {
+            ast::GraphNode::VarOrTerm(var_or_term) => self.visit_var_or_term(var_or_term),
+            ast::GraphNode::Collection(nodes) => {
+                // We use blank nodes for collections
+                self.on_blank_node(&nodes.span.make_wrapped(ast::BlankNode(None)));
+                for node in &nodes.inner {
+                    self.visit_graph_node(node);
+                }
+            }
+            ast::GraphNode::BlankNodePropertyList(property_list) => {
+                // This is an anonymous blank node
+                self.on_blank_node(&property_list.span.make_wrapped(ast::BlankNode(None)));
+                self.visit_property_list(&property_list.inner)
+            }
+            #[cfg(feature = "sparql-12")]
+            ast::GraphNode::ReifiedTriple(triple) => self.visit_reified_triple(triple),
+        }
+    }
+
+    fn visit_property_list_path(&mut self, property_list_path: &ast::PropertyListPath<'a>) {
+        for (predicate, objects) in property_list_path {
+            self.visit_var_or_path(predicate);
+            for object in objects {
+                self.visit_graph_node_path(&object.graph_node);
+                #[cfg(feature = "sparql-12")]
+                {
+                    let mut with_explicit_reifier = false;
+                    for annotation in &object.annotations {
+                        match &annotation.inner {
+                            ast::AnnotationPath::Reifier(reifier) => {
+                                if let Some(reifier) = reifier {
+                                    self.visit_var_or_reifier_id(reifier)
+                                } else {
+                                    // This is an anonymous blank node
+                                    self.on_blank_node(
+                                        &annotation.span.make_wrapped(ast::BlankNode(None)),
+                                    );
+                                }
+                                with_explicit_reifier = true;
+                            }
+                            ast::AnnotationPath::AnnotationBlock(property_list) => {
+                                if !with_explicit_reifier {
+                                    // We use an anonymous blank node
+                                    self.on_blank_node(
+                                        &annotation.span.make_wrapped(ast::BlankNode(None)),
+                                    );
+                                }
+                                self.visit_property_list_path(property_list);
+                                with_explicit_reifier = false;
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
 
-fn add_property_list_blank_node_ids<'a>(
-    property_list: &ast::PropertyList<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    for (_, objects) in property_list {
-        for object in objects {
-            add_graph_node_blank_node_ids(&object.graph_node, blank_node_ids);
-            #[cfg(feature = "sparql-12")]
-            for annotation in &object.annotations {
-                match &annotation.inner {
-                    ast::Annotation::Reifier(_) => (),
-                    ast::Annotation::AnnotationBlock(property_list) => {
-                        add_property_list_blank_node_ids(property_list, blank_node_ids)
+    fn visit_property_list(&mut self, property_list: &ast::PropertyList<'a>) {
+        for (predicate, objects) in property_list {
+            self.visit_verb(predicate);
+            for object in objects {
+                self.visit_graph_node(&object.graph_node);
+                #[cfg(feature = "sparql-12")]
+                {
+                    let mut with_explicit_reifier = false;
+                    for annotation in &object.annotations {
+                        match &annotation.inner {
+                            ast::Annotation::Reifier(reifier) => {
+                                if let Some(reifier) = reifier {
+                                    self.visit_var_or_reifier_id(reifier);
+                                } else {
+                                    // This is an anonymous blank node
+                                    self.on_blank_node(
+                                        &annotation.span.make_wrapped(ast::BlankNode(None)),
+                                    );
+                                }
+                                with_explicit_reifier = true;
+                            }
+                            ast::Annotation::AnnotationBlock(property_list) => {
+                                if !with_explicit_reifier {
+                                    // We use an anonymous blank node
+                                    self.on_blank_node(
+                                        &annotation.span.make_wrapped(ast::BlankNode(None)),
+                                    );
+                                }
+                                self.visit_property_list(property_list);
+                                with_explicit_reifier = false;
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
 
-fn add_var_or_term_blank_node_ids<'a>(
-    var_or_term: &ast::VarOrTerm<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    match var_or_term {
-        ast::VarOrTerm::BlankNode(bnode) => {
-            if let Some(id) = bnode.inner.0 {
-                blank_node_ids.insert(id, bnode.span);
+    fn visit_var_or_term(&mut self, var_or_term: &ast::VarOrTerm<'a>) {
+        match var_or_term {
+            ast::VarOrTerm::BlankNode(bnode) => self.on_blank_node(bnode),
+            ast::VarOrTerm::Var(v) => self.on_variable(v),
+            ast::VarOrTerm::Iri(_) | ast::VarOrTerm::Literal(_) | ast::VarOrTerm::Nil => (),
+            #[cfg(feature = "sparql-12")]
+            ast::VarOrTerm::TripleTerm(triple_term) => self.visit_triple_term(triple_term),
+        }
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn visit_reified_triple(&mut self, reified_triple: &ast::ReifiedTriple<'a>) {
+        self.visit_reified_triple_term_subject_or_object(&reified_triple.subject);
+        self.visit_verb(&reified_triple.predicate);
+        self.visit_reified_triple_term_subject_or_object(&reified_triple.object);
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn visit_triple_term(&mut self, triple_term: &ast::TripleTerm<'a>) {
+        self.visit_var_or_term(&triple_term.subject);
+        self.visit_verb(&triple_term.predicate);
+        self.visit_var_or_term(&triple_term.object)
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn visit_reified_triple_term_subject_or_object(
+        &mut self,
+        var_or_term: &ast::ReifiedTripleSubjectOrObject<'a>,
+    ) {
+        match var_or_term {
+            ast::ReifiedTripleSubjectOrObject::BlankNode(bnode) => self.on_blank_node(bnode),
+            ast::ReifiedTripleSubjectOrObject::Var(v) => self.on_variable(v),
+            ast::ReifiedTripleSubjectOrObject::Iri(_)
+            | ast::ReifiedTripleSubjectOrObject::Literal(_) => (),
+            ast::ReifiedTripleSubjectOrObject::TripleTerm(triple_term) => {
+                self.visit_triple_term(triple_term)
+            }
+            ast::ReifiedTripleSubjectOrObject::ReifiedTriple(triple) => {
+                self.visit_reified_triple(triple)
             }
         }
-        ast::VarOrTerm::Var(_)
-        | ast::VarOrTerm::Iri(_)
-        | ast::VarOrTerm::Literal(_)
-        | ast::VarOrTerm::Nil => (),
-        #[cfg(feature = "sparql-12")]
-        ast::VarOrTerm::TripleTerm(triple_term) => {
-            add_triple_term_blank_node_ids(triple_term, blank_node_ids)
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn visit_var_or_reifier_id(&mut self, var_or_reifier_id: &ast::VarOrReifierId<'a>) {
+        match var_or_reifier_id {
+            ast::VarOrReifierId::Var(v) => self.on_variable(v),
+            ast::VarOrReifierId::Iri(_) => {}
+            ast::VarOrReifierId::BlankNode(bnode) => self.on_blank_node(bnode),
+        }
+    }
+
+    fn visit_verb(&mut self, verb: &ast::Verb<'a>) {
+        match verb {
+            ast::Verb::Var(v) => self.on_variable(v),
+            ast::Verb::Iri(_) | ast::Verb::A => {}
+        }
+    }
+
+    fn visit_var_or_path(&mut self, var_or_path: &ast::VarOrPath<'a>) {
+        match var_or_path {
+            ast::VarOrPath::Var(v) => self.on_variable(v),
+            ast::VarOrPath::Path(_) => {}
+        }
+    }
+
+    fn visit_var_or_iri(&mut self, var_or_iri: &ast::VarOrIri<'a>) {
+        match var_or_iri {
+            ast::VarOrIri::Var(v) => self.on_variable(v),
+            ast::VarOrIri::Iri(_) => {}
         }
     }
 }
 
-#[cfg(feature = "sparql-12")]
-fn add_reified_triple_blank_node_ids<'a>(
-    reified_triple: &ast::ReifiedTriple<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    add_reified_triple_term_subject_or_object_blank_node_ids(
-        &reified_triple.subject,
-        blank_node_ids,
-    );
-    add_reified_triple_term_subject_or_object_blank_node_ids(
-        &reified_triple.object,
-        blank_node_ids,
-    );
+impl<'a> TermVisitor<'a> for HashMap<&'a str, SimpleSpan> {
+    fn on_blank_node(&mut self, bnode: &Spanned<ast::BlankNode<'a>>) {
+        if let Some(id) = &bnode.inner.0 {
+            self.insert(id, bnode.span);
+        }
+    }
 }
 
-#[cfg(feature = "sparql-12")]
-fn add_triple_term_blank_node_ids<'a>(
-    triple_term: &ast::TripleTerm<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    add_var_or_term_blank_node_ids(&triple_term.subject, blank_node_ids);
-    add_var_or_term_blank_node_ids(&triple_term.object, blank_node_ids)
+#[derive(Default)]
+struct FindBlankNodeOrVariable<'a> {
+    blank_node: Option<Spanned<ast::BlankNode<'a>>>,
+    variable: Option<Spanned<ast::Var<'a>>>,
 }
 
-#[cfg(feature = "sparql-12")]
-fn add_reified_triple_term_subject_or_object_blank_node_ids<'a>(
-    var_or_term: &ast::ReifiedTripleSubjectOrObject<'a>,
-    blank_node_ids: &mut HashMap<&'a str, SimpleSpan>,
-) {
-    match var_or_term {
-        ast::ReifiedTripleSubjectOrObject::BlankNode(bnode) => {
-            if let Some(id) = bnode.inner.0 {
-                blank_node_ids.insert(id, bnode.span);
-            }
-        }
-        ast::ReifiedTripleSubjectOrObject::Var(_)
-        | ast::ReifiedTripleSubjectOrObject::Iri(_)
-        | ast::ReifiedTripleSubjectOrObject::Literal(_) => (),
-        ast::ReifiedTripleSubjectOrObject::TripleTerm(triple_term) => {
-            add_triple_term_blank_node_ids(triple_term, blank_node_ids)
-        }
-        ast::ReifiedTripleSubjectOrObject::ReifiedTriple(triple) => {
-            add_reified_triple_blank_node_ids(triple, blank_node_ids)
-        }
+impl<'a> TermVisitor<'a> for FindBlankNodeOrVariable<'a> {
+    fn on_blank_node(&mut self, blank_node: &Spanned<ast::BlankNode<'a>>) {
+        self.blank_node.get_or_insert(*blank_node);
+    }
+
+    fn on_variable(&mut self, variable: &Spanned<ast::Var<'a>>) {
+        self.variable.get_or_insert(*variable);
     }
 }
 
