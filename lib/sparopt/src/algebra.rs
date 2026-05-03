@@ -1345,7 +1345,7 @@ impl GraphPattern {
         if let AlExpression::Variable(variable) = expression {
             (variable.clone(), graph_pattern)
         } else {
-            let variable = Variable::new_unchecked(format!("{:x}", random::<u128>()));
+            let variable = new_var();
             (
                 variable.clone(),
                 GraphPattern::Extend {

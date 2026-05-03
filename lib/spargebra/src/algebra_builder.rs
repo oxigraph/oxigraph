@@ -160,12 +160,26 @@ impl<'a> AlgebraBuilder<'a> {
             false,
         )?;
         // We add the IRIS
+        let mut counter = 0;
         if let ast::DescribeTargets::Explicit(targets) = query.targets.inner {
             for target in targets {
+                // We generate a variable
+                let variable = loop {
+                    counter += 1;
+                    let variable = Variable::new_unchecked(format!("v{counter}"));
+                    // We look for name conflicts
+                    let mut found_conflict = false;
+                    pattern.on_in_scope_variable(|v| {
+                        found_conflict |= *v == variable;
+                    });
+                    if !found_conflict {
+                        break variable;
+                    }
+                };
                 if let ast::VarOrIri::Iri(target) = target.inner {
                     pattern = GraphPattern::Extend {
                         inner: Box::new(pattern),
-                        variable: random_variable(),
+                        variable,
                         expression: self.build_named_node(target)?.into(),
                     }
                 }
