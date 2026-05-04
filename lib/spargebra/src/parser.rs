@@ -481,7 +481,7 @@ fn limit_offset_clauses<'src>() -> impl CParser<'src, LimitOffsetClauses> {
 }
 
 // [28]   	LimitClause 	  ::=   	'LIMIT' INTEGER
-fn limit_clause<'src>() -> impl CParser<'src, usize> {
+fn limit_clause<'src>() -> impl CParser<'src, u64> {
     keyword("LIMIT")
         .ignore_then(
             select! {
@@ -490,7 +490,7 @@ fn limit_clause<'src>() -> impl CParser<'src, usize> {
             .labelled("an integer"),
         )
         .try_map(|l, span| {
-            usize::from_str(l).map_err(|_| {
+            u64::from_str(l).map_err(|_| {
                 Rich::custom(
                     span,
                     format!("The query limit must be a non negative integer, found {l}"),
@@ -501,7 +501,7 @@ fn limit_clause<'src>() -> impl CParser<'src, usize> {
 }
 
 // [29]   	OffsetClause 	  ::=   	'OFFSET' INTEGER
-fn offset_clause<'src>() -> impl CParser<'src, usize> {
+fn offset_clause<'src>() -> impl CParser<'src, u64> {
     keyword("OFFSET")
         .ignore_then(
             select! {
@@ -510,7 +510,7 @@ fn offset_clause<'src>() -> impl CParser<'src, usize> {
             .labelled("an integer"),
         )
         .try_map(|o, span| {
-            usize::from_str(o).map_err(|_| {
+            u64::from_str(o).map_err(|_| {
                 Rich::custom(
                     span,
                     format!("The query offset must be a non negative integer, found {o}"),

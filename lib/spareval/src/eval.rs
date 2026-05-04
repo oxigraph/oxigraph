@@ -1603,11 +1603,11 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 stat_children.push(child_stats);
                 let mut child = child?;
                 #[expect(clippy::shadow_same)]
-                let start = *start;
+                let start = (*start).try_into().unwrap();
                 if start > 0 {
                     child = Rc::new(move |from| Box::new(child(from).skip(start)));
                 }
-                if let Some(length) = *length {
+                if let Some(length) = (*length).map(|l| l.try_into().unwrap()) {
                     child = Rc::new(move |from| Box::new(child(from).take(length)));
                 }
                 child

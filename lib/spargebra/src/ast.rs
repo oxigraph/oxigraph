@@ -106,8 +106,8 @@ pub enum OrderCondition<'a> {
 
 #[derive(Clone, Copy)]
 pub struct LimitOffsetClauses {
-    pub offset: usize,
-    pub limit: Option<usize>,
+    pub offset: u64,
+    pub limit: Option<u64>,
 }
 
 #[derive(Clone)]
