@@ -701,8 +701,8 @@ pub enum GraphPattern {
     /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice).
     Slice {
         inner: Box<Self>,
-        start: usize,
-        length: Option<usize>,
+        start: u64,
+        length: Option<u64>,
     },
     /// [Group](https://www.w3.org/TR/sparql11-query/#aggregateAlgebra).
     Group {
@@ -970,7 +970,7 @@ impl GraphPattern {
         }
     }
 
-    pub fn slice(inner: Self, start: usize, length: Option<usize>) -> Self {
+    pub fn slice(inner: Self, start: u64, length: Option<u64>) -> Self {
         if inner.is_empty() {
             return Self::empty();
         }
