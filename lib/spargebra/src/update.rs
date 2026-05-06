@@ -261,7 +261,7 @@ impl fmt::Display for DeleteInsertOperation {
             }
             writeln!(f, "}}")?;
         }
-        if !self.insert.is_empty() {
+        if !self.insert.is_empty() || self.delete.is_empty() {
             writeln!(f, "INSERT {{")?;
             for quad in &self.insert {
                 writeln!(f, "\t{quad} .")?;
@@ -278,11 +278,12 @@ impl fmt::Display for DeleteInsertOperation {
                 }
             }
         }
-        write!(
-            f,
-            "WHERE {{ {} }}",
-            SparqlGraphRootPattern::new(&self.pattern, None)
-        )
+        let mut pattern = &*self.pattern;
+        // We ignore the root projection, it's useless
+        if let GraphPattern::Project { inner, .. } = pattern {
+            pattern = inner;
+        }
+        write!(f, " WHERE {{ {pattern} }}")
     }
 }
 

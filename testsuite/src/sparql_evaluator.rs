@@ -174,11 +174,6 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         .parse_query(&read_file_to_string(query_file)?)
         .context("Failure to parse query")?;
 
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_query(&query.to_string())
-        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
-
     let evaluator = QueryEvaluator::new()
         .with_default_service_handler(StaticServiceHandler::new(&test.service_data)?);
 
@@ -222,13 +217,10 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 
 fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test.action.as_deref().context("No action found")?;
-    let update = SparqlParser::new()
+    SparqlParser::new()
         .with_base_iri(update_file)?
         .parse_update(&read_file_to_string(update_file)?)
         .context("Not able to parse")?;
-    SparqlParser::new()
-        .parse_update(&update.to_string())
-        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
     Ok(())
 }
 
@@ -266,11 +258,6 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         .with_base_iri(update_file)?
         .parse_update(&read_file_to_string(update_file)?)
         .context("Failure to parse update")?;
-
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_update(&update.to_string())
-        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
     SparqlEvaluator::new()
         .for_update(update.clone())

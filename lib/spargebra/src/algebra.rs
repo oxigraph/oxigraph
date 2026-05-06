@@ -3,6 +3,7 @@
 use crate::term::*;
 use oxrdf::LiteralRef;
 use std::fmt;
+use std::fmt::Write as _;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -256,7 +257,7 @@ impl Expression {
         }
     }
 
-    fn lookup_used_variable<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+    fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
         self.walk(&mut |e| {
             if let Self::Variable(v) | Self::Bound(v) = e {
                 callback(v)
@@ -295,22 +296,22 @@ impl fmt::Display for Expression {
                 f.write_str(")")
             }
             Self::Add(a, b) => {
-                write!(f, "{a} + {b}")
+                write!(f, "({a} + {b})")
             }
             Self::Subtract(a, b) => {
-                write!(f, "{a} - {b}")
+                write!(f, "({a} - {b})")
             }
             Self::Multiply(a, b) => {
-                write!(f, "{a} * {b}")
+                write!(f, "({a} * {b})")
             }
             Self::Divide(a, b) => {
-                write!(f, "{a} / {b}")
+                write!(f, "({a} / {b})")
             }
-            Self::UnaryPlus(e) => write!(f, "+{e}"),
-            Self::UnaryMinus(e) => write!(f, "-{e}"),
-            Self::Not(e) => match e.as_ref() {
+            Self::UnaryPlus(e) => write!(f, "+({e})"),
+            Self::UnaryMinus(e) => write!(f, "-({e})"),
+            Self::Not(e) => match &**e {
                 Self::Exists(p) => write!(f, "NOT EXISTS {{ {p} }}"),
-                e => write!(f, "!{e}"),
+                _ => write!(f, "!({e})"),
             },
             Self::FunctionCall(function, parameters) => {
                 write!(f, "{function}")?;
@@ -683,19 +684,30 @@ impl fmt::Display for GraphPattern {
                 object,
             } => write!(f, "{subject} {path} {object} ."),
             Self::Join { left, right } => {
-                match right.as_ref() {
-                    Self::LeftJoin { .. }
-                    | Self::Minus { .. }
-                    | Self::Extend { .. }
-                    | Self::Filter { .. } => {
-                        // The second block might be considered as a modification of the first one.
-                        write!(f, "{left} {{ {right} }}")
-                    }
-                    #[cfg(feature = "sep-0006")]
-                    Self::Lateral { .. } => {
-                        write!(f, "{left} {{ {right} }}")
-                    }
-                    _ => write!(f, "{left} {right}"),
+                if matches!(left.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {left} }}") // We put brackets to avoid the filter to be pushed at the root
+                } else {
+                    left.fmt(f)
+                }?;
+                f.write_char(' ')?;
+                if matches!(
+                    right.as_ref(),
+                    Self::Bgp { .. }
+                        | Self::Path { .. }
+                        | Self::Values { .. }
+                        | Self::Service { .. }
+                        | Self::Graph { .. }
+                        | Self::Union { .. }
+                        | Self::Group { .. }
+                        | Self::Project { .. }
+                        | Self::Distinct { .. }
+                        | Self::Reduced { .. }
+                        | Self::OrderBy { .. }
+                        | Self::Slice { .. }
+                ) {
+                    right.fmt(f)
+                } else {
+                    write!(f, "{{ {right} }}") // No brackets, the reconstruction will be wrong
                 }
             }
             Self::LeftJoin {
@@ -703,18 +715,38 @@ impl fmt::Display for GraphPattern {
                 right,
                 expression,
             } => {
-                if let Some(expr) = expression {
-                    write!(f, "{left} OPTIONAL {{ {right} FILTER({expr}) }}")
+                if matches!(left.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {left} }}") // We put brackets to avoid the filter to be pushed at the root
                 } else {
-                    write!(f, "{left} OPTIONAL {{ {right} }}")
+                    left.fmt(f)
+                }?;
+                f.write_str(" OPTIONAL { ")?;
+                if matches!(right.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {right} }}") // We put brackets to avoid the filter to be considered as the left join filter
+                } else {
+                    right.fmt(f)
+                }?;
+                if let Some(expression) = expression {
+                    write!(f, " FILTER({expression})")?;
                 }
+                f.write_str(" }")
             }
             #[cfg(feature = "sep-0006")]
             Self::Lateral { left, right } => {
-                write!(f, "{left} LATERAL {{ {right} }}")
+                if matches!(left.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {left} }}") // We put brackets to avoid the filter to be pushed at the root
+                } else {
+                    left.fmt(f)
+                }?;
+                write!(f, " LATERAL {{ {right} }}")
             }
             Self::Filter { expr, inner } => {
-                write!(f, "{inner} FILTER({expr})")
+                if matches!(inner.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {inner} }}") // We put brackets to avoid the filter to be pushed at the root
+                } else {
+                    inner.fmt(f)
+                }?;
+                write!(f, " FILTER({expr})")
             }
             Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}"),
             Self::Graph { name, inner } => {
@@ -724,8 +756,22 @@ impl fmt::Display for GraphPattern {
                 inner,
                 variable,
                 expression,
-            } => write!(f, "{inner} BIND({expression} AS {variable})"),
-            Self::Minus { left, right } => write!(f, "{left} MINUS {{ {right} }}"),
+            } => {
+                if matches!(inner.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {inner} }}") // We put brackets to avoid the filter to be pushed at the root
+                } else {
+                    inner.fmt(f)
+                }?;
+                write!(f, " BIND({expression} AS {variable})")
+            }
+            Self::Minus { left, right } => {
+                if matches!(left.as_ref(), Self::Filter { .. }) {
+                    write!(f, "{{ {left} }}") // We put brackets to avoid the filter to be pushed at the root
+                } else {
+                    left.fmt(f)
+                }?;
+                write!(f, " MINUS {{ {right} }}")
+            }
             Self::Service {
                 name,
                 inner,
@@ -763,12 +809,12 @@ impl fmt::Display for GraphPattern {
                 variables,
                 aggregates,
             } => {
-                f.write_str("{SELECT")?;
+                f.write_str("{ SELECT")?;
                 for (a, v) in aggregates {
                     write!(f, " ({v} AS {a})")?;
                 }
-                for b in variables {
-                    write!(f, " {b}")?;
+                for v in variables {
+                    write!(f, " {v}")?;
                 }
                 write!(f, " WHERE {{ {inner} }}")?;
                 if !variables.is_empty() {
@@ -777,16 +823,9 @@ impl fmt::Display for GraphPattern {
                         write!(f, " {v}")?;
                     }
                 }
-                f.write_str("}")
+                f.write_str(" }")
             }
-            p => write!(
-                f,
-                "{{ {} }}",
-                SparqlGraphRootPattern {
-                    pattern: p,
-                    dataset: None
-                }
-            ),
+            p => write!(f, "{{ {} }}", SparqlGraphRootPattern::new(p, None)?),
         }
     }
 }
@@ -1121,7 +1160,7 @@ impl GraphPattern {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
                 if let Some(expr) = expression {
-                    expr.lookup_used_variable(callback);
+                    expr.lookup_used_variables(callback);
                 }
             }
             #[cfg(feature = "sep-0006")]
@@ -1141,7 +1180,7 @@ impl GraphPattern {
                 expression,
             } => {
                 callback(variable);
-                expression.lookup_used_variable(callback);
+                expression.lookup_used_variables(callback);
                 inner.lookup_used_variables(callback);
             }
             Self::Group {
@@ -1164,7 +1203,7 @@ impl GraphPattern {
                 }
             }
             Self::Filter { inner, expr } => {
-                expr.lookup_used_variable(callback);
+                expr.lookup_used_variables(callback);
                 inner.lookup_used_variables(callback);
             }
             Self::Service { inner, name, .. } => {
@@ -1210,114 +1249,240 @@ fn lookup_triple_pattern_variables<'a>(
 }
 
 pub(crate) struct SparqlGraphRootPattern<'a> {
+    option: SelectionOption,
+    project: Option<Vec<(&'a Variable, Option<ExpressionOrAggregate<'a>>)>>,
     pattern: &'a GraphPattern,
     dataset: Option<&'a QueryDataset>,
+    group_by: &'a [Variable],
+    order: &'a [OrderExpression],
+    start: u64,
+    length: Option<u64>,
 }
 
 impl<'a> SparqlGraphRootPattern<'a> {
-    pub fn new(pattern: &'a GraphPattern, dataset: Option<&'a QueryDataset>) -> Self {
-        Self { pattern, dataset }
-    }
-}
-
-impl fmt::Display for SparqlGraphRootPattern<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut distinct = false;
-        let mut reduced = false;
-        let mut order = None;
+    pub fn new(
+        mut pattern: &'a GraphPattern,
+        dataset: Option<&'a QueryDataset>,
+    ) -> Result<Self, fmt::Error> {
+        let mut option = SelectionOption::Default;
         let mut start = 0;
         let mut length = None;
-        let mut project = Vec::new();
+        let mut group_by = [].as_slice();
 
-        let mut child = self.pattern;
+        // Before project
         loop {
-            match child {
-                GraphPattern::OrderBy { inner, expression } => {
-                    order = Some(expression);
-                    child = inner;
+            match pattern {
+                GraphPattern::Distinct { inner } if option == SelectionOption::Default => {
+                    option = SelectionOption::Distinct;
+                    pattern = inner;
                 }
-                GraphPattern::Project { inner, variables } if project.is_empty() => {
-                    project.extend(variables.iter().map(|v| (v, None)));
-                    child = inner;
-                }
-                GraphPattern::Distinct { inner } => {
-                    distinct = true;
-                    child = inner;
-                }
-                GraphPattern::Reduced { inner } => {
-                    reduced = true;
-                    child = inner;
+                GraphPattern::Reduced { inner } if option == SelectionOption::Default => {
+                    option = SelectionOption::Reduced;
+                    pattern = inner;
                 }
                 GraphPattern::Slice {
                     inner,
                     start: s,
                     length: l,
-                } => {
+                } if start == 0 && length.is_none() => {
                     start = *s;
                     length = *l;
-                    child = inner;
+                    pattern = inner;
                 }
-                GraphPattern::Extend {
-                    inner,
-                    expression,
-                    variable,
-                } if project.iter().any(|(v, _)| *v == variable)
-                    && !project.iter().any(|(_, expr)| {
-                        expr.is_some_and(|expr: &Expression| {
-                            let mut found = false;
-                            expr.lookup_used_variable(&mut |v| found |= v == variable);
-                            found
-                        })
-                    }) =>
-                {
-                    // This simplification only works if the extended variable is in the projection and not used in another expression of the projection.
-                    project
-                        .iter_mut()
-                        .find(|(v, _)| *v == variable)
-                        .ok_or(fmt::Error)?
-                        .1 = Some(expression);
-                    child = inner
-                }
-                p => {
-                    f.write_str("SELECT")?;
-                    if distinct {
-                        f.write_str(" DISTINCT")?;
-                    }
-                    if reduced {
-                        f.write_str(" REDUCED")?;
-                    }
-                    if project.is_empty() {
-                        f.write_str(" *")?;
-                    } else {
-                        for (variable, expr) in project {
-                            if let Some(expr) = expr {
-                                write!(f, " ({expr} AS {variable})")
-                            } else {
-                                write!(f, " {variable}")
-                            }?;
-                        }
-                    }
-                    if let Some(dataset) = self.dataset {
-                        write!(f, " {dataset}")?;
-                    }
-                    write!(f, " WHERE {{ {p} }}")?;
-                    if let Some(order) = order {
-                        f.write_str(" ORDER BY")?;
-                        for c in order {
-                            write!(f, " {c}")?;
-                        }
-                    }
-                    if start > 0 {
-                        write!(f, " OFFSET {start}")?;
-                    }
-                    if let Some(length) = length {
-                        write!(f, " LIMIT {length}")?;
-                    }
-                    return Ok(());
-                }
+                _ => break,
             }
         }
+        let (project, order) = if let GraphPattern::Project { inner, variables } = pattern {
+            // We have the projection
+            let mut project = variables.iter().map(|v| (v, None)).collect::<Vec<_>>();
+            pattern = inner;
+
+            // we collect extends
+            while let GraphPattern::Extend {
+                inner,
+                expression,
+                variable,
+            } = pattern
+            {
+                if !project.iter().any(|(v, _)| *v == variable)
+                    || project.iter().any(|(_, expr)| {
+                        expr.as_ref().is_some_and(|expr| {
+                            let mut found = false;
+                            match expr {
+                                ExpressionOrAggregate::Expression(expr) => {
+                                    expr.lookup_used_variables(&mut |v| found |= v == variable)
+                                }
+                                ExpressionOrAggregate::Aggregate(expr) => {
+                                    expr.lookup_used_variables(&mut |v| found |= v == variable)
+                                }
+                            }
+                            found
+                        })
+                    })
+                {
+                    // This simplification only works if the extended variable is in the projection and not used in another expression of the projection.
+                    break;
+                }
+                project
+                    .iter_mut()
+                    .find(|(v, _)| *v == variable)
+                    .ok_or(fmt::Error)?
+                    .1 = Some(ExpressionOrAggregate::Expression(expression));
+                pattern = inner
+            }
+
+            // Order by
+            let order = if let GraphPattern::OrderBy { inner, expression } = pattern {
+                pattern = inner;
+                expression
+            } else {
+                [].as_slice()
+            };
+
+            // And aggregates
+            if let GraphPattern::Group {
+                inner,
+                variables,
+                aggregates,
+            } = pattern
+            {
+                // Currently, we only do this simplification if aggregates are directly projected
+                if aggregates.iter().all(|(agg_var, _)| {
+                    project.iter().all(|(_, project_expr)| {
+                        project_expr
+                            .as_ref()
+                            .is_none_or(|project_expr| match project_expr {
+                                ExpressionOrAggregate::Expression(project_expr) => {
+                                    let mut contains_variable = false;
+                                    project_expr.lookup_used_variables(&mut |v| {
+                                        contains_variable |= v == agg_var
+                                    });
+                                    !contains_variable
+                                        || if let Expression::Variable(project_var) = project_expr {
+                                            agg_var == project_var
+                                        } else {
+                                            false
+                                        }
+                                }
+                                ExpressionOrAggregate::Aggregate(_) => unreachable!(),
+                            })
+                    })
+                }) {
+                    for (project_var, project_expr) in &mut project {
+                        if let Some((_, agg_expr)) = aggregates.iter().find(|(agg_var, _)| {
+                            project_expr.as_ref().map_or_else(
+                                || agg_var == *project_var,
+                                |project_expr| {
+                                    if let ExpressionOrAggregate::Expression(
+                                        Expression::Variable(project_var),
+                                    ) = project_expr
+                                    {
+                                        agg_var == project_var
+                                    } else {
+                                        false
+                                    }
+                                },
+                            )
+                        }) {
+                            *project_expr = Some(ExpressionOrAggregate::Aggregate(agg_expr));
+                        }
+                    }
+                    group_by = variables.as_slice();
+                    pattern = inner;
+                }
+            }
+            (Some(project), order)
+        } else if let GraphPattern::OrderBy { inner, expression } = pattern {
+            pattern = inner;
+            (None, expression.as_slice())
+        } else {
+            (None, [].as_slice())
+        };
+        Ok(Self {
+            option,
+            project,
+            pattern,
+            dataset,
+            group_by,
+            order,
+            start,
+            length,
+        })
     }
+}
+
+impl fmt::Display for SparqlGraphRootPattern<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SELECT")?;
+        match self.option {
+            SelectionOption::Default => (),
+            SelectionOption::Distinct => f.write_str(" DISTINCT")?,
+            SelectionOption::Reduced => f.write_str(" REDUCED")?,
+        }
+        if let Some(project) = &self.project {
+            if project.is_empty() {
+                // We make sure there is no in-scope variable, if yes, it's not serializable
+                let mut with_in_scope = false;
+                self.pattern.on_in_scope_variable(|_| with_in_scope = true);
+                if with_in_scope {
+                    return Err(fmt::Error);
+                }
+                f.write_str(" *")?;
+            } else {
+                for (variable, expr) in project {
+                    if let Some(expr) = expr {
+                        match expr {
+                            ExpressionOrAggregate::Expression(expr) => {
+                                write!(f, " ({expr} AS {variable})")
+                            }
+                            ExpressionOrAggregate::Aggregate(expr) => {
+                                write!(f, " ({expr} AS {variable})")
+                            }
+                        }
+                    } else {
+                        write!(f, " {variable}")
+                    }?;
+                }
+            }
+        } else {
+            f.write_str(" *")?;
+        }
+        if let Some(dataset) = self.dataset {
+            write!(f, " {dataset}")?;
+        }
+        write!(f, " WHERE {{ {} }}", self.pattern)?;
+        if !self.group_by.is_empty() {
+            f.write_str(" GROUP BY")?;
+            for v in self.group_by {
+                write!(f, " {v}")?;
+            }
+        }
+        if !self.order.is_empty() {
+            f.write_str(" ORDER BY")?;
+            for c in self.order {
+                write!(f, " {c}")?;
+            }
+        }
+        if self.start > 0 {
+            write!(f, " OFFSET {}", self.start)?;
+        }
+        if let Some(length) = self.length {
+            write!(f, " LIMIT {length}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Eq, PartialEq)]
+enum SelectionOption {
+    Default,
+    Distinct,
+    Reduced,
+}
+
+enum ExpressionOrAggregate<'a> {
+    Expression(&'a Expression),
+    Aggregate(&'a AggregateExpression),
 }
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
@@ -1377,7 +1542,7 @@ impl AggregateExpression {
 
     fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
         if let Self::FunctionCall { expr, .. } = self {
-            expr.lookup_used_variable(callback);
+            expr.lookup_used_variables(callback);
         }
     }
 }
@@ -1512,7 +1677,7 @@ impl OrderExpression {
 
     fn lookup_used_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
         let (Self::Asc(e) | Self::Desc(e)) = self;
-        e.lookup_used_variable(callback);
+        e.lookup_used_variables(callback);
     }
 }
 
