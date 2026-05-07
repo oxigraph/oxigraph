@@ -26,21 +26,9 @@ pub fn parse_sparql_update<'a>(
         .into_result()
 }
 
-// TODO: remove when bumping Chumsky
-macro_rules! select_with_attr {
-    ($($(#[$attr:meta])? $p:pat $(= $extra:ident)? $(if $guard:expr)? $(=> $out:expr)?),+ $(,)?) => ({
-        chumsky::primitive::select(
-            move |x, extra| match (x, extra) {
-                $($(#[$attr])? ($p $(,$extra)?, ..) $(if $guard)? => ::core::option::Option::Some({ () $(;$out)? })),+,
-                _ => ::core::option::Option::None,
-            }
-        )
-    });
-}
-
 macro_rules! select_keyword {
     ($($(#[$attr:meta])? $p:literal => $out:expr),+) => ({
-        select_with_attr! {
+        select! {
             $($(#[$attr])? Token::Keyword(v) if v.eq_ignore_ascii_case($p) => $out),+
         }
     });

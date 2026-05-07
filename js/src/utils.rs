@@ -78,28 +78,6 @@ impl IntoAsyncIter {
     }
 }
 
-pub fn make_iterator_iterable(value: impl Into<JsValue>) -> Result<JsValue, JsValue> {
-    let value = value.into();
-    let symbol_value = value.clone();
-    Reflect::set(
-        &value,
-        &Symbol::iterator(),
-        &Closure::<dyn Fn() -> JsValue>::new(move || symbol_value.clone()).into_js_value(),
-    )?;
-    Ok(value)
-}
-
-pub fn make_async_iterator_iterable(value: impl Into<JsValue>) -> Result<JsValue, JsValue> {
-    let value = value.into();
-    let symbol_value = value.clone();
-    Reflect::set(
-        &value,
-        &Symbol::async_iterator(),
-        &Closure::<dyn Fn() -> JsValue>::new(move || symbol_value.clone()).into_js_value(),
-    )?;
-    Ok(value)
-}
-
 pub fn to_option_ref(value: &JsValue) -> Option<&JsValue> {
     if value.is_undefined() || value.is_null() {
         None
