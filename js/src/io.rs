@@ -1,10 +1,7 @@
 use crate::format_err;
 use crate::model::*;
 use crate::reflect::*;
-use crate::utils::{
-    IntoAsyncIter, make_async_iterator_iterable, make_iterator_iterable, to_option, to_option_ref,
-    try_async_iter,
-};
+use crate::utils::{IntoAsyncIter, to_option, to_option_ref, try_async_iter};
 use js_sys::{IntoIter, Uint8Array, try_iter};
 use oxigraph::io::{RdfFormat, RdfParseError, RdfParser, ReaderQuadParser};
 use oxrdfio::TokioAsyncReaderQuadParser;
@@ -58,15 +55,17 @@ pub fn parse(input: &JsValue, options: &JsValue) -> Result<JsValue, JsValue> {
             .map_err(JsError::from)?
             .into())
     } else if let Some(iterator) = try_iter(input)? {
-        make_iterator_iterable(ParserIterator {
+        Ok(ParserIterator {
             parser: parser.for_reader(BytesInput::from(iterator)),
             data_factory,
-        })
+        }
+        .into())
     } else if let Some(iterator) = try_async_iter(input)? {
-        make_async_iterator_iterable(AsyncParserIterator {
+        Ok(AsyncParserIterator {
             parser: parser.for_tokio_async_reader(AsyncBytesInput::from(iterator)),
             data_factory,
-        })
+        }
+        .into())
     } else {
         Err(format_err!(
             "The input must be a string, Uint8Array or a sync or async iterator of string or Uint8Array"
@@ -204,6 +203,11 @@ impl ParserIterator {
                 .map(|q| from_quad(&self.data_factory, q.as_ref())),
         ))
     }
+
+    #[wasm_bindgen(js_name = "[Symbol.iterator]")]
+    pub fn iterator(self) -> Self {
+        self
+    }
 }
 
 #[wasm_bindgen(skip_typescript, private)]
@@ -224,9 +228,14 @@ impl AsyncParserIterator {
                 .map(|q| from_quad(&self.data_factory, q.as_ref())),
         ))
     }
+
+    #[wasm_bindgen(js_name = "[Symbol.asyncIterator]")]
+    pub fn iterator(self) -> Self {
+        self
+    }
 }
 
-#[wasm_bindgen(skip_typescript, private, getter_with_clone)]
+#[wasm_bindgen(skip_typescript, private)]
 pub struct ParserIteratorResult(Option<JsValue>);
 
 #[wasm_bindgen]
