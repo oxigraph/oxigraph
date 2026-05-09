@@ -30,6 +30,7 @@ use sparopt::algebra::{
 };
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::fmt::Write;
 use std::hash::{Hash, Hasher};
 use std::iter::{Peekable, empty, once};
 use std::marker::PhantomData;
@@ -4497,12 +4498,11 @@ fn eval_node_label(node: &GraphPattern) -> String {
             ..
         } => format!(
             "Extend({} -> {variable})",
-            spargebra::algebra::Expression::from(expression)
+            FormattableExpression(expression)
         ),
-        GraphPattern::Filter { expression, .. } => format!(
-            "Filter({})",
-            spargebra::algebra::Expression::from(expression)
-        ),
+        GraphPattern::Filter { expression, .. } => {
+            format!("Filter({})", FormattableExpression(expression))
+        }
         GraphPattern::Graph { graph_name } => format!("Graph({graph_name})"),
         GraphPattern::Group {
             variables,
@@ -4537,7 +4537,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
                     // We are in a ForLoopLeftJoin
                     return format!(
                         "ForLoopLeftJoin(expression = {})",
-                        spargebra::algebra::Expression::from(expression)
+                        FormattableExpression(expression)
                     );
                 }
             }
@@ -4551,7 +4551,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => format!(
                 "LeftJoin(HashBuildRightProbeLeft, keys = {}, expression = {})",
                 format_list(keys),
-                spargebra::algebra::Expression::from(expression)
+                FormattableExpression(expression)
             ),
         },
         GraphPattern::Minus { algorithm, .. } => match algorithm {
@@ -4631,6 +4631,17 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 }))
             )
         }
+    }
+}
+
+struct FormattableExpression<'a>(&'a Expression);
+
+impl fmt::Display for FormattableExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if spargebra::algebra::Expression::from(self.0).fmt(f).is_err() {
+            f.write_char('?')?;
+        }
+        Ok(())
     }
 }
 
