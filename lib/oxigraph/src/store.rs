@@ -106,6 +106,8 @@ pub struct Store {
 pub struct StoreOptions {
     max_open_files: Option<StoreMaxOpenFiles>,
     fd_reserve: Option<u32>,
+    is_enable_blob: Option<bool>,
+    min_blob_size: Option<u64>,
 }
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -142,6 +144,20 @@ impl StoreOptions {
         self.fd_reserve = Some(fd_reserve);
         self
     }
+
+    /// Configures RocksDB enable/disable using blob files
+    #[must_use]
+    pub fn with_is_enable_blob(mut self, is_enable_blob: bool) -> Self {
+        self.is_enable_blob = Some(is_enable_blob);
+        self
+    }
+
+    /// Configures RocksDB min byte-size [value] which to move in blob file
+    #[must_use]
+    pub fn with_min_blob_size(mut self, min_blob_size: u64) -> Self {
+        self.min_blob_size = Some(min_blob_size);
+        self
+    }
 }
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -155,6 +171,8 @@ impl From<StoreOptions> for StorageOptions {
                     StoreMaxOpenFiles::Unlimited => -1,
                 }),
             value.fd_reserve,
+            value.is_enable_blob,
+            value.min_blob_size,
         )
     }
 }
