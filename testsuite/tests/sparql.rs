@@ -7,9 +7,7 @@ use oxigraph_testsuite::check_testsuite;
 fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
-        &[
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", /* tokenizer */
-        ],
+        &[],
     )
 }
 
@@ -59,9 +57,6 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_more_set_end",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_one_set_start",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_one_set_end",
-            // Our GROUP_CONCAT is wrong
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-groupconcat-04",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-groupconcat-06",
         ],
     )
 }
