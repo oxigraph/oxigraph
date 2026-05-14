@@ -1,8 +1,4 @@
-#![allow(
-    clippy::trivially_copy_pass_by_ref,
-    clippy::unused_self,
-    clippy::useless_conversion
-)]
+#![expect(clippy::trivially_copy_pass_by_ref, clippy::unused_self)]
 
 mod dataset;
 mod io;

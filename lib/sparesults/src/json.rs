@@ -1,7 +1,5 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
-#![allow(clippy::large_enum_variant)]
-
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 #[cfg(feature = "async-tokio")]
@@ -236,6 +234,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
+#[expect(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -291,6 +290,7 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
+#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -350,6 +350,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     }
 }
 
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -404,6 +406,7 @@ impl SliceJsonSolutionsParser<'_> {
     }
 }
 
+#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
 enum JsonInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -412,6 +415,7 @@ enum JsonInnerQueryResults {
     Boolean(bool),
 }
 
+#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
 enum JsonInnerSolutions {
     Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
@@ -427,6 +431,7 @@ struct JsonInnerReader {
     solutions_read: bool,
 }
 
+#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
 enum JsonInnerReaderState {
     Start,
     InRootObject,
@@ -778,6 +783,7 @@ struct JsonInnerSolutionsParser {
     new_bindings: Vec<Option<Term>>,
 }
 
+#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
 enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,

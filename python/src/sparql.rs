@@ -294,7 +294,7 @@ pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
 
-#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
+#[expect(clippy::large_enum_variant)]
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {

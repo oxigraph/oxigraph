@@ -1,5 +1,3 @@
-#![allow(clippy::unreadable_literal)]
-
 use crate::model::*;
 use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::small_string::SmallString;

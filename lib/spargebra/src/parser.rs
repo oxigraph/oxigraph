@@ -1,5 +1,3 @@
-#![allow(clippy::unused_unit)]
-
 use crate::ast::*;
 use crate::lexer::Token;
 use chumsky::input::{MappedInput, ValueInput};

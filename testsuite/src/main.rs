@@ -1,4 +1,5 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
+
 use anyhow::Result;
 use clap::Parser;
 use oxigraph_testsuite::evaluator::TestEvaluator;
