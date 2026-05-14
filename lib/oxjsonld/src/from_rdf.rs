@@ -412,20 +412,9 @@ impl InnerJsonLdWriter {
         if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
-            #[allow(
-                unreachable_patterns,
-                clippy::match_wildcard_for_single_variants,
-                clippy::allow_attributes
-            )]
             output.push(JsonEvent::String(self.id_value(match quad.subject {
                 NamedOrBlankNodeRef::NamedNode(iri) => iri.into(),
                 NamedOrBlankNodeRef::BlankNode(bnode) => bnode.into(),
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "JSON-LD does not support RDF 1.2 yet",
-                    ));
-                }
             })));
             self.current_subject = Some(quad.subject.into_owned());
         }
@@ -472,11 +461,8 @@ impl InnerJsonLdWriter {
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         output.push(JsonEvent::StartObject);
-        #[allow(
-            unreachable_patterns,
-            clippy::match_wildcard_for_single_variants,
-            clippy::allow_attributes
-        )]
+        #[cfg_attr(feature = "rdf-12", expect(clippy::match_wildcard_for_single_variants))]
+        #[cfg_attr(not(feature = "rdf-12"), expect(unreachable_patterns))]
         match term {
             TermRef::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));

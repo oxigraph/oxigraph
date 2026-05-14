@@ -1,8 +1,7 @@
 //! Code inspired by [Rust RocksDB](https://github.com/rust-rocksdb/rust-rocksdb) under Apache License 2.0.
 
-#![allow(
+#![expect(
     unsafe_code,
-    trivial_casts,
     clippy::undocumented_unsafe_blocks,
     clippy::panic_in_result_fn,
     clippy::unwrap_in_result

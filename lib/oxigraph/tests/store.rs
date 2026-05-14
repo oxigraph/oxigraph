@@ -1,5 +1,5 @@
 #![cfg(test)]
-#![allow(clippy::panic_in_result_fn)]
+#![expect(clippy::panic_in_result_fn)]
 
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};

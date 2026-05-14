@@ -1,4 +1,5 @@
-#![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
+#![expect(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
+
 use crate::cli::{Args, Command};
 use crate::service_description::{EndpointKind, generate_service_description};
 use anyhow::{Context, bail, ensure};

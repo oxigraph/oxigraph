@@ -1,5 +1,3 @@
-#![allow(clippy::range_plus_one)]
-
 use crate::toolkit::{TokenRecognizer, TokenRecognizerError};
 use memchr::{memchr, memchr2};
 use oxilangtag::LanguageTag;

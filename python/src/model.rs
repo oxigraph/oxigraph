@@ -1,4 +1,4 @@
-#![allow(clippy::multiple_inherent_impl)]
+#![expect(clippy::multiple_inherent_impl)]
 
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;

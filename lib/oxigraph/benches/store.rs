@@ -1,4 +1,4 @@
-#![allow(clippy::panic)]
+#![expect(clippy::panic)]
 
 use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
@@ -361,7 +361,7 @@ enum RawOperation {
     Update(String),
 }
 
-#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum Operation {
     Query(Query),

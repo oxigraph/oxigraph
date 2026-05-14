@@ -176,7 +176,7 @@ impl Optimizer {
                 let left_types = infer_expression_type(&left, types);
                 let right = Self::normalize_expression(*right, types);
                 let right_types = infer_expression_type(&right, types);
-                #[allow(unused_mut, clippy::allow_attributes)]
+                #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
                 let mut must_use_equal = left_types.literal && right_types.literal;
                 #[cfg(feature = "sparql-12")]
                 {
