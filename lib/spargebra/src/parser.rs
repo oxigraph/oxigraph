@@ -1457,16 +1457,25 @@ parser! {
         }
         rule TriplesTemplate_inner() -> Vec<TriplePattern> = _ t:TriplesSameSubject() _ { t }
 
-        rule GroupGraphPattern() -> GraphPattern =
+        rule GroupGraphPattern() -> GraphPattern = p:GroupGraphPatternWithFilters() {
+            if let Some(expr) = p.1 {
+                GraphPattern::Filter { expr, inner: Box::new(p.0) }
+            } else {
+                p.0
+            }
+        }
+        // Keep this group's filters separate until OPTIONAL has extracted its condition.
+        // A filter in a nested group must remain inside that nested group.
+        rule GroupGraphPatternWithFilters() -> (GraphPattern, Option<Expression>) =
             "{" _ GroupGraphPattern_clear() p:GroupGraphPatternSub() GroupGraphPattern_clear() _ "}" { p } /
-            "{" _ GroupGraphPattern_clear() p:SubSelect() GroupGraphPattern_clear() _ "}" { p }
+            "{" _ GroupGraphPattern_clear() p:SubSelect() GroupGraphPattern_clear() _ "}" { (p, None) }
         rule GroupGraphPattern_clear() = {
              // We deal with blank nodes aliases rule
             state.used_bnodes.extend(state.currently_used_bnodes.iter().cloned());
             state.currently_used_bnodes.clear();
         }
 
-        rule GroupGraphPatternSub() -> GraphPattern = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {?
+        rule GroupGraphPatternSub() -> (GraphPattern, Option<Expression>) = a:TriplesBlock()? _ b:GroupGraphPatternSub_item()* {?
             let mut filter: Option<Expression> = None;
             let mut g = a.map_or_else(GraphPattern::default, build_bgp);
             for e in b.into_iter().flatten() {
@@ -1513,11 +1522,7 @@ parser! {
                 }
             }
 
-            Ok(if let Some(expr) = filter {
-                GraphPattern::Filter { expr, inner: Box::new(g) }
-            } else {
-                g
-            })
+            Ok((g, filter))
         }
         rule GroupGraphPatternSub_item() -> Vec<PartialGraphPattern> = a:GraphPatternNotTriples() _ ("." _)? b:TriplesBlock()? _ {
             let mut result = vec![a];
@@ -1556,12 +1561,8 @@ parser! {
 
         rule GraphPatternNotTriples() -> PartialGraphPattern = GroupOrUnionGraphPattern() / OptionalGraphPattern() / LateralGraphPattern() / MinusGraphPattern() / GraphGraphPattern() / ServiceGraphPattern() / Filter() / Bind() / InlineData()
 
-        rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPattern() {
-            if let GraphPattern::Filter { expr, inner } =  p {
-               PartialGraphPattern::Optional(*inner, Some(expr))
-            } else {
-               PartialGraphPattern::Optional(p, None)
-            }
+        rule OptionalGraphPattern() -> PartialGraphPattern = i("OPTIONAL") _ p:GroupGraphPatternWithFilters() {
+            PartialGraphPattern::Optional(p.0, p.1)
         }
 
         rule LateralGraphPattern() -> PartialGraphPattern = i("LATERAL") _ p:GroupGraphPattern() {?
