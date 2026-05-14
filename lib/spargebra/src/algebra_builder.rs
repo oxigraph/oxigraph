@@ -330,15 +330,10 @@ impl<'a> AlgebraBuilder<'a> {
         if with_aggregate {
             let mut variables = Vec::new();
             for (expression, variable) in solution_modifier.group_clause {
-                let expression_span = expression.span;
-                let mut group_by_aggregates = Vec::new();
-                let expression = self.build_expression(expression, &mut group_by_aggregates)?;
-                if !group_by_aggregates.is_empty() {
-                    return Err(AlgebraBuilderError::new(
-                        expression_span,
-                        "Aggregation functions cannot be used in GROUP BY",
-                    ));
-                }
+                let expression = self.build_expression_without_aggregates(
+                    expression,
+                    "Aggregation functions cannot be used in GROUP BY",
+                )?;
                 let variable = variable.map(Self::build_variable);
                 if let Some(variable) = variable {
                     // Explicit renaming
@@ -593,17 +588,40 @@ impl<'a> AlgebraBuilder<'a> {
                 for element in elements {
                     match element.inner {
                         ast::GraphPatternElement::Optional(p) => {
-                            let p = self.build_graph_pattern(*p)?;
-                            let (right, expression) =
-                                if let GraphPattern::Filter { expr, inner } = p {
-                                    (inner, Some(expr))
-                                } else {
-                                    (Box::new(p), None)
-                                };
+                            // We remove filters from the inner
+                            #[expect(clippy::shadow_same)]
+                            let mut p = *p;
+                            let mut filters = Vec::new();
+                            if let ast::GraphPattern::Group(group) = p {
+                                p = ast::GraphPattern::Group(
+                                    group
+                                        .into_iter()
+                                        .filter_map(|element| {
+                                            if let ast::GraphPatternElement::Filter(expression) =
+                                                element.inner
+                                            {
+                                                filters.push(expression);
+                                                None
+                                            } else {
+                                                Some(element)
+                                            }
+                                        })
+                                        .collect(),
+                                );
+                            }
                             g = GraphPattern::LeftJoin {
                                 left: Box::new(g),
-                                right,
-                                expression,
+                                right: Box::new(self.build_graph_pattern(p)?),
+                                expression: filters
+                                    .into_iter()
+                                    .map(|expr| {
+                                        self.build_expression_without_aggregates(
+                                            expr,
+                                            "Aggregation functions cannot be used in FILTER",
+                                        )
+                                    })
+                                    .reduce(|l, r| Ok(Expression::And(Box::new(l?), Box::new(r?))))
+                                    .transpose()?,
                             }
                         }
                         ast::GraphPatternElement::Minus(p) => {
@@ -628,28 +646,20 @@ impl<'a> AlgebraBuilder<'a> {
                                     ),
                                 ));
                             }
-                            let mut aggregates = Vec::new();
                             g = GraphPattern::Extend {
                                 inner: Box::new(g),
                                 variable,
-                                expression: self.build_expression(expression, &mut aggregates)?,
-                            };
-                            if !aggregates.is_empty() {
-                                return Err(AlgebraBuilderError::new(
-                                    element.span,
+                                expression: self.build_expression_without_aggregates(
+                                    expression,
                                     "Aggregation functions cannot be used in BIND",
-                                ));
-                            }
+                                )?,
+                            };
                         }
                         ast::GraphPatternElement::Filter(expr) => {
-                            let mut aggregates = Vec::new();
-                            let expr = self.build_expression(expr, &mut aggregates)?;
-                            if !aggregates.is_empty() {
-                                return Err(AlgebraBuilderError::new(
-                                    element.span,
-                                    "Aggregation functions cannot be used in FILTER",
-                                ));
-                            }
+                            let expr = self.build_expression_without_aggregates(
+                                expr,
+                                "Aggregation functions cannot be used in FILTER",
+                            )?;
                             filter = Some(if let Some(f) = filter {
                                 Expression::And(Box::new(f), Box::new(expr))
                             } else {
@@ -834,19 +844,29 @@ impl<'a> AlgebraBuilder<'a> {
                 distinct,
             ),
         };
-        let mut nested_aggregates = Vec::new();
-        let expr = self.build_expression(*expression, &mut nested_aggregates)?;
-        if !nested_aggregates.is_empty() {
-            return Err(AlgebraBuilderError::new(
-                aggregate.span,
-                "Aggregated expressions cannot be nested",
-            ));
-        }
+        let expr = self.build_expression_without_aggregates(
+            *expression,
+            "Aggregated expressions cannot be nested",
+        )?;
         Ok(AggregateExpression::FunctionCall {
             name,
             expr,
             distinct,
         })
+    }
+
+    fn build_expression_without_aggregates(
+        &self,
+        expression: Spanned<ast::Expression<'_>>,
+        error_message: &'static str,
+    ) -> Result<Expression, AlgebraBuilderError> {
+        let mut aggregates = Vec::new();
+        let span = expression.span;
+        let expression = self.build_expression(expression, &mut aggregates)?;
+        if !aggregates.is_empty() {
+            return Err(AlgebraBuilderError::new(span, error_message));
+        }
+        Ok(expression)
     }
 
     fn build_expression(
@@ -1062,17 +1082,10 @@ impl<'a> AlgebraBuilder<'a> {
                             ),
                         ));
                     }
-                    let mut nested_aggregates = Vec::new();
-                    let expr = self.build_expression(
+                    let expr = self.build_expression_without_aggregates(
                         args.args.into_iter().next().unwrap(),
-                        &mut nested_aggregates,
+                        "Aggregated expressions cannot be nested",
                     )?;
-                    if !nested_aggregates.is_empty() {
-                        return Err(AlgebraBuilderError::new(
-                            expression.span,
-                            "Aggregated expressions cannot be nested",
-                        ));
-                    }
                     return Ok(register_aggregate(
                         AggregateExpression::FunctionCall {
                             name: AggregateFunction::Custom(name),

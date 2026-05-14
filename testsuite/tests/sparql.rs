@@ -7,9 +7,7 @@ use oxigraph_testsuite::check_testsuite;
 fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
-        &[
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", /* tokenizer */
-        ],
+        &[],
     )
 }
 
@@ -31,8 +29,6 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
             // We use XSD 1.1 equality on dates
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
-            // We choose to simplify first the nested group patterns in OPTIONAL
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
             // This test relies on naive iteration on the input file
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
