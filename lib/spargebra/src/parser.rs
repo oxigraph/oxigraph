@@ -2069,9 +2069,9 @@ fn numeric_literal_positive_or_negative<'src>() -> impl CParser<'src, Literal<'s
 
 // [154]   	BooleanLiteral 	  ::=   	'true' | 'false'
 fn boolean_literal<'src>() -> impl CParser<'src, Literal<'src>> {
-    case_sensitive_keyword("true")
+    keyword("true")
         .to(Literal::Boolean(true))
-        .or(case_sensitive_keyword("false").to(Literal::Boolean(false)))
+        .or(keyword("false").to(Literal::Boolean(false)))
 }
 
 // [155]   	String 	  ::=   	STRING_LITERAL1 | STRING_LITERAL2 | STRING_LITERAL_LONG1 | STRING_LITERAL_LONG2
