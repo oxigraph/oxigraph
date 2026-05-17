@@ -63,21 +63,12 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
     /// - CONSTRUCT and DESCRIBE: a table with subject, predicate, and object columns
     pub fn query_plan(&mut self, query: &Query) -> Result<LogicalPlanBuilder> {
         match query {
-            Query::Select {
-                pattern, dataset, ..
-            } => self.select_plan(pattern, dataset.as_ref()),
-            Query::Construct {
-                template,
-                pattern,
-                dataset,
-                ..
-            } => self.construct_plan(pattern, template, dataset.as_ref()),
-            Query::Describe {
-                pattern, dataset, ..
-            } => self.describe_plan(pattern, dataset.as_ref()),
-            Query::Ask {
-                pattern, dataset, ..
-            } => self.ask_plan(pattern, dataset.as_ref()),
+            Query::Select(q) => self.select_plan(&q.pattern, q.dataset.as_ref()),
+            Query::Construct(q) => {
+                self.construct_plan(&q.pattern, &q.template, q.dataset.as_ref())
+            }
+            Query::Describe(q) => self.describe_plan(&q.pattern, q.dataset.as_ref()),
+            Query::Ask(q) => self.ask_plan(&q.pattern, q.dataset.as_ref()),
         }
     }
 
@@ -696,9 +687,10 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                 inner,
                 start,
                 length,
-            } => self
-                .plan_for_graph_pattern(inner, context)?
-                .limit(*start, *length),
+            } => self.plan_for_graph_pattern(inner, context)?.limit(
+                usize::try_from(*start).unwrap_or(usize::MAX),
+                length.map(|l| usize::try_from(l).unwrap_or(usize::MAX)),
+            ),
             GraphPattern::Service { .. } => not_impl_err!("SERVICE is not implemented yet"),
         }
     }

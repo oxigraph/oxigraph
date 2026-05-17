@@ -567,19 +567,15 @@ impl PreparedSparqlQuery {
     }
 
     #[cfg(feature = "datafusion")]
-    #[expect(deprecated)]
     pub fn datafusion(self, store: &Store) -> Result<QueryResults<'static>, QueryEvaluationError> {
-        let query = Query::from(self.query);
         let dataset = DatasetView::new(store.storage().snapshot());
-        DatafusionEvaluator::new()?.execute(dataset, &query.inner)
+        DatafusionEvaluator::new()?.execute(dataset, &self.query)
     }
 
     #[cfg(feature = "datafusion")]
-    #[expect(deprecated)]
     pub fn datafusion_explain(self, store: &Store) -> Result<String, QueryEvaluationError> {
-        let query = Query::from(self.query);
         let dataset = DatasetView::new(store.storage().snapshot());
-        DatafusionEvaluator::new()?.explain(dataset, &query.inner)
+        DatafusionEvaluator::new()?.explain(dataset, &self.query)
     }
 
     /// Bind the prepared query to the [`Transaction`] it should be evaluated on.
