@@ -858,8 +858,8 @@ impl JsonInnerSolutionsParser {
 struct JsonInnerTermReader {
     state: JsonInnerTermReaderState,
     term_type: Option<TermType>,
-    value: Option<String>,
-    lang: Option<String>,
+    value: Option<OxString>,
+    lang: Option<OxString>,
     #[cfg(feature = "sparql-12")]
     direction: Option<String>,
     datatype: Option<NamedNode>,
@@ -979,7 +979,7 @@ impl JsonInnerTermReader {
                                     }
                                     return Ok(Some(Literal::new_directional_language_tagged_literal(
                                         value,
-                                        &lang,
+                                        lang.clone(),
                                         match direction.as_str() {
                                             "ltr" => BaseDirection::Ltr,
                                             "rtl" => BaseDirection::Rtl,
@@ -1000,7 +1000,7 @@ impl JsonInnerTermReader {
                                         )));
                                     }
                                 }
-                                Literal::new_language_tagged_literal(value, &lang)
+                                Literal::new_language_tagged_literal(value, lang.clone())
                                     .map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
                                             "Invalid xml:lang value '{lang}': {e}"
@@ -1095,7 +1095,7 @@ impl JsonInnerTermReader {
             }
             JsonInnerTermReaderState::Value => match event {
                 JsonEvent::String(value) => {
-                    self.value = Some(value.into_owned());
+                    self.value = Some(OxString::new_owned(&value));
                     self.state = JsonInnerTermReaderState::Middle;
                     Ok(None)
                 }
@@ -1112,7 +1112,7 @@ impl JsonInnerTermReader {
             },
             JsonInnerTermReaderState::Lang => {
                 let result = if let JsonEvent::String(value) = event {
-                    self.lang = Some(value.into_owned());
+                    self.lang = Some(OxString::new_owned(&value));
                     Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Term lang must be strings"))
@@ -1137,7 +1137,7 @@ impl JsonInnerTermReader {
             }
             JsonInnerTermReaderState::Datatype => {
                 let result = if let JsonEvent::String(value) = event {
-                    match NamedNode::new(value) {
+                    match NamedNode::new(OxString::new_owned(&value)) {
                         Ok(datatype) => {
                             self.datatype = Some(datatype);
                             Ok(None)

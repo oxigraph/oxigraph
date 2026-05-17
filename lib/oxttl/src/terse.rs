@@ -7,7 +7,7 @@ use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 
@@ -220,7 +220,7 @@ impl RuleRecognizer for TriGRecognizer {
                     N3Token::BlankNodeLabel(label) => {
                         self.stack
                             .push(TriGState::WrappedGraphOrPredicateObjectList {
-                                term: BlankNode::new_unchecked(label).into(),
+                                term: BlankNode::new_unchecked(OxString::new_owned(label)).into(),
                             });
                         self
                     }
@@ -401,7 +401,7 @@ impl RuleRecognizer for TriGRecognizer {
                     },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_subject
-                            .push(BlankNode::new_unchecked(label).into());
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
@@ -457,7 +457,8 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_graph = BlankNode::new_unchecked(label).into();
+                        self.cur_graph =
+                            BlankNode::new_unchecked(OxString::new_owned(label)).into();
                         self
                     }
                     N3Token::Punctuation("[") => {
@@ -660,7 +661,8 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_object.push(BlankNode::new_unchecked(label).into());
+                        self.cur_object
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self.emit_quad(results);
                         self
                     }
@@ -674,25 +676,30 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::String(value) | N3Token::LongString(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: true });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into(),
+                            emit: true,
+                        });
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
@@ -1027,7 +1034,7 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                     },
                     N3Token::BlankNodeLabel(bnode) => {
-                        let reifier = BlankNode::new_unchecked(bnode);
+                        let reifier = BlankNode::new_unchecked(OxString::new_owned(bnode));
                         results.push(Quad::new(
                             reifier.clone(),
                             rdf::REIFIES,
@@ -1080,7 +1087,7 @@ impl RuleRecognizer for TriGRecognizer {
                     },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_subject
-                            .push(BlankNode::new_unchecked(label).into());
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self
                     }
                     N3Token::Punctuation("<<") if is_reified => {
@@ -1128,27 +1135,33 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_object.push(BlankNode::new_unchecked(label).into());
+                        self.cur_object
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self
                     }
                     N3Token::String(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: false });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into(),
+                            emit: false,
+                        });
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                        );
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                        );
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                        );
                         self
                     }
                     N3Token::PlainKeyword("true") => {
@@ -1224,7 +1237,7 @@ impl RuleRecognizer for TriGRecognizer {
             }
             [.., TriGState::LiteralPossibleSuffix { value, emit: true }] => {
                 self.cur_object
-                    .push(Literal::new_simple_literal(value).into());
+                    .push(Literal::new_simple_literal(value.clone()).into());
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }
@@ -1345,11 +1358,11 @@ enum TriGState {
     ObjectCollectionBeginning,
     ObjectCollectionPossibleEnd,
     LiteralPossibleSuffix {
-        value: String,
+        value: OxString,
         emit: bool,
     },
     LiteralExpectDatatype {
-        value: String,
+        value: OxString,
         emit: bool,
     },
     #[cfg(feature = "rdf-12")]

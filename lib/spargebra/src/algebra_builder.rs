@@ -20,7 +20,7 @@ use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, OxString, Variable};
 use rand::random;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -1557,13 +1557,19 @@ impl<'a> AlgebraBuilder<'a> {
             ast::Literal::Boolean(v) => {
                 Literal::new_typed_literal(if v { "true" } else { "false" }, xsd::BOOLEAN)
             }
-            ast::Literal::Integer(v) => Literal::new_typed_literal(v, xsd::INTEGER),
-            ast::Literal::Decimal(v) => Literal::new_typed_literal(v, xsd::DECIMAL),
-            ast::Literal::Double(v) => Literal::new_typed_literal(v, xsd::DOUBLE),
+            ast::Literal::Integer(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER)
+            }
+            ast::Literal::Decimal(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL)
+            }
+            ast::Literal::Double(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE)
+            }
             ast::Literal::String(v) => Literal::new_simple_literal(Self::build_string(v)?),
             ast::Literal::LangString(v, l) => Literal::new_language_tagged_literal(
                 Self::build_string(v)?,
-                l.inner,
+                OxString::new_owned(l.inner),
             )
             .map_err(|e| {
                 AlgebraBuilderError::new(l.span, format!("Invalid language tag '{}': {e}", l.inner))
@@ -1571,7 +1577,7 @@ impl<'a> AlgebraBuilder<'a> {
             #[cfg(feature = "sparql-12")]
             ast::Literal::DirLangString(v, l) => Literal::new_directional_language_tagged_literal(
                 Self::build_string(v)?,
-                l.inner.0,
+                OxString::new_owned(l.inner.0),
                 match l.inner.1 {
                     "ltr" => BaseDirection::Ltr,
                     "rtl" => BaseDirection::Rtl,
@@ -1600,13 +1606,13 @@ impl<'a> AlgebraBuilder<'a> {
 
     fn build_blank_node(blank_node: Spanned<ast::BlankNode<'_>>) -> BlankNode {
         if let Some(id) = blank_node.inner.0 {
-            BlankNode::new_unchecked(id)
+            BlankNode::new_unchecked(OxString::new_owned(id))
         } else {
             BlankNode::default()
         }
     }
 
-    fn build_string(string: Spanned<ast::String<'_>>) -> Result<String, AlgebraBuilderError> {
+    fn build_string(string: Spanned<ast::String<'_>>) -> Result<OxString, AlgebraBuilderError> {
         unescape_string(string.inner.0, string.span)
     }
 
@@ -2260,7 +2266,7 @@ fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraB
     feature = "standard-unicode-escaping",
     expect(unused_variables, clippy::unnecessary_wraps)
 )]
-fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraBuilderError> {
+fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
     let mut output = String::with_capacity(input.len());
     while let Some((before, after)) = input.split_once('\\') {
         output.push_str(before);
@@ -2289,7 +2295,7 @@ fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraB
         input = after;
     }
     output.push_str(input);
-    Ok(output)
+    Ok(output.into())
 }
 
 #[cfg(not(feature = "standard-unicode-escaping"))]

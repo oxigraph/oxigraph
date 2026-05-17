@@ -6,7 +6,7 @@ use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Term, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, OxString, Term, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, TimezoneOffset, YearMonthDuration};
 use oxsdatatypes::{DateTime, Decimal, Double, Float, Integer};
@@ -468,9 +468,9 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {
                     Some(ExpressionTerm::StringLiteral(match e(tuple)?.into() {
-                        Term::NamedNode(term) => term.into_string(),
+                        Term::NamedNode(term) => term.into_string().as_str().to_owned(),
                         Term::BlankNode(_) => return None,
-                        Term::Literal(term) => term.destruct().0,
+                        Term::Literal(term) => term.into_value().as_str().to_owned(),
                         #[cfg(feature = "sparql-12")]
                         Term::Triple(_) => return None,
                     }))
@@ -592,13 +592,17 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 Rc::new(move |tuple| {
                     Some(ExpressionTerm::NamedNode(match e(tuple)? {
                         ExpressionTerm::NamedNode(iri) => iri,
-                        ExpressionTerm::StringLiteral(iri) => if let Some(base_iri) = &base_iri {
-                            base_iri.resolve(&iri)
-                        } else {
-                            Iri::parse(iri)
+                        ExpressionTerm::StringLiteral(iri) => {
+                            NamedNode::new_unchecked(OxString::new_owned(
+                                &if let Some(base_iri) = &base_iri {
+                                    base_iri.resolve(&iri)
+                                } else {
+                                    Iri::parse(iri)
+                                }
+                                .ok()?
+                                .into_inner(),
+                            ))
                         }
-                        .ok()?
-                        .into(),
                         _ => return None,
                     }))
                 })
@@ -1380,9 +1384,9 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     xsd::STRING => {
                         cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::StringLiteral(
                             match t.into() {
-                                Term::NamedNode(term) => term.into_string(),
+                                Term::NamedNode(term) => term.into_string().as_str().to_owned(),
                                 Term::BlankNode(_) => return None,
-                                Term::Literal(term) => term.destruct().0,
+                                Term::Literal(term) => term.into_value().as_str().to_owned(),
                                 #[cfg(feature = "sparql-12")]
                                 Term::Triple(_) => return None,
                             }

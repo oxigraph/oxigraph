@@ -643,7 +643,7 @@ struct XmlInnerSolutionsParser {
     new_bindings: Vec<Option<Term>>,
     current_var: Option<String>,
     term: Option<Term>,
-    lang: Option<String>,
+    lang: Option<OxString>,
     #[cfg(feature = "sparql-12")]
     direction: Option<String>,
     datatype: Option<NamedNode>,
@@ -719,22 +719,21 @@ impl XmlInnerSolutionsParser {
                         for attr in event.attributes() {
                             let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
-                                self.lang = Some(
-                                    attr.decoded_and_normalized_value(
+                                self.lang =
+                                    Some(OxString::new_owned(&attr.decoded_and_normalized_value(
                                         self.xml_version,
                                         self.decoder,
-                                    )?
-                                    .into_owned(),
-                                );
+                                    )?));
                             } else if attr.key.local_name().as_ref() == b"datatype" {
                                 let iri = attr
                                     .decoded_and_normalized_value(self.xml_version, self.decoder)?;
-                                self.datatype =
-                                    Some(NamedNode::new(iri.as_ref()).map_err(|e| {
+                                self.datatype = Some(
+                                    NamedNode::new(OxString::new_owned(&iri)).map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
                                             "Invalid datatype IRI '{iri}': {e}"
                                         ))
-                                    })?);
+                                    })?,
+                                );
                             }
                             #[cfg(feature = "sparql-12")]
                             if attr.key.as_ref() == b"its:dir" {
@@ -801,7 +800,9 @@ impl XmlInnerSolutionsParser {
             }
             Event::End(_) => {
                 let value = take(&mut self.text_buffer);
-                let value = value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '));
+                let value = OxString::new_owned(
+                    value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' ')),
+                );
                 match self.state_stack.pop().ok_or_else(|| {
                     QueryResultsSyntaxError::msg(
                         "Extra XML is not allowed at the end of the document",
@@ -846,7 +847,7 @@ impl XmlInnerSolutionsParser {
                     }
                     State::Uri => {
                         self.term = Some(
-                            NamedNode::new(value)
+                            NamedNode::new(value.clone())
                                 .map_err(|e| {
                                     QueryResultsSyntaxError::msg(format!(
                                         "Invalid IRI value '{value}': {e}"
@@ -861,7 +862,7 @@ impl XmlInnerSolutionsParser {
                             if value.is_empty() {
                                 BlankNode::default()
                             } else {
-                                BlankNode::new(value).map_err(|e| {
+                                BlankNode::new(value.clone()).map_err(|e| {
                                     QueryResultsSyntaxError::msg(format!(
                                         "Invalid blank node value '{value}': {e}"
                                     ))
@@ -957,8 +958,8 @@ impl XmlInnerSolutionsParser {
 }
 
 fn build_literal(
-    value: impl Into<String>,
-    lang: Option<String>,
+    value: OxString,
+    lang: Option<OxString>,
     #[cfg(feature = "sparql-12")] direction: Option<String>,
     datatype: Option<NamedNode>,
 ) -> Result<Literal, QueryResultsSyntaxError> {
@@ -974,7 +975,7 @@ fn build_literal(
             }
             return Literal::new_directional_language_tagged_literal(
                 value,
-                &lang,
+                lang.clone(),
                 match direction.as_str() {
                     "ltr" => BaseDirection::Ltr,
                     "rtl" => BaseDirection::Rtl,
@@ -996,7 +997,7 @@ fn build_literal(
                 )));
             }
         }
-        Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
+        Literal::new_language_tagged_literal(value, lang.clone()).map_err(|e| {
             QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
         })
     } else {

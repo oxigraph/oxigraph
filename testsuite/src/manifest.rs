@@ -16,7 +16,7 @@ pub struct Test {
     pub update: Option<String>,
     pub data: Option<String>,
     pub graph_data: Vec<(NamedNode, String)>,
-    pub service_data: Vec<(String, String)>,
+    pub service_data: Vec<(OxString, String)>,
     pub result: Option<String>,
     pub result_graph_data: Vec<(NamedNode, String)>,
     pub option: HashMap<NamedNode, Term>,
@@ -58,7 +58,7 @@ impl fmt::Display for Test {
 pub struct TestManifest {
     graph: Graph,
     tests_to_do: VecDeque<Term>,
-    manifests_to_do: VecDeque<String>,
+    manifests_to_do: VecDeque<OxString>,
 }
 
 impl Iterator for TestManifest {
@@ -77,13 +77,13 @@ impl Iterator for TestManifest {
 }
 
 impl TestManifest {
-    pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
+    pub fn new<S: AsRef<str>>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
         Self {
             graph: Graph::new(),
             tests_to_do: VecDeque::new(),
             manifests_to_do: manifest_urls
                 .into_iter()
-                .map(|url| url.to_string())
+                .map(|url| OxString::new_owned(url.as_ref()))
                 .collect(),
         }
     }
@@ -180,7 +180,9 @@ impl TestManifest {
                                             .object_for_subject_predicate(node, rdfs::LABEL)
                                         {
                                             (
-                                                match NamedNode::new(name.value()) {
+                                                match NamedNode::new(OxString::new_owned(
+                                                    name.value(),
+                                                )) {
                                                     Ok(graph) => graph,
                                                     Err(e) => return Some(Err(e)),
                                                 },
@@ -217,7 +219,10 @@ impl TestManifest {
                                 self.graph.object_for_subject_predicate(g, qt::ENDPOINT),
                                 self.graph.object_for_subject_predicate(g, qt::DATA),
                             ) {
-                                Some((endpoint.as_str().to_owned(), data.as_str().to_owned()))
+                                Some((
+                                    OxString::new_owned(endpoint.as_str()),
+                                    data.as_str().to_owned(),
+                                ))
                             } else {
                                 None
                             }
@@ -259,7 +264,9 @@ impl TestManifest {
                                             .object_for_subject_predicate(node, rdfs::LABEL)
                                         {
                                             (
-                                                match NamedNode::new(name.value()) {
+                                                match NamedNode::new(OxString::new_owned(
+                                                    name.value(),
+                                                )) {
                                                     Ok(graph) => graph,
                                                     Err(e) => return Some(Err(e)),
                                                 },

@@ -90,7 +90,7 @@ pub fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
     if let Some(value) = value.as_string() {
         Ok(Some(value))
     } else if let Ok(value) = to_named_node(value) {
-        Ok(Some(value.into_string()))
+        Ok(Some(value.into_string().as_str().to_owned()))
     } else {
         Err(format_err!(
             "If provided, the base IRI must be a NamedNode or a string"

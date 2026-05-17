@@ -6,7 +6,7 @@ use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
 
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,
@@ -28,10 +28,10 @@ enum NQuadsState {
     ExpectPossibleGraphOrEndOfQuotedTriple,
     ExpectDot,
     ExpectLiteralAnnotationOrGraphNameOrDot {
-        value: String,
+        value: OxString,
     },
     ExpectLiteralDatatype {
-        value: String,
+        value: OxString,
     },
     ExpectLineJump,
     RecoverToLineJump,
@@ -82,7 +82,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     N3Token::BlankNodeLabel(s) => {
-                        self.subjects.push(BlankNode::new_unchecked(s).into());
+                        self.subjects
+                            .push(BlankNode::new_unchecked(OxString::new_owned(s)).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
@@ -138,14 +139,17 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     N3Token::BlankNodeLabel(o) => {
-                        self.objects.push(BlankNode::new_unchecked(o).into());
+                        self.objects
+                            .push(BlankNode::new_unchecked(OxString::new_owned(o)).into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
                     }
                     N3Token::String(value) => {
                         self.stack
-                            .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
+                            .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot {
+                                value: value.into(),
+                            });
                         self
                     }
                     #[cfg(feature = "rdf-12")]
@@ -259,7 +263,10 @@ impl RuleRecognizer for NQuadsRecognizer {
                         TokenOrLineJump::Token(N3Token::BlankNodeLabel(g))
                             if context.with_graph_name =>
                         {
-                            self.emit_quad(results, BlankNode::new_unchecked(g).into());
+                            self.emit_quad(
+                                results,
+                                BlankNode::new_unchecked(OxString::new_owned(g)).into(),
+                            );
                             self.stack.push(NQuadsState::ExpectDot);
                             self
                         }
@@ -348,7 +355,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                 errors.push("Triples must be followed by a dot".into())
             }
             [NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value }] => {
-                self.objects.push(Literal::new_simple_literal(value).into());
+                self.objects
+                    .push(Literal::new_simple_literal(value.clone()).into());
                 self.emit_quad(results, GraphName::DefaultGraph);
                 errors.push("Triples must be followed by a dot".into())
             }

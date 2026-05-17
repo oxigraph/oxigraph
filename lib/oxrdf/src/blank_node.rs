@@ -1,5 +1,6 @@
 #![expect(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 
+use crate::OxString;
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -25,7 +26,7 @@ pub struct BlankNode(BlankNodeContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum BlankNodeContent {
-    Named(String),
+    Named(OxString),
     Anonymous { id: [u8; 16], str: IdStr },
 }
 
@@ -36,7 +37,7 @@ impl BlankNode {
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
     /// that creates a random ID that could be easily inlined by Oxigraph stores.
-    pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
+    pub fn new(id: impl Into<OxString>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
         Ok(Self::new_unchecked(id))
@@ -49,7 +50,7 @@ impl BlankNode {
     ///
     /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(id: impl Into<String>) -> Self {
+    pub fn new_unchecked(id: impl Into<OxString>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
             Self::new_from_unique_id(numerical_id)
@@ -80,10 +81,10 @@ impl BlankNode {
 
     /// Returns the underlying ID of this blank node.
     #[inline]
-    pub fn into_string(self) -> String {
+    pub fn into_string(self) -> OxString {
         match self.0 {
             BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => str.as_str().to_owned(),
+            BlankNodeContent::Anonymous { str, .. } => OxString::new_owned(str.as_str()),
         }
     }
 
@@ -209,7 +210,7 @@ impl<'a> BlankNodeRef<'a> {
     #[inline]
     pub fn into_owned(self) -> BlankNode {
         BlankNode(match self.0 {
-            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
+            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(OxString::new_owned(id)),
             BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
                 id,
                 str: IdStr::new(u128::from_ne_bytes(id)),
@@ -386,7 +387,7 @@ impl<'de> Deserialize<'de> for BlankNode {
         #[derive(Deserialize)]
         #[serde(rename = "BlankNode")]
         struct Value {
-            value: String,
+            value: OxString,
         }
         Self::new(Value::deserialize(deserializer)?.value).map_err(de::Error::custom)
     }
