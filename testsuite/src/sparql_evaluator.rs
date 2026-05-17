@@ -226,10 +226,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
                 let msg = e.to_string();
                 if msg.contains("not implemented") || msg.contains("not supported") {
                     if std::env::var("OXIGRAPH_DATAFUSION_SKIP_VERBOSE").is_ok() {
-                        eprintln!(
-                            "DataFusion: skip {} -- {msg}",
-                            test.id.as_str()
-                        );
+                        eprintln!("DataFusion: skip {} -- {msg}", test.id.as_str());
                     }
                     return Ok(()); // TODO: implement everything
                 }

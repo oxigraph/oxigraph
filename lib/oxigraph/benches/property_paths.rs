@@ -144,7 +144,9 @@ fn property_paths(c: &mut Criterion) {
                             Ok(r) => drain(r),
                             Err(e) => {
                                 let msg = e.to_string();
-                                if !msg.contains("not implemented") && !msg.contains("not supported") {
+                                if !msg.contains("not implemented")
+                                    && !msg.contains("not supported")
+                                {
                                     panic!("datafusion failed on {name}: {e}");
                                 }
                             }
