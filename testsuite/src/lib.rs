@@ -27,14 +27,25 @@ pub fn check_testsuite(manifest_url: &str, ignored_tests: &[&str]) -> Result<()>
     let results = evaluator.evaluate(manifest)?;
 
     let mut errors = Vec::default();
+    let mut passed = 0_usize;
+    let mut ignored = 0_usize;
     for result in results {
-        if let Err(error) = &result.outcome {
-            if !ignored_tests.contains(&result.test.as_str()) {
-                errors.push(format!("{}: failed with error {error:?}", result.test))
+        match &result.outcome {
+            Ok(()) => passed += 1,
+            Err(error) => {
+                if ignored_tests.contains(&result.test.as_str()) {
+                    ignored += 1;
+                } else {
+                    errors.push(format!("{}: failed with error {error:?}", result.test))
+                }
             }
         }
     }
 
+    eprintln!(
+        "{manifest_url}: {passed} passed, {} failed, {ignored} ignored",
+        errors.len()
+    );
     assert!(
         errors.is_empty(),
         "{} failing tests:\n{}\n",

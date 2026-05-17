@@ -307,7 +307,12 @@ fn run_datafusion_operation(store: &Store, operations: &[Operation]) {
                     }
                 }
             },
-            Operation::Update(u) => store.update_opt(u.clone(), evaluator.clone()).unwrap(),
+            Operation::Update(u) => evaluator
+                .clone()
+                .for_update(u.clone())
+                .on_store(store)
+                .execute()
+                .unwrap(),
         }
     }
 }

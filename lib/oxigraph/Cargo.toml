@@ -91,3 +91,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "store"
 harness = false
 required-features = ["rocksdb"]
+
+[[bench]]
+name = "property_paths"
+harness = false
+required-features = ["rocksdb", "datafusion"]

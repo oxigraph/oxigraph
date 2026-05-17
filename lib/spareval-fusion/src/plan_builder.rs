@@ -64,9 +64,7 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
     pub fn query_plan(&mut self, query: &Query) -> Result<LogicalPlanBuilder> {
         match query {
             Query::Select(q) => self.select_plan(&q.pattern, q.dataset.as_ref()),
-            Query::Construct(q) => {
-                self.construct_plan(&q.pattern, &q.template, q.dataset.as_ref())
-            }
+            Query::Construct(q) => self.construct_plan(&q.pattern, &q.template, q.dataset.as_ref()),
             Query::Describe(q) => self.describe_plan(&q.pattern, q.dataset.as_ref()),
             Query::Ask(q) => self.ask_plan(&q.pattern, q.dataset.as_ref()),
         }
