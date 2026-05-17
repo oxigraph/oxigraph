@@ -11,99 +11,79 @@ Oxigraph is a graph database written in Rust implementing the [SPARQL](https://w
 
 Oxigraph for JavaScript is a work in progress and currently offers a simple in-memory store with [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) and [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/) capabilities.
 
-The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
+The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) and [JSON-LD](https://www.w3.org/TR/json-ld/).
 
-It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
+It is distributed using an [NPM package](https://www.npmjs.com/package/oxigraph) that is compatible with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
 
 To install:
 ```bash
 npm install oxigraph
 ```
 
-To load with Node.JS:
+And then import:
 ```js
-const oxigraph = require('oxigraph');
+import { Store } from "oxigraph";
 ```
 
-or with ES modules:
-```js
-import oxigraph from './node_modules/oxigraph/node.js';
-```
+Note that a bundler compatible with WebAssembly like Vite or WebPack is likely required to make the package work.
 
-To load on an HTML web page (for [WebPack 5](https://webpack.js.org/) remove the `<script>` tag and put the code in a JS file):
-```html
-<script type="module">
-    import init, * as oxigraph from './node_modules/oxigraph/web.js'
-
-    (async function () {
-        await init(); // Required to compile the WebAssembly code.
-
-        // We can use here Oxigraph methods
-    })()
-</script>
-```
-
-## Node.JS Example
+## Example
 
 Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in  SPARQL:
 
 ```js
-const oxigraph = require('oxigraph');
-const store = new oxigraph.Store();
-const ex = oxigraph.namedNode("http://example/");
-const schemaName = oxigraph.namedNode("http://schema.org/name");
-store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
+import { Store } from "oxigraph";
+import dataModel from "@rdfjs/data-model";
+const store = new Store();
+const ex = dataModel.namedNode("http://example/");
+const schemaName = dataModel.namedNode("http://schema.org/name");
+store.add(dataModel.triple(ex, schemaName, dataModel.literal("example")));
 for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
 ```
 
-## Web Example
-
-Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in
-SPARQL:
-
-```html
-
-<script type="module">
-    import init, * as oxigraph from './node_modules/oxigraph/web.js'
-
-    (async function () {
-        await init(); // Required to compile the WebAssembly.
-
-        const store = new oxigraph.Store();
-        const ex = oxigraph.namedNode("http://example/");
-        const schemaName = oxigraph.namedNode("http://schema.org/name");
-        store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
-        for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
-            console.log(binding.get("name").value);
-        }
-    })()
-</script>
-```
-
-This example works with WebPack too if you remove the `<script>` tag and put the code in a JS file.
-
 ## API
 
 Oxigraph currently provides a simple JS API.
+It relies on the [RDF/JS DataModel API](https://rdf.js.org/data-model-spec/) to represent RDF terms and its ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model) implementation.
 
-### RDF data model
+### I/O
 
-Oxigraph implements the [RDF/JS datamodel specification](https://rdf.js.org/data-model-spec/).
+#### `parse(input, object options)`
 
-For that, the `oxigraph` module implements the [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface).
+Parse some content and return `Quad`s.
 
-Example:
+The method arguments are:
+1. `input`: the serialized RDF triples or quads. It allows different types:
+    - `string | UInt8Array`. In this case the output is returned as a plain `Quad[]`.
+    - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
+    - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
+2. `options`: an object containing various options (all optional except `format`):
+    - `format`: the format of the serialization as a `string`. See below for the supported formats.
+    - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
+    - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
+    - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
+
+The available formats are:
+* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
+
+Example of parsing a Turtle file with the base IRI `http://example.com`:
 ```js
-const oxigraph = require('oxigraph');
-const ex = oxigraph.namedNode("http://example.com");
-const blank = oxigraph.blankNode();
-const foo = oxigraph.literal("foo");
-const quad = oxigraph.quad(blank, ex, foo);
+parse(
+    "<http://example.com> <http://example.com> <> .",
+    {
+        format: "text/turtle",
+        base_iri: "http://example.com",
+    }
+)
 ```
-
-All terms overrides the the `toString()` method to return a N-Quads/SPARQL-like representation of the terms.
 
 ### `Store`
 
@@ -115,15 +95,17 @@ A store contains an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-
 Creates a new store.
 
 ```js
-const oxigraph = require('oxigraph');
-const store = new oxigraph.Store();
+import { Store } from "oxigraph";
+const store = new Store();
 ```
 
 If provided, the `Store` will be initialized with a sequence of quads.
 
 ```js
-const oxigraph = require('oxigraph');
-const store = new oxigraph.Store([oxigraph.quad(blank, ex, foo)]);
+import {Store} from "oxigraph";
+import dataModel from "@rdfjs/data-model";
+
+const store = new Store([dataModel.quad(blank, ex, foo)]);
 ```
 
 #### `Store.prototype.add(Quad quad)`
@@ -155,7 +137,7 @@ Returns an array with all the quads matching a given quad pattern.
 
 Example to get all quads in the default graph with `ex` for subject:
 ```js
-store.match(ex, null, null, oxigraph.defaultGraph());
+store.match(ex, null, null, dataModel.defaultGraph());
 ```
 
 Example to get all quads:
@@ -178,7 +160,7 @@ for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
 
 Example of CONSTRUCT query:
 ```js
-const filteredStore = new oxigraph.Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
+const filteredStore = new Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
 ```
 
 Example of ASK query:
@@ -192,11 +174,11 @@ It is also possible to provide some options in an object given as second argumen
 
 ```js
 console.log(store.query("ASK { <s> ?p ?o }", {
-  base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
-  use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
-  default_graph: [oxigraph.defaultGraph(), oxigraph.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
-  named_graphs: [oxigraph.namedNode("http://example.com"), oxigraph.blankNode("b")], // we restrict the available named graphs to the two listed
-  results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
+    base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
+    use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
+    default_graph: [dataModel.defaultGraph(), dataModel.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
+    named_graphs: [dataModel.namedNode("http://example.com"), dataModel.blankNode("b")], // we restrict the available named graphs to the two listed
+    results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
 }));
 ```
 
@@ -217,11 +199,11 @@ store.update("DELETE WHERE { <s> ?p ?o }", {
 })
 ```
 
-#### `Store.prototype.load(String data, object options)`
+#### `Store.prototype.load(string | UInt8Array | Iterable<string | UInt8Array> data, object options)`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
-1. `data`: the serialized RDF triples or quads.
+1. `data`: the serialized RDF triples or quads as a single buffer or an iterable of buffers.
 2. `options`: an object containing various options (all optional except `format`):
    - `format`: the format of the serialization as a `string`. See below for the supported formats.
    - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
@@ -230,7 +212,7 @@ The method arguments are:
    - `no_transaction`: disables transactional guarantees: if the file has a syntax error, the start of it might be loaded into the store even if parsing fails.
 
 The available formats are:
-* [JSON-LD 1.0](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 * [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 * [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
 * [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
@@ -245,7 +227,7 @@ store.load(
     {
         format: "text/turtle",
         base_iri: "http://example.com",
-        to_graph_name: oxigraph.namedNode("http://example.com/graph")
+        to_graph_name: dataModel.namedNode("http://example.com/graph")
     }
 );
 ```
@@ -270,11 +252,18 @@ Example of building a Turtle file from the named graph `<http://example.com/grap
 ```js
 store.dump({
     format: "text/turtle",
-    from_graph_name: oxigraph.namedNode("http://example.com/graph")
+    from_graph_name: dataModel.namedNode("http://example.com/graph")
 });
 ```
 
 ## Migration guide
+
+### From 0.5 to 0.6
+* The package is now build from bundlers and not for plain Node.JS or web browsers. 
+  If you don't use a bundler you can still avoid using one by directly importing the `oxigraph_bg.wasm` and `oxigraph_bg.js` files.
+  To import Oxigraph use `import { Store } from "oxigraph"`
+* Oxigraph does not implement RDF/JS DataModel anymore.
+  Use another library like ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model). 
 
 ### From 0.2 to 0.3
 * The `MemoryStore` class is now called `Store` (there is no other kind of stores...).

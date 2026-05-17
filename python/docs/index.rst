@@ -20,7 +20,7 @@ Pyoxigraph is a Python graph database library implementing the `SPARQL <https://
 It is built on top of `Oxigraph <https://crates.io/crates/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
 
 It also provides a set of utility functions for reading, writing, and processing RDF files in
-`JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_,
+`JSON-LD <https://www.w3.org/TR/json-ld/>`_,
 `Turtle <https://www.w3.org/TR/turtle/>`_,
 `TriG <https://www.w3.org/TR/trig/>`_,
 `N-Triples <https://www.w3.org/TR/n-triples/>`_,

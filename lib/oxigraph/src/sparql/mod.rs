@@ -2,7 +2,6 @@
 //!
 //! The entry point for SPARQL execution is the [`SparqlEvaluator`] type.
 
-mod algebra;
 #[cfg(feature = "datafusion")]
 mod datafusion;
 mod dataset;
@@ -13,8 +12,6 @@ pub mod results;
 mod update;
 
 use crate::model::{NamedNode, Term};
-#[expect(deprecated)]
-pub use crate::sparql::algebra::{Query, Update};
 #[cfg(feature = "datafusion")]
 use crate::sparql::datafusion::DatafusionEvaluator;
 use crate::sparql::dataset::DatasetView;
@@ -32,19 +29,12 @@ pub use spareval::{
 };
 use spareval::{QueryEvaluator, QueryableDataset};
 use spargebra::SparqlParser;
-pub use spargebra::SparqlSyntaxError;
+pub use spargebra::{Query, SparqlSyntaxError, Update};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::mem::take;
 #[cfg(feature = "http-client")]
 use std::time::Duration;
-
-#[deprecated(note = "Use SparqlEvaluator instead", since = "0.5.0")]
-pub type QueryOptions = SparqlEvaluator;
-#[deprecated(note = "Use SparqlEvaluator instead", since = "0.5.0")]
-pub type UpdateOptions = SparqlEvaluator;
-#[deprecated(note = "Use QueryEvaluationError instead", since = "0.5.0")]
-pub type EvaluationError = QueryEvaluationError;
 
 pub type QueryDataset = QueryDatasetSpecification;
 
@@ -181,17 +171,6 @@ impl SparqlEvaluator {
     pub fn without_default_http_service_handler(mut self) -> Self {
         self.with_http_default_service_handler = false;
         self
-    }
-
-    /// Disables the `SERVICE` calls
-    #[cfg(feature = "http-client")]
-    #[inline]
-    #[deprecated(
-        note = "Use `without_default_http_service_handler` instead",
-        since = "0.5.0"
-    )]
-    pub fn without_service_handler(self) -> Self {
-        self.without_default_http_service_handler()
     }
 
     /// Sets a timeout for HTTP requests done during SPARQL evaluation.
@@ -421,12 +400,11 @@ impl SparqlEvaluator {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[expect(deprecated)]
-    pub fn for_query(self, query: impl Into<Query>) -> PreparedSparqlQuery {
-        let query = query.into();
+    pub fn for_query(self, query: Query) -> PreparedSparqlQuery {
+        let dataset = query.dataset().cloned().map(Into::into).unwrap_or_default();
         PreparedSparqlQuery {
-            dataset: query.dataset,
-            query: query.inner,
+            dataset,
+            query,
             evaluator: self.into_evaluator(),
             substitutions: HashMap::new(),
         }
@@ -472,15 +450,14 @@ impl SparqlEvaluator {
     ///     .execute()?;
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
-    #[expect(deprecated)]
-    pub fn for_update(self, update: impl Into<Update>) -> PreparedSparqlUpdate {
+    pub fn for_update(self, update: Update) -> PreparedSparqlUpdate {
         #[cfg(feature = "http-client")]
         let http_timeout = self.http_timeout;
         #[cfg(feature = "http-client")]
         let http_redirection_limit = self.http_redirection_limit;
         PreparedSparqlUpdate::new(
             self.into_evaluator(),
-            update.into(),
+            update,
             #[cfg(feature = "http-client")]
             http_timeout,
             #[cfg(feature = "http-client")]
@@ -532,7 +509,7 @@ impl Default for SparqlEvaluator {
 #[must_use]
 pub struct PreparedSparqlQuery {
     evaluator: QueryEvaluator,
-    query: spargebra::Query,
+    query: Query,
     dataset: QueryDatasetSpecification,
     substitutions: HashMap<Variable, Term>,
 }
@@ -656,7 +633,7 @@ impl PreparedSparqlQuery {
 #[must_use]
 pub struct BoundPreparedSparqlQuery<'a, D: QueryableDataset<'a> = DatasetView<'a>> {
     evaluator: QueryEvaluator,
-    query: spargebra::Query,
+    query: Query,
     queryable_dataset: D,
     substitutions: HashMap<Variable, Term>,
     dataset: QueryDatasetSpecification,

@@ -41,6 +41,7 @@ if let QueryResults::Solutions(solutions) = results.unwrap() {
 - `sep-0002`: enables the [`SEP-0002`](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0002/sep-0002.md) (`ADJUST` function and a lot of arithmetic on `xsd:date`, `xsd:time`, `xsd:yearMonthDuration` and `xsd:dayTimeDuration`).
 - `sep-0006`: enables the [`SEP-0006`](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0006/sep-0006.md) (`LATERAL` keyword). 
 - `calendar-ext`: arithmetic on `xsd:gYear`, `xsd:gYearMonth`, `xsd:gMonth`, `xsd:gMonthDay` and `xsd:gDay`.
+- `geosparql`: pre-registers the [GeoSPARQL 1.1](https://docs.ogc.org/is/22-047r1/22-047r1.html) extension functions from the [`spargeo`](https://crates.io/crates/spargeo) crate so `QueryEvaluator::new()` evaluates `geof:` predicates without an explicit `with_custom_function` call per function.
 
 ## License
 

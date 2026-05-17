@@ -1,6 +1,6 @@
 [package]
 name = "spargeo"
-version = "0.5.2"
+version = "0.5.4"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
@@ -10,6 +10,9 @@ documentation = "https://docs.rs/spargeo"
 description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true
+
+[features]
+default = []
 
 [dependencies]
 geo.workspace = true

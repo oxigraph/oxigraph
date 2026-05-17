@@ -10,6 +10,7 @@ use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
+use std::mem::take;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +30,7 @@ pub enum JsonLdEvent {
         language: Option<String>,
         direction: Option<&'static str>,
     },
+    Json(Vec<JsonEvent<'static>>),
     StartGraph,
     EndGraph,
     StartList,
@@ -53,6 +55,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     ObjectOrContainerStart {
         buffer: Vec<(String, Vec<JsonEvent<'static>>)>,
@@ -63,6 +66,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     ObjectOrContainerStartStreaming {
         active_property: Option<String>,
@@ -70,6 +74,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     Context {
         buffer: Vec<JsonEvent<'static>>,
@@ -79,6 +84,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     ObjectStartIsSingleIdOrValue {
         buffer: Vec<JsonEvent<'static>>,
@@ -100,6 +106,7 @@ enum JsonLdExpansionState {
         active_context: Arc<JsonLdContext>,
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     ObjectType {
         types: Vec<String>,
@@ -112,6 +119,7 @@ enum JsonLdExpansionState {
         reverse: bool,
         in_included: bool,
         nesting: usize,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     ObjectId {
         active_context: Arc<JsonLdContext>,
@@ -120,6 +128,7 @@ enum JsonLdExpansionState {
         from_start: bool,
         reverse: bool,
         nesting: usize,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     Object {
         active_context: Arc<JsonLdContext>,
@@ -137,31 +146,33 @@ enum JsonLdExpansionState {
     Value {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
     },
     ValueValue {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
+        nesting: usize,
     },
     ValueLanguage {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         direction: Option<&'static str>,
     },
     ValueDirection {
         active_context: Arc<JsonLdContext>,
         r#type: Option<String>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
     },
     ValueType {
         active_context: Arc<JsonLdContext>,
-        value: Option<JsonLdValue>,
+        value: Vec<JsonEvent<'static>>,
         language: Option<String>,
         direction: Option<&'static str>,
     },
@@ -173,9 +184,23 @@ enum JsonLdExpansionState {
         end_event: Option<JsonLdEvent>,
         active_context: Arc<JsonLdContext>,
     },
+    EndOfGraphContainer,
     IndexContainer {
         active_context: Arc<JsonLdContext>,
         active_property: Option<String>,
+        container: &'static [&'static str],
+    },
+    IndexedGraphContainerElement {
+        active_property: Option<String>,
+        active_context: Arc<JsonLdContext>,
+        is_array: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
+    },
+
+    IndexedGraphContainerElementWaitingForGraph {
+        active_property: Option<String>,
+        active_context: Arc<JsonLdContext>,
+        extra_node: Option<(String, JsonEvent<'static>)>,
     },
     LanguageContainer {
         active_context: Arc<JsonLdContext>,
@@ -194,6 +219,10 @@ enum JsonLdExpansionState {
         has_emitted_id: bool,
         nesting: usize,
         array_count: usize,
+    },
+    Json {
+        value: Vec<JsonEvent<'static>>,
+        nesting: usize,
     },
     Skip {
         is_array: bool,
@@ -228,6 +257,7 @@ impl JsonLdExpansionConverter {
                 container: &[],
                 reverse: false,
                 in_included: false,
+                extra_node: None,
             }],
             is_end: false,
             streaming,
@@ -270,13 +300,11 @@ impl JsonLdExpansionConverter {
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
-        if self.state.len() > 4096 {
-            errors.push(JsonLdSyntaxError::msg("Too large state stack"));
-            return;
-        }
         if event == JsonEvent::Eof {
             self.is_end = true;
-            return;
+            if self.state.is_empty() {
+                return;
+            }
         }
 
         // Large hack to fetch the last state but keep it if we are in an array
@@ -289,6 +317,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
+                extra_node,
             } => {
                 match event {
                     JsonEvent::Null => {
@@ -301,39 +330,43 @@ impl JsonLdExpansionConverter {
                                 container,
                                 reverse,
                                 in_included,
+                                extra_node,
                             });
                         }
                     }
                     JsonEvent::String(value) => self.on_literal_value(
-                        JsonLdValue::String(value.into()),
+                        JsonEvent::String(value.into_owned().into()),
                         active_context,
                         active_property,
                         is_array,
                         container,
                         reverse,
                         in_included,
+                        extra_node,
                         results,
                         errors,
                     ),
                     JsonEvent::Number(value) => self.on_literal_value(
-                        JsonLdValue::Number(value.into()),
+                        JsonEvent::Number(value.into_owned().into()),
                         active_context,
                         active_property,
                         is_array,
                         container,
                         reverse,
                         in_included,
+                        extra_node,
                         results,
                         errors,
                     ),
                     JsonEvent::Boolean(value) => self.on_literal_value(
-                        JsonLdValue::Boolean(value),
+                        JsonEvent::Boolean(value),
                         active_context,
                         active_property,
                         is_array,
                         container,
                         reverse,
                         in_included,
+                        extra_node,
                         results,
                         errors,
                     ),
@@ -347,9 +380,10 @@ impl JsonLdExpansionConverter {
                                 container,
                                 reverse,
                                 in_included,
+                                extra_node: extra_node.clone(),
                             });
                         }
-                        if container.contains(&"@list") {
+                        if container == ["@list"] {
                             if reverse {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
                                     "Lists are not allowed inside of reverse properties",
@@ -362,8 +396,7 @@ impl JsonLdExpansionConverter {
                                 end_event: Some(JsonLdEvent::EndList),
                                 active_context: Arc::clone(&active_context),
                             })
-                        }
-                        if container.contains(&"@set") && !is_array {
+                        } else if container == ["@set"] && !is_array {
                             results.push(JsonLdEvent::StartSet);
                             self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object: false,
@@ -378,6 +411,7 @@ impl JsonLdExpansionConverter {
                             container,
                             reverse,
                             in_included,
+                            extra_node,
                         });
                     }
                     JsonEvent::EndArray => (),
@@ -390,14 +424,24 @@ impl JsonLdExpansionConverter {
                                 container,
                                 reverse,
                                 in_included,
+                                extra_node: extra_node.clone(),
                             });
-                        } else if container.contains(&"@index") {
+                        }
+                        if container == ["@graph"] || container == ["@graph", "@set"] {
+                            results.push(JsonLdEvent::StartObject);
+                            results.push(JsonLdEvent::StartGraph);
+                            self.state.push(JsonLdExpansionState::EndOfGraphContainer);
+                        } else if !is_array && container.contains(&"@index")
+                            || container.contains(&"@id")
+                            || container.contains(&"@type")
+                        {
                             self.state.push(JsonLdExpansionState::IndexContainer {
                                 active_context,
                                 active_property,
+                                container,
                             });
                             return;
-                        } else if container.contains(&"@language") {
+                        } else if !is_array && container.contains(&"@language") {
                             // 13.7.2)
                             let mut direction = active_context.default_direction;
                             // 13.7.3)
@@ -418,10 +462,10 @@ impl JsonLdExpansionConverter {
                             });
                             return;
                         }
-                        self.state
-                            .push(if active_context.previous_context.is_some() {
-                                // We need to decide if we go back to the previous context or not
-                                JsonLdExpansionState::ObjectStartIsSingleIdOrValue {
+                        if active_context.previous_context.is_some() && extra_node.is_none() {
+                            // We need to decide if we go back to the previous context or not
+                            self.state
+                                .push(JsonLdExpansionState::ObjectStartIsSingleIdOrValue {
                                     buffer: Vec::new(),
                                     depth: 1,
                                     seen_type: false,
@@ -432,40 +476,47 @@ impl JsonLdExpansionConverter {
                                     in_included,
                                     is_array,
                                     container,
+                                });
+                        } else {
+                            let active_context_for_property_scoped_context =
+                                Arc::clone(&active_context);
+                            if let Some(previous_context) = &active_context.previous_context {
+                                active_context = Arc::clone(previous_context);
+                            }
+                            if let Some(active_property) = &active_property {
+                                if let Some(property_scoped_context) = self.new_scoped_context(
+                                    &active_context_for_property_scoped_context,
+                                    active_property,
+                                    true,
+                                    true,
+                                    errors,
+                                ) {
+                                    active_context = Arc::new(property_scoped_context);
+                                }
+                            }
+                            self.state.push(if self.streaming {
+                                JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                                    extra_node,
+                                    active_property,
+                                    active_context,
+                                    container: if is_array { &[] } else { container },
+                                    reverse,
+                                    in_included,
                                 }
                             } else {
-                                if let Some(active_property) = &active_property {
-                                    if let Some(property_scoped_context) = self.new_scoped_context(
-                                        &active_context,
-                                        active_property,
-                                        true,
-                                        true,
-                                        errors,
-                                    ) {
-                                        active_context = Arc::new(property_scoped_context);
-                                    }
-                                }
-                                if self.streaming {
-                                    JsonLdExpansionState::ObjectOrContainerStartStreaming {
-                                        active_property,
-                                        active_context,
-                                        container: if is_array { &[] } else { container },
-                                        reverse,
-                                        in_included,
-                                    }
-                                } else {
-                                    JsonLdExpansionState::ObjectOrContainerStart {
-                                        buffer: Vec::new(),
-                                        depth: 1,
-                                        current_key: None,
-                                        active_property,
-                                        active_context,
-                                        container: if is_array { &[] } else { container },
-                                        reverse,
-                                        in_included,
-                                    }
+                                JsonLdExpansionState::ObjectOrContainerStart {
+                                    buffer: Vec::new(),
+                                    depth: 1,
+                                    current_key: None,
+                                    active_property,
+                                    active_context,
+                                    container: if is_array { &[] } else { container },
+                                    reverse,
+                                    in_included,
+                                    extra_node,
                                 }
                             });
+                        }
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
                         unreachable!()
@@ -481,6 +532,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
+                extra_node,
             } => {
                 // We have to buffer everything to make sure we get the @context key even if it's at the end
                 match event {
@@ -560,6 +612,7 @@ impl JsonLdExpansionConverter {
                     }
                     self.state
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                            extra_node,
                             active_property,
                             active_context,
                             container,
@@ -593,6 +646,7 @@ impl JsonLdExpansionConverter {
                             container,
                             reverse,
                             in_included,
+                            extra_node,
                         });
                 }
             }
@@ -602,6 +656,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
+                extra_node,
             } => {
                 let event = match event {
                     JsonEvent::ObjectKey(key) => {
@@ -618,12 +673,14 @@ impl JsonLdExpansionConverter {
                                     container,
                                     reverse,
                                     in_included,
+                                    extra_node,
                                 });
                                 return;
                             }
                             Some("@index") => {
                                 self.state.push(
                                     JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                                        extra_node,
                                         active_property,
                                         active_context,
                                         container,
@@ -660,6 +717,7 @@ impl JsonLdExpansionConverter {
                                         container: &[],
                                         reverse: false,
                                         in_included: false,
+                                        extra_node: None,
                                     });
                                     results.push(JsonLdEvent::StartList);
                                 } else {
@@ -691,6 +749,7 @@ impl JsonLdExpansionConverter {
                                     container: &[],
                                     reverse: false,
                                     in_included: false,
+                                    extra_node: None,
                                 });
                                 if has_property {
                                     results.push(JsonLdEvent::StartSet);
@@ -703,14 +762,14 @@ impl JsonLdExpansionConverter {
                     JsonEvent::EndObject => JsonEvent::EndObject,
                     _ => unreachable!("Inside of an object"),
                 };
-                if container.contains(&"@list") {
+                if container == ["@list"] {
                     results.push(JsonLdEvent::StartList);
                     self.state.push(JsonLdExpansionState::ListOrSetContainer {
                         needs_end_object: false,
                         end_event: Some(JsonLdEvent::EndList),
                         active_context: Arc::clone(&active_context),
                     });
-                } else if container.contains(&"@set") {
+                } else if container == ["@set"] {
                     results.push(JsonLdEvent::StartSet);
                     self.state.push(JsonLdExpansionState::ListOrSetContainer {
                         needs_end_object: false,
@@ -719,6 +778,7 @@ impl JsonLdExpansionConverter {
                     });
                 }
                 self.state.push(JsonLdExpansionState::ObjectStart {
+                    extra_node,
                     types: Vec::new(),
                     id: None,
                     seen_id: false,
@@ -737,6 +797,7 @@ impl JsonLdExpansionConverter {
                 container,
                 reverse,
                 in_included,
+                extra_node,
             } => {
                 match event {
                     JsonEvent::String(_)
@@ -766,6 +827,7 @@ impl JsonLdExpansionConverter {
                             container,
                             reverse,
                             in_included,
+                            extra_node,
                         });
                 } else {
                     self.state.push(JsonLdExpansionState::Context {
@@ -776,6 +838,7 @@ impl JsonLdExpansionConverter {
                         container,
                         reverse,
                         in_included,
+                        extra_node,
                     });
                 }
             }
@@ -859,6 +922,7 @@ impl JsonLdExpansionConverter {
                             container: if is_array { &[] } else { container },
                             reverse,
                             in_included,
+                            extra_node: None,
                         }
                     } else {
                         JsonLdExpansionState::ObjectOrContainerStart {
@@ -870,6 +934,7 @@ impl JsonLdExpansionConverter {
                             container: if is_array { &[] } else { container },
                             reverse,
                             in_included,
+                            extra_node: None,
                         }
                     });
                     for event in buffer {
@@ -899,12 +964,26 @@ impl JsonLdExpansionConverter {
                 active_context,
                 reverse,
                 in_included,
+                mut extra_node,
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) =
                         self.expand_iri(&active_context, key.as_ref().into(), false, true)
                     {
                         match iri.as_ref() {
+                            "@index" => {
+                                self.state.push(JsonLdExpansionState::ObjectStart {
+                                    extra_node,
+                                    types,
+                                    id,
+                                    seen_id,
+                                    active_property,
+                                    active_context,
+                                    reverse,
+                                    in_included,
+                                });
+                                self.state.push(JsonLdExpansionState::Index);
+                            }
                             "@type" => {
                                 if seen_id && !self.lenient {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -923,44 +1002,14 @@ impl JsonLdExpansionConverter {
                                     reverse,
                                     in_included,
                                     nesting: 0,
+                                    extra_node,
                                 });
-                            }
-                            "@value" | "@language" | "@direction" => {
-                                if types.len() > 1 {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "Only a single @type is allowed when @value is present",
-                                        JsonLdErrorCode::InvalidTypedValue,
-                                    ));
-                                }
-                                if id.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@value and @id are incompatible",
-                                        JsonLdErrorCode::InvalidValueObject,
-                                    ));
-                                }
-                                if reverse {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "Literals are not allowed inside of reverse properties",
-                                        JsonLdErrorCode::InvalidReversePropertyValue,
-                                    ))
-                                }
-                                if in_included {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "Literals are not allowed inside of @included",
-                                        JsonLdErrorCode::InvalidIncludedValue,
-                                    ));
-                                }
-                                self.state.push(JsonLdExpansionState::Value {
-                                    active_context,
-                                    r#type: types.into_iter().next(),
-                                    value: None,
-                                    language: None,
-                                    direction: None,
-                                });
-                                self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
                             "@id" => {
-                                if id.is_some() {
+                                if extra_node.as_ref().is_some_and(|(k, _)| k == "@id") {
+                                    extra_node = None; // It overrides the extra id
+                                }
+                                if seen_id {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "Only a single @id is allowed",
                                         JsonLdErrorCode::CollidingKeywords,
@@ -973,62 +1022,119 @@ impl JsonLdExpansionConverter {
                                     from_start: true,
                                     reverse,
                                     nesting: 0,
+                                    extra_node,
                                 });
-                            }
-                            "@graph"
-                                if id.is_none() && types.is_empty() && self.state.is_empty() =>
-                            {
-                                // Graph only for @context
-                                self.state.push(JsonLdExpansionState::RootGraph);
-                                self.state.push(JsonLdExpansionState::Element {
-                                    active_property: None,
-                                    active_context,
-                                    is_array: false,
-                                    container: &[],
-                                    reverse: false,
-                                    in_included: false,
-                                })
-                            }
-                            "@index" => {
-                                self.state.push(JsonLdExpansionState::ObjectStart {
-                                    types,
-                                    id,
-                                    seen_id,
-                                    active_property,
-                                    active_context,
-                                    reverse,
-                                    in_included,
-                                });
-                                self.state.push(JsonLdExpansionState::Index);
                             }
                             _ => {
-                                results.push(JsonLdEvent::StartObject);
-                                let has_emitted_id = id.is_some();
-                                if let Some(id) = id {
-                                    if let Some(id) =
-                                        self.expand_iri(&active_context, id.into(), true, false)
-                                    {
-                                        if has_keyword_form(&id) {
-                                            errors.push(JsonLdSyntaxError::msg(
-                                                "@id value must be an IRI or a blank node",
+                                // We process the extra node
+                                if let Some((k, v)) = extra_node {
+                                    self.state.push(JsonLdExpansionState::ObjectStart {
+                                        extra_node: None,
+                                        types,
+                                        id,
+                                        seen_id,
+                                        active_property,
+                                        active_context,
+                                        reverse,
+                                        in_included,
+                                    });
+                                    self.convert_event(
+                                        JsonEvent::ObjectKey(k.into()),
+                                        results,
+                                        errors,
+                                    );
+                                    self.convert_event(v, results, errors);
+                                    self.convert_event(JsonEvent::ObjectKey(key), results, errors);
+                                    return;
+                                }
+                                match iri.as_ref() {
+                                    "@value" | "@language" | "@direction" => {
+                                        if types.len() > 1 {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "Only a single @type is allowed when @value is present",
+                                                JsonLdErrorCode::InvalidTypedValue,
                                             ));
-                                        } else {
-                                            results.push(JsonLdEvent::Id(id.into()));
                                         }
+                                        if id.is_some() {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "@value and @id are incompatible",
+                                                JsonLdErrorCode::InvalidValueObject,
+                                            ));
+                                        }
+                                        if reverse {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "Literals are not allowed inside of reverse properties",
+                                                JsonLdErrorCode::InvalidReversePropertyValue,
+                                            ))
+                                        }
+                                        if in_included {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "Literals are not allowed inside of @included",
+                                                JsonLdErrorCode::InvalidIncludedValue,
+                                            ));
+                                        }
+                                        self.state.push(JsonLdExpansionState::Value {
+                                            active_context,
+                                            r#type: types.into_iter().next(),
+                                            value: Vec::new(),
+                                            language: None,
+                                            direction: None,
+                                        });
+                                        self.convert_event(
+                                            JsonEvent::ObjectKey(key),
+                                            results,
+                                            errors,
+                                        );
+                                    }
+                                    "@graph"
+                                        if id.is_none()
+                                            && types.is_empty()
+                                            && self.state.is_empty() =>
+                                    {
+                                        // Graph only for @context
+                                        self.state.push(JsonLdExpansionState::RootGraph);
+                                        self.state.push(JsonLdExpansionState::Element {
+                                            active_property: None,
+                                            active_context,
+                                            is_array: false,
+                                            container: &[],
+                                            reverse: false,
+                                            in_included: false,
+                                            extra_node: None,
+                                        })
+                                    }
+                                    _ => {
+                                        results.push(JsonLdEvent::StartObject);
+                                        let has_emitted_id = id.is_some();
+                                        if let Some(id) = id {
+                                            if let Some(id) = self.expand_iri(
+                                                &active_context,
+                                                id.into(),
+                                                true,
+                                                false,
+                                            ) {
+                                                results.push(JsonLdEvent::Id(id.into()));
+                                            }
+                                        }
+                                        results.extend(types.into_iter().map(JsonLdEvent::Type));
+                                        self.state.push(JsonLdExpansionState::Object {
+                                            active_context,
+                                            in_property: false,
+                                            has_emitted_id,
+                                            nesting: 0,
+                                        });
+                                        self.convert_event(
+                                            JsonEvent::ObjectKey(key),
+                                            results,
+                                            errors,
+                                        );
                                     }
                                 }
-                                results.extend(types.into_iter().map(JsonLdEvent::Type));
-                                self.state.push(JsonLdExpansionState::Object {
-                                    active_context,
-                                    in_property: false,
-                                    has_emitted_id,
-                                    nesting: 0,
-                                });
-                                self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
                         }
                     } else {
                         self.state.push(JsonLdExpansionState::ObjectStart {
+                            extra_node,
                             types,
                             id,
                             seen_id,
@@ -1042,16 +1148,27 @@ impl JsonLdExpansionConverter {
                     }
                 }
                 JsonEvent::EndObject => {
+                    // We process the extra node
+                    if let Some((k, v)) = extra_node {
+                        self.state.push(JsonLdExpansionState::ObjectStart {
+                            extra_node: None,
+                            types,
+                            id,
+                            seen_id,
+                            active_property,
+                            active_context,
+                            reverse,
+                            in_included,
+                        });
+                        self.convert_event(JsonEvent::ObjectKey(k.into()), results, errors);
+                        self.convert_event(v, results, errors);
+                        self.convert_event(JsonEvent::EndObject, results, errors);
+                        return;
+                    }
                     if let Some(id) = id {
                         if let Some(id) = self.expand_iri(&active_context, id.into(), true, false) {
                             results.push(JsonLdEvent::StartObject);
-                            if has_keyword_form(&id) {
-                                errors.push(JsonLdSyntaxError::msg(
-                                    "@id value must be an IRI or a blank node",
-                                ));
-                            } else {
-                                results.push(JsonLdEvent::Id(id.into()));
-                            }
+                            results.push(JsonLdEvent::Id(id.into()));
                             results.extend(types.into_iter().map(JsonLdEvent::Type));
                             results.push(JsonLdEvent::EndObject);
                         }
@@ -1074,6 +1191,7 @@ impl JsonLdExpansionConverter {
                 reverse,
                 in_included,
                 nesting,
+                extra_node,
             } => {
                 match event {
                     JsonEvent::Null
@@ -1097,6 +1215,7 @@ impl JsonLdExpansionConverter {
                                 reverse,
                                 in_included,
                                 nesting,
+                                extra_node,
                             });
                         } else {
                             self.state.push(if from_start {
@@ -1108,6 +1227,7 @@ impl JsonLdExpansionConverter {
                                     active_context,
                                     reverse,
                                     in_included,
+                                    extra_node,
                                 }
                             } else {
                                 JsonLdExpansionState::Object {
@@ -1137,6 +1257,7 @@ impl JsonLdExpansionConverter {
                                 reverse,
                                 in_included,
                                 nesting,
+                                extra_node,
                             });
                         } else {
                             (active_context, new_types) =
@@ -1151,6 +1272,7 @@ impl JsonLdExpansionConverter {
                                     active_context,
                                     reverse,
                                     in_included,
+                                    extra_node,
                                 });
                             } else {
                                 results.extend(new_types.into_iter().map(JsonLdEvent::Type));
@@ -1175,6 +1297,7 @@ impl JsonLdExpansionConverter {
                             reverse,
                             in_included,
                             nesting,
+                            extra_node,
                         });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1198,6 +1321,7 @@ impl JsonLdExpansionConverter {
                                 active_context,
                                 reverse,
                                 in_included,
+                                extra_node,
                             });
                         } else {
                             results.extend(new_types.into_iter().map(JsonLdEvent::Type));
@@ -1221,6 +1345,7 @@ impl JsonLdExpansionConverter {
                 from_start,
                 reverse,
                 nesting,
+                extra_node,
             } => {
                 if let JsonEvent::String(new_id) = event {
                     if from_start {
@@ -1232,17 +1357,12 @@ impl JsonLdExpansionConverter {
                             active_context,
                             reverse,
                             in_included: false,
+                            extra_node,
                         });
                     } else {
                         if let Some(new_id) = self.expand_iri(&active_context, new_id, true, false)
                         {
-                            if has_keyword_form(&new_id) {
-                                errors.push(JsonLdSyntaxError::msg(
-                                    "@id value must be an IRI or a blank node",
-                                ));
-                            } else {
-                                results.push(JsonLdEvent::Id(new_id.into()));
-                            }
+                            results.push(JsonLdEvent::Id(new_id.into()));
                         }
                         self.state.push(JsonLdExpansionState::Object {
                             active_context,
@@ -1258,6 +1378,7 @@ impl JsonLdExpansionConverter {
                     ));
                     self.state.push(if from_start {
                         JsonLdExpansionState::ObjectStart {
+                            extra_node,
                             types,
                             id,
                             seen_id: true,
@@ -1301,7 +1422,10 @@ impl JsonLdExpansionConverter {
                             match iri.as_ref() {
                                 "@id" => {
                                     if has_emitted_id {
-                                        errors.push(JsonLdSyntaxError::msg("Duplicated @id key"));
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "Duplicated @id key",
+                                            JsonLdErrorCode::CollidingKeywords,
+                                        ));
                                         self.state.push(JsonLdExpansionState::Object {
                                             active_context,
                                             in_property: false,
@@ -1318,6 +1442,7 @@ impl JsonLdExpansionConverter {
                                             from_start: false,
                                             reverse: false,
                                             nesting,
+                                            extra_node: None,
                                         });
                                     }
                                 }
@@ -1336,6 +1461,7 @@ impl JsonLdExpansionConverter {
                                         reverse: false,
                                         active_context,
                                         in_included: false,
+                                        extra_node: None,
                                     });
                                     results.push(JsonLdEvent::StartGraph);
                                 }
@@ -1371,6 +1497,7 @@ impl JsonLdExpansionConverter {
                                         reverse: false,
                                         in_included: false,
                                         nesting,
+                                        extra_node: None,
                                     });
                                 }
                                 "@index" => {
@@ -1416,6 +1543,7 @@ impl JsonLdExpansionConverter {
                                             container: &[],
                                             reverse: false,
                                             in_included: true,
+                                            extra_node: None,
                                         });
                                     }
                                 }
@@ -1443,26 +1571,22 @@ impl JsonLdExpansionConverter {
                                     });
                                 }
                                 _ if has_keyword_form(&iri) => {
-                                    errors.push(if iri == "@list" || iri == "@set" {
-                                        JsonLdSyntaxError::msg_and_code(
+                                    if iri == "@list" || iri == "@set" {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@list and @set must be the only keys of an object",
                                             JsonLdErrorCode::InvalidSetOrListObject,
-                                        )
+                                        ));
                                     } else if iri == "@context" {
-                                        JsonLdSyntaxError::msg_and_code(
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@context must be the first key of an object",
                                             JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                        )
+                                        ));
                                     } else if iri == "@value" && nesting > 0 {
-                                        JsonLdSyntaxError::msg_and_code(
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@value is not allowed in @nest",
                                             JsonLdErrorCode::InvalidNestValue,
-                                        )
-                                    } else {
-                                        JsonLdSyntaxError::msg(format!(
-                                            "Unsupported JSON-LD keyword: {iri}"
-                                        ))
-                                    });
+                                        ));
+                                    }
                                     self.state.push(JsonLdExpansionState::Object {
                                         active_context,
                                         in_property: false,
@@ -1473,32 +1597,42 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 _ => {
-                                    let (container, reverse) = active_context
+                                    let (container, reverse, is_json) = active_context
                                         .term_definitions
                                         .get(key.as_ref())
-                                        .map_or(([].as_slice(), false), |term_definition| {
+                                        .map_or(([].as_slice(), false, false), |term_definition| {
                                             (
                                                 term_definition.container_mapping,
                                                 term_definition.reverse_property,
+                                                term_definition.type_mapping.as_deref()
+                                                    == Some("@json"),
                                             )
                                         });
+                                    results.push(JsonLdEvent::StartProperty {
+                                        name: iri.into(),
+                                        reverse,
+                                    });
                                     self.state.push(JsonLdExpansionState::Object {
                                         active_context: Arc::clone(&active_context),
                                         in_property: true,
                                         has_emitted_id,
                                         nesting,
                                     });
-                                    self.state.push(JsonLdExpansionState::Element {
-                                        active_property: Some(key.clone().into()),
-                                        active_context,
-                                        is_array: false,
-                                        container,
-                                        reverse,
-                                        in_included: false,
-                                    });
-                                    results.push(JsonLdEvent::StartProperty {
-                                        name: iri.into(),
-                                        reverse,
+                                    self.state.push(if is_json {
+                                        JsonLdExpansionState::Json {
+                                            value: Vec::new(),
+                                            nesting: 0,
+                                        }
+                                    } else {
+                                        JsonLdExpansionState::Element {
+                                            active_property: Some(key.clone().into()),
+                                            active_context,
+                                            is_array: false,
+                                            container,
+                                            reverse,
+                                            in_included: false,
+                                            extra_node: None,
+                                        }
                                     });
                                 }
                             }
@@ -1576,6 +1710,10 @@ impl JsonLdExpansionConverter {
                                         )
                                     });
                                 let reverse = !reverse; // We are in @reverse
+                                results.push(JsonLdEvent::StartProperty {
+                                    name: iri.into(),
+                                    reverse,
+                                });
                                 self.state.push(JsonLdExpansionState::Reverse {
                                     active_context: Arc::clone(&active_context),
                                     in_property: true,
@@ -1587,10 +1725,7 @@ impl JsonLdExpansionConverter {
                                     container,
                                     reverse,
                                     in_included: false,
-                                });
-                                results.push(JsonLdEvent::StartProperty {
-                                    name: iri.into(),
-                                    reverse,
+                                    extra_node: None,
                                 });
                             }
                         } else {
@@ -1624,7 +1759,16 @@ impl JsonLdExpansionConverter {
                         if let Some(iri) = self.expand_iri(&active_context, key, false, true) {
                             match iri.as_ref() {
                                 "@value" => {
-                                    if value.is_some() {
+                                    if value.is_empty() {
+                                        self.state.push(JsonLdExpansionState::ValueValue {
+                                            active_context,
+                                            r#type,
+                                            value: Vec::new(),
+                                            language,
+                                            direction,
+                                            nesting: 0,
+                                        });
+                                    } else {
                                         errors.push(JsonLdSyntaxError::msg_and_code(
                                             "@value cannot be set multiple times",
                                             JsonLdErrorCode::InvalidValueObject,
@@ -1638,13 +1782,6 @@ impl JsonLdExpansionConverter {
                                         });
                                         self.state
                                             .push(JsonLdExpansionState::Skip { is_array: false });
-                                    } else {
-                                        self.state.push(JsonLdExpansionState::ValueValue {
-                                            active_context,
-                                            r#type,
-                                            language,
-                                            direction,
-                                        });
                                     }
                                 }
                                 "@language" => {
@@ -1703,9 +1840,9 @@ impl JsonLdExpansionConverter {
                                 "@type" => {
                                     if !self.lenient {
                                         errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type must be the first key of an object or right after @context",
-                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    ))
+                                            "@type must be the first key of an object or right after @context",
+                                            JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                        ))
                                     }
                                     if r#type.is_some() {
                                         errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1798,48 +1935,65 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::EndObject => {
-                        if let Some(value) = value {
-                            let mut is_valid = true;
-                            if language.is_some() && r#type.is_some() {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@type and @language cannot be used together",
-                                    JsonLdErrorCode::InvalidValueObject,
-                                ));
-                                is_valid = false;
+                        if value.is_empty() {
+                            return;
+                        }
+                        if language.is_some() && r#type.is_some() {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@type and @language cannot be used together",
+                                JsonLdErrorCode::InvalidValueObject,
+                            ));
+                            return;
+                        }
+                        if language.is_some() && !matches!(value.as_slice(), [JsonEvent::String(_)])
+                        {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@language can be used only on a string @value",
+                                JsonLdErrorCode::InvalidLanguageTaggedValue,
+                            ));
+                            return;
+                        }
+                        if let Some(r#type) = &r#type {
+                            if r#type == "@json" {
+                                results.push(JsonLdEvent::Json(value));
+                                return;
                             }
-                            if language.is_some() && !matches!(value, JsonLdValue::String(_)) {
+                            if r#type.starts_with("_:") {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@language can be used only on a string @value",
-                                    JsonLdErrorCode::InvalidLanguageTaggedValue,
+                                    "@type cannot be a blank node",
+                                    JsonLdErrorCode::InvalidTypedValue,
                                 ));
-                                is_valid = false;
-                            }
-                            if let Some(r#type) = &r#type {
-                                if r#type.starts_with("_:") {
+                                return;
+                            } else if !self.lenient {
+                                if let Err(e) = Iri::parse(r#type.as_str()) {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type cannot be a blank node",
+                                        format!("@type value '{type}' must be an IRI: {e}"),
                                         JsonLdErrorCode::InvalidTypedValue,
                                     ));
-                                    is_valid = false;
-                                } else if !self.lenient {
-                                    if let Err(e) = Iri::parse(r#type.as_str()) {
-                                        errors.push(JsonLdSyntaxError::msg_and_code(
-                                            format!("@type value '{type}' must be an IRI: {e}"),
-                                            JsonLdErrorCode::InvalidTypedValue,
-                                        ));
-                                        is_valid = false;
-                                    }
+                                    return;
                                 }
                             }
-                            if is_valid {
-                                results.push(JsonLdEvent::Value {
-                                    value,
-                                    r#type,
-                                    language,
-                                    direction,
-                                })
-                            }
                         }
+                        if value.len() != 1 {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@value value must be a string, number, boolean or null",
+                                JsonLdErrorCode::InvalidValueObjectValue,
+                            ));
+                            return;
+                        }
+                        let value = match value.into_iter().next().unwrap() {
+                            JsonEvent::String(value) => JsonLdValue::String(value.into_owned()),
+                            JsonEvent::Number(value) => JsonLdValue::Number(value.into_owned()),
+                            JsonEvent::Boolean(value) => JsonLdValue::Boolean(value),
+                            JsonEvent::Null => return,
+                            _ => unreachable!(),
+                        };
+                        results.push(JsonLdEvent::Value {
+                            value,
+                            r#type,
+                            language,
+                            direction,
+                        })
                     }
                     _ => unreachable!(),
                 }
@@ -1847,54 +2001,56 @@ impl JsonLdExpansionConverter {
             JsonLdExpansionState::ValueValue {
                 active_context,
                 r#type,
+                mut value,
                 language,
                 direction,
-            } => match event {
-                JsonEvent::Null => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: None,
-                    language,
-                    direction,
-                }),
-                JsonEvent::Number(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::Number(value.into())),
-                    language,
-                    direction,
-                }),
-                JsonEvent::Boolean(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::Boolean(value)),
-                    language,
-                    direction,
-                }),
-                JsonEvent::String(value) => self.state.push(JsonLdExpansionState::Value {
-                    active_context,
-                    r#type,
-                    value: Some(JsonLdValue::String(value.into())),
-                    language,
-                    direction,
-                }),
-                _ => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@value value must be a string, number, boolean or null",
-                        JsonLdErrorCode::InvalidValueObjectValue,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
+                mut nesting,
+            } => {
+                match event {
+                    JsonEvent::Null => value.push(JsonEvent::Null),
+                    JsonEvent::Number(v) => value.push(JsonEvent::Number(v.into_owned().into())),
+                    JsonEvent::Boolean(v) => value.push(JsonEvent::Boolean(v)),
+                    JsonEvent::String(v) => value.push(JsonEvent::String(v.into_owned().into())),
+                    JsonEvent::ObjectKey(v) => {
+                        value.push(JsonEvent::ObjectKey(v.into_owned().into()))
+                    }
+                    JsonEvent::StartArray => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartArray)
+                    }
+                    JsonEvent::StartObject => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartObject)
+                    }
+                    JsonEvent::EndArray => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndArray)
+                    }
+                    JsonEvent::EndObject => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndObject)
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                self.state.push(if nesting == 0 {
+                    JsonLdExpansionState::Value {
                         active_context,
                         r#type,
-                        value: None,
+                        value,
                         language,
                         direction,
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: false });
-                    self.convert_event(event, results, errors);
-                }
-            },
+                    }
+                } else {
+                    JsonLdExpansionState::ValueValue {
+                        active_context,
+                        r#type,
+                        value,
+                        language,
+                        direction,
+                        nesting,
+                    }
+                });
+            }
             JsonLdExpansionState::ValueLanguage {
                 active_context,
                 value,
@@ -1944,7 +2100,7 @@ impl JsonLdExpansionConverter {
                             _ => {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
                                     format!("The allowed @direction values are 'rtl' and 'ltr', found '{direction}'"),
-                                    JsonLdErrorCode::InvalidBaseDirection
+                                    JsonLdErrorCode::InvalidBaseDirection,
                                 ));
                                 None
                             }
@@ -1974,16 +2130,7 @@ impl JsonLdExpansionConverter {
                 direction,
             } => {
                 if let JsonEvent::String(t) = event {
-                    let mut r#type = self.expand_iri(&active_context, t, true, true);
-                    if let Some(iri) = &r#type {
-                        if has_keyword_form(iri) {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                format!("{iri} is not a valid value for @type"),
-                                JsonLdErrorCode::InvalidTypedValue,
-                            ));
-                            r#type = None
-                        }
-                    }
+                    let r#type = self.expand_iri(&active_context, t, true, true);
                     self.state.push(JsonLdExpansionState::Value {
                         active_context,
                         r#type: r#type.map(Into::into),
@@ -2083,26 +2230,194 @@ impl JsonLdExpansionConverter {
                     self.convert_event(event, results, errors)
                 }
             }
+            JsonLdExpansionState::EndOfGraphContainer => {
+                results.push(JsonLdEvent::EndGraph);
+                results.push(JsonLdEvent::EndObject);
+                self.convert_event(event, results, errors);
+            }
             JsonLdExpansionState::IndexContainer {
                 active_property,
                 active_context,
+                container,
             } => match event {
                 JsonEvent::EndObject => (),
-                JsonEvent::ObjectKey(_) => {
-                    // TODO: emit @index
+                JsonEvent::ObjectKey(key) => {
+                    // Events for the @index
+                    let mut map_context = Arc::clone(&active_context);
+                    if let Some(parent_context) = &map_context.previous_context {
+                        map_context = Arc::clone(parent_context);
+                    }
+                    let extra_node = if self
+                        .expand_iri(&active_context, key.as_ref().into(), false, true)
+                        .is_none_or(|k| k != "@none")
+                    {
+                        if container.contains(&"@id") {
+                            Some((
+                                "@id".into(),
+                                JsonEvent::String(key.clone().into_owned().into()),
+                            ))
+                        } else if container.contains(&"@type") {
+                            Some((
+                                "@type".into(),
+                                JsonEvent::String(key.clone().into_owned().into()),
+                            ))
+                        } else {
+                            active_property
+                                .as_ref()
+                                .and_then(|p| active_context.term_definitions.get(p))
+                                .and_then(|d| d.index_mapping.as_ref())
+                                .map(|index_key| {
+                                    (
+                                        index_key.clone(),
+                                        JsonEvent::String(key.clone().into_owned().into()),
+                                    )
+                                })
+                        }
+                    } else {
+                        None
+                    };
                     self.state.push(JsonLdExpansionState::IndexContainer {
-                        active_context: Arc::clone(&active_context),
-                        active_property: active_property.clone(),
-                    });
-                    self.state.push(JsonLdExpansionState::Element {
-                        active_property,
                         active_context,
-                        is_array: false,
-                        container: &[],
-                        reverse: false,
-                        in_included: false,
-                    })
+                        active_property: active_property.clone(),
+                        container,
+                    });
+                    if container.contains(&"@graph") {
+                        self.state
+                            .push(JsonLdExpansionState::IndexedGraphContainerElement {
+                                active_property,
+                                active_context: map_context,
+                                is_array: false,
+                                extra_node,
+                            });
+                    } else {
+                        self.state.push(JsonLdExpansionState::Element {
+                            active_property,
+                            active_context: map_context,
+                            is_array: false,
+                            container: &[],
+                            reverse: false,
+                            in_included: false,
+                            extra_node,
+                        });
+                    }
                 }
+                _ => unreachable!(),
+            },
+            JsonLdExpansionState::IndexedGraphContainerElement {
+                active_property,
+                active_context,
+                is_array,
+                extra_node,
+            } => match event {
+                JsonEvent::Null
+                | JsonEvent::String(_)
+                | JsonEvent::Number(_)
+                | JsonEvent::Boolean(_) => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::IndexedGraphContainerElement {
+                                active_property,
+                                active_context,
+                                is_array,
+                                extra_node,
+                            });
+                    }
+                }
+                JsonEvent::StartArray => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::IndexedGraphContainerElement {
+                                active_property: active_property.clone(),
+                                active_context: Arc::clone(&active_context),
+                                is_array,
+                                extra_node: extra_node.clone(),
+                            });
+                    }
+                    self.state
+                        .push(JsonLdExpansionState::IndexedGraphContainerElement {
+                            active_property,
+                            active_context,
+                            is_array: true,
+                            extra_node,
+                        });
+                }
+                JsonEvent::EndArray => (),
+                JsonEvent::StartObject => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::IndexedGraphContainerElement {
+                                active_property: active_property.clone(),
+                                active_context: Arc::clone(&active_context),
+                                is_array,
+                                extra_node: extra_node.clone(),
+                            });
+                    }
+                    self.state.push(
+                        JsonLdExpansionState::IndexedGraphContainerElementWaitingForGraph {
+                            active_property,
+                            active_context,
+                            extra_node,
+                        },
+                    )
+                }
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
+                    unreachable!()
+                }
+            },
+            JsonLdExpansionState::IndexedGraphContainerElementWaitingForGraph {
+                active_property,
+                active_context,
+                mut extra_node,
+            } => match event {
+                JsonEvent::ObjectKey(key) => {
+                    if self
+                        .expand_iri(&active_context, key.as_ref().into(), false, true)
+                        .as_deref()
+                        != Some("@graph")
+                    {
+                        // We open a nested graph node
+                        self.state.push(JsonLdExpansionState::ObjectStart {
+                            types: Vec::new(),
+                            id: None,
+                            seen_id: false,
+                            active_property: active_property.clone(),
+                            active_context: Arc::clone(&active_context),
+                            reverse: false,
+                            in_included: false,
+                            extra_node: take(&mut extra_node),
+                        });
+                        self.convert_event(JsonEvent::ObjectKey("@graph".into()), results, errors);
+                        // We replace the node state by EndOfGraphContainer
+                        self.state.pop();
+                        self.state.pop();
+                        self.state.pop();
+                        self.state.push(JsonLdExpansionState::EndOfGraphContainer);
+                    }
+                    self.state.push(if self.streaming {
+                        JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                            extra_node,
+                            active_property,
+                            active_context,
+                            container: &[],
+                            reverse: false,
+                            in_included: false,
+                        }
+                    } else {
+                        JsonLdExpansionState::ObjectOrContainerStart {
+                            buffer: Vec::new(),
+                            depth: 1,
+                            current_key: None,
+                            active_property,
+                            active_context,
+                            container: &[],
+                            reverse: false,
+                            in_included: false,
+                            extra_node,
+                        }
+                    });
+                    self.convert_event(JsonEvent::ObjectKey(key), results, errors);
+                }
+                JsonEvent::EndObject => (),
                 _ => unreachable!(),
             },
             JsonLdExpansionState::LanguageContainer {
@@ -2274,14 +2589,61 @@ impl JsonLdExpansionConverter {
                         "@nest value must be a JSON object",
                         JsonLdErrorCode::InvalidNestValue,
                     ));
-                    self.state.push(JsonLdExpansionState::Object {
-                        active_context,
-                        in_property: false,
-                        has_emitted_id,
-                        nesting: 0,
+                    self.state.push(if array_count > 0 {
+                        JsonLdExpansionState::NestStart {
+                            active_context,
+                            parent_active_context,
+                            has_emitted_id,
+                            nesting,
+                            array_count,
+                        }
+                    } else {
+                        JsonLdExpansionState::Object {
+                            active_context: parent_active_context,
+                            in_property: false,
+                            has_emitted_id,
+                            nesting,
+                        }
                     });
                 }
             },
+            JsonLdExpansionState::Json {
+                mut value,
+                mut nesting,
+            } => {
+                match event {
+                    JsonEvent::Null => value.push(JsonEvent::Null),
+                    JsonEvent::Number(v) => value.push(JsonEvent::Number(v.into_owned().into())),
+                    JsonEvent::Boolean(v) => value.push(JsonEvent::Boolean(v)),
+                    JsonEvent::String(v) => value.push(JsonEvent::String(v.into_owned().into())),
+                    JsonEvent::ObjectKey(v) => {
+                        value.push(JsonEvent::ObjectKey(v.into_owned().into()))
+                    }
+                    JsonEvent::StartArray => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartArray)
+                    }
+                    JsonEvent::StartObject => {
+                        nesting += 1;
+                        value.push(JsonEvent::StartObject)
+                    }
+                    JsonEvent::EndArray => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndArray)
+                    }
+                    JsonEvent::EndObject => {
+                        nesting -= 1;
+                        value.push(JsonEvent::EndObject)
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                if nesting > 0 {
+                    self.state
+                        .push(JsonLdExpansionState::Json { value, nesting });
+                } else {
+                    results.push(JsonLdEvent::Json(value));
+                }
+            }
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -2403,29 +2765,26 @@ impl JsonLdExpansionConverter {
                     active_context = Arc::new(scoped_context);
                 }
                 // 13.4.4.4)
-                let iri = self.expand_iri(&typed_scoped_context, value.into(), true, true)?;
-                if has_keyword_form(&iri) {
-                    errors.push(JsonLdSyntaxError::msg(format!(
-                        "{iri} is not a valid value for @type"
-                    )));
-                    None
-                } else {
-                    Some(iri.into())
-                }
+                Some(
+                    self.expand_iri(&typed_scoped_context, value.into(), true, true)?
+                        .into(),
+                )
             })
             .collect();
         (active_context, types_to_emit)
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn on_literal_value(
         &mut self,
-        value: JsonLdValue,
+        value: JsonEvent<'static>,
         active_context: Arc<JsonLdContext>,
         active_property: Option<String>,
         is_array: bool,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
@@ -2435,99 +2794,102 @@ impl JsonLdExpansionConverter {
                 JsonLdErrorCode::InvalidIncludedValue,
             ))
         }
-        if !is_array {
-            if container.contains(&"@list") {
-                if reverse {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "Lists are not allowed inside of reverse properties",
-                        JsonLdErrorCode::InvalidReversePropertyValue,
-                    ))
-                }
-                results.push(JsonLdEvent::StartList);
-            } else if container.contains(&"@set") {
-                results.push(JsonLdEvent::StartSet);
-            }
-        }
-        if let Some(active_property) = &active_property {
-            let property_scoped_context =
-                self.new_scoped_context(&active_context, active_property, false, true, errors);
-            self.expand_value(
-                active_property,
-                property_scoped_context.as_ref().unwrap_or(&active_context),
-                value,
-                reverse,
-                results,
-                errors,
-            );
-        }
         if is_array {
             self.state.push(JsonLdExpansionState::Element {
-                active_property,
-                active_context,
+                active_property: active_property.clone(),
+                active_context: Arc::clone(&active_context),
                 is_array,
                 container,
                 reverse,
                 in_included: false,
+                extra_node: extra_node.clone(),
             });
-        } else if container.contains(&"@list") {
-            results.push(JsonLdEvent::EndList);
-        } else if container.contains(&"@set") {
-            results.push(JsonLdEvent::EndSet);
+        } else if container == ["@list"] {
+            if reverse {
+                errors.push(JsonLdSyntaxError::msg_and_code(
+                    "Lists are not allowed inside of reverse properties",
+                    JsonLdErrorCode::InvalidReversePropertyValue,
+                ))
+            }
+            results.push(JsonLdEvent::StartList);
+        } else if container == ["@set"] {
+            results.push(JsonLdEvent::StartSet);
+        }
+        if let Some(active_property) = active_property {
+            let property_scoped_context =
+                self.new_scoped_context(&active_context, &active_property, false, true, errors);
+            self.expand_value(
+                active_property,
+                property_scoped_context.map_or(active_context, Arc::new),
+                value,
+                reverse,
+                extra_node,
+                results,
+                errors,
+            );
+        }
+        if !is_array {
+            if container == ["@list"] {
+                results.push(JsonLdEvent::EndList);
+            } else if container == ["@set"] {
+                results.push(JsonLdEvent::EndSet);
+            }
         }
     }
 
     /// [Value Expansion](https://www.w3.org/TR/json-ld-api/#value-expansion)
     fn expand_value(
         &mut self,
-        active_property: &str,
-        active_context: &JsonLdContext,
-        value: JsonLdValue,
+        active_property: String,
+        active_context: Arc<JsonLdContext>,
+        value: JsonEvent<'static>,
         reverse: bool,
+        extra_node: Option<(String, JsonEvent<'static>)>,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         let mut r#type = None;
         let mut language = None;
         let mut direction = None;
-        if let Some(term_definition) = active_context.term_definitions.get(active_property) {
+        if let Some(term_definition) = active_context.term_definitions.get(&active_property) {
             if let Some(type_mapping) = &term_definition.type_mapping {
                 match type_mapping.as_ref() {
                     // 1)
                     "@id" => {
-                        if let JsonLdValue::String(value) = value {
-                            if let Some(id) =
-                                self.expand_iri(active_context, value.into(), true, false)
-                            {
-                                if has_keyword_form(&id) {
-                                    errors.push(JsonLdSyntaxError::msg(
-                                        "@id value must be an IRI or a blank node",
-                                    ));
-                                } else {
-                                    results.push(JsonLdEvent::StartObject);
-                                    results.push(JsonLdEvent::Id(id.into()));
-                                    results.push(JsonLdEvent::EndObject);
-                                }
-                            }
-
+                        if let JsonEvent::String(value) = value {
+                            self.state.push(JsonLdExpansionState::ObjectStart {
+                                types: Vec::new(),
+                                id: Some(value.into_owned()),
+                                seen_id: false,
+                                active_property: Some(active_property),
+                                active_context,
+                                reverse,
+                                in_included: false,
+                                extra_node,
+                            });
+                            self.convert_event(JsonEvent::EndObject, results, errors);
                             return;
                         }
                     }
                     // 2)
                     "@vocab" => {
-                        if let JsonLdValue::String(value) = value {
-                            if let Some(id) =
-                                self.expand_iri(active_context, value.into(), true, true)
-                            {
-                                if has_keyword_form(&id) {
-                                    errors.push(JsonLdSyntaxError::msg(
-                                        "@id value must be an IRI or a blank node",
-                                    ));
-                                } else {
-                                    results.push(JsonLdEvent::StartObject);
-                                    results.push(JsonLdEvent::Id(id.into()));
-                                    results.push(JsonLdEvent::EndObject);
-                                }
-                            }
+                        if let JsonEvent::String(value) = value {
+                            self.state.push(JsonLdExpansionState::ObjectStart {
+                                types: Vec::new(),
+                                id: self
+                                    .expand_iri(&active_context, value, true, true)
+                                    .map(Cow::into_owned),
+                                seen_id: false,
+                                active_property: Some(active_property),
+                                active_context: active_context
+                                    .previous_context
+                                    .clone()
+                                    .unwrap_or(active_context),
+                                reverse,
+                                in_included: false,
+                                extra_node,
+                            });
+                            self.convert_event(JsonEvent::EndObject, results, errors);
                             return;
                         }
                     }
@@ -2537,9 +2899,8 @@ impl JsonLdExpansionConverter {
                         r#type = Some(type_mapping.clone());
                     }
                 }
-            }
-            // 5)
-            if matches!(value, JsonLdValue::String(_)) {
+            } else if matches!(value, JsonEvent::String(_)) {
+                // 5
                 language = term_definition
                     .language_mapping
                     .clone()
@@ -2548,15 +2909,12 @@ impl JsonLdExpansionConverter {
                     .direction_mapping
                     .unwrap_or(active_context.default_direction);
             }
-        } else {
-            // 5)
-            if matches!(value, JsonLdValue::String(_)) {
-                if language.is_none() {
-                    language.clone_from(&active_context.default_language);
-                }
-                if direction.is_none() {
-                    direction.clone_from(&active_context.default_direction);
-                }
+        } else if matches!(value, JsonEvent::String(_)) {
+            if language.is_none() {
+                language.clone_from(&active_context.default_language);
+            }
+            if direction.is_none() {
+                direction.clone_from(&active_context.default_direction);
             }
         }
         if reverse {
@@ -2565,12 +2923,18 @@ impl JsonLdExpansionConverter {
                 JsonLdErrorCode::InvalidReversePropertyValue,
             ))
         }
-        results.push(JsonLdEvent::Value {
-            value,
+        self.state.push(JsonLdExpansionState::Value {
+            active_context,
             r#type,
+            value: vec![value],
             language,
             direction,
         });
+        if let Some((k, v)) = extra_node {
+            self.convert_event(JsonEvent::ObjectKey(k.into()), results, errors);
+            self.convert_event(v, results, errors);
+        }
+        self.convert_event(JsonEvent::EndObject, results, errors);
     }
 
     fn new_context(
@@ -2599,21 +2963,17 @@ impl JsonLdExpansionConverter {
         propagate: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> Option<JsonLdContext> {
-        active_context
-            .term_definitions
-            .get(active_property)
-            .and_then(|term_definition| {
-                Some(self.context_processor.process_context(
-                    active_context,
-                    term_definition.context.clone()?,
-                    term_definition.base_url.as_ref().or(self.base_url.as_ref()),
-                    &mut Vec::new(),
-                    override_protected,
-                    propagate,
-                    true,
-                    errors,
-                ))
-            })
+        let term_definition = active_context.term_definitions.get(active_property)?;
+        Some(self.context_processor.process_context(
+            active_context,
+            term_definition.context.clone()?,
+            term_definition.base_url.as_ref().or(self.base_url.as_ref()),
+            &mut Vec::new(),
+            override_protected,
+            propagate,
+            true,
+            errors,
+        ))
     }
 
     pub fn active_context(&self) -> &JsonLdContext {
@@ -2639,6 +2999,11 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::ValueType { active_context, .. }
                 | JsonLdExpansionState::ListOrSetContainer { active_context, .. }
                 | JsonLdExpansionState::IndexContainer { active_context, .. }
+                | JsonLdExpansionState::IndexedGraphContainerElement { active_context, .. }
+                | JsonLdExpansionState::IndexedGraphContainerElementWaitingForGraph {
+                    active_context,
+                    ..
+                }
                 | JsonLdExpansionState::LanguageContainer { active_context, .. }
                 | JsonLdExpansionState::LanguageContainerValue { active_context, .. }
                 | JsonLdExpansionState::NestStart { active_context, .. } => {
@@ -2648,6 +3013,8 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::Graph
                 | JsonLdExpansionState::RootGraph
                 | JsonLdExpansionState::Included
+                | JsonLdExpansionState::EndOfGraphContainer
+                | JsonLdExpansionState::Json { .. }
                 | JsonLdExpansionState::Skip { .. } => (),
             }
         }

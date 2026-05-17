@@ -21,7 +21,7 @@ use pyo3::prelude::*;
 /// >>> str(Dataset([Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), NamedNode('http://example.com/o'), NamedNode('http://example.com/g'))]))
 /// '<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n'
 #[pyclass(name = "Dataset", module = "pyoxigraph", eq)]
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct PyDataset {
     inner: Dataset,
 }
@@ -276,7 +276,7 @@ impl QuadIter {
     eq,
     hash
 )]
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct PyCanonicalizationAlgorithm {
     inner: CanonicalizationAlgorithm,
 }

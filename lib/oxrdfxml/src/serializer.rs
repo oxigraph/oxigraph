@@ -413,11 +413,6 @@ impl InnerRdfXmlWriter {
         if let Some(prop_xmlns) = prop_xmlns {
             property_open.push_attribute(prop_xmlns);
         }
-        #[allow(
-            unreachable_patterns,
-            clippy::match_wildcard_for_single_variants,
-            clippy::allow_attributes
-        )]
         match object {
             TermRef::NamedNode(node) => {
                 property_open

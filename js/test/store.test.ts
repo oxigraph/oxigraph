@@ -1,9 +1,9 @@
 import assert from "node:assert";
 import { webcrypto } from "node:crypto";
-// @ts-expect-error
 import dataModel from "@rdfjs/data-model";
+import type { Quad, Term } from "@rdfjs/types";
 import { describe, it, vi } from "vitest";
-import { type Quad, Store, type Term } from "../pkg/oxigraph.js";
+import { Store } from "../pkg";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
 vi.stubGlobal("crypto", webcrypto);
@@ -205,16 +205,7 @@ describe("Store", () => {
 
         it("load NTriples in an other graph", () => {
             const store = new Store();
-            store.load("<http://example.com> <http://example.com> <http://example.com> .", {
-                format: "application/n-triples",
-                to_graph_name: ex,
-            });
-            assert(store.has(dataModel.quad(ex, ex, ex, ex)));
-        });
-
-        it("load NTriples in an other graph with options", () => {
-            const store = new Store();
-            store.load("<http://example.com> <http://example.com> <http://example.com> .", {
+            store.load(["<http://example.com> <http://example.com> <http://example.com> ."], {
                 format: "application/n-triples",
                 to_graph_name: ex,
             });
@@ -223,7 +214,7 @@ describe("Store", () => {
 
         it("load Turtle with a base IRI", () => {
             const store = new Store();
-            store.load("<http://example.com> <http://example.com> <> .", {
+            store.load(Buffer.from("<http://example.com> <http://example.com> <> ."), {
                 base_iri: "http://example.com",
                 format: "text/turtle",
             });
@@ -233,7 +224,11 @@ describe("Store", () => {
         it("load NQuads", () => {
             const store = new Store();
             store.load(
-                "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .",
+                [
+                    Buffer.from(
+                        "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .",
+                    ),
+                ],
                 { format: "application/n-quads" },
             );
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));

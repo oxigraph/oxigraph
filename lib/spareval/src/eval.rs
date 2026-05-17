@@ -4,7 +4,7 @@ use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::expression::{
     CustomFunctionRegistry, ExpressionEvaluator, ExpressionEvaluatorContext, NumericBinaryOperands,
-    build_expression_evaluator, partial_cmp_literals, try_build_internal_expression_evaluator,
+    build_expression_evaluator, partial_cmp, try_build_internal_expression_evaluator,
 };
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
@@ -30,6 +30,7 @@ use sparopt::algebra::{
 };
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::fmt::Write;
 use std::hash::{Hash, Hasher};
 use std::iter::{Peekable, empty, once};
 use std::marker::PhantomData;
@@ -1518,25 +1519,18 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 let child = child?;
                 let by = expression
                     .iter()
-                    .map(|comp| {
-                        Ok(match comp {
-                            OrderExpression::Asc(expression) => {
-                                ComparatorFunction::Asc(self.expression_evaluator(
-                                    expression,
-                                    encoded_variables,
-                                    stat_children,
-                                )?)
+                    .filter_map(|comp| {
+                        Some(match comp {
+                            OrderExpression::Asc(variable) => {
+                                (true, slice_key(encoded_variables, variable)?)
                             }
-                            OrderExpression::Desc(expression) => {
-                                ComparatorFunction::Desc(self.expression_evaluator(
-                                    expression,
-                                    encoded_variables,
-                                    stat_children,
-                                )?)
+                            OrderExpression::Desc(variable) => {
+                                (false, slice_key(encoded_variables, variable)?)
                             }
                         })
                     })
-                    .collect::<Result<Vec<_>, QueryEvaluationError>>()?;
+                    .collect::<Vec<_>>();
+                let dataset = self.dataset.clone();
                 Rc::new(move |from| {
                     let mut errors = Vec::default();
                     let mut values = child(from)
@@ -1549,24 +1543,34 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         })
                         .collect::<Vec<_>>();
                     values.sort_unstable_by(|a, b| {
-                        for comp in &by {
-                            match comp {
-                                ComparatorFunction::Asc(expression) => {
-                                    match cmp_terms(expression(a).as_ref(), expression(b).as_ref())
-                                    {
-                                        Ordering::Greater => return Ordering::Greater,
-                                        Ordering::Less => return Ordering::Less,
-                                        Ordering::Equal => (),
-                                    }
+                        for (is_asc, variable_key) in &by {
+                            match cmp_terms(
+                                a.get(*variable_key)
+                                    .and_then(|term| {
+                                        dataset.externalize_expression_term(term.clone()).ok()
+                                    })
+                                    .as_ref(),
+                                b.get(*variable_key)
+                                    .and_then(|term| {
+                                        dataset.externalize_expression_term(term.clone()).ok()
+                                    })
+                                    .as_ref(),
+                            ) {
+                                Ordering::Greater => {
+                                    return if *is_asc {
+                                        Ordering::Greater
+                                    } else {
+                                        Ordering::Less
+                                    };
                                 }
-                                ComparatorFunction::Desc(expression) => {
-                                    match cmp_terms(expression(a).as_ref(), expression(b).as_ref())
-                                    {
-                                        Ordering::Greater => return Ordering::Less,
-                                        Ordering::Less => return Ordering::Greater,
-                                        Ordering::Equal => (),
-                                    }
+                                Ordering::Less => {
+                                    return if *is_asc {
+                                        Ordering::Less
+                                    } else {
+                                        Ordering::Greater
+                                    };
                                 }
+                                Ordering::Equal => (),
                             }
                         }
                         Ordering::Equal
@@ -1599,12 +1603,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let mut child = child?;
-                #[expect(clippy::shadow_same)]
-                let start = *start;
+                #[expect(clippy::unwrap_in_result)]
+                let start = (*start).try_into().unwrap();
                 if start > 0 {
                     child = Rc::new(move |from| Box::new(child(from).skip(start)));
                 }
-                if let Some(length) = *length {
+                if let Some(length) = (*length).map(|l| l.try_into().unwrap()) {
                     child = Rc::new(move |from| Box::new(child(from).take(length)));
                 }
                 child
@@ -1753,7 +1757,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 let silent = *silent;
                 let service_name =
                     TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset)?;
-                self.build_graph_pattern_evaluator(inner, encoded_variables, &mut Vec::new())?; // We call recursively to fill "encoded_variables"
+                inner.lookup_used_variables(&mut |v| {
+                    encode_variable(encoded_variables, v);
+                }); // We fill "encoded_variables"
                 let graph_pattern = spargebra::algebra::GraphPattern::from(inner.as_ref());
                 let variables = Rc::from(encoded_variables.as_slice());
                 let eval = self.clone();
@@ -2116,8 +2122,8 @@ struct ExpressionContext<'a, E> {
     stat_children: &'a mut Vec<Rc<EvalNodeWithStats>>,
 }
 
-impl<'a, 'b, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
-    for ExpressionContext<'b, SimpleEvaluator<'a, D>>
+impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
+    for ExpressionContext<'_, SimpleEvaluator<'a, D>>
 {
     type Tuple = InternalTuple<D::InternalTerm>;
     type Term = D::InternalTerm;
@@ -2191,8 +2197,6 @@ impl<'a, 'b, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
 
 #[cfg(feature = "sparql-12")]
 type LanguageWithMaybeBaseDirection = (String, Option<BaseDirection>);
-#[cfg(not(feature = "sparql-12"))]
-type LanguageWithMaybeBaseDirection = String;
 
 #[cfg(feature = "sparql-12")]
 fn to_string_and_language(
@@ -2213,9 +2217,7 @@ fn to_string_and_language(
 }
 
 #[cfg(not(feature = "sparql-12"))]
-fn to_string_and_language(
-    term: ExpressionTerm,
-) -> Option<(String, Option<LanguageWithMaybeBaseDirection>)> {
+fn to_string_and_language(term: ExpressionTerm) -> Option<(String, Option<String>)> {
     match term {
         ExpressionTerm::StringLiteral(value) => Some((value, None)),
         ExpressionTerm::LangStringLiteral { value, language } => Some((value, Some(language))),
@@ -2244,10 +2246,7 @@ fn build_plain_literal(
 }
 
 #[cfg(not(feature = "sparql-12"))]
-fn build_plain_literal(
-    value: String,
-    language: Option<LanguageWithMaybeBaseDirection>,
-) -> ExpressionTerm {
+fn build_plain_literal(value: String, language: Option<String>) -> ExpressionTerm {
     if let Some(language) = language {
         ExpressionTerm::LangStringLiteral { value, language }
     } else {
@@ -2378,7 +2377,7 @@ impl<T: Clone + Eq + Hash> AccumulatorWrapper<'_, T> {
             Self::CountInternal { evaluator, count } => {
                 if evaluator(tuple).is_some() {
                     *count += 1;
-                };
+                }
             }
             Self::CountDistinctInternal {
                 seen,
@@ -2571,7 +2570,7 @@ impl Accumulator for MinAccumulator {
     }
 
     fn finish(&mut self) -> Option<ExpressionTerm> {
-        self.min.clone().and_then(|v| v)
+        self.min.clone()?
     }
 }
 
@@ -2593,14 +2592,13 @@ impl Accumulator for MaxAccumulator {
     }
 
     fn finish(&mut self) -> Option<ExpressionTerm> {
-        self.max.clone().and_then(|v| v)
+        self.max.clone()?
     }
 }
 
-#[expect(clippy::option_option)]
 struct GroupConcatAccumulator {
     concat: Option<String>,
-    language: Option<Option<LanguageWithMaybeBaseDirection>>,
+    is_continue: bool,
     separator: Rc<str>,
 }
 
@@ -2608,7 +2606,7 @@ impl GroupConcatAccumulator {
     fn new(separator: Rc<str>) -> Self {
         Self {
             concat: Some(String::new()),
-            language: None,
+            is_continue: false,
             separator,
         }
     }
@@ -2619,17 +2617,14 @@ impl Accumulator for GroupConcatAccumulator {
         let Some(concat) = self.concat.as_mut() else {
             return;
         };
-        let Some((value, e_language)) = to_string_and_language(element) else {
+        let Some((value, _)) = to_string_and_language(element) else {
             self.concat = None;
             return;
         };
-        if let Some(lang) = &self.language {
-            if *lang != e_language {
-                self.language = Some(None)
-            }
+        if self.is_continue {
             concat.push_str(&self.separator);
         } else {
-            self.language = Some(e_language)
+            self.is_continue = true;
         }
         concat.push_str(&value);
     }
@@ -2637,7 +2632,7 @@ impl Accumulator for GroupConcatAccumulator {
     fn finish(&mut self) -> Option<ExpressionTerm> {
         self.concat
             .take()
-            .map(|result| build_plain_literal(result, self.language.take().flatten()))
+            .map(|result| build_plain_literal(result, None))
     }
 }
 
@@ -2706,7 +2701,7 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
                     #[cfg(feature = "sparql-12")]
                     ExpressionTerm::Triple(_) => Ordering::Less,
                     _ => {
-                        if let Some(ord) = partial_cmp_literals(a, b) {
+                        if let Some(ord) = partial_cmp(a, b) {
                             ord
                         } else if let (Term::Literal(a), Term::Literal(b)) =
                             (a.clone().into(), b.clone().into())
@@ -4115,9 +4110,8 @@ fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
     match selector {
         TripleTemplateValue::Constant(term) => Some(term.clone()),
         TripleTemplateValue::Variable(v) => {
-            tuple
-                .get(*v)
-                .and_then(|t| dataset.externalize_term(t.clone()).ok()) // TODO: raise error
+            let t = tuple.get(*v)?;
+            dataset.externalize_term(t.clone()).ok() // TODO: raise error
         }
         TripleTemplateValue::BlankNode(bnode) => {
             if *bnode >= bnodes.len() {
@@ -4338,11 +4332,6 @@ impl<
     }
 }
 
-enum ComparatorFunction<'a, T> {
-    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
-    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
-}
-
 struct InternalTupleSet<T> {
     key: Vec<usize>,
     map: FxHashMap<u64, Vec<InternalTuple<T>>>,
@@ -4498,12 +4487,11 @@ fn eval_node_label(node: &GraphPattern) -> String {
             ..
         } => format!(
             "Extend({} -> {variable})",
-            spargebra::algebra::Expression::from(expression)
+            FormattableExpression(expression)
         ),
-        GraphPattern::Filter { expression, .. } => format!(
-            "Filter({})",
-            spargebra::algebra::Expression::from(expression)
-        ),
+        GraphPattern::Filter { expression, .. } => {
+            format!("Filter({})", FormattableExpression(expression))
+        }
         GraphPattern::Graph { graph_name } => format!("Graph({graph_name})"),
         GraphPattern::Group {
             variables,
@@ -4538,7 +4526,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
                     // We are in a ForLoopLeftJoin
                     return format!(
                         "ForLoopLeftJoin(expression = {})",
-                        spargebra::algebra::Expression::from(expression)
+                        FormattableExpression(expression)
                     );
                 }
             }
@@ -4552,7 +4540,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => format!(
                 "LeftJoin(HashBuildRightProbeLeft, keys = {}, expression = {})",
                 format_list(keys),
-                spargebra::algebra::Expression::from(expression)
+                FormattableExpression(expression)
             ),
         },
         GraphPattern::Minus { algorithm, .. } => match algorithm {
@@ -4632,6 +4620,17 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 }))
             )
         }
+    }
+}
+
+struct FormattableExpression<'a>(&'a Expression);
+
+impl fmt::Display for FormattableExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if spargebra::algebra::Expression::from(self.0).fmt(f).is_err() {
+            f.write_char('?')?;
+        }
+        Ok(())
     }
 }
 

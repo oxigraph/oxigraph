@@ -1,6 +1,8 @@
+//! Data structures around SPARQL queries. The main type is [`Query`].
+
 use crate::SparqlParser;
 use crate::algebra::*;
-use crate::parser::SparqlSyntaxError;
+use crate::error::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -23,88 +25,43 @@ use std::str::FromStr;
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Query {
     /// [SELECT](https://www.w3.org/TR/sparql11-query/#select).
-    Select {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-        dataset: Option<QueryDataset>,
-        /// The query selection graph pattern.
-        pattern: GraphPattern,
-        /// The query base IRI.
-        base_iri: Option<Iri<String>>,
-    },
+    Select(SelectQuery),
     /// [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct).
-    Construct {
-        /// The query construction template.
-        template: Vec<TriplePattern>,
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-        dataset: Option<QueryDataset>,
-        /// The query selection graph pattern.
-        pattern: GraphPattern,
-        /// The query base IRI.
-        base_iri: Option<Iri<String>>,
-    },
+    Construct(ConstructQuery),
     /// [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe).
-    Describe {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-        dataset: Option<QueryDataset>,
-        /// The query selection graph pattern.
-        pattern: GraphPattern,
-        /// The query base IRI.
-        base_iri: Option<Iri<String>>,
-    },
+    Describe(DescribeQuery),
     /// [ASK](https://www.w3.org/TR/sparql11-query/#ask).
-    Ask {
-        /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-        dataset: Option<QueryDataset>,
-        /// The query selection graph pattern.
-        pattern: GraphPattern,
-        /// The query base IRI.
-        base_iri: Option<Iri<String>>,
-    },
+    Ask(AskQuery),
 }
 
 impl Query {
-    /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    #[deprecated(
-        note = "Use `SparqlParser::new().parse_query` instead",
-        since = "0.4.0"
-    )]
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        let mut parser = SparqlParser::new();
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
-        }
-        parser.parse_query(query)
-    }
-
     #[inline]
     pub fn dataset(&self) -> Option<&QueryDataset> {
         match self {
-            Query::Select { dataset, .. }
-            | Query::Construct { dataset, .. }
-            | Query::Describe { dataset, .. }
-            | Query::Ask { dataset, .. } => dataset.as_ref(),
+            Self::Select(query) => query.dataset.as_ref(),
+            Self::Construct(query) => query.dataset.as_ref(),
+            Self::Describe(query) => query.dataset.as_ref(),
+            Self::Ask(query) => query.dataset.as_ref(),
         }
     }
 
     #[inline]
     pub fn dataset_mut(&mut self) -> Option<&mut QueryDataset> {
         match self {
-            Query::Select { dataset, .. }
-            | Query::Construct { dataset, .. }
-            | Query::Describe { dataset, .. }
-            | Query::Ask { dataset, .. } => dataset.as_mut(),
+            Self::Select(query) => query.dataset.as_mut(),
+            Self::Construct(query) => query.dataset.as_mut(),
+            Self::Describe(query) => query.dataset.as_mut(),
+            Self::Ask(query) => query.dataset.as_mut(),
         }
     }
 
     #[inline]
     pub fn base_iri(&self) -> Option<&Iri<String>> {
         match self {
-            Query::Select { base_iri, .. }
-            | Query::Construct { base_iri, .. }
-            | Query::Describe { base_iri, .. }
-            | Query::Ask { base_iri, .. } => base_iri.as_ref(),
+            Self::Select(query) => query.base_iri.as_ref(),
+            Self::Construct(query) => query.base_iri.as_ref(),
+            Self::Describe(query) => query.base_iri.as_ref(),
+            Self::Ask(query) => query.base_iri.as_ref(),
         }
     }
 
@@ -118,108 +75,10 @@ impl Query {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Select {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{base_iri}> ")?;
-                }
-                if let Some(dataset) = dataset {
-                    f.write_str("(dataset ")?;
-                    dataset.fmt_sse(f)?;
-                    f.write_str(" ")?;
-                }
-                pattern.fmt_sse(f)?;
-                if dataset.is_some() {
-                    f.write_str(")")?;
-                }
-                if base_iri.is_some() {
-                    f.write_str(")")?;
-                }
-                Ok(())
-            }
-            Self::Construct {
-                template,
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{base_iri}> ")?;
-                }
-                f.write_str("(construct (")?;
-                for (i, t) in template.iter().enumerate() {
-                    if i > 0 {
-                        f.write_str(" ")?;
-                    }
-                    t.fmt_sse(f)?;
-                }
-                f.write_str(") ")?;
-                if let Some(dataset) = dataset {
-                    f.write_str("(dataset ")?;
-                    dataset.fmt_sse(f)?;
-                    f.write_str(" ")?;
-                }
-                pattern.fmt_sse(f)?;
-                if dataset.is_some() {
-                    f.write_str(")")?;
-                }
-                f.write_str(")")?;
-                if base_iri.is_some() {
-                    f.write_str(")")?;
-                }
-                Ok(())
-            }
-            Self::Describe {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{base_iri}> ")?;
-                }
-                f.write_str("(describe ")?;
-                if let Some(dataset) = dataset {
-                    f.write_str("(dataset ")?;
-                    dataset.fmt_sse(f)?;
-                    f.write_str(" ")?;
-                }
-                pattern.fmt_sse(f)?;
-                if dataset.is_some() {
-                    f.write_str(")")?;
-                }
-                f.write_str(")")?;
-                if base_iri.is_some() {
-                    f.write_str(")")?;
-                }
-                Ok(())
-            }
-            Self::Ask {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    write!(f, "(base <{base_iri}> ")?;
-                }
-                f.write_str("(ask ")?;
-                if let Some(dataset) = dataset {
-                    f.write_str("(dataset ")?;
-                    dataset.fmt_sse(f)?;
-                    f.write_str(" ")?;
-                }
-                pattern.fmt_sse(f)?;
-                if dataset.is_some() {
-                    f.write_str(")")?;
-                }
-                f.write_str(")")?;
-                if base_iri.is_some() {
-                    f.write_str(")")?;
-                }
-                Ok(())
-            }
+            Self::Select(query) => query.fmt_sse(f),
+            Self::Construct(query) => query.fmt_sse(f),
+            Self::Describe(query) => query.fmt_sse(f),
+            Self::Ask(query) => query.fmt_sse(f),
         }
     }
 }
@@ -227,79 +86,10 @@ impl Query {
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Select {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{base_iri}>")?;
-                }
-                write!(
-                    f,
-                    "{}",
-                    SparqlGraphRootPattern::new(pattern, dataset.as_ref())
-                )
-            }
-            Self::Construct {
-                template,
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{base_iri}>")?;
-                }
-                f.write_str("CONSTRUCT { ")?;
-                for triple in template {
-                    write!(f, "{triple} . ")?;
-                }
-                f.write_str("}")?;
-                if let Some(dataset) = dataset {
-                    dataset.fmt(f)?;
-                }
-                write!(
-                    f,
-                    " WHERE {{ {} }}",
-                    SparqlGraphRootPattern::new(pattern, None)
-                )
-            }
-            Self::Describe {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{}>", base_iri.as_str())?;
-                }
-                f.write_str("DESCRIBE *")?;
-                if let Some(dataset) = dataset {
-                    dataset.fmt(f)?;
-                }
-                write!(
-                    f,
-                    " WHERE {{ {} }}",
-                    SparqlGraphRootPattern::new(pattern, None)
-                )
-            }
-            Self::Ask {
-                dataset,
-                pattern,
-                base_iri,
-            } => {
-                if let Some(base_iri) = base_iri {
-                    writeln!(f, "BASE <{base_iri}>")?;
-                }
-                f.write_str("ASK")?;
-                if let Some(dataset) = dataset {
-                    dataset.fmt(f)?;
-                }
-                write!(
-                    f,
-                    " WHERE {{ {} }}",
-                    SparqlGraphRootPattern::new(pattern, None)
-                )
-            }
+            Self::Select(query) => query.fmt(f),
+            Self::Construct(query) => query.fmt(f),
+            Self::Describe(query) => query.fmt(f),
+            Self::Ask(query) => query.fmt(f),
         }
     }
 }
@@ -325,5 +115,307 @@ impl TryFrom<&String> for Query {
 
     fn try_from(query: &String) -> Result<Self, Self::Error> {
         Self::from_str(query)
+    }
+}
+
+/// A parsed  [SELECT SPARQL query](https://www.w3.org/TR/sparql11-query/#select).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct SelectQuery {
+    /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
+    pub dataset: Option<QueryDataset>,
+    /// The query selection graph pattern.
+    pub pattern: GraphPattern,
+    /// The query base IRI.
+    pub base_iri: Option<Iri<String>>,
+}
+
+impl SelectQuery {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub fn to_sse(&self) -> String {
+        let mut buffer = String::new();
+        self.fmt_sse(&mut buffer).unwrap();
+        buffer
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            write!(f, "(base <{base_iri}> ")?;
+        }
+        if let Some(dataset) = &self.dataset {
+            f.write_str("(dataset ")?;
+            dataset.fmt_sse(f)?;
+            f.write_str(" ")?;
+        }
+        self.pattern.fmt_sse(f)?;
+        if self.dataset.is_some() {
+            f.write_str(")")?;
+        }
+        if self.base_iri.is_some() {
+            f.write_str(")")?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for SelectQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{base_iri}>")?;
+        }
+        SparqlGraphRootPattern::new(&self.pattern, self.dataset.as_ref())?.fmt(f)
+    }
+}
+
+impl From<SelectQuery> for Query {
+    #[inline]
+    fn from(query: SelectQuery) -> Self {
+        Self::Select(query)
+    }
+}
+
+/// A parsed [CONSTRUCT SPARQL query](https://www.w3.org/TR/sparql11-query/#construct).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct ConstructQuery {
+    /// The query construction template.
+    pub template: Vec<TriplePattern>,
+    /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
+    pub dataset: Option<QueryDataset>,
+    /// The query selection graph pattern.
+    pub pattern: GraphPattern,
+    /// The query base IRI.
+    pub base_iri: Option<Iri<String>>,
+}
+
+impl ConstructQuery {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub fn to_sse(&self) -> String {
+        let mut buffer = String::new();
+        self.fmt_sse(&mut buffer).unwrap();
+        buffer
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            write!(f, "(base <{base_iri}> ")?;
+        }
+        f.write_str("(construct (")?;
+        for (i, t) in self.template.iter().enumerate() {
+            if i > 0 {
+                f.write_str(" ")?;
+            }
+            t.fmt_sse(f)?;
+        }
+        f.write_str(") ")?;
+        if let Some(dataset) = &self.dataset {
+            f.write_str("(dataset ")?;
+            dataset.fmt_sse(f)?;
+            f.write_str(" ")?;
+        }
+        self.pattern.fmt_sse(f)?;
+        if self.dataset.is_some() {
+            f.write_str(")")?;
+        }
+        f.write_str(")")?;
+        if self.base_iri.is_some() {
+            f.write_str(")")?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for ConstructQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{base_iri}>")?;
+        }
+        f.write_str("CONSTRUCT { ")?;
+        for triple in &self.template {
+            write!(f, "{triple} . ")?;
+        }
+        f.write_str("}")?;
+        if let Some(dataset) = &self.dataset {
+            write!(f, " {dataset}")?;
+        }
+        let mut pattern = &self.pattern;
+        // We ignore the root projection, it's useless
+        if let GraphPattern::Project { inner, .. } = pattern {
+            pattern = inner;
+        }
+        write!(f, " WHERE {{ {pattern} }}")
+    }
+}
+
+impl From<ConstructQuery> for Query {
+    #[inline]
+    fn from(query: ConstructQuery) -> Self {
+        Self::Construct(query)
+    }
+}
+
+/// A parsed [DESCRIBE SPARQL query](https://www.w3.org/TR/sparql11-query/#describe).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct DescribeQuery {
+    /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
+    pub dataset: Option<QueryDataset>,
+    /// The query selection graph pattern.
+    pub pattern: GraphPattern,
+    /// The query base IRI.
+    pub base_iri: Option<Iri<String>>,
+}
+
+impl DescribeQuery {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub fn to_sse(&self) -> String {
+        let mut buffer = String::new();
+        self.fmt_sse(&mut buffer).unwrap();
+        buffer
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            write!(f, "(base <{base_iri}> ")?;
+        }
+        f.write_str("(describe ")?;
+        if let Some(dataset) = &self.dataset {
+            f.write_str("(dataset ")?;
+            dataset.fmt_sse(f)?;
+            f.write_str(" ")?;
+        }
+        self.pattern.fmt_sse(f)?;
+        if self.dataset.is_some() {
+            f.write_str(")")?;
+        }
+        f.write_str(")")?;
+        if self.base_iri.is_some() {
+            f.write_str(")")?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for DescribeQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{}>", base_iri.as_str())?;
+        }
+
+        // We find the DESCRIBE IRIs
+        let mut pattern = &self.pattern;
+        let mut iris = Vec::new();
+        while let GraphPattern::Extend {
+            inner,
+            expression: Expression::NamedNode(iri),
+            ..
+        } = pattern
+        {
+            iris.push(iri);
+            pattern = inner;
+        }
+
+        // If there is a projection, we can inline it too
+        let mut select_variables = Vec::new();
+        if let GraphPattern::Project { inner, variables } = pattern {
+            select_variables.extend(variables);
+            pattern = inner;
+        } else {
+            pattern.on_in_scope_variable(|v| {
+                if !select_variables.contains(&v) {
+                    select_variables.push(v);
+                }
+            })
+        }
+
+        f.write_str("DESCRIBE ")?;
+        if select_variables.is_empty() && iris.is_empty() {
+            writeln!(f, " *")?;
+        }
+        for variable in select_variables {
+            write!(f, " {variable}")?;
+        }
+        for iri in iris.iter().rev() {
+            // reverse to keep the same order as the parsing
+            write!(f, " {iri}")?;
+        }
+        if let Some(dataset) = &self.dataset {
+            dataset.fmt(f)?;
+        }
+        write!(f, " WHERE {{ {pattern} }}")
+    }
+}
+
+impl From<DescribeQuery> for Query {
+    #[inline]
+    fn from(query: DescribeQuery) -> Self {
+        Self::Describe(query)
+    }
+}
+
+/// A parsed [ASK SPARQL query](https://www.w3.org/TR/sparql11-query/#ask).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct AskQuery {
+    /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
+    pub dataset: Option<QueryDataset>,
+    /// The query selection graph pattern.
+    pub pattern: GraphPattern,
+    /// The query base IRI.
+    pub base_iri: Option<Iri<String>>,
+}
+
+impl AskQuery {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub fn to_sse(&self) -> String {
+        let mut buffer = String::new();
+        self.fmt_sse(&mut buffer).unwrap();
+        buffer
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            write!(f, "(base <{base_iri}> ")?;
+        }
+        f.write_str("(ask ")?;
+        if let Some(dataset) = &self.dataset {
+            f.write_str("(dataset ")?;
+            dataset.fmt_sse(f)?;
+            f.write_str(" ")?;
+        }
+        self.pattern.fmt_sse(f)?;
+        if self.dataset.is_some() {
+            f.write_str(")")?;
+        }
+        f.write_str(")")?;
+        if self.base_iri.is_some() {
+            f.write_str(")")?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for AskQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(base_iri) = &self.base_iri {
+            writeln!(f, "BASE <{base_iri}>")?;
+        }
+        f.write_str("ASK")?;
+        if let Some(dataset) = &self.dataset {
+            write!(f, " {dataset}")?;
+        }
+        let mut pattern = &self.pattern;
+        // We ignore the root projection, it's useless
+        if let GraphPattern::Project { inner, .. } = pattern {
+            pattern = inner;
+        }
+        write!(f, " WHERE {{ {pattern} }}")
+    }
+}
+
+impl From<AskQuery> for Query {
+    #[inline]
+    fn from(query: AskQuery) -> Self {
+        Self::Ask(query)
     }
 }

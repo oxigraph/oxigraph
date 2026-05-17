@@ -1,5 +1,3 @@
-#![allow(clippy::large_enum_variant)]
-
 use crate::csv::{
     ReaderTsvQueryResultsParserOutput, ReaderTsvSolutionsParser, SliceTsvQueryResultsParserOutput,
     SliceTsvSolutionsParser,
@@ -322,6 +320,7 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[expect(clippy::large_enum_variant)]
 pub enum ReaderQueryResultsParserOutput<R: Read> {
     Solutions(ReaderSolutionsParser<R>),
     Boolean(bool),
@@ -441,6 +440,7 @@ impl<R: Read> Iterator for ReaderSolutionsParser<R> {
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions(TokioAsyncReaderSolutionsParser<R>),
     Boolean(bool),
@@ -560,6 +560,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[expect(clippy::large_enum_variant)]
 pub enum SliceQueryResultsParserOutput<'a> {
     Solutions(SliceSolutionsParser<'a>),
     Boolean(bool),

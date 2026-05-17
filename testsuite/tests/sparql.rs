@@ -7,13 +7,10 @@ use oxigraph_testsuite::check_testsuite;
 fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
-        &[
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", /* tokenizer */
-        ],
+        &[],
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
     check_testsuite(
@@ -32,8 +29,6 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
             // We use XSD 1.1 equality on dates
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
-            // We choose to simplify first the nested group patterns in OPTIONAL
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
             // This test relies on naive iteration on the input file
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
@@ -73,6 +68,8 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
         &[
+            // xsd:string cast is using xsd:double canonical serialization
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/cast/manifest#cast-string",
             // Our scoping of variables introduced by GRAPH is wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#graph-minus",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-graph",
@@ -134,6 +131,7 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(feature = "rdf-12")]
 #[test]
 fn sparql12_w3c_testsuite() -> Result<()> {
     check_testsuite(

@@ -22,9 +22,12 @@ Oxigraph internal design [is described on the wiki](https://github.com/oxigraph/
 
 Oxigraph implements the following specifications:
 
-- [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
-- [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval.
-- [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
+- [SPARQL Query](https://www.w3.org/TR/sparql-query/), [SPARQL Update](https://www.w3.org/TR/sparql-update/), and [SPARQL Federated Query](https://www.w3.org/TR/sparql-federated-query/).
+- [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) and [JSON-LD](https://www.w3.org/TR/json-ld/) RDF serialization formats for both data ingestion and retrieval.
+- [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql-results-json/) and [SPARQL Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql-results-csv-tsv/).
+- [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/).
+
+Most implementations are nearly fully conformant with the latest recommendations (1.1 for RDF, SPARQL and JSON-LD) with preliminary support for 1.2 RDF and SPARQL drafts.
 
 It is split into multiple parts:
 
@@ -43,11 +46,13 @@ Also, some parts of Oxigraph are available as standalone Rust crates:
 * [`oxrdfio`](./lib/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
   * [`oxttl`](./lib/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
   * [`oxrdfxml`](./lib/oxrdfxml), RDF/XML parsing and serialization.
+  * [`oxjsonld`](./lib/oxjsonld), JSON-LD RDF serialization/deserialization algorithms.
 * [`spareval`](./lib/spareval), a SPARQL evaluator.
 * [`spargebra`](./lib/spargebra), a SPARQL parser.
 * [`sparesults`](./lib/sparesults), parsers and serializers for SPARQL result formats.
 * [`sparopt`](./lib/sparopt), a SPARQL optimizer.
 * [`oxsdatatypes`](./lib/oxsdatatypes), an implementation of some XML Schema datatypes.
+* [`spargeo`](./lib/spargeo), a partial implementation of [GeoSPARQL](https://docs.ogc.org/is/22-047r1/22-047r1.html).
 
 The library layers in Oxigraph. The elements above depend on the elements below:
 ![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)
@@ -89,7 +94,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 * [RelationLabs](https://relationlabs.ai/) that is building [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
 * [Field 33](https://field33.com) that was building [an ontology management platform](https://plow.pm/).
 * [Magnus Bakken](https://github.com/magbak) who is building [Data Treehouse](https://www.data-treehouse.com/), a time-series + RDF datalake platform, and [chrontext](https://github.com/magbak/chrontext), a SPARQL query endpoint on top of joint RDF and time series databases.
-* [DeciSym.AI](https://www.decisym.ai/) a cyber security consulting company providing RDF-based software.
+* [DeciSym.AI](https://www.decisym.ai/) a cybersecurity consulting company providing RDF-based software.
 * [ACE IoT Solutions](https://aceiotsolutions.com/), a building IOT platform.
 * [Albin Larsson](https://byabbe.se/) who is building [GovDirectory](https://www.govdirectory.org/), a directory of public agencies based on Wikidata.
 

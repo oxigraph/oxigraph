@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:ehContains(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("Polygon((0 0, 10 0, 10 10, 0 10, 0 0))"^^geo:wktLiteral "Polygon((3 3, 4 3, 4 4, 3 4, 3 3))"^^geo:wktLiteral)
+        ("Polygon((0 0, 1 0, 1 1, 0 1, 0 0))"^^geo:wktLiteral "Polygon((5 5, 6 5, 6 6, 5 6, 5 5))"^^geo:wktLiteral)
+    }
+}

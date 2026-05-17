@@ -1,29 +1,29 @@
 [workspace]
 members = [
-    "cli",
-    "js",
-    "lib/oxigraph",
-    "lib/oxjsonld",
-    "lib/oxrdf",
-    "lib/oxrdfio",
-    "lib/oxrdfxml",
-    "lib/oxsdatatypes",
-    "lib/oxttl",
-    "lib/sparesults",
-    "lib/spareval",
-    "lib/spareval-fusion",
-    "lib/spargebra",
-    "lib/spargeo",
-    "lib/sparopt",
-    "lib/sparql-smith",
-    "oxrocksdb-sys",
-    "python",
-    "testsuite"
+  "cli",
+  "js",
+  "lib/oxigraph",
+  "lib/oxjsonld",
+  "lib/oxrdf",
+  "lib/oxrdfio",
+  "lib/oxrdfxml",
+  "lib/oxsdatatypes",
+  "lib/oxttl",
+  "lib/sparesults",
+  "lib/spareval",
+  "lib/spareval-fusion",
+  "lib/spargebra",
+  "lib/spargeo",
+  "lib/sparopt",
+  "lib/sparql-smith",
+  "oxrocksdb-sys",
+  "python",
+  "testsuite",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.3"
+version = "0.5.7"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
@@ -38,9 +38,10 @@ async-trait = "0.1"
 bindgen = ">=0.71,<0.73"
 bzip2 = ">=0.4, <0.7"
 cc = "1.0.73"
-clap = "4.0"
+chumsky = { version = "0.13", default-features = false }
+clap = "4.5"
 clap_complete = "4.0"
-clap_mangen = "0.2.19"
+clap_mangen = ">=0.2.19,<0.4"
 codspeed-criterion-compat = ">=2.3.3,<5.0"
 console_error_panic_hook = "0.1.7"
 csv = "1.3"
@@ -49,55 +50,57 @@ dashmap = ">=5.4, <7.0"
 datafusion = "52"
 flate2 = "1.0"
 futures = "0.3"
-geo = ">=0.28, <0.32"  # TODO: upgrade when the dependency on old getrandom will be dropped
-geojson = "0.24"
-getrandom = "0.3"
+geo = ">=0.31,<0.34"
+geojson = ">=0.24,<2"
+getrandom = "0.4"
 hex = "0.4"
-js-sys = "0.3.77"
-json-event-parser = "0.2.2"
+js-sys = "0.3.98"
+json-event-parser = "0.2.3"
 libc = "0.2.155"
-md-5 = "0.10"
-memchr = "2.5"
+logos = "0.16"
+md-5 = ">=0.10,<0.12"
+memchr = "2.6"
 oxhttp = "0.3"
 oxilangtag = "0.1"
 oxiri = "0.2.11"
-peg = "0.8"
 pkg-config = "0.3.25"
 predicates = ">=2.0, <4.0"
-pyo3 = "0.27"
-quick-xml = "0.37"
-rand = "0.9"
-rayon = "1.8.1"
-rayon-core = "1.12.1"
+pyo3 = "0.28"
+quick-xml = "0.40"
+rand = "0.10"
+rayon = "1.11"
+rayon-core = "1.13.0"
 regex = "1.7"
 rustc-hash = "2.1"
+ryu-js = "1"
 serde = "1.0.200"
 serde_json = "1.0.120"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = ">=0.10,<0.12"
+sha2 = ">=0.10,<0.12"
 siphasher = ">=0.3.10, <2.0"
 tempfile = "3.1"
 thiserror = ">=1.0.50, <3.0"
 time = "0.3"
 tokio = "1.29"
 url = "2.4"
-wasm-bindgen = "0.2.100"
+wasm-bindgen = "0.2.121"
+wasm-bindgen-futures = "0.4.71"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.3", path = "lib/oxigraph" }
-oxjsonld = { version = "=0.2.1", path = "lib/oxjsonld" }
-oxrdf = { version = "=0.3.1", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.2.1", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.2.1", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.5.3", path = "./oxrocksdb-sys" }
+oxigraph = { version = "=0.5.7", path = "lib/oxigraph", default-features = false }
+oxjsonld = { version = "=0.2.5", path = "lib/oxjsonld" }
+oxrdf = { version = "=0.3.3", path = "lib/oxrdf" }
+oxrdfio = { version = "=0.2.5", path = "lib/oxrdfio" }
+oxrdfxml = { version = "=0.2.3", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { version = "=0.5.7", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.2.1", path = "lib/oxttl" }
-spargebra = { version = "=0.4.3", path = "lib/spargebra" }
-spargeo = { version = "=0.5.2", path = "lib/spargeo" }
-sparesults = { version = "=0.3.1", path = "lib/sparesults" }
-sparopt = { version = "=0.3.3", path = "lib/sparopt" }
-spareval = { version = "=0.2.3", path = "lib/spareval" }
+oxttl = { version = "=0.2.3", path = "lib/oxttl" }
+spargebra = { version = "=0.4.6", path = "lib/spargebra" }
+spargeo = { version = "=0.5.4", path = "lib/spargeo" }
+sparesults = { version = "=0.3.3", path = "lib/sparesults" }
+sparopt = { version = "=0.3.6", path = "lib/sparopt" }
+spareval = { version = "=0.2.6", path = "lib/spareval" }
 spareval-fusion = { version = "=0.0.1-dev", path = "lib/spareval-fusion" }
 
 [workspace.lints.rust]
@@ -117,6 +120,7 @@ unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 allow_attributes = "warn"
+as_pointer_underscore = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 assigning_clones = "warn"
@@ -133,18 +137,26 @@ cfg_not_test = "warn"
 checked_conversions = "warn"
 clone_on_ref_ptr = "warn"
 cloned_instead_of_copied = "warn"
+collapsible_else_if = "warn"
+comparison_chain = "warn"
 copy_iterator = "warn"
 create_dir = "warn"
 dbg_macro = "warn"
+decimal_bitwise_operands = "warn"
 decimal_literal_representation = "warn"
 default_trait_access = "warn"
 default_union_representation = "warn"
 deref_by_slicing = "warn"
 disallowed_script_idents = "warn"
+doc_broken_link = "warn"
+doc_comment_double_space_linebreaks = "warn"
+doc_include_without_cfg = "warn"
 doc_link_with_quotes = "warn"
+duration_suboptimal_units = "warn"
+elidable_lifetime_names = "warn"
 empty_drop = "warn"
-empty_enum = "warn"
 empty_enum_variants_with_brackets = "warn"
+empty_enums = "warn"
 empty_structs_with_brackets = "warn"
 enum_glob_use = "warn"
 error_impl_error = "warn"
@@ -160,12 +172,14 @@ filter_map_next = "warn"
 flat_map_option = "warn"
 fn_params_excessive_bools = "warn"
 fn_to_numeric_cast_any = "warn"
+format_collect = "warn"
 format_push_string = "warn"
 from_iter_instead_of_collect = "warn"
 get_unwrap = "warn"
 host_endian_bytes = "warn"
 if_not_else = "warn"
 if_then_some_else_none = "warn"
+ignore_without_reason = "warn"
 ignored_unit_patterns = "warn"
 implicit_clone = "warn"
 implicit_hasher = "warn"
@@ -174,10 +188,9 @@ index_refutable_slice = "warn"
 inefficient_to_string = "warn"
 infinite_loop = "warn"
 inline_always = "warn"
-inline_asm_x86_att_syntax = "warn"
-inline_asm_x86_intel_syntax = "warn"
 into_iter_without_iter = "warn"
 invalid_upcast_comparisons = "warn"
+ip_constant = "warn"
 items_after_statements = "warn"
 iter_filter_is_ok = "warn"
 iter_filter_is_some = "warn"
@@ -195,12 +208,14 @@ lossy_float_literal = "warn"
 macro_use_imports = "warn"
 manual_assert = "warn"
 manual_instant_elapsed = "warn"
+manual_is_power_of_two = "warn"
 manual_is_variant_and = "warn"
 manual_let_else = "warn"
-manual_ok_or = "warn"
+manual_midpoint = "warn"
 manual_string_new = "warn"
 many_single_char_names = "warn"
 map_unwrap_or = "warn"
+map_with_unused_argument_over_ranges = "warn"
 match_bool = "warn"
 match_same_arms = "warn"
 match_wild_err_arm = "warn"
@@ -214,6 +229,7 @@ missing_fields_in_debug = "warn"
 multiple_inherent_impl = "warn"
 mut_mut = "warn"
 mutex_atomic = "warn"
+mutex_integer = "warn"
 naive_bytecount = "warn"
 needless_bitwise_bool = "warn"
 needless_continue = "warn"
@@ -225,16 +241,20 @@ negative_feature_names = "warn"
 no_effect_underscore_binding = "warn"
 no_mangle_with_rust_abi = "warn"
 non_ascii_literal = "warn"
+non_std_lazy_statics = "warn"
 non_zero_suggestions = "warn"
 option_as_ref_cloned = "warn"
 panic = "warn"
 panic_in_result_fn = "warn"
 partial_pub_fields = "warn"
 pathbuf_init_then_push = "warn"
+pointer_format = "warn"
+precedence_bits = "warn"
 print_stderr = "warn"
 print_stdout = "warn"
 ptr_as_ptr = "warn"
 ptr_cast_constness = "warn"
+ptr_offset_by_literal = "warn"
 pub_underscore_fields = "warn"
 pub_without_shorthand = "warn"
 range_minus_one = "warn"
@@ -251,9 +271,12 @@ ref_option_ref = "warn"
 ref_patterns = "warn"
 renamed_function_params = "warn"
 rest_pat_in_fully_bound_structs = "warn"
+return_and_then = "warn"
 return_self_not_must_use = "warn"
 same_functions_in_if_condition = "warn"
+same_length_and_capacity = "warn"
 same_name_method = "warn"
+self_only_used_in_recursion = "warn"
 semicolon_inside_block = "warn"
 shadow_same = "warn"
 should_panic_without_expect = "warn"
@@ -273,16 +296,20 @@ todo = "warn"
 transmute_ptr_to_ptr = "warn"
 trivially_copy_pass_by_ref = "warn"
 try_err = "warn"
-unchecked_duration_subtraction = "warn"
+unchecked_time_subtraction = "warn"
 undocumented_unsafe_blocks = "warn"
 unicode_not_nfc = "warn"
 unimplemented = "warn"
 uninlined_format_args = "warn"
 unnecessary_box_returns = "warn"
+unnecessary_debug_formatting = "warn"
 unnecessary_join = "warn"
+unnecessary_literal_bound = "warn"
 unnecessary_safety_comment = "warn"
 unnecessary_safety_doc = "warn"
 unnecessary_self_imports = "warn"
+unnecessary_semicolon = "warn"
+unnecessary_trailing_comma = "warn"
 unnecessary_wraps = "warn"
 unneeded_field_pattern = "warn"
 unnested_or_patterns = "warn"

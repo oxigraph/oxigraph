@@ -1,6 +1,6 @@
 [package]
 name = "spargebra"
-version = "0.4.3"
+version = "0.4.6"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
@@ -16,13 +16,14 @@ default = []
 sparql-12 = ["oxrdf/rdf-12"]
 sep-0002 = []
 sep-0006 = []
-standard-unicode-escaping = [] # Allow \uXXXX anywhere in the query/update and not only in IRIs and literals, following the SPARQL specification
+standard-unicode-escaping = [
+] # Allow \uXXXX anywhere in the query/update and not only in IRIs and literals, following the SPARQL specification
 
 [dependencies]
-oxilangtag.workspace = true
+chumsky = { workspace = true, features = ["pratt", "stacker"] }
+logos.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
-peg.workspace = true
 rand.workspace = true
 thiserror.workspace = true
 

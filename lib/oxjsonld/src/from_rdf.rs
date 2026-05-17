@@ -1,3 +1,4 @@
+use crate::context::has_keyword_form;
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
@@ -411,20 +412,9 @@ impl InnerJsonLdWriter {
         if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
-            #[allow(
-                unreachable_patterns,
-                clippy::match_wildcard_for_single_variants,
-                clippy::allow_attributes
-            )]
             output.push(JsonEvent::String(self.id_value(match quad.subject {
                 NamedOrBlankNodeRef::NamedNode(iri) => iri.into(),
                 NamedOrBlankNodeRef::BlankNode(bnode) => bnode.into(),
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "JSON-LD does not support RDF 1.2 yet",
-                    ));
-                }
             })));
             self.current_subject = Some(quad.subject.into_owned());
         }
@@ -471,11 +461,8 @@ impl InnerJsonLdWriter {
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         output.push(JsonEvent::StartObject);
-        #[allow(
-            unreachable_patterns,
-            clippy::match_wildcard_for_single_variants,
-            clippy::allow_attributes
-        )]
+        #[cfg_attr(feature = "rdf-12", expect(clippy::match_wildcard_for_single_variants))]
+        #[cfg_attr(not(feature = "rdf-12"), expect(unreachable_patterns))]
         match term {
             TermRef::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
@@ -526,10 +513,11 @@ impl InnerJsonLdWriter {
                 if let Some(base_iri) = &self.base_iri {
                     if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
                         let relative = relative.into_inner();
-                        // We check the relative IRI is not considered as absolute by IRI expansion
+                        // We check the relative IRI is not considered as absolute or a keyword by IRI expansion
                         if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
                             prefix == "_" || suffix.starts_with("//")
-                        }) {
+                        }) && !has_keyword_form(&relative)
+                        {
                             return relative.into();
                         }
                     }

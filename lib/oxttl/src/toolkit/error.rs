@@ -45,7 +45,7 @@ impl fmt::Display for TurtleSyntaxError {
         if self.location.start.offset + 1 >= self.location.end.offset {
             write!(
                 f,
-                "Parser error at line {} column {}: {}",
+                "Syntax error at line {} column {}: {}",
                 self.location.start.line + 1,
                 self.location.start.column + 1,
                 self.message
@@ -53,7 +53,7 @@ impl fmt::Display for TurtleSyntaxError {
         } else if self.location.start.line == self.location.end.line {
             write!(
                 f,
-                "Parser error at line {} between columns {} and {}: {}",
+                "Syntax error at line {} between columns {} and {}: {}",
                 self.location.start.line + 1,
                 self.location.start.column + 1,
                 self.location.end.column + 1,
@@ -62,7 +62,7 @@ impl fmt::Display for TurtleSyntaxError {
         } else {
             write!(
                 f,
-                "Parser error between line {} column {} and line {} column {}: {}",
+                "Syntax error between line {} column {} and line {} column {}: {}",
                 self.location.start.line + 1,
                 self.location.start.column + 1,
                 self.location.end.line + 1,

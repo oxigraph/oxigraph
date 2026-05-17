@@ -150,6 +150,18 @@ impl Literal {
         self.as_ref().value()
     }
 
+    /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
+    #[inline]
+    pub fn into_value(self) -> String {
+        match self.0 {
+            LiteralContent::String(value)
+            | LiteralContent::TypedLiteral { value, .. }
+            | LiteralContent::LanguageTaggedString { value, .. } => value,
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString { value, .. } => value,
+        }
+    }
+
     /// The literal [language tag](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag) if it is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     ///
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
@@ -175,17 +187,6 @@ impl Literal {
     #[inline]
     pub fn datatype(&self) -> NamedNodeRef<'_> {
         self.as_ref().datatype()
-    }
-
-    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/2004/REC-rdf-concepts-20040210/#dfn-plain-literal).
-    ///
-    /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
-    #[inline]
-    #[deprecated(note = "Plain literal concept is removed in RDF 1.1", since = "0.3.0")]
-    pub fn is_plain(&self) -> bool {
-        #[expect(deprecated)]
-        self.as_ref().is_plain()
     }
 
     #[inline]
@@ -363,12 +364,19 @@ impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: if value == f32::INFINITY {
-                "INF".to_owned()
-            } else if value == f32::NEG_INFINITY {
-                "-INF".to_owned()
-            } else {
-                value.to_string()
+            value: {
+                #[cfg(feature = "oxsdatatypes")]
+                {
+                    Float::from(value).to_string()
+                }
+                #[cfg(not(feature = "oxsdatatypes"))]
+                if value == f32::INFINITY {
+                    "INF".to_owned()
+                } else if value == f32::NEG_INFINITY {
+                    "-INF".to_owned()
+                } else {
+                    value.to_string()
+                }
             },
             datatype: xsd::FLOAT.into(),
         })
@@ -379,12 +387,19 @@ impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: if value == f64::INFINITY {
-                "INF".to_owned()
-            } else if value == f64::NEG_INFINITY {
-                "-INF".to_owned()
-            } else {
-                value.to_string()
+            value: {
+                #[cfg(feature = "oxsdatatypes")]
+                {
+                    Double::from(value).to_string()
+                }
+                #[cfg(not(feature = "oxsdatatypes"))]
+                if value == f64::INFINITY {
+                    "INF".to_owned()
+                } else if value == f64::NEG_INFINITY {
+                    "-INF".to_owned()
+                } else {
+                    value.to_string()
+                }
             },
             datatype: xsd::DOUBLE.into(),
         })
@@ -662,19 +677,6 @@ impl<'a> LiteralRef<'a> {
         }
     }
 
-    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/2004/REC-rdf-concepts-20040210/#dfn-plain-literal).
-    ///
-    /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
-    #[inline]
-    #[deprecated(note = "Plain literal concept is removed in RDF 1.1", since = "0.3.0")]
-    pub const fn is_plain(self) -> bool {
-        matches!(
-            self.0,
-            LiteralRefContent::String(_) | LiteralRefContent::LanguageTaggedString { .. }
-        )
-    }
-
     #[inline]
     pub fn into_owned(self) -> Literal {
         Literal(match self.0 {
@@ -700,23 +702,6 @@ impl<'a> LiteralRef<'a> {
                 datatype: datatype.into_owned(),
             },
         })
-    }
-
-    /// Extract components from this literal
-    #[cfg(not(feature = "rdf-12"))]
-    #[inline]
-    #[deprecated(
-        note = "Use directly .value(), .datatype() and .language()",
-        since = "0.3.0"
-    )]
-    pub const fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
-        match self.0 {
-            LiteralRefContent::String(s) => (s, None, None),
-            LiteralRefContent::LanguageTaggedString { value, language } => {
-                (value, None, Some(language))
-            }
-            LiteralRefContent::TypedLiteral { value, datatype } => (value, Some(datatype), None),
-        }
     }
 }
 

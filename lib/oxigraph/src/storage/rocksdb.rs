@@ -14,7 +14,8 @@ use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::rocksdb_wrapper::{
-    ColumnFamily, ColumnFamilyDefinition, Db, Iter, ReadableTransaction, Reader, Transaction,
+    ColumnFamily, ColumnFamilyDefinition, Db, DbOptions, Iter, ReadableTransaction, Reader,
+    Transaction,
 };
 use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use rustc_hash::{FxBuildHasher, FxHashSet};
@@ -47,6 +48,21 @@ const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RocksDbStorageOptions {
+    pub max_open_files: Option<i32>,
+    pub fd_reserve: Option<u32>,
+}
+
+impl From<RocksDbStorageOptions> for DbOptions {
+    fn from(value: RocksDbStorageOptions) -> Self {
+        Self {
+            max_open_files: value.max_open_files,
+            fd_reserve: value.fd_reserve,
+        }
+    }
+}
+
 /// Low level storage primitives
 #[derive(Clone)]
 pub struct RocksDbStorage {
@@ -67,7 +83,18 @@ pub struct RocksDbStorage {
 
 impl RocksDbStorage {
     pub fn open(path: &Path) -> Result<Self, StorageError> {
-        Self::setup(Db::open_read_write(path, Self::column_families())?)
+        Self::open_with_options(path, RocksDbStorageOptions::default())
+    }
+
+    pub fn open_with_options(
+        path: &Path,
+        options: RocksDbStorageOptions,
+    ) -> Result<Self, StorageError> {
+        Self::setup(Db::open_read_write(
+            path,
+            Self::column_families(),
+            options.into(),
+        )?)
     }
 
     pub fn open_read_only(path: &Path) -> Result<Self, StorageError> {
@@ -703,8 +730,7 @@ impl<'a> RocksDbStorageReader<'a> {
     }
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        self.storage
-            .db
+        self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 
@@ -898,8 +924,7 @@ impl Iterator for RocksDbDecodingGraphIterator<'_> {
 impl StrLookup for RocksDbStorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
-            .storage
-            .db
+            .reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
             .map(|v| String::from_utf8(v.into()))
             .transpose()

@@ -1,3 +1,45 @@
+# [0.5.7] - 2026-04-19
+
+### Changed
+- JSON-LD: Fixes conflicts between `@type` and `@language` in property-scoped contexts.
+- Bump RocksDB to 11.0.4
+
+
+# [0.5.6] - 2026-03-14
+
+### Changed
+- SPARQL: DESCRIBE: do not describe values of blank node "variables".
+- SPARQL: Fixes some bug in the parser related to spacing.
+- SPARQL: Fixes evaluation of SERVICE clauses with unsupported custom functions.
+- JSON-LD: fixes serialization of relative IRIs looking like keywords.
+- RocksDB: reduce the number of copies in read operations.
+
+
+# [0.5.5] - 2026-02-14
+
+### Added
+- JSON-LD: JSON-LD 1.1 is now implemented and enabled by default.
+- JavaScript: the `parse` method that allows to parse a RDF file from a buffer, an iterator of buffers or and async iterator of buffers (including streams). 
+- `oxrdf`: the `Dataset.quads_for_pattern` method allowing to iterate only on quads matching a given pattern.
+- `oxjsonld`: The `JsonLdParser.with_processing_mode` method to select the JSON-LD 1.0 or 1.1 processing mode.
+
+### Changed
+- RocksDB fixes a panic when `ulimit -n` is set to a very large number.
+
+
+# [0.5.4] - 2026-01-24
+
+### Added
+- RDF/XML: support of the current 1.2 draft behind the `rdf-12` cargo feature (directional language strings and triple terms).
+- RDFC 1.0 canonicalization algorithm on the `Graph` and `Dataset` containers.
+
+### Changed
+- `oxrdf`: the default `Unstable` canonicalization algorithm has been changed for a variant of RDFC 1.0. It seems much faster in a lot of cases.
+- HTTP: always set `sd:endpoint` in the served service description (the value is guessed from the incoming request values).
+- `spareval`: make `QueryTripleIter::new` public.
+- JSON-LD: lots of internal changes in preparation of JSON-LD 1.1 support (might affect some edge cases of 1.0 parsing).
+
+
 # [0.5.3] - 2025-12-19
 
 ### Added
@@ -6,6 +48,7 @@
 ### Changed
 - SPARQL: fixes parsing of `HAVING` when there are multiple conditions.
 - SPARQL: compute ordering values for `ORDER BY` only once (allows `ORDER BY RAND()` to work properly).
+
 
 # [0.5.2] - 2025-10-25
 

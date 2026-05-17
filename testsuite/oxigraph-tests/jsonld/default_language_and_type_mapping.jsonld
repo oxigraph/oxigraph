@@ -1,0 +1,4 @@
+{
+  "@context": {"@language": "en", "@vocab": "http://example.org/", "foo": {"@type": "xsd:boolean"}},
+  "foo": "true"
+}

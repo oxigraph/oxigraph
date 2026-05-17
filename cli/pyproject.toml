@@ -1,13 +1,22 @@
 [project]
 name = "oxigraph"
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Rust",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Rust",
 ]
-dynamic = ["authors", "description", "keywords", "license", "license-files", "maintainers", "readme", "version"]
+dynamic = [
+  "authors",
+  "description",
+  "keywords",
+  "license",
+  "license-files",
+  "maintainers",
+  "readme",
+  "version",
+]
 
 [project.urls]
 Changelog = "https://github.com/oxigraph/oxigraph/blob/main/CHANGELOG.md"

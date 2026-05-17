@@ -1,0 +1,4 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ((geof:length("LineString(0 0, 3 0, 3 4)"^^geo:wktLiteral, <http://www.opengis.net/def/uom/OGC/1.0/metre>) > 0.0) AS ?result) WHERE {}

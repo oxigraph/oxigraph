@@ -4,7 +4,7 @@ use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
 use crate::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
-use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
+use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
@@ -15,13 +15,11 @@ use std::fmt::Write;
 use std::io::Read;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::str;
+use std::str::FromStr;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
-///
-/// The parser is a work in progress.
-/// Only JSON-LD 1.0 is supported at the moment. JSON-LD 1.1 is not supported yet.
 ///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
@@ -130,7 +128,6 @@ impl JsonLdParser {
 
     /// Set the [processing mode](https://www.w3.org/TR/json-ld11/#dfn-processing-mode) of the parser.
     #[inline]
-    #[doc(hidden)] // TODO: expose after implementing JSON-LD 1.1
     pub fn with_processing_mode(mut self, processing_mode: JsonLdProcessingMode) -> Self {
         self.processing_mode = processing_mode;
         self
@@ -1002,6 +999,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdEvent::StartObject
                 | JsonLdEvent::Value { .. }
+                | JsonLdEvent::Json(_)
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::EndGraph
                 | JsonLdEvent::StartList
@@ -1029,6 +1027,10 @@ impl JsonLdToRdfConverter {
                         self.convert_literal(value, language, direction, r#type),
                         results,
                     )
+                }
+                JsonLdEvent::Json(value) => {
+                    self.state.push(state);
+                    self.emit_quad_for_new_literal(Some(Self::convert_json(value)), results)
                 }
                 JsonLdEvent::EndProperty => (),
                 JsonLdEvent::StartList => {
@@ -1067,6 +1069,10 @@ impl JsonLdToRdfConverter {
                         self.convert_literal(value, language, direction, r#type),
                         results,
                     )
+                }
+                JsonLdEvent::Json(value) => {
+                    self.add_new_list_node_state(current_node, results);
+                    self.emit_quad_for_new_literal(Some(Self::convert_json(value)), results)
                 }
                 JsonLdEvent::StartList => {
                     self.add_new_list_node_state(current_node, results);
@@ -1108,7 +1114,7 @@ impl JsonLdToRdfConverter {
                         nesting: 0,
                     });
                 }
-                JsonLdEvent::Value { .. } => {
+                JsonLdEvent::Value { .. } | JsonLdEvent::Json(_) => {
                     self.state.push(state);
                 }
                 JsonLdEvent::EndGraph => (),
@@ -1133,7 +1139,7 @@ impl JsonLdToRdfConverter {
                         nesting: 0,
                     });
                 }
-                JsonLdEvent::Value { .. } => {
+                JsonLdEvent::Value { .. } | JsonLdEvent::Json(_) => {
                     // Illegal but might happen in "lenient" mode
                     self.state.push(JsonLdToRdfState::Included);
                 }
@@ -1294,7 +1300,7 @@ impl JsonLdToRdfConverter {
                 if language.is_some() {
                     return None; // Expansion already returns an error
                 }
-                let value = canonicalize_json_number(
+                let value = canonicalize_xsd_number(
                     &value,
                     r#type.as_ref().is_some_and(|t| *t == xsd::DOUBLE),
                 )
@@ -1320,6 +1326,18 @@ impl JsonLdToRdfConverter {
                 )
             }
         })
+    }
+
+    fn convert_json(value: Vec<JsonEvent<'static>>) -> Literal {
+        let mut writer = WriterJsonSerializer::new(Vec::new());
+        serialize_canonical_json(value, &mut writer);
+        Literal::new_typed_literal(
+            String::from_utf8(writer.finish().unwrap()).unwrap(),
+            #[cfg(feature = "rdf-12")]
+            rdf::JSON,
+            #[cfg(not(feature = "rdf-12"))]
+            NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON"),
+        )
     }
 
     fn last_subject(&self) -> Option<&NamedOrBlankNode> {
@@ -1389,8 +1407,8 @@ enum RdfJsonNumber {
     Double(String),
 }
 
-/// Canonicalizes the JSON number to xsd:double canonical form.
-fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonNumber> {
+/// Canonicalizes the JSON number to a xsd:integer, xsd:decimal or xsd:double.
+fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNumber> {
     // We parse
     let (value, is_negative) = if let Some(value) = value.strip_prefix('-') {
         (value, true)
@@ -1443,6 +1461,7 @@ fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonN
     Some(if !always_double && exp >= digits_count && exp < 21 {
         buffer.push_str(integer_part);
         buffer.push_str(decimal_part);
+        #[expect(clippy::map_with_unused_argument_over_ranges)]
         buffer.extend((0..(exp - digits_count)).map(|_| '0'));
         RdfJsonNumber::Integer(buffer)
     } else {
@@ -1459,102 +1478,155 @@ fn canonicalize_json_number(value: &str, always_double: bool) -> Option<RdfJsonN
     })
 }
 
+fn serialize_canonical_json(
+    events: Vec<JsonEvent<'static>>,
+    writer: &mut WriterJsonSerializer<Vec<u8>>,
+) {
+    let mut iter = events.into_iter();
+    while let Some(event) = iter.next() {
+        match event {
+            JsonEvent::StartObject => {
+                writer.serialize_event(JsonEvent::StartObject).unwrap();
+                let mut key_values = Vec::new();
+                let mut nesting = 1;
+                for event in iter.by_ref() {
+                    match event {
+                        JsonEvent::ObjectKey(k) if nesting == 1 => {
+                            key_values.push((k, Vec::new()));
+                        }
+                        JsonEvent::StartObject => {
+                            nesting += 1;
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                        JsonEvent::EndObject => {
+                            nesting -= 1;
+                            if nesting == 0 {
+                                break;
+                            }
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                        _ => {
+                            key_values.last_mut().unwrap().1.push(event);
+                        }
+                    }
+                }
+                key_values.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+                for (k, v) in key_values {
+                    writer.serialize_event(JsonEvent::ObjectKey(k)).unwrap();
+                    serialize_canonical_json(v, writer);
+                }
+                writer.serialize_event(JsonEvent::EndObject).unwrap();
+            }
+            JsonEvent::Number(value) => {
+                let value = f64::from_str(&value).unwrap();
+                let mut buffer = ryu_js::Buffer::new();
+                writer
+                    .serialize_event(JsonEvent::Number(buffer.format(value).into()))
+                    .unwrap();
+            }
+            _ => {
+                writer.serialize_event(event).unwrap();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_canonicalize_json_number() {
+    fn test_canonicalize_xsd_number() {
         assert_eq!(
-            canonicalize_json_number("12", false),
+            canonicalize_xsd_number("12", false),
             Some(RdfJsonNumber::Integer("12".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12", false),
+            canonicalize_xsd_number("-12", false),
             Some(RdfJsonNumber::Integer("-12".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1", true),
+            canonicalize_xsd_number("1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1", true),
+            canonicalize_xsd_number("1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("+1", true),
+            canonicalize_xsd_number("+1", true),
             Some(RdfJsonNumber::Double("1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-1", true),
+            canonicalize_xsd_number("-1", true),
             Some(RdfJsonNumber::Double("-1.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12", true),
+            canonicalize_xsd_number("12", true),
             Some(RdfJsonNumber::Double("1.2E1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12", true),
+            canonicalize_xsd_number("-12", true),
             Some(RdfJsonNumber::Double("-1.2E1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.3456E3", false),
+            canonicalize_xsd_number("12.3456E3", false),
             Some(RdfJsonNumber::Double("1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.3456e3", false),
+            canonicalize_xsd_number("12.3456e3", false),
             Some(RdfJsonNumber::Double("1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-12.3456E3", false),
+            canonicalize_xsd_number("-12.3456E3", false),
             Some(RdfJsonNumber::Double("-1.23456E4".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.34E-3", false),
+            canonicalize_xsd_number("12.34E-3", false),
             Some(RdfJsonNumber::Double("1.234E-2".into()))
         );
         assert_eq!(
-            canonicalize_json_number("12.340E-3", false),
+            canonicalize_xsd_number("12.340E-3", false),
             Some(RdfJsonNumber::Double("1.234E-2".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0.01234E-1", false),
+            canonicalize_xsd_number("0.01234E-1", false),
             Some(RdfJsonNumber::Double("1.234E-3".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1.0", false),
+            canonicalize_xsd_number("1.0", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1.0E0", false),
+            canonicalize_xsd_number("1.0E0", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0.01E2", false),
+            canonicalize_xsd_number("0.01E2", false),
             Some(RdfJsonNumber::Integer("1".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1E2", false),
+            canonicalize_xsd_number("1E2", false),
             Some(RdfJsonNumber::Integer("100".into()))
         );
         assert_eq!(
-            canonicalize_json_number("1E21", false),
+            canonicalize_xsd_number("1E21", false),
             Some(RdfJsonNumber::Double("1.0E21".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0", false),
+            canonicalize_xsd_number("0", false),
             Some(RdfJsonNumber::Integer("0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0", true),
+            canonicalize_xsd_number("0", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("-0", true),
+            canonicalize_xsd_number("-0", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
         assert_eq!(
-            canonicalize_json_number("0E-10", true),
+            canonicalize_xsd_number("0E-10", true),
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
     }

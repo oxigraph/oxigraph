@@ -4,13 +4,13 @@ use oxigraph::io::{
     ReaderQuadParser,
 };
 use oxigraph::model::QuadRef;
-use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
+use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
 use std::cmp::max;
 use std::collections::BTreeMap;
-use std::ffi::{CString, OsStr};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 ///
 /// It currently supports the following formats:
 ///
-/// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+/// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
 /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
 /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
 /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -54,7 +54,7 @@ use std::sync::OnceLock;
 #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false, lenient = false))]
 pub fn parse(
     input: Option<PyReadableInput>,
-    format: Option<PyRdfFormatInput>,
+    format: Option<PyRdfFormat>,
     path: Option<PathBuf>,
     base_iri: Option<&str>,
     without_named_graphs: bool,
@@ -89,7 +89,7 @@ pub fn parse(
 ///
 /// It currently supports the following formats:
 ///
-/// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+/// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
 /// * `canonical <https://www.w3.org/TR/n-triples/#canonical-ntriples>`_ `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
 /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
 /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -126,7 +126,7 @@ pub fn parse(
 pub fn serialize<'py>(
     input: &Bound<'py, PyAny>,
     output: Option<PyWritableOutput>,
-    format: Option<PyRdfFormatInput>,
+    format: Option<PyRdfFormat>,
     prefixes: Option<BTreeMap<String, String>>,
     base_iri: Option<&str>,
     py: Python<'py>,
@@ -246,7 +246,7 @@ impl PyQuadParser {
 ///
 /// The following formats are supported:
 ///
-/// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+/// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
 /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
 /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
 /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -256,7 +256,14 @@ impl PyQuadParser {
 ///
 /// >>> RdfFormat.N3.media_type
 /// 'text/n3'
-#[pyclass(frozen, name = "RdfFormat", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "RdfFormat",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyRdfFormat {
     inner: RdfFormat,
@@ -359,23 +366,6 @@ impl PyRdfFormat {
     #[getter]
     fn supports_datasets(&self) -> bool {
         self.inner.supports_datasets()
-    }
-
-    /// :return: if the format supports `RDF-star quoted triples <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted>`_.
-    /// :rtype: bool
-    ///
-    /// >>> RdfFormat.N_TRIPLES.supports_rdf_star
-    /// True
-    /// >>> RdfFormat.RDF_XML.supports_rdf_star
-    /// False
-    #[cfg(feature = "rdf-12")]
-    #[getter]
-    fn supports_rdf_star(&self) -> PyResult<bool> {
-        deprecation_warning(
-            "RdfFormat.supports_rdf_star is deprecated, all formats will support RDF 1.2 soon.",
-        )?;
-        #[expect(deprecated)]
-        Ok(self.inner.supports_rdf_star())
     }
 
     /// Looks for a known format from a media type.
@@ -600,24 +590,9 @@ impl Write for PyIo {
     }
 }
 
-pub fn lookup_rdf_format(
-    format: Option<PyRdfFormatInput>,
-    path: Option<&Path>,
-) -> PyResult<RdfFormat> {
+pub fn lookup_rdf_format(format: Option<PyRdfFormat>, path: Option<&Path>) -> PyResult<RdfFormat> {
     if let Some(format) = format {
-        return match format {
-            PyRdfFormatInput::Object(format) => Ok(format.inner),
-            PyRdfFormatInput::MediaType(media_type) => {
-                deprecation_warning(
-                    "Using string to specify a RDF format is deprecated, please use a RdfFormat object instead.",
-                )?;
-                RdfFormat::from_media_type(&media_type).ok_or_else(|| {
-                    PyValueError::new_err(format!(
-                        "The media type {media_type} is not supported by pyoxigraph"
-                    ))
-                })
-            }
-        };
+        return Ok(format.inner);
     }
     let Some(path) = path else {
         return Err(PyValueError::new_err(
@@ -632,12 +607,6 @@ pub fn lookup_rdf_format(
     };
     RdfFormat::from_extension(ext)
         .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
-}
-
-#[derive(FromPyObject)]
-pub enum PyRdfFormatInput {
-    Object(PyRdfFormat),
-    MediaType(String),
 }
 
 pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyErr {
@@ -683,16 +652,5 @@ pub fn python_version() -> (u8, u8) {
             let v = py.version_info();
             (v.major, v.minor)
         })
-    })
-}
-
-pub fn deprecation_warning(message: &str) -> PyResult<()> {
-    Python::attach(|py| {
-        PyErr::warn(
-            py,
-            &py.get_type::<PyDeprecationWarning>(),
-            CString::new(message)?.as_c_str(),
-            0,
-        )
     })
 }

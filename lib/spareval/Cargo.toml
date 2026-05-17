@@ -1,6 +1,6 @@
 [package]
 name = "spareval"
-version = "0.2.3"
+version = "0.2.6"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
@@ -13,10 +13,13 @@ rust-version.workspace = true
 
 [features]
 default = []
+geosparql = ["dep:spargeo"]
 sparql-12 = ["sparopt/sparql-12", "sparesults/sparql-12"]
 sep-0002 = ["sparopt/sep-0002"]
 sep-0006 = ["sparopt/sep-0006"]
-calendar-ext = ["sep-0002"] # Extended calendar arithmetic: gYear, gYearMonth, gMonth, gMonthDay, gDay
+calendar-ext = [
+  "sep-0002",
+] # Extended calendar arithmetic: gYear, gYearMonth, gMonth, gMonthDay, gDay
 
 
 [dependencies]
@@ -32,6 +35,7 @@ rustc-hash.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 spargebra.workspace = true
+spargeo = { workspace = true, optional = true }
 sparopt.workspace = true
 sparesults.workspace = true
 thiserror.workspace = true

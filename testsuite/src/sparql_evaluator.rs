@@ -11,19 +11,16 @@ use oxigraph::model::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
     NamedNode, Term, TermRef, Triple, TripleRef, Variable,
 };
-#[cfg(feature = "datafusion")]
-use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::sparql::results::{
     QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
 };
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
-use spareval::{
-    DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QueryResults, QuerySolutionIter,
-};
+use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
+use spargebra::SparqlParser;
 use spargebra::algebra::GraphPattern;
-use spargebra::{Query, SparqlParser};
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
+use spargebra::query::{Query, SelectQuery};
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -177,16 +174,8 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         .parse_query(&read_file_to_string(query_file)?)
         .context("Failure to parse query")?;
 
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_query(&query.to_string())
-        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
-
-    let mut evaluator = QueryEvaluator::new()
+    let evaluator = QueryEvaluator::new()
         .with_default_service_handler(StaticServiceHandler::new(&test.service_data)?);
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
 
     // FROM and FROM NAMED support. We make sure the data is in the store
     if let Some(query_dataset) = query.dataset() {
@@ -255,13 +244,10 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 
 fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test.action.as_deref().context("No action found")?;
-    let update = SparqlParser::new()
+    SparqlParser::new()
         .with_base_iri(update_file)?
         .parse_update(&read_file_to_string(update_file)?)
         .context("Not able to parse")?;
-    SparqlParser::new()
-        .parse_update(&update.to_string())
-        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
     Ok(())
 }
 
@@ -300,13 +286,10 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         .parse_update(&read_file_to_string(update_file)?)
         .context("Failure to parse update")?;
 
-    // We check parsing roundtrip
-    SparqlParser::new()
-        .parse_update(&update.to_string())
-        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
-
-    store
-        .update(update.clone())
+    SparqlEvaluator::new()
+        .for_update(update.clone())
+        .on_store(&store)
+        .execute()
         .context("Failure to execute update")?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
     store_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
@@ -379,11 +362,14 @@ impl DefaultServiceHandler for StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
         let QueryResults::Solutions(iter) = evaluator
-            .prepare(&Query::Select {
-                dataset: None,
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            })
+            .prepare(
+                &SelectQuery {
+                    dataset: None,
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
             .execute(dataset)?
         else {
             return Err(QueryEvaluationError::Service(Box::new(io::Error::new(
@@ -521,6 +507,7 @@ fn compare_terms<'a>(
         (TermRef::BlankNode(expected), TermRef::BlankNode(actual)) => {
             expected == *bnode_map.entry(actual).or_insert(expected)
         }
+        #[cfg(feature = "rdf-12")]
         (TermRef::Triple(expected), TermRef::Triple(actual)) => {
             compare_terms(
                 expected.subject.as_ref().into(),
@@ -616,7 +603,7 @@ impl StaticQueryResults {
                         Ok((bindings, index))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
+                solutions.sort_by_key(|(_, index)| *index);
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
 
@@ -770,7 +757,7 @@ fn load_to_dataset(
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let actual = (&Optimizer::optimize_graph_pattern(
-        (&if let Query::Select { pattern, .. } = SparqlParser::new()
+        (&if let Query::Select(SelectQuery { pattern, .. }) = SparqlParser::new()
             .with_base_iri(action)?
             .parse_query(&read_file_to_string(action)?)?
         {
@@ -782,9 +769,9 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     ))
         .into();
     let result = test.result.as_ref().context("No tests result found")?;
-    let Query::Select {
+    let Query::Select(SelectQuery {
         pattern: expected, ..
-    } = SparqlParser::new()
+    }) = SparqlParser::new()
         .with_base_iri(result)?
         .parse_query(&read_file_to_string(result)?)?
     else {
@@ -794,13 +781,13 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         expected == actual,
         "Not equal queries.\nDiff:\n{}\n",
         format_diff(
-            &Query::Select {
+            &SelectQuery {
                 pattern: expected,
                 dataset: None,
                 base_iri: None
             }
             .to_sse(),
-            &Query::Select {
+            &SelectQuery {
                 pattern: actual,
                 dataset: None,
                 base_iri: None

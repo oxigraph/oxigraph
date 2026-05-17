@@ -1,4 +1,4 @@
-//! Utilities to read and write RDF results formats  using [sparesults](https://crates.io/crates/sparesults).
+//! Utilities to read and write RDF results formats using [sparesults](https://crates.io/crates/sparesults).
 //!
 //! It supports [SPARQL Query Results XML Format (Second Edition)](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
 //!

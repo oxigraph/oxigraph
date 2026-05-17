@@ -339,6 +339,38 @@ impl Dataset {
             .map(|(g, s, p, o)| (s, p, o, g))
     }
 
+    /// Retrieves quads with a filter on each quad component
+    pub fn quads_for_pattern<'a>(
+        &'a self,
+        subject: Option<NamedOrBlankNodeRef<'a>>,
+        predicate: Option<NamedNodeRef<'a>>,
+        object: Option<TermRef<'a>>,
+        graph_name: Option<GraphNameRef<'a>>,
+    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+        let iter: Box<dyn Iterator<Item = _>> = if let Some(subject) = subject {
+            Box::new(self.quads_for_subject(subject).filter(move |q| {
+                predicate.as_ref().is_none_or(|p| *p == q.predicate)
+                    && object.as_ref().is_none_or(|o| *o == q.object)
+                    && graph_name.as_ref().is_none_or(|g| *g == q.graph_name)
+            }))
+        } else if let Some(object) = object {
+            Box::new(self.quads_for_object(object).filter(move |q| {
+                predicate.as_ref().is_none_or(|p| *p == q.predicate)
+                    && graph_name.as_ref().is_none_or(|g| *g == q.graph_name)
+            }))
+        } else if let Some(predicate) = predicate {
+            Box::new(
+                self.quads_for_predicate(predicate)
+                    .filter(move |q| graph_name.as_ref().is_none_or(|g| *g == q.graph_name)),
+            )
+        } else if let Some(graph_name) = graph_name {
+            Box::new(self.quads_for_graph_name(graph_name))
+        } else {
+            Box::new(self.iter())
+        };
+        iter
+    }
+
     /// Checks if the dataset contains the given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> bool {
         if let Some(q) = self.encoded_quad(quad.into()) {
@@ -1571,6 +1603,38 @@ impl<'a> GraphView<'a> {
                     ),
             )
             .map(move |(_, o, s, p)| ds.decode_spo((s, p, o)))
+    }
+
+    /// Retrieves triples with a filter on each triple component
+    pub fn triples_for_pattern(
+        &self,
+        subject: Option<NamedOrBlankNodeRef<'a>>,
+        predicate: Option<NamedNodeRef<'a>>,
+        object: Option<TermRef<'a>>,
+    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+        let iter: Box<dyn Iterator<Item = _>> = match (subject, predicate, object) {
+            (Some(subject), Some(predicate), Some(object)) => {
+                let triple = TripleRef::new(subject, predicate, object);
+                Box::new(self.contains(triple).then_some(triple).into_iter())
+            }
+            (Some(subject), Some(predicate), None) => Box::new(
+                self.objects_for_subject_predicate(subject, predicate)
+                    .map(move |object| TripleRef::new(subject, predicate, object)),
+            ),
+            (Some(subject), None, Some(object)) => Box::new(
+                self.predicates_for_subject_object(subject, object)
+                    .map(move |predicate| TripleRef::new(subject, predicate, object)),
+            ),
+            (Some(subject), None, None) => Box::new(self.triples_for_subject(subject)),
+            (None, Some(predicate), Some(object)) => Box::new(
+                self.subjects_for_predicate_object(predicate, object)
+                    .map(move |subject| TripleRef::new(subject, predicate, object)),
+            ),
+            (None, Some(predicate), None) => Box::new(self.triples_for_predicate(predicate)),
+            (None, None, Some(object)) => Box::new(self.triples_for_object(object)),
+            (None, None, None) => Box::new(self.iter()),
+        };
+        iter
     }
 
     /// Checks if the graph contains the given triple.

@@ -10,7 +10,7 @@ uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --
 rm -rf ../target/wheels
 uv run --locked --only-dev maturin build --release --features abi3 --compatibility manylinux_2_28
 if [ %for_each_version% ]; then
-  for VERSION in 8 9 10 11 12 13 13t 14 14t; do
+  for VERSION in 10 11 12 13 14 14t; do
     uv run --locked --only-dev maturin build --release --interpreter "python3.$VERSION" --compatibility manylinux_2_28
   done
   uv run --locked --only-dev maturin build --release --interpreter "pypy3.11" --compatibility manylinux_2_28

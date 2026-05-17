@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(doc, doc = include_str!("../README.md"))]
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
@@ -65,7 +65,7 @@ use std::{fmt, io};
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct QueryEvaluator {
     service_handler: ServiceHandlerRegistry,
     custom_functions: CustomFunctionRegistry,
@@ -73,6 +73,29 @@ pub struct QueryEvaluator {
     without_optimizations: bool,
     run_stats: bool,
     cancellation_token: Option<CancellationToken>,
+}
+
+impl Default for QueryEvaluator {
+    fn default() -> Self {
+        Self {
+            service_handler: ServiceHandlerRegistry::default(),
+            custom_functions: default_custom_functions(),
+            custom_aggregate_functions: CustomAggregateFunctionRegistry::default(),
+            without_optimizations: false,
+            run_stats: false,
+            cancellation_token: None,
+        }
+    }
+}
+
+fn default_custom_functions() -> CustomFunctionRegistry {
+    #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
+    let mut registry = CustomFunctionRegistry::default();
+    #[cfg(feature = "geosparql")]
+    for (name, implementation) in spargeo::GEOSPARQL_EXTENSION_FUNCTIONS {
+        registry.insert(name.into_owned(), Arc::new(implementation));
+    }
+    registry
 }
 
 impl QueryEvaluator {
@@ -91,97 +114,6 @@ impl QueryEvaluator {
             dataset,
             substitutions: HashMap::new(),
         }
-    }
-
-    /// Execute the SPARQL query against the given dataset.
-    ///
-    /// Note that this evaluator does not handle the `FROM` and `FROM NAMED` part of the query.
-    /// You must select the proper dataset before using this struct.
-    #[deprecated(since = "0.2.1", note = "Use prepare instead")]
-    #[expect(deprecated)]
-    pub fn execute<'a>(
-        &self,
-        dataset: impl QueryableDataset<'a>,
-        query: &Query,
-    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
-        self.execute_with_substituted_variables(dataset, query, [])
-    }
-
-    /// Executes a SPARQL query while substituting some variables with the given values.
-    ///
-    /// Substitution follows [RDF-dev SEP-0007](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md).
-    ///
-    /// ```
-    /// # #![expect(deprecated)]
-    /// use oxrdf::{Dataset, GraphName, NamedNode, Quad, Variable};
-    /// use spareval::{QueryEvaluator, QueryResults};
-    /// use spargebra::SparqlParser;
-    ///
-    /// let ex = NamedNode::new("http://example.com")?;
-    /// let dataset = Dataset::from_iter([Quad::new(
-    ///     ex.clone(),
-    ///     ex.clone(),
-    ///     ex.clone(),
-    ///     GraphName::DefaultGraph,
-    /// )]);
-    /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
-    /// let results = QueryEvaluator::new().execute_with_substituted_variables(
-    ///     &dataset,
-    ///     &query,
-    ///     [(Variable::new("s")?, ex.clone().into())],
-    /// );
-    /// if let QueryResults::Solutions(solutions) = results? {
-    ///     let solutions = solutions.collect::<Result<Vec<_>, _>>()?;
-    ///     assert_eq!(solutions.len(), 1);
-    ///     assert_eq!(solutions[0]["s"], ex.into());
-    /// }
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    #[deprecated(since = "0.2.1", note = "Use prepare instead")]
-    #[expect(deprecated)]
-    pub fn execute_with_substituted_variables<'a>(
-        &self,
-        dataset: impl QueryableDataset<'a>,
-        query: &Query,
-        substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
-        self.explain_with_substituted_variables(dataset, query, substitutions)
-            .0
-    }
-
-    #[deprecated(since = "0.2.1", note = "Use prepare instead")]
-    #[expect(deprecated)]
-    pub fn explain<'a>(
-        &self,
-        dataset: impl QueryableDataset<'a>,
-        query: &Query,
-    ) -> (
-        Result<QueryResults<'a>, QueryEvaluationError>,
-        QueryExplanation,
-    ) {
-        self.explain_with_substituted_variables(dataset, query, [])
-    }
-
-    #[deprecated(since = "0.2.1", note = "Use prepare instead")]
-    pub fn explain_with_substituted_variables<'a>(
-        &self,
-        dataset: impl QueryableDataset<'a>,
-        query: &Query,
-        substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> (
-        Result<QueryResults<'a>, QueryEvaluationError>,
-        QueryExplanation,
-    ) {
-        let mut prepared = PreparedQuery {
-            evaluator: self,
-            query,
-            dataset: QueryDatasetSpecification::new(),
-            substitutions: HashMap::new(),
-        };
-        for (variable, term) in substitutions {
-            prepared = prepared.substitute_variable(variable, term);
-        }
-        prepared.explain(dataset)
     }
 
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
@@ -498,7 +430,8 @@ impl QueryEvaluator {
     /// ```
     /// use oxrdf::{Dataset, GraphName, Literal, NamedNode, Quad};
     /// use spareval::{DeleteInsertQuad, QueryEvaluator};
-    /// use spargebra::{GraphUpdateOperation, SparqlParser};
+    /// use spargebra::SparqlParser;
+    /// use spargebra::update::GraphUpdateOperation;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let dataset = Dataset::from_iter([Quad::new(
@@ -510,17 +443,17 @@ impl QueryEvaluator {
     /// let update = SparqlParser::new().parse_update(
     ///     "DELETE { ?s ?p ?o } INSERT { ?s ?p ?o2 } WHERE { ?s ?p ?o BIND(?o +1 AS ?o2) }",
     /// )?;
-    /// let GraphUpdateOperation::DeleteInsert {
-    ///     delete,
-    ///     insert,
-    ///     using: _,
-    ///     pattern,
-    /// } = &update.operations[0]
-    /// else {
+    /// let GraphUpdateOperation::DeleteInsert(operation) = &update.operations[0] else {
     ///     unreachable!()
     /// };
     /// let results = QueryEvaluator::new()
-    ///     .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+    ///     .prepare_delete_insert(
+    ///         operation.delete.clone(),
+    ///         operation.insert.clone(),
+    ///         None,
+    ///         None,
+    ///         &operation.pattern,
+    ///     )
     ///     .execute(&dataset)?
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(
@@ -673,10 +606,8 @@ impl PreparedQuery<'_> {
     ) {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match self.query {
-            Query::Select {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Select(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -684,7 +615,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_select(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -695,10 +626,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Ask {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Ask(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -706,7 +635,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_ask(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -717,13 +646,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Construct {
-                template,
-                pattern,
-                base_iri,
-                ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Construct(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -731,11 +655,13 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
-                        Ok(evaluator) => {
-                            evaluator.evaluate_construct(&pattern, template, self.substitutions)
-                        }
+                        Ok(evaluator) => evaluator.evaluate_construct(
+                            &pattern,
+                            &query.template,
+                            self.substitutions,
+                        ),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
                     };
                 (
@@ -744,10 +670,8 @@ impl PreparedQuery<'_> {
                     planning_duration,
                 )
             }
-            Query::Describe {
-                pattern, base_iri, ..
-            } => {
-                let mut pattern = GraphPattern::from(pattern);
+            Query::Describe(query) => {
+                let mut pattern = GraphPattern::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
@@ -755,7 +679,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
                     {
                         Ok(evaluator) => evaluator.evaluate_describe(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -784,7 +708,8 @@ impl PreparedQuery<'_> {
 /// ```
 /// use oxrdf::{Dataset, GraphName, Literal, NamedNode, Quad};
 /// use spareval::{DeleteInsertQuad, QueryEvaluator};
-/// use spargebra::{GraphUpdateOperation, SparqlParser};
+/// use spargebra::SparqlParser;
+/// use spargebra::update::GraphUpdateOperation;
 ///
 /// let ex = NamedNode::new("http://example.com")?;
 /// let dataset = Dataset::from_iter([Quad::new(
@@ -796,17 +721,17 @@ impl PreparedQuery<'_> {
 /// let update = SparqlParser::new().parse_update(
 ///     "DELETE { ?s ?p ?o } INSERT { ?s ?p ?o2 } WHERE { ?s ?p ?o BIND(?o +1 AS ?o2) }",
 /// )?;
-/// let GraphUpdateOperation::DeleteInsert {
-///     delete,
-///     insert,
-///     using: _,
-///     pattern,
-/// } = &update.operations[0]
-/// else {
+/// let GraphUpdateOperation::DeleteInsert(operation) = &update.operations[0] else {
 ///     unreachable!()
 /// };
 /// let results = QueryEvaluator::new()
-///     .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+///     .prepare_delete_insert(
+///         operation.delete.clone(),
+///         operation.insert.clone(),
+///         None,
+///         None,
+///         &operation.pattern,
+///     )
 ///     .execute(&dataset)?
 ///     .collect::<Result<Vec<_>, _>>()?;
 /// assert_eq!(
@@ -1179,7 +1104,7 @@ mod tests {
 
         // NamedNode has no EBV
         let iri = NamedNode::new("http://example.com/").unwrap();
-        let nn = Expression::from(iri.clone());
+        let nn = Expression::from(iri);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&nn, std::iter::empty()),
             None

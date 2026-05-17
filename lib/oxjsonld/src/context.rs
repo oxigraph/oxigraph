@@ -372,7 +372,7 @@ impl JsonLdContextProcessor {
                                 format!("Invalid @vocab '{value}'"),
                                 JsonLdErrorCode::InvalidVocabMapping,
                             ));
-                        };
+                        }
                     }
                     _ => errors.push(JsonLdSyntaxError::msg_and_code(
                         "@vocab value must be a string",
@@ -440,7 +440,7 @@ impl JsonLdContextProcessor {
                         JsonLdErrorCode::InvalidPropagateValue,
                     ));
                     continue;
-                };
+                }
             }
             // 5.13)
             let mut protected = false;
@@ -893,10 +893,6 @@ impl JsonLdContextProcessor {
                 // 15.2)
                 if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
                     definition.iri_mapping = Some(Some(format!("{iri_mapping}{suffix}")));
-                } else {
-                    errors.push(JsonLdSyntaxError::msg(format!(
-                        "The prefix '{prefix}' is not associated with an IRI in the context"
-                    )));
                 }
             } else {
                 // 15.3)
@@ -1007,7 +1003,7 @@ impl JsonLdContextProcessor {
                     if !["@id", "@vocab"].contains(&type_mapping.as_str()) {
                         errors.push(JsonLdSyntaxError::msg_and_code(
                                     format!("Type mapping must be @id or @vocab, not {type_mapping} when used with @type container"),
-                                    JsonLdErrorCode::InvalidContainerMapping,
+                                    JsonLdErrorCode::InvalidTypeMapping,
                                 ));
                     }
                 } else {
@@ -1038,7 +1034,7 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             };
-            let Some(index) = self.expand_iri(
+            let Some(expanded_index) = self.expand_iri(
                 active_context,
                 index.into(),
                 false,
@@ -1053,8 +1049,9 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             };
-            if self.lenient && (has_keyword_form(&index) || index.starts_with("_:"))
-                || !self.lenient && Iri::parse(index.as_ref()).is_err()
+            if self.lenient
+                && (has_keyword_form(&expanded_index) || expanded_index.starts_with("_:"))
+                || !self.lenient && Iri::parse(expanded_index.as_ref()).is_err()
             {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     "@index value must be a valid IRI",
@@ -1382,10 +1379,8 @@ impl JsonLdContextProcessor {
         &self,
         url: &str,
     ) -> Result<(Option<Iri<String>>, JsonNode), JsonLdSyntaxError> {
-        let mut remote_context_cache = self
-            .remote_context_cache
-            .lock()
-            .map_err(|_| JsonLdSyntaxError::msg("Poisoned mutex"))?;
+        #[expect(clippy::unwrap_in_result)]
+        let mut remote_context_cache = self.remote_context_cache.lock().unwrap();
         if let Some(loaded_context) = remote_context_cache.get(url) {
             // 5.2.4)
             return Ok(loaded_context.clone());

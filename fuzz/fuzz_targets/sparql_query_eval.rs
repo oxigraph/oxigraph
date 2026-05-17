@@ -12,8 +12,9 @@ use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
 use spareval::QueryEvaluator;
+use spargebra::SparqlParser;
 use spargebra::algebra::{GraphPattern, QueryDataset};
-use spargebra::{Query, SparqlParser};
+use spargebra::query::SelectQuery;
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -49,7 +50,8 @@ fuzz_target!(|data: sparql_smith::Query| {
             .with_default_service_handler(DatasetServiceHandler {
                 dataset: dataset.clone(),
             })
-            .execute(dataset, &query)
+            .prepare(&query)
+            .execute(dataset)
             .map(|r| query_results_key(r, query_str.contains(" REDUCED ")));
         match (&with_opt, &without_opt) {
             (Ok(with_opt), Ok(without_opt)) => {
@@ -156,14 +158,17 @@ impl DefaultServiceHandler for StoreServiceHandler {
         }
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .with_default_service_handler(self.clone())
-            .for_query(Query::Select {
-                dataset: Some(QueryDataset {
-                    default: vec![service_name.clone()],
-                    named: None,
-                }),
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            })
+            .for_query(
+                SelectQuery {
+                    dataset: Some(QueryDataset {
+                        default: vec![service_name.clone()],
+                        named: None,
+                    }),
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
             .on_store(&self.store)
             .execute()?
         else {
@@ -215,14 +220,16 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
             dataset: dataset.clone(),
         });
-        let QueryResults::Solutions(iter) = evaluator.execute(
-            &dataset,
-            &Query::Select {
-                dataset: None,
-                pattern: pattern.clone(),
-                base_iri: base_iri.cloned(),
-            },
-        )?
+        let QueryResults::Solutions(iter) = evaluator
+            .prepare(
+                &SelectQuery {
+                    dataset: None,
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
+                }
+                .into(),
+            )
+            .execute(&dataset)?
         else {
             panic!()
         };

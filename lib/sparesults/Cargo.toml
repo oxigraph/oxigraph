@@ -1,6 +1,6 @@
 [package]
 name = "sparesults"
-version = "0.3.1"
+version = "0.3.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
@@ -14,7 +14,11 @@ rust-version.workspace = true
 [features]
 default = []
 sparql-12 = ["oxrdf/rdf-12"]
-async-tokio = ["dep:tokio", "quick-xml/async-tokio", "json-event-parser/async-tokio"]
+async-tokio = [
+  "dep:tokio",
+  "quick-xml/async-tokio",
+  "json-event-parser/async-tokio",
+]
 
 [dependencies]
 json-event-parser.workspace = true

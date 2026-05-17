@@ -1,5 +1,5 @@
 use crate::io::{
-    PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
+    PyRdfFormat, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
     map_parse_error,
 };
 use crate::model::*;
@@ -8,7 +8,7 @@ use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -38,7 +38,6 @@ use std::path::PathBuf;
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
 #[pyclass(frozen, name = "Store", module = "pyoxigraph")]
-#[derive(Clone)]
 pub struct PyStore {
     inner: Store,
 }
@@ -362,7 +361,7 @@ impl PyStore {
                 custom_aggregate_functions,
             )?
             .parse_update(update)
-            .map_err(|e| PySyntaxError::new_err(e.to_string()))?
+            .map_err(map_sparql_syntax_error)?
             .on_store(&self.inner)
             .execute()
             .map_err(map_update_evaluation_error)
@@ -378,7 +377,7 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+    /// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
     /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
     /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
     /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -412,7 +411,7 @@ impl PyStore {
     fn load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
@@ -449,7 +448,7 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+    /// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
     /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
     /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
     /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -483,7 +482,7 @@ impl PyStore {
     fn bulk_load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
@@ -550,7 +549,7 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+    /// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
     /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
     /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
     /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -590,7 +589,7 @@ impl PyStore {
     fn dump(
         &self,
         output: Option<PyWritableOutput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         from_graph: Option<PyGraphNameRef<'_>>,
         prefixes: Option<BTreeMap<String, String>>,
         base_iri: Option<&str>,

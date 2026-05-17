@@ -9,16 +9,14 @@ use oxigraph::sparql::results::{
 };
 use oxigraph::sparql::{
     AggregateFunctionAccumulator, PreparedSparqlQuery, QueryEvaluationError, QueryResults,
-    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, UpdateEvaluationError,
-    Variable,
+    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, SparqlSyntaxError,
+    UpdateEvaluationError, Variable,
 };
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyTuple;
-#[cfg(feature = "geosparql")]
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -35,7 +33,7 @@ pub fn prepare_sparql_query(
 ) -> PyResult<PreparedSparqlQuery> {
     let mut prepared = evaluator
         .parse_query(query)
-        .map_err(|e| PySyntaxError::new_err(e.to_string()))?;
+        .map_err(map_sparql_syntax_error)?;
 
     if use_default_graph_as_union && default_graph.is_some() {
         return Err(PyValueError::new_err(
@@ -85,10 +83,6 @@ pub fn sparql_evaluator_from_python(
     custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
 ) -> PyResult<SparqlEvaluator> {
     let mut evaluator = SparqlEvaluator::default();
-    #[cfg(feature = "geosparql")]
-    for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        evaluator = evaluator.with_custom_function(name.into(), implementation)
-    }
 
     if let Some(custom_functions) = custom_functions {
         for (name, function) in custom_functions {
@@ -300,7 +294,7 @@ pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
 
-#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
+#[expect(clippy::large_enum_variant)]
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {
@@ -365,7 +359,7 @@ impl PyQuerySolutions {
     fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
-        format: Option<PyQueryResultsFormatInput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -435,7 +429,7 @@ impl PyQuerySolutions {
 /// >>> bool(store.query('ASK { ?s ?p ?o }'))
 /// True
 #[pyclass(frozen, name = "QueryBoolean", module = "pyoxigraph", eq, ord, hash)]
-#[derive(Eq, Ord, PartialOrd, PartialEq, Hash, Clone, Copy)]
+#[derive(Eq, Ord, PartialOrd, PartialEq, Hash)]
 pub struct PyQueryBoolean {
     inner: bool,
 }
@@ -468,7 +462,7 @@ impl PyQueryBoolean {
     fn serialize(
         &self,
         output: Option<PyWritableOutput>,
-        format: Option<PyQueryResultsFormatInput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -516,7 +510,7 @@ impl PyQueryTriples {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `JSON-LD 1.0 <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
+    /// * `JSON-LD <https://www.w3.org/TR/json-ld/>`_ (:py:attr:`RdfFormat.JSON_LD`)
     /// * `canonical <https://www.w3.org/TR/n-triples/#canonical-ntriples>`_ `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
     /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
     /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
@@ -541,7 +535,7 @@ impl PyQueryTriples {
     fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
-        format: Option<PyRdfFormatInput>,
+        format: Option<PyRdfFormat>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
@@ -602,7 +596,7 @@ impl PyQueryTriples {
 #[pyo3(signature = (input = None, format = None, *, path = None))]
 pub fn parse_query_results(
     input: Option<PyReadableInput>,
-    format: Option<PyQueryResultsFormatInput>,
+    format: Option<PyQueryResultsFormat>,
     path: Option<PathBuf>,
     py: Python<'_>,
 ) -> PyResult<Bound<'_, PyAny>> {
@@ -633,7 +627,14 @@ pub fn parse_query_results(
 /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
 /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
 /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
-#[pyclass(frozen, name = "QueryResultsFormat", module = "pyoxigraph", eq, hash)]
+#[pyclass(
+    frozen,
+    name = "QueryResultsFormat",
+    module = "pyoxigraph",
+    eq,
+    hash,
+    from_py_object
+)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyQueryResultsFormat {
     inner: QueryResultsFormat,
@@ -761,23 +762,11 @@ impl PyQueryResultsFormat {
 }
 
 fn lookup_query_results_format(
-    format: Option<PyQueryResultsFormatInput>,
+    format: Option<PyQueryResultsFormat>,
     path: Option<&Path>,
 ) -> PyResult<QueryResultsFormat> {
     if let Some(format) = format {
-        return match format {
-            PyQueryResultsFormatInput::Object(format) => Ok(format.inner),
-            PyQueryResultsFormatInput::MediaType(media_type) => {
-                deprecation_warning(
-                    "Using a string to specify a query results format is deprecated, please use a QueryResultsFormat object instead.",
-                )?;
-                QueryResultsFormat::from_media_type(&media_type).ok_or_else(|| {
-                    PyValueError::new_err(format!(
-                        "The media type {media_type} is not supported by pyoxigraph"
-                    ))
-                })
-            }
-        };
+        return Ok(format.inner);
     }
     let Some(path) = path else {
         return Err(PyValueError::new_err(
@@ -792,12 +781,6 @@ fn lookup_query_results_format(
     };
     QueryResultsFormat::from_extension(ext)
         .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
-}
-
-#[derive(FromPyObject)]
-pub enum PyQueryResultsFormatInput {
-    Object(PyQueryResultsFormat),
-    MediaType(String),
 }
 
 pub fn map_evaluation_error(error: QueryEvaluationError) -> PyErr {
@@ -841,6 +824,31 @@ pub fn map_update_evaluation_error(error: UpdateEvaluationError) -> PyErr {
             },
         },
         _ => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+#[expect(clippy::needless_pass_by_value)]
+pub fn map_sparql_syntax_error(error: SparqlSyntaxError) -> PyErr {
+    let location = error.location();
+    // Python 3.9 does not support end line and end column
+    if python_version() >= (3, 10) {
+        let params = (
+            None::<PathBuf>,
+            Some(location.start.line + 1),
+            Some(location.start.column + 1),
+            None::<Vec<u8>>,
+            Some(location.end.line + 1),
+            Some(location.end.column + 1),
+        );
+        PySyntaxError::new_err((error.to_string(), params))
+    } else {
+        let params = (
+            None::<PathBuf>,
+            Some(location.start.line + 1),
+            Some(location.start.column + 1),
+            None::<Vec<u8>>,
+        );
+        PySyntaxError::new_err((error.to_string(), params))
     }
 }
 

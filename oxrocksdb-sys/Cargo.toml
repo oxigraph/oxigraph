@@ -2,7 +2,7 @@
 name = "oxrocksdb-sys"
 version.workspace = true
 authors.workspace = true
-license = "GPL-2.0 OR Apache-2.0"
+license = "GPL-2.0-only OR Apache-2.0"
 repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
 readme = "README.md"
 description = "Rust bindings for RocksDB for Oxigraph usage."

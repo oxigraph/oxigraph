@@ -1,0 +1,4 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT (geof:sfEquals(geof:envelope("Polygon((0 0, 4 0, 0 3, 0 0))"^^geo:wktLiteral), "Polygon((0 0, 4 0, 4 3, 0 3, 0 0))"^^geo:wktLiteral) AS ?result) WHERE {}

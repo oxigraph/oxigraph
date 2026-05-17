@@ -46,10 +46,7 @@ enum SyntaxErrorKind {
     #[error(transparent)]
     Json(#[from] JsonSyntaxError),
     #[error("{msg}")]
-    Msg {
-        msg: String,
-        code: Option<JsonLdErrorCode>,
-    },
+    Msg { msg: String, code: JsonLdErrorCode },
 }
 
 impl JsonLdSyntaxError {
@@ -57,7 +54,7 @@ impl JsonLdSyntaxError {
     pub fn code(&self) -> Option<JsonLdErrorCode> {
         match &self.0 {
             SyntaxErrorKind::Json(_) => None,
-            SyntaxErrorKind::Msg { code, .. } => *code,
+            SyntaxErrorKind::Msg { code, .. } => Some(*code),
         }
     }
 
@@ -69,19 +66,11 @@ impl JsonLdSyntaxError {
         }
     }
 
-    /// Builds an error from a printable error message.
-    pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self(SyntaxErrorKind::Msg {
-            msg: msg.into(),
-            code: None,
-        })
-    }
-
     /// Builds an error from a printable error message and an error code.
     pub(crate) fn msg_and_code(msg: impl Into<String>, code: JsonLdErrorCode) -> Self {
         Self(SyntaxErrorKind::Msg {
             msg: msg.into(),
-            code: Some(code),
+            code,
         })
     }
 }

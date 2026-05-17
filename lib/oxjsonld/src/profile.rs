@@ -238,9 +238,9 @@ impl BitOrAssign<JsonLdProfile> for JsonLdProfileSet {
 /// JSON-LD [processing mode](https://www.w3.org/TR/json-ld11/#dfn-processing-mode)
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub enum JsonLdProcessingMode {
-    #[default]
     JsonLd1_0,
-    JsonLd1_1, // TODO: Move to 1.1 when implemented
+    #[default]
+    JsonLd1_1,
 }
 
 impl JsonLdProcessingMode {

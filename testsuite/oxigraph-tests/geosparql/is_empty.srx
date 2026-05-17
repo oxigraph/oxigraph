@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="geom"/>
+        <variable name="result"/>
+    </head>
+    <results>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Point(1 2)</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">MultiPoint EMPTY</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+            </binding>
+        </result>
+    </results>
+</sparql>

@@ -24,14 +24,14 @@ rdf-12 = ["oxigraph/rdf-12"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 rustls-native = ["oxigraph/http-client-rustls-native"]
 rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
-geosparql = ["dep:spargeo"]
+geosparql = ["dep:spargeo", "oxigraph/geosparql"]
 
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 flate2.workspace = true
 oxhttp = { workspace = true, features = ["flate2"] }
-oxigraph.workspace = true
+oxigraph = { workspace = true, default-features = true }
 oxiri.workspace = true
 rand.workspace = true
 rayon-core.workspace = true

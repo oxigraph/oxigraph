@@ -8,27 +8,28 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+default = ["rdf-12"]
+rdf-12 = ["oxigraph/rdf-12"]
+datafusion = ["oxigraph/datafusion"]
+
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 dissimilar.workspace = true
 json-event-parser.workspace = true
-oxigraph = { workspace = true, features = ["rdf-12"] }
+oxigraph.workspace = true
 oxrdf = { workspace = true, features = ["rdfc-10"] }
 oxiri.workspace = true
 oxjsonld.workspace = true
 oxttl.workspace = true
 spargebra = { workspace = true, features = ["standard-unicode-escaping"] }
-spargeo.workspace = true
 sparopt.workspace = true
-spareval.workspace = true
+spareval = { workspace = true, features = ["geosparql"] }
 time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
 codspeed-criterion-compat.workspace = true
-
-[features]
-datafusion = ["oxigraph/datafusion"]
 
 [lints]
 workspace = true

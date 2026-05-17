@@ -1,10 +1,12 @@
 #![cfg(test)]
-#![allow(clippy::panic_in_result_fn)]
+#![expect(clippy::panic_in_result_fn)]
 
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use oxigraph::store::StoreOptions;
 use std::error::Error;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::fs::remove_dir_all;
@@ -141,6 +143,24 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::new()?;
     let store = Store::open(&dir)?;
+    store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
+    for q in quads(GraphNameRef::DefaultGraph) {
+        assert!(store.contains(q)?);
+    }
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_load_graph_on_disk_with_options() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open_with_options(
+        &dir,
+        StoreOptions::default()
+            .with_max_open_files(128)
+            .with_fd_reserve(64),
+    )?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
@@ -589,6 +609,29 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
         File::create(dir.as_ref().join("CURRENT"))?.write_all(b"foo")?;
     }
     assert!(Store::open_read_only(&dir).is_err());
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_read_your_own_write_transaction() -> Result<(), Box<dyn Error>> {
+    let store_dir = TempDir::new()?;
+
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        GraphNameRef::DefaultGraph,
+    );
+
+    let store = Store::open(&store_dir)?;
+    let mut transaction = store.start_transaction()?;
+    transaction.insert(quad);
+    assert_eq!(
+        transaction.iter().collect::<Result<Vec<_>, _>>()?,
+        [quad.into_owned()]
+    );
+
     Ok(())
 }
 

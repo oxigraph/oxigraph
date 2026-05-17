@@ -1,4 +1,4 @@
-#![allow(clippy::panic)]
+#![expect(clippy::panic)]
 
 use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
@@ -274,7 +274,12 @@ fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
                     }
                 }
             },
-            Operation::Update(u) => store.update_opt(u.clone(), evaluator.clone()).unwrap(),
+            Operation::Update(u) => evaluator
+                .clone()
+                .for_update(u.clone())
+                .on_store(store)
+                .execute()
+                .unwrap(),
         }
     }
 }
@@ -394,7 +399,7 @@ enum RawOperation {
     Update(String),
 }
 
-#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum Operation {
     Query(Query),

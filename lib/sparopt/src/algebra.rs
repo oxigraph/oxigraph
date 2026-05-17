@@ -701,8 +701,8 @@ pub enum GraphPattern {
     /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice).
     Slice {
         inner: Box<Self>,
-        start: usize,
-        length: Option<usize>,
+        start: u64,
+        length: Option<u64>,
     },
     /// [Group](https://www.w3.org/TR/sparql11-query/#aggregateAlgebra).
     Group {
@@ -970,7 +970,7 @@ impl GraphPattern {
         }
     }
 
-    pub fn slice(inner: Self, start: usize, length: Option<usize>) -> Self {
+    pub fn slice(inner: Self, start: u64, length: Option<u64>) -> Self {
         if inner.is_empty() {
             return Self::empty();
         }
@@ -1217,14 +1217,14 @@ impl GraphPattern {
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
                                 e, inner, graph_name,
                             );
-                            OrderExpression::Asc(Expression::Variable(v))
+                            OrderExpression::Asc(v)
                         }
                         AlOrderExpression::Desc(e) => {
                             let v;
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
                                 e, inner, graph_name,
                             );
-                            OrderExpression::Desc(Expression::Variable(v))
+                            OrderExpression::Desc(v)
                         }
                     });
                 }
@@ -1345,7 +1345,7 @@ impl GraphPattern {
         if let AlExpression::Variable(variable) = expression {
             (variable.clone(), graph_pattern)
         } else {
-            let variable = Variable::new_unchecked(format!("{:x}", random::<u128>()));
+            let variable = new_var();
             (
                 variable.clone(),
                 GraphPattern::Extend {
@@ -1644,16 +1644,16 @@ impl From<&AggregateExpression> for AlAggregateExpression {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order
-    Asc(Expression),
+    Asc(Variable),
     /// Descending order
-    Desc(Expression),
+    Desc(Variable),
 }
 
 impl From<&OrderExpression> for AlOrderExpression {
     fn from(expression: &OrderExpression) -> Self {
         match expression {
-            OrderExpression::Asc(e) => Self::Asc(e.into()),
-            OrderExpression::Desc(e) => Self::Desc(e.into()),
+            OrderExpression::Asc(e) => Self::Asc(e.clone().into()),
+            OrderExpression::Desc(e) => Self::Desc(e.clone().into()),
         }
     }
 }

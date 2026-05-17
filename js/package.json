@@ -2,26 +2,29 @@
     "name": "oxigraph_tests",
     "description": "Oxigraph JS build and tests",
     "private": true,
+    "dependencies": {
+        "@rdfjs/data-model": "^2.1.0",
+        "@rdfjs/types": "^2.0.1"
+    },
     "devDependencies": {
         "@biomejs/biome": "^2.0.0",
         "@codspeed/vitest-plugin": "^5.0.1",
-        "@rdfjs/data-model": "^2.1.0",
         "@tsconfig/node18": "^18.2.4",
         "@tsconfig/strictest": "^2.0.5",
         "@types/node": "^24.0.0",
         "@types/rdfjs__data-model": "^2.0.9",
         "fzstd": "^0.1.1",
-        "typescript": "~5.9",
+        "typescript": "~6.0",
         "vitest": "^4.0.0",
-        "wasm-pack": "^0.14.0"
+        "vite-plugin-wasm": "^3.6.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
-        "build": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target web --out-name web --weak-refs --reference-types && RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
-        "build-node": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --release --target nodejs --weak-refs --reference-types",
+        "test": "npm run build-debug && vitest",
+        "build": "python build_package.py",
+        "build-debug": "python build_package.py --debug",
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
-        "bench": "npm run build-node && vitest bench"
+        "bench": "npm run build && vitest bench"
     }
 }

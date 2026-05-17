@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="geom"/>
+        <variable name="result"/>
+    </head>
+    <results>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Point(1 2)</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#integer">0</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">LineString(0 0, 1 0)</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#integer">1</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="geom">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Polygon((0 0, 1 0, 1 1, 0 1, 0 0))</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#integer">2</literal>
+            </binding>
+        </result>
+    </results>
+</sparql>

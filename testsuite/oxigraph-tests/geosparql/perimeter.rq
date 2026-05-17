@@ -1,0 +1,4 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ((geof:perimeter("Polygon((0 0, 2 0, 2 2, 0 2, 0 0))"^^geo:wktLiteral, <http://www.opengis.net/def/uom/OGC/1.0/metre>) > 0.0) AS ?result) WHERE {}

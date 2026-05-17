@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(doc, doc = include_str!("../README.md"))]
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
@@ -16,9 +16,7 @@ pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPositi
 #[cfg(feature = "async-tokio")]
 pub use from_rdf::TokioAsyncWriterJsonLdSerializer;
 pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
-#[doc(hidden)]
-pub use profile::JsonLdProcessingMode;
-pub use profile::{JsonLdProfile, JsonLdProfileSet};
+pub use profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 pub use to_rdf::TokioAsyncReaderJsonLdParser;
 pub use to_rdf::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};

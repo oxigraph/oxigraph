@@ -170,7 +170,7 @@ fn write_escaped_csv_string(output: &mut String, s: &str) {
                 output.push('"');
             } else {
                 output.push(c)
-            };
+            }
         }
         output.push('"');
     } else {
@@ -356,7 +356,7 @@ fn write_tsv_quoted_str(output: &mut String, string: &str) {
             '"' => output.push_str("\\\""),
             '\\' => output.push_str("\\\\"),
             _ => output.push(c),
-        };
+        }
     }
     output.push('"');
 }

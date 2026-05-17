@@ -1,8 +1,7 @@
 //! Code inspired by [Rust RocksDB](https://github.com/rust-rocksdb/rust-rocksdb) under Apache License 2.0.
 
-#![allow(
+#![expect(
     unsafe_code,
-    trivial_casts,
     clippy::undocumented_unsafe_blocks,
     clippy::panic_in_result_fn,
     clippy::unwrap_in_result
@@ -19,6 +18,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::ptr::NonNull;
 use std::sync::{Arc, OnceLock};
 use std::thread::available_parallelism;
 use std::{fmt, io, ptr, slice};
@@ -40,6 +40,12 @@ pub struct ColumnFamilyDefinition {
     pub use_iter: bool,
     pub min_prefix_size: usize,
     pub unordered_writes: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DbOptions {
+    pub max_open_files: Option<i32>,
+    pub fd_reserve: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -125,13 +131,17 @@ impl Drop for RoDbHandler {
 }
 
 impl Db {
+    const DEFAULT_FD_RESERVE: u32 = 48;
+    const MINIMUM_MAX_OPEN_FILES: u64 = 48;
+
     pub fn open_read_write(
         path: &Path,
         column_families: Vec<ColumnFamilyDefinition>,
+        db_options: DbOptions,
     ) -> Result<Self, StorageError> {
         let c_path = path_to_cstring(path)?;
         unsafe {
-            let options = Self::db_options(true)?;
+            let options = Self::db_options(db_options)?;
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
             rocksdb_options_set_compression(options, rocksdb_lz4_compression.try_into().unwrap());
@@ -250,7 +260,7 @@ impl Db {
     ) -> Result<Self, StorageError> {
         unsafe {
             let c_path = path_to_cstring(path)?;
-            let options = Self::db_options(true)?;
+            let options = Self::db_options(DbOptions::default())?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
@@ -306,7 +316,7 @@ impl Db {
         }
     }
 
-    fn db_options(limit_max_open_files: bool) -> Result<*mut rocksdb_options_t, StorageError> {
+    fn db_options(db_options: DbOptions) -> Result<*mut rocksdb_options_t, StorageError> {
         static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
         unsafe {
             let options = rocksdb_options_create();
@@ -316,24 +326,15 @@ impl Db {
                 options,
                 available_parallelism()?.get().try_into().unwrap(),
             );
-            if limit_max_open_files {
-                if let Some(available_fd) = available_file_descriptors()? {
-                    if available_fd < 96 {
-                        rocksdb_options_destroy(options);
-                        return Err(io::Error::other(format!(
-                            "Oxigraph needs at least 96 file descriptors, \
-                                    only {available_fd} allowed. \
-                                    Run e.g. `ulimit -n 512` to allow 512 opened files"
-                        ))
-                        .into());
-                    }
-                    rocksdb_options_set_max_open_files(
-                        options,
-                        (available_fd - 48).try_into().unwrap(),
-                    )
-                }
-            } else {
-                rocksdb_options_set_max_open_files(options, -1);
+            if let Some(max_open_files) = db_options.max_open_files {
+                rocksdb_options_set_max_open_files(options, max_open_files);
+            } else if let Some(available_fd) = available_file_descriptors()? {
+                let max_open_files = Self::max_open_files_from_fd_limit(
+                    available_fd,
+                    db_options.fd_reserve.unwrap_or(Self::DEFAULT_FD_RESERVE),
+                )
+                .inspect_err(|_| rocksdb_options_destroy(options))?;
+                rocksdb_options_set_max_open_files(options, max_open_files);
             }
             rocksdb_options_set_info_log_level(options, 2); // We only log warnings
             rocksdb_options_set_max_log_file_size(options, 1024 * 1024); // Only 1MB log size
@@ -350,6 +351,22 @@ impl Db {
             );
             Ok(options)
         }
+    }
+
+    fn max_open_files_from_fd_limit(available_fd: u64, fd_reserve: u32) -> io::Result<i32> {
+        let fd_reserve = u64::from(fd_reserve);
+        let minimum_fd = fd_reserve + Self::MINIMUM_MAX_OPEN_FILES;
+        if available_fd < minimum_fd {
+            return Err(io::Error::other(format!(
+                "Oxigraph needs at least {minimum_fd} file descriptors when reserving \
+                {fd_reserve} descriptors for non-RocksDB usage, \
+                only {available_fd} allowed. \
+                Run e.g. `ulimit -n 512` to allow 512 opened files"
+            )));
+        }
+        // macOS sometime set the number of available file descriptors as "unlimited" i.e. UINT64_MAX
+        // We use 8192 in this case because the hard limit is typically around 10240.
+        Ok((available_fd - fd_reserve).try_into().unwrap_or(8192))
     }
 
     fn column_families_names_and_options(
@@ -481,33 +498,20 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<Option<PinnableSlice>, StorageError> {
-        unsafe {
-            let slice = match &self.inner {
-                DbKind::ReadOnly(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len(),
-                    ))
-                }
-                DbKind::ReadWrite(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        db.db,
-                        db.read_options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
-            }?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
+        let (db, read_options) = match &self.inner {
+            DbKind::ReadOnly(db) => (db.db, db.read_options),
+            DbKind::ReadWrite(db) => (db.db, db.read_options),
+        };
+        let slice = unsafe {
+            ffi_result!(oxrocksdb_get_pinned_cf_v2(
+                db,
+                read_options,
+                column_family.0,
+                key.as_ptr().cast(),
+                key.len(),
+            ))
+        }?;
+        Ok(NonNull::new(slice).map(PinnableSlice))
     }
 
     pub fn contains_key(
@@ -515,7 +519,26 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
+        let (db, read_options) = match &self.inner {
+            DbKind::ReadOnly(db) => (db.db, db.read_options),
+            DbKind::ReadWrite(db) => (db.db, db.read_options),
+        };
+        let mut value_len = 0;
+        let mut found = 0;
+        unsafe {
+            ffi_result!(oxrocksdb_get_into_buffer_cf(
+                db,
+                read_options,
+                column_family.0,
+                key.as_ptr().cast(),
+                key.len(),
+                ptr::null_mut(),
+                0,
+                &raw mut value_len,
+                &raw mut found
+            ))
+        }?;
+        Ok(found != 0)
     }
 
     pub fn insert(
@@ -568,7 +591,7 @@ impl Db {
         };
         unsafe {
             rocksdb_compact_range_cf_opt(
-                db.db.cast(),
+                db.db,
                 column_family.0,
                 db.compaction_options,
                 ptr::null(),
@@ -729,43 +752,35 @@ impl<'a> Reader<'a> {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<Option<PinnableSlice>, StorageError> {
-        unsafe {
-            let slice = match &self.inner {
-                InnerReader::ReadOnly(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
-                InnerReader::ReadWrite(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf(
-                        inner.db.db,
-                        self.options,
-                        column_family.0,
-                        key.as_ptr().cast(),
-                        key.len()
-                    ))
-                }
+        let slice = unsafe {
+            match &self.inner {
+                InnerReader::ReadOnly(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
+                    inner.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len(),
+                )),
+                InnerReader::ReadWrite(inner) => ffi_result!(oxrocksdb_get_pinned_cf_v2(
+                    inner.db.db,
+                    self.options,
+                    column_family.0,
+                    key.as_ptr().cast(),
+                    key.len(),
+                )),
                 InnerReader::Transaction(inner) => {
-                    ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
+                    ffi_result!(oxrocksdb_writebatch_wi_get_pinned_cf_v2(
                         inner.batch,
                         inner.db.db,
                         self.options,
                         column_family.0,
                         key.as_ptr().cast(),
-                        key.len()
+                        key.len(),
                     ))
                 }
-            }?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
+            }
+        }?;
+        Ok(NonNull::new(slice).map(PinnableSlice))
     }
 
     pub fn contains_key(
@@ -773,7 +788,53 @@ impl<'a> Reader<'a> {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
+        let mut value_len = 0;
+        let mut found = 0;
+        unsafe {
+            match &self.inner {
+                InnerReader::ReadOnly(inner) => {
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
+                        inner.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        ptr::null_mut(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))
+                }
+                InnerReader::ReadWrite(inner) => {
+                    ffi_result!(oxrocksdb_get_into_buffer_cf(
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        ptr::null_mut(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))
+                }
+                InnerReader::Transaction(inner) => {
+                    ffi_result!(oxrocksdb_writebatch_wi_get_into_buffer_cf(
+                        inner.batch,
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len(),
+                        ptr::null_mut(),
+                        0,
+                        &raw mut value_len,
+                        &raw mut found
+                    ))
+                }
+            }
+        }?;
+        Ok(found != 0)
     }
 
     #[expect(clippy::iter_not_returning_iterator)]
@@ -995,12 +1056,12 @@ impl ReadableTransaction<'_> {
     }
 }
 
-pub struct PinnableSlice(*mut rocksdb_pinnableslice_t);
+pub struct PinnableSlice(NonNull<oxrocksdb_pinnable_handle_t>);
 
 impl Drop for PinnableSlice {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_pinnableslice_destroy(self.0);
+            oxrocksdb_pinnable_handle_destroy(self.0.as_ptr());
         }
     }
 }
@@ -1011,7 +1072,7 @@ impl Deref for PinnableSlice {
     fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnableslice_value(self.0, &raw mut len);
+            let val = oxrocksdb_pinnable_handle_get_value(self.0.as_ptr(), &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
     }
@@ -1117,9 +1178,8 @@ impl Iter<'_> {
     pub fn key(&self) -> Option<&[u8]> {
         if self.is_valid() {
             unsafe {
-                let mut len = 0;
-                let val = rocksdb_iter_key(self.inner, &raw mut len);
-                Some(slice::from_raw_parts(val.cast(), len))
+                let key = oxrocksdb_iter_key_slice(self.inner);
+                Some(slice::from_raw_parts(key.data.cast(), key.size))
             }
         } else {
             None
@@ -1238,24 +1298,90 @@ fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
 }
 
 #[cfg(unix)]
-fn available_file_descriptors() -> io::Result<Option<libc::rlim_t>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     let mut rlimit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
     };
+    #[cfg_attr(target_pointer_width = "64", expect(clippy::useless_conversion))]
     if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut rlimit) } == 0 {
-        Ok(Some(min(rlimit.rlim_cur, rlimit.rlim_max)))
+        Ok(Some(min(
+            u64::from(rlimit.rlim_cur),
+            u64::from(rlimit.rlim_max),
+        )))
     } else {
         Err(io::Error::last_os_error())
     }
 }
 
 #[cfg(windows)]
-fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(Some(512)) // https://docs.microsoft.com/en-us/cpp/c-runtime-library/file-handling
 }
 
 #[cfg(not(any(unix, windows)))]
-fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
+fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::ErrorKind;
+    use tempfile::TempDir;
+
+    #[test]
+    fn max_open_files_from_fd_limit_default_reserve() {
+        assert_eq!(
+            Db::max_open_files_from_fd_limit(512, Db::DEFAULT_FD_RESERVE).unwrap(),
+            464
+        );
+    }
+
+    #[test]
+    fn max_open_files_from_fd_limit_custom_reserve() {
+        assert_eq!(Db::max_open_files_from_fd_limit(512, 128).unwrap(), 384);
+    }
+
+    #[test]
+    fn max_open_files_from_fd_limit_requires_minimum_fds() {
+        let error = Db::max_open_files_from_fd_limit(95, Db::DEFAULT_FD_RESERVE).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Other);
+    }
+
+    #[test]
+    #[expect(clippy::panic_in_result_fn)]
+    fn contains_key_handles_empty_and_non_empty_values() -> Result<(), StorageError> {
+        let dir = TempDir::new()?;
+        let db = Db::open_read_write(dir.path(), vec![], DbOptions::default())?;
+        let default_cf = db.column_family("default")?;
+
+        assert!(!db.contains_key(&default_cf, b"missing")?);
+
+        db.insert(&default_cf, b"empty", &[])?;
+        db.insert(&default_cf, b"non-empty", b"value")?;
+        db.flush()?;
+
+        assert!(db.contains_key(&default_cf, b"empty")?);
+        assert!(db.contains_key(&default_cf, b"non-empty")?);
+        assert!(!db.contains_key(&default_cf, b"missing")?);
+
+        let rw_reader = db.snapshot();
+        assert!(rw_reader.contains_key(&default_cf, b"empty")?);
+        assert!(rw_reader.contains_key(&default_cf, b"non-empty")?);
+        assert!(!rw_reader.contains_key(&default_cf, b"missing")?);
+
+        let ro_db = Db::open_read_only(dir.path(), vec![])?;
+        let ro_default_cf = ro_db.column_family("default")?;
+        assert!(ro_db.contains_key(&ro_default_cf, b"empty")?);
+        assert!(ro_db.contains_key(&ro_default_cf, b"non-empty")?);
+        assert!(!ro_db.contains_key(&ro_default_cf, b"missing")?);
+
+        let ro_reader = ro_db.snapshot();
+        assert!(ro_reader.contains_key(&ro_default_cf, b"empty")?);
+        assert!(ro_reader.contains_key(&ro_default_cf, b"non-empty")?);
+        assert!(!ro_reader.contains_key(&ro_default_cf, b"missing")?);
+
+        Ok(())
+    }
 }
