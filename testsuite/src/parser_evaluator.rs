@@ -12,6 +12,7 @@ use oxjsonld::{
     JsonLdParser, JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet, JsonLdRemoteDocument,
     JsonLdSyntaxError,
 };
+use oxrdf::OxString;
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -178,7 +179,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         profile |= JsonLdProfile::Streaming;
     }
     let mut processing_mode = JsonLdProcessingMode::JsonLd1_1;
-    if let Some(opt) = test.option.get(&jld::PROCESSING_MODE.into_owned()) {
+    if let Some(opt) = test.option.get(&jld::PROCESSING_MODE) {
         let Term::Literal(opt) = opt else {
             bail!("The processingMode must be a literal");
         };
@@ -187,7 +188,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         };
         processing_mode = opt;
     }
-    let base_url = test.option.get(&jld::BASE.into_owned()).and_then(|t| {
+    let base_url = test.option.get(&jld::BASE).and_then(|t| {
         if let Term::NamedNode(i) = t {
             Some(i.as_str())
         } else {
@@ -227,7 +228,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         let actual_error = result.unwrap_err();
         let actual_error_code = actual_error.code().map(|c| c.to_string());
         ensure!(
-            test.result == actual_error_code,
+            test.result.as_deref() == actual_error_code.as_deref(),
             "Different error code, found {:?} with message '{}' instead of {:?}",
             actual_error_code,
             actual_error,
@@ -354,7 +355,7 @@ fn parse_json_ld(
         .with_load_document_callback(|url, _| {
             Ok(JsonLdRemoteDocument {
                 document: read_file_to_string(url)?.into(),
-                document_url: url.into(),
+                document_url: OxString::new_owned(url),
             })
         })
         .collect())

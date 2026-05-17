@@ -13,7 +13,7 @@ use crate::json::{WriterJsonSolutionsSerializer, write_boolean_json_result};
 #[cfg(feature = "async-tokio")]
 use crate::xml::{TokioAsyncWriterXmlSolutionsSerializer, tokio_async_write_boolean_xml_result};
 use crate::xml::{WriterXmlSolutionsSerializer, write_boolean_xml_result};
-use oxrdf::{TermRef, Variable, VariableRef};
+use oxrdf::{Term, Variable};
 use std::io::{self, Write};
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncWrite;
@@ -29,7 +29,7 @@ use tokio::io::AsyncWrite;
 /// Example in JSON (the API is the same for XML, CSV and TSV):
 /// ```
 /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-/// use oxrdf::{LiteralRef, Variable, VariableRef};
+/// use oxrdf::{Literal, Variable};
 /// use std::iter::once;
 ///
 /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
@@ -42,7 +42,7 @@ use tokio::io::AsyncWrite;
 /// // solutions
 /// let mut buffer = Vec::new();
 /// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-/// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test"))))?;
+/// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
 /// serializer.finish()?;
 /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -127,13 +127,13 @@ impl QueryResultsSerializer {
     /// Example in XML (the API is the same for JSON, CSV and TSV):
     /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-    /// use oxrdf::{LiteralRef, Variable, VariableRef};
+    /// use oxrdf::{Literal, Variable};
     /// use std::iter::once;
     ///
     /// let xml_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
     /// let mut serializer = xml_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-    /// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test"))))?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
     /// serializer.finish()?;
     /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -176,13 +176,13 @@ impl QueryResultsSerializer {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
-    /// use oxrdf::{LiteralRef, Variable, VariableRef};
+    /// use oxrdf::{Literal, Variable};
     /// use std::iter::once;
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?]).await?;
-    /// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test")))).await?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into()))).await?;
     /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
@@ -233,7 +233,7 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///
 /// Example in TSV (the API is the same for JSON, XML and CSV):
 /// ```
-/// use oxrdf::{LiteralRef, Variable, VariableRef};
+/// use oxrdf::{Literal, Variable};
 /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use std::iter::once;
 ///
@@ -243,7 +243,10 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///     &mut buffer,
 ///     vec![Variable::new("foo")?, Variable::new("bar")?],
 /// )?;
-/// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test"))))?;
+/// serializer.serialize(once((
+///     &Variable::new("foo")?,
+///     &Literal::new_simple_literal("test").into(),
+/// )))?;
 /// serializer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -266,13 +269,13 @@ impl<W: Write> WriterSolutionsSerializer<W> {
     /// Example in JSON (the API is the same for XML, CSV and TSV):
     /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer, QuerySolution};
-    /// use oxrdf::{Literal, LiteralRef, Variable, VariableRef};
+    /// use oxrdf::{Literal, Variable};
     /// use std::iter::once;
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-    /// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test"))))?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
     /// serializer.serialize(&QuerySolution::from((vec![Variable::new("bar")?], vec![Some(Literal::from("test").into())])))?;
     /// serializer.finish()?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
@@ -280,9 +283,8 @@ impl<W: Write> WriterSolutionsSerializer<W> {
     /// ```
     pub fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (impl Into<VariableRef<'a>>, impl Into<TermRef<'a>>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
-        let solution = solution.into_iter().map(|(v, s)| (v.into(), s.into()));
         match &mut self.formatter {
             WriterSolutionsSerializerKind::Xml(writer) => writer.serialize(solution),
             WriterSolutionsSerializerKind::Json(writer) => writer.serialize(solution),
@@ -318,7 +320,7 @@ impl<W: Write> WriterSolutionsSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{LiteralRef, Variable, VariableRef};
+/// use oxrdf::{Literal, Variable};
 /// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use std::iter::once;
 ///
@@ -331,7 +333,10 @@ impl<W: Write> WriterSolutionsSerializer<W> {
 ///     )
 ///     .await?;
 /// serializer
-///     .serialize(once((VariableRef::new("foo")?, LiteralRef::from("test"))))
+///     .serialize(once((
+///         &Variable::new("foo")?,
+///         &Literal::new_simple_literal("test").into(),
+///     )))
 ///     .await?;
 /// serializer.finish().await?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
@@ -361,13 +366,13 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterSolutionsSerializer<W> {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use sparesults::{QueryResultsFormat, QueryResultsSerializer, QuerySolution};
-    /// use oxrdf::{Literal, LiteralRef, Variable, VariableRef};
+    /// use oxrdf::{Literal, Variable};
     /// use std::iter::once;
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?]).await?;
-    /// serializer.serialize(once((VariableRef::new("foo")?, LiteralRef::from("test")))).await?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into()))).await?;
     /// serializer.serialize(&QuerySolution::from((vec![Variable::new("bar")?], vec![Some(Literal::from("test").into())]))).await?;
     /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
@@ -376,9 +381,8 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterSolutionsSerializer<W> {
     /// ```
     pub async fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (impl Into<VariableRef<'a>>, impl Into<TermRef<'a>>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
-        let solution = solution.into_iter().map(|(v, s)| (v.into(), s.into()));
         match &mut self.formatter {
             TokioAsyncWriterSolutionsSerializerKind::Xml(writer) => {
                 writer.serialize(solution).await

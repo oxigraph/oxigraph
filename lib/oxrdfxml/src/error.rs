@@ -1,5 +1,6 @@
 use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
+use oxrdf::OxString;
 use quick_xml::encoding::EncodingError;
 use quick_xml::events::attributes::AttrError;
 use std::io;
@@ -64,13 +65,13 @@ enum SyntaxErrorKind {
     Xml(#[from] quick_xml::Error),
     #[error("error while parsing IRI '{iri}': {error}")]
     InvalidIri {
-        iri: String,
+        iri: OxString,
         #[source]
         error: IriParseError,
     },
     #[error("error while parsing language tag '{tag}': {error}")]
     InvalidLanguageTag {
-        tag: String,
+        tag: OxString,
         #[source]
         error: LanguageTagParseError,
     },
@@ -84,11 +85,11 @@ impl RdfXmlSyntaxError {
         Self(SyntaxErrorKind::Msg(msg.into()))
     }
 
-    pub(crate) fn invalid_iri(iri: String, error: IriParseError) -> Self {
+    pub(crate) fn invalid_iri(iri: OxString, error: IriParseError) -> Self {
         Self(SyntaxErrorKind::InvalidIri { iri, error })
     }
 
-    pub(crate) fn invalid_language_tag(tag: String, error: LanguageTagParseError) -> Self {
+    pub(crate) fn invalid_language_tag(tag: OxString, error: LanguageTagParseError) -> Self {
         Self(SyntaxErrorKind::InvalidLanguageTag { tag, error })
     }
 }

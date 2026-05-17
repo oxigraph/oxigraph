@@ -10,7 +10,7 @@ use oxigraph::sparql::{
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
-use oxrdf::{GraphNameRef, QuadRef};
+use oxrdf::{GraphName, OxString};
 use spareval::QueryEvaluator;
 use spargebra::SparqlParser;
 use spargebra::algebra::{GraphPattern, QueryDataset};
@@ -97,7 +97,12 @@ fn query_results_key(results: QueryResults, is_reduced: bool) -> String {
         }
         QueryResults::Graph(iter) => {
             let mut graph = iter.filter_map(Result::ok).collect::<Graph>();
-            if graph.iter().map(count_triple_blank_nodes).sum::<usize>() > 4 {
+            if graph
+                .iter()
+                .map(|t| count_triple_blank_nodes(&t))
+                .sum::<usize>()
+                > 4
+            {
                 return String::new(); // canonicalization might be too slow
             };
             graph.canonicalize(CanonicalizationAlgorithm::Unstable);
@@ -121,11 +126,11 @@ impl DefaultServiceHandler for StoreServiceHandler {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if !self
             .store
-            .contains_named_graph(service_name)
+            .contains_named_graph(&service_name.clone().into())
             .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))?
         {
             return Err(QueryEvaluationError::Service("Graph does not exist".into()));
@@ -164,7 +169,7 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if self
             .dataset
@@ -181,9 +186,13 @@ impl DefaultServiceHandler for DatasetServiceHandler {
             .flat_map(|q| {
                 if q.graph_name.is_default_graph() {
                     vec![]
-                } else if q.graph_name == service_name.as_ref().into() {
+                } else if q.graph_name == *service_name {
                     vec![
-                        QuadRef::new(q.subject, q.predicate, q.object, GraphNameRef::DefaultGraph),
+                        {
+                            let mut q = q.clone();
+                            q.graph_name = GraphName::DefaultGraph;
+                            q
+                        },
                         q,
                     ]
                 } else {

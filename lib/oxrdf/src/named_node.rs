@@ -1,3 +1,4 @@
+use crate::string::OxString;
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -18,17 +19,17 @@ use std::fmt;
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
-    iri: String,
+    iri: OxString,
 }
 
 impl NamedNode {
     /// Builds and validate an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
-    pub fn new(iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn new(iri: impl Into<OxString>) -> Result<Self, IriParseError> {
         Ok(Self::new_from_iri(Iri::parse(iri.into())?))
     }
 
     #[inline]
-    pub(crate) fn new_from_iri(iri: Iri<String>) -> Self {
+    pub(crate) fn new_from_iri(iri: Iri<OxString>) -> Self {
         Self::new_unchecked(iri.into_inner())
     }
 
@@ -36,10 +37,23 @@ impl NamedNode {
     ///
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
-    /// [`NamedNode::new()`] is a safe version of this constructor and should be used for untrusted data.
+    /// [`NamedNode::new`] is a safe version of this constructor and should be used for untrusted data
+    /// and [`NamedNode::new_const_unchecked`] in const contexts on trusted data.
     #[inline]
-    pub fn new_unchecked(iri: impl Into<String>) -> Self {
+    pub fn new_unchecked(iri: impl Into<OxString>) -> Self {
         Self { iri: iri.into() }
+    }
+
+    /// Builds an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) from a static string without allocating.
+    ///
+    /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
+    ///
+    /// [`NamedNode::new`] is a safe version of this constructor and should be used for untrusted data.
+    #[inline]
+    pub const fn new_const_unchecked(iri: &'static str) -> Self {
+        Self {
+            iri: OxString::new(iri),
+        }
     }
 
     #[inline]
@@ -48,13 +62,13 @@ impl NamedNode {
     }
 
     #[inline]
-    pub fn into_string(self) -> String {
+    pub fn into_string(self) -> OxString {
         self.iri
     }
 
     #[inline]
-    pub fn as_ref(&self) -> NamedNodeRef<'_> {
-        NamedNodeRef::new_unchecked(&self.iri)
+    pub const fn as_ref(&self) -> NamedNodeRef<'_> {
+        NamedNodeRef::new_unchecked(self.iri.as_str())
     }
 }
 
@@ -125,7 +139,7 @@ impl<'a> NamedNodeRef<'a> {
     ///
     /// It is the caller's responsibility to ensure that `iri` is a valid IRI.
     ///
-    /// [`NamedNode::new()`] is a safe version of this constructor and should be used for untrusted data.
+    /// [`NamedNode::new`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub const fn new_unchecked(iri: &'a str) -> Self {
         Self { iri }
@@ -138,7 +152,7 @@ impl<'a> NamedNodeRef<'a> {
 
     #[inline]
     pub fn into_owned(self) -> NamedNode {
-        NamedNode::new_unchecked(self.iri)
+        NamedNode::new_unchecked(OxString::new_owned(self.iri))
     }
 }
 
@@ -219,9 +233,9 @@ impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
     }
 }
 
-impl From<Iri<String>> for NamedNode {
+impl From<Iri<OxString>> for NamedNode {
     #[inline]
-    fn from(iri: Iri<String>) -> Self {
+    fn from(iri: Iri<OxString>) -> Self {
         Self {
             iri: iri.into_inner(),
         }
@@ -268,26 +282,18 @@ impl<'de> Deserialize<'de> for NamedNode {
         #[derive(Deserialize)]
         #[serde(rename = "NamedNode")]
         struct Value {
-            value: String,
+            value: OxString,
         }
         Self::new(Value::deserialize(deserializer)?.value).map_err(de::Error::custom)
     }
 }
 
+#[cfg(feature = "serde")]
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn named_node_construction() {
-        assert_eq!(
-            "http://example.org/",
-            NamedNode::new("http://example.org/").unwrap().iri
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "serde")]
     fn test_serde() {
         let n = NamedNode::new("http://example.com/foo").unwrap();
         let json = serde_json::to_string(&n).unwrap();

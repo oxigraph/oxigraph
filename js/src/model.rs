@@ -12,15 +12,15 @@ pub fn default_data_factory() -> DataFactory {
     FACTORY.with(|f| <&JsValue>::from(f).clone().into())
 }
 
-pub fn from_named_node(factory: &DataFactory, value: NamedNodeRef<'_>) -> JsValue {
+pub fn from_named_node(factory: &DataFactory, value: &NamedNode) -> JsValue {
     factory.named_node(value.as_str())
 }
 
-pub fn from_blank_node(factory: &DataFactory, value: BlankNodeRef<'_>) -> JsValue {
+pub fn from_blank_node(factory: &DataFactory, value: &BlankNode) -> JsValue {
     factory.blank_node(value.as_str())
 }
 
-pub fn from_literal(factory: &DataFactory, value: LiteralRef<'_>) -> JsValue {
+pub fn from_literal(factory: &DataFactory, value: &Literal) -> JsValue {
     if let Some(language) = value.language() {
         #[cfg(feature = "rdf-12")]
         if let Some(direction) = value.direction() {
@@ -37,7 +37,7 @@ pub fn from_literal(factory: &DataFactory, value: LiteralRef<'_>) -> JsValue {
         factory.language_tagged_literal(value.value(), language)
     } else {
         let datatype = value.datatype();
-        if datatype == xsd::STRING {
+        if *datatype == xsd::STRING {
             factory.simple_literal(value.value())
         } else {
             factory.typed_literal(value.value(), from_named_node(factory, datatype))
@@ -45,45 +45,45 @@ pub fn from_literal(factory: &DataFactory, value: LiteralRef<'_>) -> JsValue {
     }
 }
 
-pub fn from_named_or_blank_node(factory: &DataFactory, value: NamedOrBlankNodeRef<'_>) -> JsValue {
+pub fn from_named_or_blank_node(factory: &DataFactory, value: &NamedOrBlankNode) -> JsValue {
     match value {
-        NamedOrBlankNodeRef::NamedNode(value) => from_named_node(factory, value),
-        NamedOrBlankNodeRef::BlankNode(value) => from_blank_node(factory, value),
+        NamedOrBlankNode::NamedNode(value) => from_named_node(factory, value),
+        NamedOrBlankNode::BlankNode(value) => from_blank_node(factory, value),
     }
 }
 
-pub fn from_term(factory: &DataFactory, value: TermRef<'_>) -> JsValue {
+pub fn from_term(factory: &DataFactory, value: &Term) -> JsValue {
     match value {
-        TermRef::NamedNode(value) => from_named_node(factory, value),
-        TermRef::BlankNode(value) => from_blank_node(factory, value),
-        TermRef::Literal(value) => from_literal(factory, value),
+        Term::NamedNode(value) => from_named_node(factory, value),
+        Term::BlankNode(value) => from_blank_node(factory, value),
+        Term::Literal(value) => from_literal(factory, value),
         #[cfg(feature = "rdf-12")]
-        TermRef::Triple(value) => from_triple(factory, value.as_ref()),
+        Term::Triple(value) => from_triple(factory, value),
     }
 }
 
-pub fn from_graph_name(factory: &DataFactory, value: GraphNameRef<'_>) -> JsValue {
+pub fn from_graph_name(factory: &DataFactory, value: &GraphName) -> JsValue {
     match value {
-        GraphNameRef::NamedNode(value) => from_named_node(factory, value),
-        GraphNameRef::BlankNode(value) => from_blank_node(factory, value),
-        GraphNameRef::DefaultGraph => factory.default_graph(),
+        GraphName::NamedNode(value) => from_named_node(factory, value),
+        GraphName::BlankNode(value) => from_blank_node(factory, value),
+        GraphName::DefaultGraph => factory.default_graph(),
     }
 }
 
-pub fn from_triple(factory: &DataFactory, value: TripleRef<'_>) -> JsValue {
+pub fn from_triple(factory: &DataFactory, value: &Triple) -> JsValue {
     factory.triple(
-        from_named_or_blank_node(factory, value.subject),
-        from_named_node(factory, value.predicate),
-        from_term(factory, value.object),
+        from_named_or_blank_node(factory, &value.subject),
+        from_named_node(factory, &value.predicate),
+        from_term(factory, &value.object),
     )
 }
 
-pub fn from_quad(factory: &DataFactory, value: QuadRef<'_>) -> JsValue {
+pub fn from_quad(factory: &DataFactory, value: &Quad) -> JsValue {
     factory.quad(
-        from_named_or_blank_node(factory, value.subject),
-        from_named_node(factory, value.predicate),
-        from_term(factory, value.object),
-        from_graph_name(factory, value.graph_name),
+        from_named_or_blank_node(factory, &value.subject),
+        from_named_node(factory, &value.predicate),
+        from_term(factory, &value.object),
+        from_graph_name(factory, &value.graph_name),
     )
 }
 

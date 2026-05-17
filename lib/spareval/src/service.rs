@@ -1,6 +1,6 @@
 use crate::{QueryEvaluationError, QuerySolutionIter};
 use oxiri::Iri;
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, OxString};
 use spargebra::algebra::GraphPattern;
 use std::collections::HashMap;
 use std::error::Error;
@@ -15,7 +15,7 @@ use std::sync::Arc;
 ///
 /// ```
 /// use oxiri::Iri;
-/// use oxrdf::{Dataset, Literal, NamedNode, Variable};
+/// use oxrdf::{Dataset, Literal, NamedNode, OxString, Variable};
 /// use sparesults::QuerySolution;
 /// use spareval::{QueryEvaluator, QueryResults, QuerySolutionIter, ServiceHandler};
 /// use spargebra::SparqlParser;
@@ -32,7 +32,7 @@ use std::sync::Arc;
 ///     fn handle(
 ///         &self,
 ///         _pattern: &GraphPattern,
-///         _base_iri: Option<&Iri<String>>,
+///         _base_iri: Option<&Iri<OxString>>,
 ///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding foo -> 1
 ///         let variables = [Variable::new_unchecked("foo")].into();
@@ -70,7 +70,7 @@ pub trait ServiceHandler: Send + Sync {
     fn handle(
         &self,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
 
@@ -83,7 +83,7 @@ pub trait ServiceHandler: Send + Sync {
 ///
 /// ```
 /// use oxiri::Iri;
-/// use oxrdf::{Dataset, NamedNode, Variable};
+/// use oxrdf::{Dataset, NamedNode, OxString, Variable};
 /// use sparesults::QuerySolution;
 /// use spareval::{DefaultServiceHandler, QueryEvaluator, QueryResults, QuerySolutionIter};
 /// use spargebra::SparqlParser;
@@ -101,7 +101,7 @@ pub trait ServiceHandler: Send + Sync {
 ///         &self,
 ///         service_name: &NamedNode,
 ///         _pattern: &GraphPattern,
-///         _base_iri: Option<&Iri<String>>,
+///         _base_iri: Option<&Iri<OxString>>,
 ///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding name -> name of service
 ///         let variables = [Variable::new_unchecked("foo")].into();
@@ -137,7 +137,7 @@ pub trait DefaultServiceHandler: Send + Sync {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
 
@@ -173,7 +173,7 @@ impl ServiceHandlerRegistry {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if let Some(handler) = self.handlers.get(service_name) {
             return handler.handle(pattern, base_iri);
@@ -195,7 +195,7 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
     fn handle(
         &self,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         self.0.handle(pattern, base_iri).map_err(wrap_service_error)
     }
@@ -208,7 +208,7 @@ impl<S: DefaultServiceHandler> DefaultServiceHandler for ErrorConversionServiceH
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         self.0
             .handle(service_name, pattern, base_iri)

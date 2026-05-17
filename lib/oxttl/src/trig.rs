@@ -8,10 +8,7 @@ use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{
-    GraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, QuadRef,
-    TermRef,
-};
+use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term, Triple};
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::hash_map::Iter;
@@ -25,7 +22,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
@@ -36,11 +33,11 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in TriGParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -51,8 +48,8 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[must_use]
 pub struct TriGParser {
     lenient: bool,
-    base: Option<Iri<String>>,
-    prefixes: HashMap<String, Iri<String>>,
+    base: Option<Iri<OxString>>,
+    prefixes: HashMap<OxString, Iri<OxString>>,
 }
 
 impl TriGParser {
@@ -74,19 +71,21 @@ impl TriGParser {
     }
 
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base = Some(Iri::parse(base_iri.into())?);
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
+        self.base = Some(Iri::parse(OxString::new_owned(base_iri))?);
         Ok(self)
     }
 
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
-        self.prefixes
-            .insert(prefix_name.into(), Iri::parse(prefix_iri.into())?);
+        self.prefixes.insert(
+            OxString::new_owned(prefix_name),
+            Iri::parse(OxString::new_owned(prefix_iri))?,
+        );
         Ok(self)
     }
 
@@ -94,7 +93,7 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
@@ -105,11 +104,11 @@ impl TriGParser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in TriGParser::new().for_reader(file.as_bytes()) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -128,7 +127,7 @@ impl TriGParser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
@@ -139,12 +138,12 @@ impl TriGParser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
-    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -166,7 +165,7 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
@@ -177,11 +176,11 @@ impl TriGParser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in TriGParser::new().for_slice(file) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -206,7 +205,7 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
@@ -218,7 +217,7 @@ impl TriGParser {
     ///     b" a schema:Person ; schema:name \"Bar\" .",
     /// ];
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TriGParser::new().low_level();
     /// let mut file_chunks = file.iter();
@@ -232,7 +231,7 @@ impl TriGParser {
     ///     // We read as many quads from the parser as possible
     ///     while let Some(quad) = parser.parse_next() {
     ///         let quad = quad?;
-    ///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///             count += 1;
     ///         }
     ///     }
@@ -260,7 +259,7 @@ impl TriGParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
@@ -271,11 +270,11 @@ impl TriGParser {
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in TriGParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -363,7 +362,7 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
@@ -374,12 +373,12 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
-///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -472,7 +471,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
@@ -483,11 +482,11 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in TriGParser::new().for_slice(file) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -573,7 +572,7 @@ impl Iterator for SliceTriGParser<'_> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
@@ -585,7 +584,7 @@ impl Iterator for SliceTriGParser<'_> {
 ///     b" a schema:Person ; schema:name \"Bar\" .",
 /// ];
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TriGParser::new().low_level();
 /// let mut file_chunks = file.iter();
@@ -599,7 +598,7 @@ impl Iterator for SliceTriGParser<'_> {
 ///     // We read as many quads from the parser as possible
 ///     while let Some(quad) = parser.parse_next() {
 ///         let quad = quad?;
-///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///         if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///             count += 1;
 ///         }
 ///     }
@@ -702,7 +701,7 @@ impl LowLevelTriGParser {
 ///
 /// See [`LowLevelTriGParser::prefixes`].
 pub struct TriGPrefixesIter<'a> {
-    inner: Iter<'a, String, Iri<String>>,
+    inner: Iter<'a, OxString, Iri<OxString>>,
 }
 
 impl<'a> Iterator for TriGPrefixesIter<'a> {
@@ -723,18 +722,18 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 /// A [TriG](https://www.w3.org/TR/trig/) serializer.
 ///
 /// ```
-/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::{NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
 /// let mut serializer = TriGSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     NamedNodeRef::new("http://example.com")?,
+///     NamedNode::new("http://schema.org/Person")?,
+///     NamedNode::new("http://example.com")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
@@ -762,8 +761,8 @@ impl TriGSerializer {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         self.prefixes.insert(
             prefix_name.into(),
@@ -776,18 +775,18 @@ impl TriGSerializer {
     ///
     /// ```
     /// use oxrdf::vocab::rdf;
-    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::{NamedNode, Quad};
     /// use oxttl::TriGSerializer;
     ///
     /// let mut serializer = TriGSerializer::new()
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com/me")?,
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com/me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
-    ///     NamedNodeRef::new("http://example.com")?,
+    ///     NamedNode::new("http://example.com/ns#Person")?,
+    ///     NamedNode::new("http://example.com")?,
     /// ))?;
     /// assert_eq!(
     ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n<> {\n\t</me> a ex:Person .\n}\n",
@@ -796,7 +795,7 @@ impl TriGSerializer {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
@@ -804,18 +803,18 @@ impl TriGSerializer {
     /// Writes a TriG file to a [`Write`] implementation.
     ///
     /// ```
-    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::{NamedNode, Quad};
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGSerializer;
     ///
     /// let mut serializer = TriGSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
-    ///     NamedNodeRef::new("http://example.com")?,
+    ///     NamedNode::new("http://schema.org/Person")?,
+    ///     NamedNode::new("http://example.com")?,
     /// ))?;
     /// assert_eq!(
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
@@ -835,7 +834,7 @@ impl TriGSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::{NamedNode, Quad};
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGSerializer;
     ///
@@ -843,11 +842,11 @@ impl TriGSerializer {
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_tokio_async_writer(Vec::new());
     /// serializer
-    ///     .serialize_quad(QuadRef::new(
-    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///     .serialize_quad(&Quad::new(
+    ///         NamedNode::new("http://example.com#me")?,
     ///         rdf::TYPE,
-    ///         NamedNodeRef::new("http://schema.org/Person")?,
-    ///         NamedNodeRef::new("http://example.com")?,
+    ///         NamedNode::new("http://schema.org/Person")?,
+    ///         NamedNode::new("http://example.com")?,
     ///     ))
     ///     .await?;
     /// assert_eq!(
@@ -872,7 +871,7 @@ impl TriGSerializer {
     /// Builds a low-level TriG writer.
     ///
     /// ```
-    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::{NamedNode, Quad};
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGSerializer;
     ///
@@ -881,11 +880,11 @@ impl TriGSerializer {
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .low_level();
     /// serializer.serialize_quad(
-    ///     QuadRef::new(
-    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///     &Quad::new(
+    ///         NamedNode::new("http://example.com#me")?,
     ///         rdf::TYPE,
-    ///         NamedNodeRef::new("http://schema.org/Person")?,
-    ///         NamedNodeRef::new("http://example.com")?,
+    ///         NamedNode::new("http://schema.org/Person")?,
+    ///         NamedNode::new("http://example.com")?,
     ///     ),
     ///     &mut buf,
     /// )?;
@@ -915,18 +914,18 @@ impl TriGSerializer {
 /// Can be built using [`TriGSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::{NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
 /// let mut serializer = TriGSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     NamedNodeRef::new("http://example.com")?,
+///     NamedNode::new("http://schema.org/Person")?,
+///     NamedNode::new("http://example.com")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
@@ -942,8 +941,14 @@ pub struct WriterTriGSerializer<W: Write> {
 
 impl<W: Write> WriterTriGSerializer<W> {
     /// Writes an extra quad.
-    pub fn serialize_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        self.low_level_writer.serialize_quad(q, &mut self.writer)
+    pub fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
+        self.low_level_writer.serialize_quad(quad, &mut self.writer)
+    }
+
+    #[doc(hidden)]
+    pub fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        self.low_level_writer
+            .serialize_triple(triple, &mut self.writer)
     }
 
     /// Ends the write process and returns the underlying [`Write`].
@@ -960,7 +965,7 @@ impl<W: Write> WriterTriGSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::{NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
@@ -968,11 +973,11 @@ impl<W: Write> WriterTriGSerializer<W> {
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_tokio_async_writer(Vec::new());
 /// serializer
-///     .serialize_quad(QuadRef::new(
-///         NamedNodeRef::new("http://example.com#me")?,
+///     .serialize_quad(&Quad::new(
+///         NamedNode::new("http://example.com#me")?,
 ///         rdf::TYPE,
-///         NamedNodeRef::new("http://schema.org/Person")?,
-///         NamedNodeRef::new("http://example.com")?,
+///         NamedNode::new("http://schema.org/Person")?,
+///         NamedNode::new("http://example.com")?,
 ///     ))
 ///     .await?;
 /// assert_eq!(
@@ -993,8 +998,18 @@ pub struct TokioAsyncWriterTriGSerializer<W: AsyncWrite + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
     /// Writes an extra quad.
-    pub async fn serialize_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        self.low_level_writer.serialize_quad(q, &mut self.buffer)?;
+    pub async fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
+        self.low_level_writer
+            .serialize_quad(quad, &mut self.buffer)?;
+        self.writer.write_all(&self.buffer).await?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    pub async fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        self.low_level_writer
+            .serialize_triple(triple, &mut self.buffer)?;
         self.writer.write_all(&self.buffer).await?;
         self.buffer.clear();
         Ok(())
@@ -1014,7 +1029,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 /// Can be built using [`TriGSerializer::low_level`].
 ///
 /// ```
-/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::{NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
@@ -1023,11 +1038,11 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .low_level();
 /// serializer.serialize_quad(
-///     QuadRef::new(
-///         NamedNodeRef::new("http://example.com#me")?,
+///     &Quad::new(
+///         NamedNode::new("http://example.com#me")?,
 ///         rdf::TYPE,
-///         NamedNodeRef::new("http://schema.org/Person")?,
-///         NamedNodeRef::new("http://example.com")?,
+///         NamedNode::new("http://schema.org/Person")?,
+///         NamedNode::new("http://example.com")?,
 ///     ),
 ///     &mut buf,
 /// )?;
@@ -1048,9 +1063,36 @@ pub struct LowLevelTriGSerializer {
 
 impl LowLevelTriGSerializer {
     /// Writes an extra quad.
-    pub fn serialize_quad<'a>(
+    pub fn serialize_quad(&mut self, quad: &Quad, writer: impl Write) -> io::Result<()> {
+        self.serialize_quad_parts(
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+            &quad.graph_name,
+            writer,
+        )
+    }
+
+    pub(crate) fn serialize_triple(
         &mut self,
-        q: impl Into<QuadRef<'a>>,
+        triple: &Triple,
+        writer: impl Write,
+    ) -> io::Result<()> {
+        self.serialize_quad_parts(
+            &triple.subject,
+            &triple.predicate,
+            &triple.object,
+            &GraphName::DefaultGraph,
+            writer,
+        )
+    }
+
+    fn serialize_quad_parts(
+        &mut self,
+        subject: &NamedOrBlankNode,
+        predicate: &NamedNode,
+        object: &Term,
+        graph_name: &GraphName,
         mut writer: impl Write,
     ) -> io::Result<()> {
         if !self.prelude_written {
@@ -1066,18 +1108,16 @@ impl LowLevelTriGSerializer {
                 )?;
             }
         }
-        let q = q.into();
-        if q.graph_name == self.current_graph_name.as_ref() {
+        if *graph_name == self.current_graph_name {
             if let Some((current_subject, current_predicate)) =
                 self.current_subject_predicate.take()
             {
-                if q.subject == current_subject.as_ref() {
-                    if q.predicate == current_predicate {
+                if *subject == current_subject {
+                    if *predicate == current_predicate {
                         self.current_subject_predicate = Some((current_subject, current_predicate));
-                        write!(writer, " , {}", self.term(q.object))
+                        write!(writer, " , {}", self.object(object))
                     } else {
-                        self.current_subject_predicate =
-                            Some((current_subject, q.predicate.into_owned()));
+                        self.current_subject_predicate = Some((current_subject, predicate.clone()));
                         writeln!(writer, " ;")?;
                         if !self.current_graph_name.is_default_graph() {
                             write!(writer, "\t")?;
@@ -1085,13 +1125,12 @@ impl LowLevelTriGSerializer {
                         write!(
                             writer,
                             "\t{} {}",
-                            self.predicate(q.predicate),
-                            self.term(q.object)
+                            self.predicate(predicate),
+                            self.object(object)
                         )
                     }
                 } else {
-                    self.current_subject_predicate =
-                        Some((q.subject.into_owned(), q.predicate.into_owned()));
+                    self.current_subject_predicate = Some((subject.clone(), predicate.clone()));
                     writeln!(writer, " .")?;
                     if !self.current_graph_name.is_default_graph() {
                         write!(writer, "\t")?;
@@ -1099,23 +1138,22 @@ impl LowLevelTriGSerializer {
                     write!(
                         writer,
                         "{} {} {}",
-                        self.term(q.subject),
-                        self.predicate(q.predicate),
-                        self.term(q.object)
+                        self.subject(subject),
+                        self.predicate(predicate),
+                        self.object(object)
                     )
                 }
             } else {
-                self.current_subject_predicate =
-                    Some((q.subject.into_owned(), q.predicate.into_owned()));
+                self.current_subject_predicate = Some((subject.clone(), predicate.clone()));
                 if !self.current_graph_name.is_default_graph() {
                     write!(writer, "\t")?;
                 }
                 write!(
                     writer,
                     "{} {} {}",
-                    self.term(q.subject),
-                    self.predicate(q.predicate),
-                    self.term(q.object)
+                    self.subject(subject),
+                    self.predicate(predicate),
+                    self.object(object)
                 )
             }
         } else {
@@ -1125,42 +1163,57 @@ impl LowLevelTriGSerializer {
             if !self.current_graph_name.is_default_graph() {
                 writeln!(writer, "}}")?;
             }
-            self.current_graph_name = q.graph_name.into_owned();
-            self.current_subject_predicate =
-                Some((q.subject.into_owned(), q.predicate.into_owned()));
-            match self.current_graph_name.as_ref() {
-                GraphNameRef::NamedNode(g) => {
-                    writeln!(writer, "{} {{", self.term(g))?;
+            self.current_graph_name = graph_name.clone();
+            self.current_subject_predicate = Some((subject.clone(), predicate.clone()));
+            match &self.current_graph_name {
+                GraphName::NamedNode(g) => {
+                    writeln!(
+                        writer,
+                        "{} {{",
+                        TurtleNamedNode {
+                            node: g,
+                            prefixes: &self.prefixes,
+                            base_iri: &self.base_iri,
+                        }
+                    )?;
                     write!(writer, "\t")?;
                 }
-                GraphNameRef::BlankNode(g) => {
-                    writeln!(writer, "{} {{", self.term(g))?;
+                GraphName::BlankNode(g) => {
+                    writeln!(writer, "{g} {{")?;
                     write!(writer, "\t")?;
                 }
-                GraphNameRef::DefaultGraph => (),
+                GraphName::DefaultGraph => (),
             }
 
             write!(
                 writer,
                 "{} {} {}",
-                self.term(q.subject),
-                self.predicate(q.predicate),
-                self.term(q.object)
+                self.subject(subject),
+                self.predicate(predicate),
+                self.object(object)
             )
         }
     }
 
-    fn predicate<'a>(&'a self, named_node: impl Into<NamedNodeRef<'a>>) -> TurtlePredicate<'a> {
-        TurtlePredicate {
-            named_node: named_node.into(),
+    fn subject<'a>(&'a self, node: &'a NamedOrBlankNode) -> TurtleNamedOrBlankNode<'a> {
+        TurtleNamedOrBlankNode {
+            node,
             prefixes: &self.prefixes,
             base_iri: &self.base_iri,
         }
     }
 
-    fn term<'a>(&'a self, term: impl Into<TermRef<'a>>) -> TurtleTerm<'a> {
+    fn predicate<'a>(&'a self, named_node: &'a NamedNode) -> TurtlePredicate<'a> {
+        TurtlePredicate {
+            named_node,
+            prefixes: &self.prefixes,
+            base_iri: &self.base_iri,
+        }
+    }
+
+    fn object<'a>(&'a self, term: &'a Term) -> TurtleTerm<'a> {
         TurtleTerm {
-            term: term.into(),
+            term,
             prefixes: &self.prefixes,
             base_iri: &self.base_iri,
         }
@@ -1178,19 +1231,40 @@ impl LowLevelTriGSerializer {
     }
 }
 
+struct TurtleNamedNode<'a> {
+    node: &'a NamedNode,
+    prefixes: &'a Vec<(String, String)>,
+    base_iri: &'a Option<Iri<String>>,
+}
+
+impl fmt::Display for TurtleNamedNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (prefix_name, prefix_iri) in self.prefixes {
+            if let Some(local_name) = self.node.as_str().strip_prefix(prefix_iri) {
+                if local_name.is_empty() {
+                    return write!(f, "{prefix_name}:");
+                } else if let Some(escaped_local_name) = escape_local_name(local_name) {
+                    return write!(f, "{prefix_name}:{escaped_local_name}");
+                }
+            }
+        }
+        write!(f, "<{}>", relative_iri(self.node.as_str(), self.base_iri))
+    }
+}
+
 struct TurtlePredicate<'a> {
-    named_node: NamedNodeRef<'a>,
+    named_node: &'a NamedNode,
     prefixes: &'a Vec<(String, String)>,
     base_iri: &'a Option<Iri<String>>,
 }
 
 impl fmt::Display for TurtlePredicate<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.named_node == rdf::TYPE {
+        if *self.named_node == rdf::TYPE {
             f.write_str("a")
         } else {
-            TurtleTerm {
-                term: self.named_node.into(),
+            TurtleNamedNode {
+                node: self.named_node,
                 prefixes: self.prefixes,
                 base_iri: self.base_iri,
             }
@@ -1199,8 +1273,28 @@ impl fmt::Display for TurtlePredicate<'_> {
     }
 }
 
+struct TurtleNamedOrBlankNode<'a> {
+    node: &'a NamedOrBlankNode,
+    prefixes: &'a Vec<(String, String)>,
+    base_iri: &'a Option<Iri<String>>,
+}
+
+impl fmt::Display for TurtleNamedOrBlankNode<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.node {
+            NamedOrBlankNode::NamedNode(v) => TurtleNamedNode {
+                node: v,
+                prefixes: self.prefixes,
+                base_iri: self.base_iri,
+            }
+            .fmt(f),
+            NamedOrBlankNode::BlankNode(v) => write!(f, "{v}"),
+        }
+    }
+}
+
 struct TurtleTerm<'a> {
-    term: TermRef<'a>,
+    term: &'a Term,
     prefixes: &'a Vec<(String, String)>,
     base_iri: &'a Option<Iri<String>>,
 }
@@ -1208,53 +1302,45 @@ struct TurtleTerm<'a> {
 impl fmt::Display for TurtleTerm<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.term {
-            TermRef::NamedNode(v) => {
-                for (prefix_name, prefix_iri) in self.prefixes {
-                    if let Some(local_name) = v.as_str().strip_prefix(prefix_iri) {
-                        if local_name.is_empty() {
-                            return write!(f, "{prefix_name}:");
-                        } else if let Some(escaped_local_name) = escape_local_name(local_name) {
-                            return write!(f, "{prefix_name}:{escaped_local_name}");
-                        }
-                    }
-                }
-                write!(f, "<{}>", relative_iri(v.as_str(), self.base_iri))
+            Term::NamedNode(v) => TurtleNamedNode {
+                node: v,
+                prefixes: self.prefixes,
+                base_iri: self.base_iri,
             }
-            TermRef::BlankNode(v) => write!(f, "{v}"),
-            TermRef::Literal(v) => {
+            .fmt(f),
+            Term::BlankNode(v) => write!(f, "{v}"),
+            Term::Literal(v) => {
                 let value = v.value();
+                let datatype = v.datatype();
                 let is_plain = {
                     #[cfg(feature = "rdf-12")]
                     {
-                        matches!(
-                            v.datatype(),
-                            xsd::STRING | rdf::LANG_STRING | rdf::DIR_LANG_STRING
-                        )
+                        *datatype == xsd::STRING
+                            || *datatype == rdf::LANG_STRING
+                            || *datatype == rdf::DIR_LANG_STRING
                     }
                     #[cfg(not(feature = "rdf-12"))]
                     {
-                        matches!(v.datatype(), xsd::STRING | rdf::LANG_STRING)
+                        *datatype == xsd::STRING || *datatype == rdf::LANG_STRING
                     }
                 };
                 if is_plain {
                     write!(f, "{v}")
                 } else {
-                    let inline = match v.datatype() {
-                        xsd::BOOLEAN => is_turtle_boolean(value),
-                        xsd::INTEGER => is_turtle_integer(value),
-                        xsd::DECIMAL => is_turtle_decimal(value),
-                        xsd::DOUBLE => is_turtle_double(value),
-                        _ => false,
-                    };
-                    if inline {
+                    let datatype = v.datatype();
+                    if *datatype == xsd::BOOLEAN && is_turtle_boolean(value)
+                        || *datatype == xsd::INTEGER && is_turtle_integer(value)
+                        || *datatype == xsd::DECIMAL && is_turtle_decimal(value)
+                        || *datatype == xsd::DOUBLE && is_turtle_double(value)
+                    {
                         f.write_str(value)
                     } else {
                         write!(
                             f,
                             "{}^^{}",
-                            LiteralRef::new_simple_literal(v.value()),
-                            TurtleTerm {
-                                term: v.datatype().into(),
+                            Literal::new_simple_literal(v.clone().into_value()),
+                            TurtleNamedNode {
+                                node: v.datatype(),
                                 prefixes: self.prefixes,
                                 base_iri: self.base_iri,
                             }
@@ -1263,22 +1349,22 @@ impl fmt::Display for TurtleTerm<'_> {
                 }
             }
             #[cfg(feature = "rdf-12")]
-            TermRef::Triple(t) => {
+            Term::Triple(t) => {
                 write!(
                     f,
                     "<<( {} {} {} )>>",
-                    TurtleTerm {
-                        term: t.subject.as_ref().into(),
+                    TurtleNamedOrBlankNode {
+                        node: &t.subject,
+                        prefixes: self.prefixes,
+                        base_iri: self.base_iri,
+                    },
+                    TurtlePredicate {
+                        named_node: &t.predicate,
                         prefixes: self.prefixes,
                         base_iri: self.base_iri,
                     },
                     TurtleTerm {
-                        term: t.predicate.as_ref().into(),
-                        prefixes: self.prefixes,
-                        base_iri: self.base_iri,
-                    },
-                    TurtleTerm {
-                        term: t.object.as_ref(),
+                        term: &t.object,
                         prefixes: self.prefixes,
                         base_iri: self.base_iri,
                     }
@@ -1425,7 +1511,7 @@ fn can_be_escaped_in_local_name(c: char) -> bool {
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    use oxrdf::BlankNodeRef;
+    use oxrdf::BlankNode;
 
     #[test]
     fn test_write() -> io::Result<()> {
@@ -1435,53 +1521,53 @@ mod tests {
             .with_prefix("exl", "http://example.com/p/")
             .map_err(io::Error::other)?
             .for_writer(Vec::new());
-        serializer.serialize_quad(QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/p/o."),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/p/o."),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/o{o}"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/o{o}"),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/"),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p"),
-            LiteralRef::new_simple_literal("foo"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            Literal::new_simple_literal("foo"),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            NamedNodeRef::new_unchecked("http://example.com/s"),
-            NamedNodeRef::new_unchecked("http://example.com/p2"),
-            LiteralRef::new_language_tagged_literal_unchecked("foo", "en"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p2"),
+            Literal::new_language_tagged_literal_unchecked("foo", "en"),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            BlankNodeRef::new_unchecked("b"),
-            NamedNodeRef::new_unchecked("http://example.com/p2"),
-            BlankNodeRef::new_unchecked("b2"),
-            NamedNodeRef::new_unchecked("http://example.com/g"),
+        serializer.serialize_quad(&Quad::new(
+            BlankNode::new_unchecked("b"),
+            NamedNode::new_unchecked("http://example.com/p2"),
+            BlankNode::new_unchecked("b2"),
+            NamedNode::new_unchecked("http://example.com/g"),
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            BlankNodeRef::new_unchecked("b"),
-            NamedNodeRef::new_unchecked("http://example.com/p2"),
-            LiteralRef::new_typed_literal("true", xsd::BOOLEAN),
-            GraphNameRef::DefaultGraph,
+        serializer.serialize_quad(&Quad::new(
+            BlankNode::new_unchecked("b"),
+            NamedNode::new_unchecked("http://example.com/p2"),
+            Literal::new_typed_literal("true", xsd::BOOLEAN),
+            GraphName::DefaultGraph,
         ))?;
-        serializer.serialize_quad(QuadRef::new(
-            BlankNodeRef::new_unchecked("b"),
-            NamedNodeRef::new_unchecked("http://example.org/p2"),
-            LiteralRef::new_typed_literal("false", xsd::BOOLEAN),
-            NamedNodeRef::new_unchecked("http://example.com/g2"),
+        serializer.serialize_quad(&Quad::new(
+            BlankNode::new_unchecked("b"),
+            NamedNode::new_unchecked("http://example.org/p2"),
+            Literal::new_typed_literal("false", xsd::BOOLEAN),
+            NamedNode::new_unchecked("http://example.com/g2"),
         ))?;
         assert_eq!(
             String::from_utf8(serializer.finish()?).map_err(io::Error::other)?,

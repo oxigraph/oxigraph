@@ -3,7 +3,6 @@ use oxigraph::io::{
     JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParseError, RdfParser, RdfSerializer,
     ReaderQuadParser,
 };
-use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -14,6 +13,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -156,10 +156,10 @@ pub fn serialize<'py>(
             for i in input.try_iter()? {
                 let i = i?;
                 if let Ok(triple) = i.extract::<PyRef<'_, PyTriple>>() {
-                    serializer.serialize_triple(&*triple)
+                    serializer.serialize_triple(triple.deref().as_ref())
                 } else {
                     let quad = i.extract::<PyRef<'_, PyQuad>>()?;
-                    let quad = QuadRef::from(&*quad);
+                    let quad = quad.deref().as_ref();
                     if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
                         return Err(PyValueError::new_err(format!(
                             "The {format} format does not support named graphs"

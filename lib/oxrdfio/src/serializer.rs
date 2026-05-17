@@ -4,7 +4,7 @@ use crate::format::RdfFormat;
 #[cfg(feature = "async-tokio")]
 use oxjsonld::TokioAsyncWriterJsonLdSerializer;
 use oxjsonld::{JsonLdProfile, JsonLdSerializer, WriterJsonLdSerializer};
-use oxrdf::{GraphNameRef, IriParseError, QuadRef, TripleRef};
+use oxrdf::{IriParseError, Quad, Triple};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::TokioAsyncWriterRdfXmlSerializer;
 use oxrdfxml::{RdfXmlSerializer, WriterRdfXmlSerializer};
@@ -110,17 +110,17 @@ impl RdfSerializer {
     ///
     /// ```
     /// use oxrdf::vocab::rdf;
-    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdf::{NamedNode, Triple};
     /// use oxrdfio::{RdfFormat, RdfSerializer};
     ///
     /// let mut serializer = RdfSerializer::from_format(RdfFormat::Turtle)
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_triple(TripleRef {
-    ///     subject: NamedNodeRef::new("http://example.com/s")?.into(),
-    ///     predicate: rdf::TYPE.into(),
-    ///     object: NamedNodeRef::new("http://schema.org/Person")?.into(),
-    /// })?;
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com/s")?,
+    ///     rdf::TYPE,
+    ///     NamedNode::new("http://schema.org/Person")?,
+    /// ))?;
     /// assert_eq!(
     ///     serializer.finish()?,
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com/s> a schema:Person .\n"
@@ -130,8 +130,8 @@ impl RdfSerializer {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfSerializerKind::JsonLd(s) => RdfSerializerKind::JsonLd(s),
@@ -154,17 +154,17 @@ impl RdfSerializer {
     ///
     /// ```
     /// use oxrdf::vocab::rdf;
-    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdf::{NamedNode, Triple};
     /// use oxrdfio::{RdfFormat, RdfSerializer};
     ///
     /// let mut serializer = RdfSerializer::from_format(RdfFormat::Turtle)
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com/me")?,
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com/me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    ///     NamedNode::new("http://example.com/ns#Person")?,
     /// ))?;
     /// assert_eq!(
     ///     serializer.finish()?,
@@ -173,7 +173,7 @@ impl RdfSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfSerializerKind::JsonLd(s) => RdfSerializerKind::JsonLd(s),
             RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
@@ -336,8 +336,8 @@ enum WriterQuadSerializerKind<W: Write> {
 }
 
 impl<W: Write> WriterQuadSerializer<W> {
-    /// Serializes a [`QuadRef`]
-    pub fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+    /// Serializes a [`Quad`]
+    pub fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
         match &mut self.inner {
             WriterQuadSerializerKind::JsonLd(serializer) => serializer.serialize_quad(quad),
             WriterQuadSerializerKind::NQuads(serializer) => serializer.serialize_quad(quad),
@@ -354,9 +354,16 @@ impl<W: Write> WriterQuadSerializer<W> {
         }
     }
 
-    /// Serializes a [`TripleRef`]
-    pub fn serialize_triple<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
-        self.serialize_quad(triple.into().in_graph(GraphNameRef::DefaultGraph))
+    /// Serializes a [`Triple`]
+    pub fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        match &mut self.inner {
+            WriterQuadSerializerKind::JsonLd(serializer) => serializer.serialize_triple(triple),
+            WriterQuadSerializerKind::NQuads(serializer) => serializer.serialize_triple(triple),
+            WriterQuadSerializerKind::NTriples(serializer) => serializer.serialize_triple(triple),
+            WriterQuadSerializerKind::RdfXml(serializer) => serializer.serialize_triple(triple),
+            WriterQuadSerializerKind::TriG(serializer) => serializer.serialize_triple(triple),
+            WriterQuadSerializerKind::Turtle(serializer) => serializer.serialize_triple(triple),
+        }
     }
 
     /// Writes the last bytes of the file
@@ -421,8 +428,8 @@ enum TokioAsyncWriterQuadSerializerKind<W: AsyncWrite + Unpin> {
 
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterQuadSerializer<W> {
-    /// Serializes a [`QuadRef`]
-    pub async fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+    /// Serializes a [`Quad`]
+    pub async fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
         match &mut self.inner {
             TokioAsyncWriterQuadSerializerKind::JsonLd(serializer) => {
                 serializer.serialize_quad(quad).await
@@ -445,13 +452,28 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterQuadSerializer<W> {
         }
     }
 
-    /// Serializes a [`TripleRef`]
-    pub async fn serialize_triple<'a>(
-        &mut self,
-        triple: impl Into<TripleRef<'a>>,
-    ) -> io::Result<()> {
-        self.serialize_quad(triple.into().in_graph(GraphNameRef::DefaultGraph))
-            .await
+    /// Serializes a [`Triple`]
+    pub async fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        match &mut self.inner {
+            TokioAsyncWriterQuadSerializerKind::JsonLd(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+            TokioAsyncWriterQuadSerializerKind::NQuads(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+            TokioAsyncWriterQuadSerializerKind::NTriples(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+            TokioAsyncWriterQuadSerializerKind::RdfXml(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+            TokioAsyncWriterQuadSerializerKind::TriG(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+            TokioAsyncWriterQuadSerializerKind::Turtle(serializer) => {
+                serializer.serialize_triple(triple).await
+            }
+        }
     }
 
     /// Writes the last bytes of the file
@@ -469,10 +491,9 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterQuadSerializer<W> {
     }
 }
 
-fn to_triple<'a>(quad: impl Into<QuadRef<'a>>) -> io::Result<TripleRef<'a>> {
-    let quad = quad.into();
+fn to_triple(quad: &Quad) -> io::Result<&Triple> {
     if quad.graph_name.is_default_graph() {
-        Ok(quad.into())
+        Ok(quad.as_triple())
     } else {
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,

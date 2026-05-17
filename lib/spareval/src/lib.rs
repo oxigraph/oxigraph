@@ -27,7 +27,7 @@ pub use crate::service::{DefaultServiceHandler, ServiceHandler};
 pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
-use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, Term, Variable};
+use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Term, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
 use spargebra::algebra::QueryDataset;
@@ -61,7 +61,7 @@ use std::{fmt, io};
 /// if let QueryResults::Solutions(solutions) = results {
 ///     let solutions = solutions.collect::<Result<Vec<_>, _>>()?;
 ///     assert_eq!(solutions.len(), 1);
-///     assert_eq!(solutions[0]["s"], ex.into());
+///     assert_eq!(solutions[0]["s"], ex);
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
@@ -93,7 +93,7 @@ fn default_custom_functions() -> CustomFunctionRegistry {
     let mut registry = CustomFunctionRegistry::default();
     #[cfg(feature = "geosparql")]
     for (name, implementation) in spargeo::GEOSPARQL_EXTENSION_FUNCTIONS {
-        registry.insert(name.into_owned(), Arc::new(implementation));
+        registry.insert(name, Arc::new(implementation));
     }
     registry
 }
@@ -379,7 +379,7 @@ impl QueryEvaluator {
                 *self.now.get_or_insert_with(DateTime::now)
             }
 
-            fn base_iri(&mut self) -> Option<Arc<Iri<String>>> {
+            fn base_iri(&mut self) -> Option<Iri<OxString>> {
                 None
             }
 
@@ -472,7 +472,7 @@ impl QueryEvaluator {
     pub fn prepare_delete_insert<'a>(
         &'a self,
         operation: &'a DeleteInsertOperation,
-        base_iri: Option<&'a Iri<String>>,
+        base_iri: Option<&'a Iri<OxString>>,
     ) -> PreparedDeleteInsertUpdate<'a> {
         let dataset = operation.using.clone().map(Into::into).unwrap_or_default();
         PreparedDeleteInsertUpdate {
@@ -487,11 +487,11 @@ impl QueryEvaluator {
         &self,
         dataset: D,
         dataset_spec: QueryDatasetSpecification,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
         SimpleEvaluator::new(
             dataset,
-            base_iri.cloned().map(Arc::new),
+            base_iri.cloned(),
             Rc::new(self.service_handler.clone()),
             Rc::new(self.custom_functions.clone()),
             Rc::new(self.custom_aggregate_functions.clone()),
@@ -740,7 +740,7 @@ impl PreparedQuery<'_> {
 pub struct PreparedDeleteInsertUpdate<'a> {
     evaluator: &'a QueryEvaluator,
     operation: &'a DeleteInsertOperation,
-    base_iri: Option<&'a Iri<String>>,
+    base_iri: Option<&'a Iri<OxString>>,
     dataset: QueryDatasetSpecification,
 }
 

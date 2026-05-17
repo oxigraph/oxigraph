@@ -3,7 +3,7 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
+use oxrdf::{NamedNode, NamedOrBlankNode, Term, Triple};
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;
@@ -18,20 +18,20 @@ use tokio::io::AsyncWrite;
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+/// use oxrdf::{Literal, NamedNode, Triple};
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
+///     NamedNode::new("http://schema.org/Person")?,
 /// ))?;
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -59,8 +59,8 @@ impl RdfXmlSerializer {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         let prefix_name = prefix_name.into();
         if prefix_name == "oxprefix" {
@@ -72,22 +72,22 @@ impl RdfXmlSerializer {
     }
 
     /// ```
-    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdf::{NamedNode, Triple};
     /// use oxrdfxml::RdfXmlSerializer;
     ///
     /// let mut serializer = RdfXmlSerializer::new()
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     NamedNode::new("http://example.com/ns#Person")?,
     /// ))?;
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://example.com/ns#parent")?,
-    ///     NamedNodeRef::new("http://example.com#other")?,
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://example.com/ns#parent")?,
+    ///     NamedNode::new("http://example.com#other")?,
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
@@ -96,7 +96,7 @@ impl RdfXmlSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
@@ -106,20 +106,20 @@ impl RdfXmlSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+    /// use oxrdf::{Literal, NamedNode, Triple};
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlSerializer;
     ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     NamedNode::new("http://schema.org/Person")?,
     /// ))?;
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://schema.org/name")?,
-    ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://schema.org/name")?,
+    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -141,20 +141,20 @@ impl RdfXmlSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
+    /// use oxrdf::{NamedNode, Triple, Literal};
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlSerializer;
     ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     NamedNode::new("http://schema.org/Person")?,
     /// )).await?;
-    /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://schema.org/name")?,
-    ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    /// serializer.serialize_triple(&Triple::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://schema.org/name")?,
+    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// )).await?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -205,20 +205,20 @@ impl RdfXmlSerializer {
 /// Can be built using [`RdfXmlSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+/// use oxrdf::{Literal, NamedNode, Triple};
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
+///     NamedNode::new("http://schema.org/Person")?,
 /// ))?;
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -234,7 +234,7 @@ pub struct WriterRdfXmlSerializer<W: Write> {
 
 impl<W: Write> WriterRdfXmlSerializer<W> {
     /// Serializes an extra triple.
-    pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub fn serialize_triple(&mut self, t: &Triple) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_triple(t, &mut buffer)?;
         self.flush_buffer(&mut buffer)
@@ -263,20 +263,20 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
+/// use oxrdf::{NamedNode, Triple, Literal};
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
+///     NamedNode::new("http://schema.org/Person")?,
 /// )).await?;
-/// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+/// serializer.serialize_triple(&Triple::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// )).await?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -295,7 +295,7 @@ pub struct TokioAsyncWriterRdfXmlSerializer<W: AsyncWrite + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterRdfXmlSerializer<W> {
     /// Serializes an extra triple.
-    pub async fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub async fn serialize_triple(&mut self, t: &Triple) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_triple(t, &mut buffer)?;
         self.flush_buffer(&mut buffer).await
@@ -343,16 +343,15 @@ pub struct InnerRdfXmlWriter {
 impl InnerRdfXmlWriter {
     fn serialize_triple<'a>(
         &mut self,
-        t: impl Into<TripleRef<'a>>,
+        triple: &'a Triple,
         output: &mut Vec<Event<'a>>,
     ) -> io::Result<()> {
         if self.current_subject.is_none() {
             self.write_start(output);
         }
 
-        let triple = t.into();
         // We open a new rdf:Description if useful
-        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref) != Some(triple.subject) {
+        if self.current_subject.as_ref() != Some(&triple.subject) {
             if self.current_subject.is_some() {
                 output.push(Event::End(
                     self.current_resource_tag
@@ -360,10 +359,10 @@ impl InnerRdfXmlWriter {
                         .map_or_else(|| BytesEnd::new("rdf:Description"), BytesEnd::new),
                 ));
             }
-            self.current_subject = Some(triple.subject.into_owned());
+            self.current_subject = Some(triple.subject.clone());
 
             let (mut description_start, with_type_tag) = if triple.predicate == rdf::TYPE {
-                if let TermRef::NamedNode(t) = triple.object {
+                if let Term::NamedNode(t) = &triple.object {
                     if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
                         (BytesStart::new("rdf:Description"), false)
                     } else {
@@ -381,24 +380,24 @@ impl InnerRdfXmlWriter {
             } else {
                 (BytesStart::new("rdf:Description"), false)
             };
-            description_start.push_attribute(match triple.subject {
-                NamedOrBlankNodeRef::NamedNode(node) => {
+            description_start.push_attribute(match &triple.subject {
+                NamedOrBlankNode::NamedNode(node) => {
                     ("rdf:about", relative_iri(node.as_str(), &self.base_iri))
                 }
-                NamedOrBlankNodeRef::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
+                NamedOrBlankNode::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
             });
             output.push(Event::Start(description_start));
             if with_type_tag {
                 return Ok(()); // No need for a value
             }
         }
-        self.write_predicate_object(triple.predicate, triple.object, output)
+        self.write_predicate_object(&triple.predicate, &triple.object, output)
     }
 
     fn write_predicate_object<'a>(
         &mut self,
-        predicate: NamedNodeRef<'a>,
-        object: TermRef<'a>,
+        predicate: &'a NamedNode,
+        object: &'a Term,
         output: &mut Vec<Event<'a>>,
     ) -> io::Result<()> {
         if RESERVED_SYNTAX_TERMS.contains(&predicate.as_str()) {
@@ -414,19 +413,19 @@ impl InnerRdfXmlWriter {
             property_open.push_attribute(prop_xmlns);
         }
         match object {
-            TermRef::NamedNode(node) => {
+            Term::NamedNode(node) => {
                 property_open
                     .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri)));
                 output.push(Event::Empty(property_open));
             }
-            TermRef::BlankNode(node) => {
+            Term::BlankNode(node) => {
                 property_open.push_attribute(("rdf:nodeID", node.as_str()));
                 output.push(Event::Empty(property_open));
             }
-            TermRef::Literal(literal) => {
+            Term::Literal(literal) => {
                 if let Some(language) = literal.language() {
                     property_open.push_attribute(("xml:lang", language));
-                } else if literal.datatype() != xsd::STRING {
+                } else if *literal.datatype() != xsd::STRING {
                     property_open.push_attribute((
                         "rdf:datatype",
                         relative_iri(literal.datatype().as_str(), &self.base_iri),
@@ -449,23 +448,19 @@ impl InnerRdfXmlWriter {
                 output.push(Event::End(BytesEnd::new(prop_qname)));
             }
             #[cfg(feature = "rdf-12")]
-            TermRef::Triple(triple) => {
+            Term::Triple(triple) => {
                 property_open.push_attribute(("rdf:version", "1.2"));
                 property_open.push_attribute(("rdf:parseType", "Triple"));
                 output.push(Event::Start(property_open));
                 let mut subject_start = BytesStart::new("rdf:Description");
-                subject_start.push_attribute(match triple.subject.as_ref() {
-                    NamedOrBlankNodeRef::NamedNode(node) => {
+                subject_start.push_attribute(match &triple.subject {
+                    NamedOrBlankNode::NamedNode(node) => {
                         ("rdf:about", relative_iri(node.as_str(), &self.base_iri))
                     }
-                    NamedOrBlankNodeRef::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
+                    NamedOrBlankNode::BlankNode(node) => ("rdf:nodeID", node.as_str().into()),
                 });
                 output.push(Event::Start(subject_start));
-                self.write_predicate_object(
-                    triple.predicate.as_ref(),
-                    triple.object.as_ref(),
-                    output,
-                )?;
+                self.write_predicate_object(&triple.predicate, &triple.object, output)?;
                 output.push(Event::End(BytesEnd::new("rdf:Description")));
                 output.push(Event::End(BytesEnd::new(prop_qname)));
             }
@@ -508,7 +503,7 @@ impl InnerRdfXmlWriter {
 
     fn uri_to_qname_and_xmlns<'a>(
         &self,
-        uri: NamedNodeRef<'a>,
+        uri: &'a NamedNode,
     ) -> (Cow<'a, str>, Option<(&'a str, &'a str)>) {
         let (prop_prefix, prop_value) = split_iri(uri.as_str());
         if let Some(prop_prefix) = self.prefixes_by_iri.get(prop_prefix) {
@@ -572,6 +567,7 @@ fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use oxrdf::NamedNode;
     use std::error::Error;
 
     #[test]
@@ -603,15 +599,15 @@ mod tests {
         let mut serializer = RdfXmlSerializer::new()
             .with_prefix("", "http://example.com/")?
             .for_writer(Vec::new());
-        serializer.serialize_triple(TripleRef::new(
-            NamedNodeRef::new("http://example.com/s")?,
+        serializer.serialize_triple(&Triple::new(
+            NamedNode::new("http://example.com/s")?,
             rdf::TYPE,
-            NamedNodeRef::new("http://example.org/o")?,
+            NamedNode::new("http://example.org/o")?,
         ))?;
-        serializer.serialize_triple(TripleRef::new(
-            NamedNodeRef::new("http://example.com/s")?,
-            NamedNodeRef::new("http://example.com/p")?,
-            NamedNodeRef::new("http://example.com/o2")?,
+        serializer.serialize_triple(&Triple::new(
+            NamedNode::new("http://example.com/s")?,
+            NamedNode::new("http://example.com/p")?,
+            NamedNode::new("http://example.com/o2")?,
         ))?;
         let output = serializer.finish()?;
         assert_eq!(

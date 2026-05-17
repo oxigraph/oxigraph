@@ -5,7 +5,6 @@ use crate::reflect::*;
 use crate::utils::{to_option, to_option_ref};
 use js_sys::{Array, Map, try_iter};
 use oxigraph::io::{RdfParser, RdfSerializer};
-use oxigraph::model::*;
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
@@ -38,7 +37,7 @@ impl JsStore {
     }
 
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
-        self.store.insert(&to_quad(quad)?).map_err(JsError::from)?;
+        self.store.insert(to_quad(quad)?).map_err(JsError::from)?;
         Ok(())
     }
 
@@ -76,12 +75,12 @@ impl JsStore {
         Ok(self
             .store
             .quads_for_pattern(
-                subject.as_ref().map(NamedOrBlankNode::as_ref),
-                predicate.as_ref().map(NamedNode::as_ref),
-                object.as_ref().map(Term::as_ref),
-                graph_name.as_ref().map(GraphName::as_ref),
+                subject.as_ref(),
+                predicate.as_ref(),
+                object.as_ref(),
+                graph_name.as_ref(),
             )
-            .map(|v| v.map(|q| from_quad(&self.data_factory, q.as_ref())))
+            .map(|v| v.map(|q| from_quad(&self.data_factory, &q)))
             .collect::<Result<Vec<_>, _>>()
             .map_err(JsError::from)?)
     }
@@ -134,7 +133,7 @@ impl JsStore {
 
         let mut evaluator = SparqlEvaluator::new();
         if let Some(base_iri) = base_iri {
-            evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+            evaluator = evaluator.with_base_iri(&base_iri).map_err(JsError::from)?;
         }
 
         let mut prepared_query = evaluator.parse_query(&query).map_err(JsError::from)?;
@@ -180,7 +179,7 @@ impl JsStore {
                         for (variable, value) in solution.iter() {
                             result.set(
                                 &variable.as_str().into(),
-                                &from_term(&self.data_factory, value.as_ref()),
+                                &from_term(&self.data_factory, value),
                             );
                         }
                         results.push(&result.into());
@@ -206,7 +205,7 @@ impl JsStore {
                     for triple in triples {
                         results.push(&from_triple(
                             &self.data_factory,
-                            triple.map_err(JsError::from)?.as_ref(),
+                            &triple.map_err(JsError::from)?,
                         ));
                     }
                     results.into()
@@ -240,7 +239,7 @@ impl JsStore {
 
         let mut evaluator = SparqlEvaluator::new();
         if let Some(base_iri) = base_iri {
-            evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
+            evaluator = evaluator.with_base_iri(&base_iri).map_err(JsError::from)?;
         }
 
         Ok(evaluator
@@ -277,7 +276,7 @@ impl JsStore {
             parser = parser.with_default_graph(to_graph_name);
         }
         if let Some(base_iri) = base_iri {
-            parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
+            parser = parser.with_base_iri(&base_iri).map_err(JsError::from)?;
         }
         if lenient {
             parser = parser.lenient();

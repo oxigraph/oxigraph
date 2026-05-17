@@ -1,12 +1,12 @@
 //! Shared parser implementation for N-Triples and N-Quads.
 
-use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
+use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, to_lowercase};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
 
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,
@@ -28,10 +28,10 @@ enum NQuadsState {
     ExpectPossibleGraphOrEndOfQuotedTriple,
     ExpectDot,
     ExpectLiteralAnnotationOrGraphNameOrDot {
-        value: String,
+        value: OxString,
     },
     ExpectLiteralDatatype {
-        value: String,
+        value: OxString,
     },
     ExpectLineJump,
     RecoverToLineJump,
@@ -82,7 +82,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     N3Token::BlankNodeLabel(s) => {
-                        self.subjects.push(BlankNode::new_unchecked(s).into());
+                        self.subjects
+                            .push(BlankNode::new_unchecked(OxString::new_owned(s)).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
@@ -138,7 +139,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     N3Token::BlankNodeLabel(o) => {
-                        self.objects.push(BlankNode::new_unchecked(o).into());
+                        self.objects
+                            .push(BlankNode::new_unchecked(OxString::new_owned(o)).into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
@@ -173,13 +175,13 @@ impl RuleRecognizer for NQuadsRecognizer {
                         if let Some(direction) = direction {
                             Literal::new_directional_language_tagged_literal_unchecked(
                                 value,
-                                language.to_ascii_lowercase(),
+                                to_lowercase(language),
                                 direction,
                             )
                         } else {
                             Literal::new_language_tagged_literal_unchecked(
                                 value,
-                                language.to_ascii_lowercase(),
+                                to_lowercase(language),
                             )
                         }
                         .into(),
@@ -193,7 +195,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     self.objects.push(
                         Literal::new_language_tagged_literal_unchecked(
                             value,
-                            language.to_ascii_lowercase(),
+                            to_lowercase(language),
                         )
                         .into(),
                     );
@@ -225,11 +227,11 @@ impl RuleRecognizer for NQuadsRecognizer {
                 };
                 match token {
                     N3Token::IriRef(d) => {
-                        if !self.lenient && d == rdf::LANG_STRING.as_str() {
+                        if !self.lenient && d == *rdf::LANG_STRING.as_str() {
                             errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
                         }
                         #[cfg(feature = "rdf-12")]
-                        if !self.lenient && d == rdf::DIR_LANG_STRING.as_str() {
+                        if !self.lenient && d == *rdf::DIR_LANG_STRING.as_str() {
                             errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
                         }
                         self.objects.push(
@@ -259,7 +261,10 @@ impl RuleRecognizer for NQuadsRecognizer {
                         TokenOrLineJump::Token(N3Token::BlankNodeLabel(g))
                             if context.with_graph_name =>
                         {
-                            self.emit_quad(results, BlankNode::new_unchecked(g).into());
+                            self.emit_quad(
+                                results,
+                                BlankNode::new_unchecked(OxString::new_owned(g)).into(),
+                            );
                             self.stack.push(NQuadsState::ExpectDot);
                             self
                         }
@@ -348,7 +353,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                 errors.push("Triples must be followed by a dot".into())
             }
             [NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value }] => {
-                self.objects.push(Literal::new_simple_literal(value).into());
+                self.objects
+                    .push(Literal::new_simple_literal(value.clone()).into());
                 self.emit_quad(results, GraphName::DefaultGraph);
                 errors.push("Triples must be followed by a dot".into())
             }

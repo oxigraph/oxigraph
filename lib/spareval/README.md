@@ -32,7 +32,7 @@ let results = evaluator.prepare(&query).execute(&dataset);
 if let QueryResults::Solutions(solutions) = results.unwrap() {
     let solutions = solutions.collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(solutions.len(), 1);
-    assert_eq!(solutions[0]["s"], ex.into());
+    assert_eq!(solutions[0]["s"], ex);
 }
 ```
 

@@ -9,7 +9,7 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad};
 use std::error::Error;
 use std::fmt::Write;
 use std::io::Read;
@@ -29,7 +29,7 @@ use tokio::io::AsyncRead;
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 ///
 /// let file = r#"{
@@ -47,11 +47,11 @@ use tokio::io::AsyncRead;
 ///     ]
 /// }"#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -64,7 +64,7 @@ pub struct JsonLdParser {
     processing_mode: JsonLdProcessingMode,
     lenient: bool,
     profile: JsonLdProfileSet,
-    base: Option<Iri<String>>,
+    base: Option<Iri<OxString>>,
 }
 
 impl JsonLdParser {
@@ -92,7 +92,7 @@ impl JsonLdParser {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdProfile};
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -106,14 +106,14 @@ impl JsonLdParser {
     ///     ]
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new()
     ///     .with_profile(JsonLdProfile::Streaming)
     ///     .for_slice(file)
     /// {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -137,8 +137,8 @@ impl JsonLdParser {
     ///
     /// It corresponds to the [`base` option from the algorithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base = Some(Iri::parse(base_iri.into())?);
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
+        self.base = Some(Iri::parse(OxString::new_owned(base_iri))?);
         Ok(self)
     }
 
@@ -147,7 +147,7 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -165,11 +165,11 @@ impl JsonLdParser {
     ///     ]
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -192,7 +192,7 @@ impl JsonLdParser {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -210,12 +210,12 @@ impl JsonLdParser {
     ///     ]
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(quad) = parser.next().await {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -241,7 +241,7 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -259,11 +259,11 @@ impl JsonLdParser {
     ///     ]
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new().for_slice(file) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -304,7 +304,7 @@ impl JsonLdParser {
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 ///
 /// let file = r#"{
@@ -322,11 +322,11 @@ impl JsonLdParser {
 ///     ]
 /// }"#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -375,7 +375,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -385,7 +385,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new()
     ///     .for_reader(file.as_bytes())
@@ -398,7 +398,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///     })
     /// {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -494,7 +494,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 ///
 /// let file = r#"{
@@ -512,12 +512,12 @@ impl<R: Read> ReaderJsonLdParser<R> {
 ///     ]
 /// }"#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(quad) = parser.next().await {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -632,7 +632,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::NamedNode;
 /// use oxrdf::vocab::rdf;
 ///
 /// let file = r#"{
@@ -650,11 +650,11 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 ///     ]
 /// }"#;
 ///
-/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let schema_person = NamedNode::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in JsonLdParser::new().for_slice(file) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
 ///         count += 1;
 ///     }
 /// }
@@ -703,7 +703,7 @@ impl SliceJsonLdParser<'_> {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = r#"{
@@ -713,7 +713,7 @@ impl SliceJsonLdParser<'_> {
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new()
     ///     .for_slice(file)
@@ -726,7 +726,7 @@ impl SliceJsonLdParser<'_> {
     ///     })
     /// {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -817,7 +817,7 @@ impl SliceJsonLdParser<'_> {
 ///
 /// See [`ReaderJsonLdParser::prefixes`].
 pub struct JsonLdPrefixesIter<'a> {
-    term_definitions: std::collections::hash_map::Iter<'a, String, JsonLdTermDefinition>,
+    term_definitions: std::collections::hash_map::Iter<'a, OxString, JsonLdTermDefinition>,
     lenient: bool,
 }
 
@@ -1084,12 +1084,12 @@ impl JsonLdToRdfConverter {
                             results.push(Quad::new(
                                 previous_node,
                                 rdf::REST,
-                                rdf::NIL.into_owned(),
+                                rdf::NIL,
                                 graph_name.clone(),
                             ));
                         }
                     } else {
-                        self.emit_quads_for_new_object(Some(&rdf::NIL.into_owned().into()), results)
+                        self.emit_quads_for_new_object(Some(&rdf::NIL.into()), results)
                     }
                 }
                 JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
@@ -1171,9 +1171,9 @@ impl JsonLdToRdfConverter {
             (self.last_subject(), self.last_predicate())
         {
             results.push(if reverse {
-                Quad::new(id.clone(), predicate, subject.clone(), graph_name.clone())
+                Quad::new(id.clone(), predicate, subject, graph_name.clone())
             } else {
-                Quad::new(subject.clone(), predicate, id.clone(), graph_name.clone())
+                Quad::new(subject, predicate, id.clone(), graph_name.clone())
             })
         }
     }
@@ -1194,12 +1194,7 @@ impl JsonLdToRdfConverter {
         if reverse {
             return;
         }
-        results.push(Quad::new(
-            subject.clone(),
-            predicate,
-            literal,
-            graph_name.clone(),
-        ))
+        results.push(Quad::new(subject, predicate, literal, graph_name.clone()))
     }
 
     fn add_new_list_node_state(
@@ -1224,12 +1219,12 @@ impl JsonLdToRdfConverter {
             .push(JsonLdToRdfState::List(Some(new_node.into())));
     }
 
-    fn convert_named_or_blank_node(&self, value: String) -> Option<NamedOrBlankNode> {
+    fn convert_named_or_blank_node(&self, value: OxString) -> Option<NamedOrBlankNode> {
         Some(if let Some(bnode_id) = value.strip_prefix("_:") {
             if self.lenient {
-                Some(BlankNode::new_unchecked(bnode_id))
+                Some(BlankNode::new_unchecked(OxString::new_owned(bnode_id)))
             } else {
-                BlankNode::new(bnode_id).ok()
+                BlankNode::new(OxString::new_owned(bnode_id)).ok()
             }?
             .into()
         } else {
@@ -1237,11 +1232,11 @@ impl JsonLdToRdfConverter {
         })
     }
 
-    fn convert_named_node(&self, value: String) -> Option<NamedNode> {
+    fn convert_named_node(&self, value: OxString) -> Option<NamedNode> {
         if self.lenient {
             Some(NamedNode::new_unchecked(value))
         } else {
-            NamedNode::new(&value).ok()
+            NamedNode::new(value).ok()
         }
     }
 
@@ -1249,9 +1244,9 @@ impl JsonLdToRdfConverter {
     fn convert_literal(
         &self,
         value: JsonLdValue,
-        language: Option<String>,
+        language: Option<OxString>,
         direction: Option<&'static str>,
-        r#type: Option<String>,
+        r#type: Option<OxString>,
     ) -> Option<Literal> {
         let r#type = if let Some(t) = r#type {
             Some(self.convert_named_node(t)?)
@@ -1277,7 +1272,7 @@ impl JsonLdToRdfConverter {
                             ))
                         } else {
                             Literal::new_directional_language_tagged_literal(
-                                value, &language, direction,
+                                value, language, direction,
                             )
                             .ok()
                         };
@@ -1288,7 +1283,7 @@ impl JsonLdToRdfConverter {
                     if self.lenient {
                         Literal::new_language_tagged_literal_unchecked(value, language)
                     } else {
-                        Literal::new_language_tagged_literal(value, &language).ok()?
+                        Literal::new_language_tagged_literal(value, language).ok()?
                     }
                 } else if let Some(datatype) = r#type {
                     Literal::new_typed_literal(value, datatype)
@@ -1306,14 +1301,12 @@ impl JsonLdToRdfConverter {
                 )
                 .unwrap_or(RdfJsonNumber::Double(value));
                 match value {
-                    RdfJsonNumber::Integer(value) => Literal::new_typed_literal(
-                        value,
-                        r#type.unwrap_or_else(|| xsd::INTEGER.into()),
-                    ),
-                    RdfJsonNumber::Double(value) => Literal::new_typed_literal(
-                        value,
-                        r#type.unwrap_or_else(|| xsd::DOUBLE.into()),
-                    ),
+                    RdfJsonNumber::Integer(value) => {
+                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::INTEGER))
+                    }
+                    RdfJsonNumber::Double(value) => {
+                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::DOUBLE))
+                    }
                 }
             }
             JsonLdValue::Boolean(value) => {
@@ -1322,7 +1315,7 @@ impl JsonLdToRdfConverter {
                 }
                 Literal::new_typed_literal(
                     if value { "true" } else { "false" },
-                    r#type.unwrap_or_else(|| xsd::BOOLEAN.into()),
+                    r#type.unwrap_or(xsd::BOOLEAN),
                 )
             }
         })
@@ -1336,21 +1329,21 @@ impl JsonLdToRdfConverter {
             #[cfg(feature = "rdf-12")]
             rdf::JSON,
             #[cfg(not(feature = "rdf-12"))]
-            NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON"),
+            NamedNode::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON"),
         )
     }
 
-    fn last_subject(&self) -> Option<&NamedOrBlankNode> {
+    fn last_subject(&self) -> Option<NamedOrBlankNode> {
         for state in self.state.iter().rev() {
             match state {
                 JsonLdToRdfState::Object(id) => {
-                    return id.as_ref();
+                    return id.clone();
                 }
                 JsonLdToRdfState::StartObject { .. } => {
                     unreachable!()
                 }
                 JsonLdToRdfState::Property { .. } => (),
-                JsonLdToRdfState::List(id) => return id.as_ref(),
+                JsonLdToRdfState::List(id) => return id.clone(),
                 JsonLdToRdfState::Graph(_) | JsonLdToRdfState::Included => {
                     return None;
                 }
@@ -1359,11 +1352,11 @@ impl JsonLdToRdfConverter {
         None
     }
 
-    fn last_predicate(&self) -> Option<(NamedNodeRef<'_>, bool)> {
+    fn last_predicate(&self) -> Option<(NamedNode, bool)> {
         for state in self.state.iter().rev() {
             match state {
                 JsonLdToRdfState::Property { id, reverse } => {
-                    return Some((id.as_ref()?.as_ref(), *reverse));
+                    return Some((id.clone()?, *reverse));
                 }
                 JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
                 JsonLdToRdfState::List(_) => return Some((rdf::FIRST, false)),
@@ -1403,8 +1396,8 @@ impl JsonLdToRdfConverter {
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 enum RdfJsonNumber {
-    Integer(String),
-    Double(String),
+    Integer(OxString),
+    Double(OxString),
 }
 
 /// Canonicalizes the JSON number to a xsd:integer, xsd:decimal or xsd:double.
@@ -1463,7 +1456,7 @@ fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNu
         buffer.push_str(decimal_part);
         #[expect(clippy::map_with_unused_argument_over_ranges)]
         buffer.extend((0..(exp - digits_count)).map(|_| '0'));
-        RdfJsonNumber::Integer(buffer)
+        RdfJsonNumber::Integer(buffer.into())
     } else {
         let mut all_digits = integer_part.chars().chain(decimal_part.chars());
         buffer.push(all_digits.next()?);
@@ -1474,7 +1467,7 @@ fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNu
             buffer.extend(all_digits);
         }
         write!(&mut buffer, "E{}", exp.checked_sub(1)?).ok()?;
-        RdfJsonNumber::Double(buffer)
+        RdfJsonNumber::Double(buffer.into())
     })
 }
 

@@ -59,10 +59,10 @@ fn serialize_quads(
 ) -> Vec<u8> {
     let mut serializer = TriGSerializer::new();
     for (prefix_name, prefix_iri) in prefixes {
-        serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+        serializer = serializer.with_prefix(&prefix_name, &prefix_iri).unwrap();
     }
     if let Some(base_iri) = base_iri {
-        serializer = serializer.with_base_iri(base_iri).unwrap();
+        serializer = serializer.with_base_iri(&base_iri).unwrap();
     }
     let mut serializer = serializer.for_writer(Vec::new());
     for quad in quads {
@@ -89,10 +89,7 @@ fuzz_target!(|data: &[u8]| {
         assert!(errors_unchecked.is_empty());
     }
 
-    let bnodes_count = quads
-        .iter()
-        .map(|q| count_quad_blank_nodes(q.as_ref()))
-        .sum::<usize>();
+    let bnodes_count = quads.iter().map(count_quad_blank_nodes).sum::<usize>();
     if bnodes_count == 0 {
         assert_eq!(
             quads,
@@ -111,8 +108,9 @@ fuzz_target!(|data: &[u8]| {
             );
         }
     } else if bnodes_count <= 4 {
-        let mut dataset_with_split = quads.iter().collect::<Dataset>();
-        let mut dataset_without_split = quads_without_split.iter().collect::<Dataset>();
+        let mut dataset_with_split = quads.clone().into_iter().collect::<Dataset>();
+        let mut dataset_without_split =
+            quads_without_split.clone().into_iter().collect::<Dataset>();
         dataset_with_split.canonicalize(CanonicalizationAlgorithm::Unstable);
         dataset_without_split.canonicalize(CanonicalizationAlgorithm::Unstable);
         assert_eq!(
@@ -123,7 +121,7 @@ fuzz_target!(|data: &[u8]| {
             String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new(), None))
         );
         if errors.is_empty() {
-            let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
+            let mut dataset_unchecked = quads_unchecked.clone().into_iter().collect::<Dataset>();
             dataset_unchecked.canonicalize(CanonicalizationAlgorithm::Unstable);
             assert_eq!(
                 dataset_with_split,

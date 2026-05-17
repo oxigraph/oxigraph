@@ -4,8 +4,7 @@ use oxilangtag::LanguageTag;
 use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
-use oxrdf::NamedNode;
-use std::borrow::Cow;
+use oxrdf::{NamedNode, OxStr, OxString};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -13,16 +12,16 @@ use std::str;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum N3Token<'a> {
-    IriRef(String),
+    IriRef(OxString),
     PrefixedName {
         prefix: &'a str,
-        local: Cow<'a, str>,
+        local: OxStr<'a>,
         might_be_invalid_iri: bool,
     },
-    Variable(Cow<'a, str>),
+    Variable(OxString),
     BlankNodeLabel(&'a str),
-    String(String),
-    LongString(String),
+    String(OxString),
+    LongString(OxString),
     Integer(&'a str),
     Decimal(&'a str),
     Double(&'a str),
@@ -44,16 +43,15 @@ pub enum N3LexerMode {
 
 #[derive(Default)]
 pub struct N3LexerOptions {
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
 }
 
 pub struct N3Lexer {
     mode: N3LexerMode,
     lenient: bool,
+    raw_buffer: Vec<u8>,
+    string_buffer: String,
 }
-
-// TODO: there are a lot of 'None' (missing data) returned even if the stream is ending!!!
-// TODO: simplify by not giving is_end and fail with an "unexpected eof" is none is returned when is_end=true?
 
 impl TokenRecognizer for N3Lexer {
     type Token<'a> = N3Token<'a>;
@@ -191,24 +189,29 @@ impl TokenRecognizer for N3Lexer {
 
 impl N3Lexer {
     pub fn new(mode: N3LexerMode, lenient: bool) -> Self {
-        Self { mode, lenient }
+        Self {
+            mode,
+            lenient,
+            raw_buffer: Vec::new(),
+            string_buffer: String::new(),
+        }
     }
 
     fn recognize_iri(
-        &self,
+        &mut self,
         data: &[u8],
         options: &N3LexerOptions,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
         // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
-        let mut string = Vec::new();
+        self.raw_buffer.clear();
         let mut i = 1;
         loop {
             let end = memchr2(b'>', b'\\', &data[i..])?;
-            string.extend_from_slice(&data[i..i + end]);
+            self.raw_buffer.extend_from_slice(&data[i..i + end]);
             i += end;
             match data[i] {
                 b'>' => {
-                    return Some((i + 1, self.parse_iri(string, 0..i + 1, options)));
+                    return Some((i + 1, self.parse_iri(0..i + 1, options)));
                 }
                 b'\\' => {
                     let (additional, c) = self.recognize_escape(&data[i..], i, false)?;
@@ -216,7 +219,8 @@ impl N3Lexer {
                     match c {
                         Ok(c) => {
                             let mut buf = [0; 4];
-                            string.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+                            self.raw_buffer
+                                .extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
                         }
                         Err(e) => return Some((i, Err(e))),
                     }
@@ -227,22 +231,22 @@ impl N3Lexer {
     }
 
     fn parse_iri(
-        &self,
-        iri: Vec<u8>,
+        &mut self,
         position: Range<usize>,
         options: &N3LexerOptions,
     ) -> Result<N3Token<'static>, TokenRecognizerError> {
-        let iri = string_from_utf8(iri, position.clone())?;
-        Ok(N3Token::IriRef(
+        let iri = str_from_utf8(&self.raw_buffer, position.clone())?;
+        Ok(N3Token::IriRef(OxString::new_owned(
             if let Some(base_iri) = options.base_iri.as_ref() {
+                self.string_buffer.clear();
                 if self.lenient {
-                    base_iri.resolve_unchecked(&iri)
+                    base_iri.resolve_into_unchecked(iri, &mut self.string_buffer)
                 } else {
                     base_iri
-                        .resolve(&iri)
+                        .resolve_into(iri, &mut self.string_buffer)
                         .map_err(|e| (position, e.to_string()))?
                 }
-                .into_inner()
+                &self.string_buffer
             } else if self.lenient {
                 iri
             } else {
@@ -250,11 +254,11 @@ impl N3Lexer {
                     .map_err(|e| (position, e.to_string()))?
                     .into_inner()
             },
-        ))
+        )))
     }
 
     fn recognize_pname_or_keyword<'a>(
-        &self,
+        &mut self,
         data: &'a [u8],
         is_ending: bool,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
@@ -345,7 +349,7 @@ impl N3Lexer {
     }
 
     fn recognize_variable<'a>(
-        &self,
+        &mut self,
         data: &'a [u8],
         is_ending: bool,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
@@ -357,23 +361,23 @@ impl N3Lexer {
                 if name.is_empty() {
                     Err((0..consumed, "A variable name is not allowed to be empty").into())
                 } else {
-                    Ok(N3Token::Variable(name))
+                    Ok(N3Token::Variable(OxString::new_owned(&name)))
                 }
             }),
         ))
     }
 
     fn recognize_optional_pn_local<'a>(
-        &self,
+        &mut self,
         data: &'a [u8],
         is_ending: bool,
-    ) -> Option<(usize, Result<(Cow<'a, str>, bool), TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<(OxStr<'a>, bool), TokenRecognizerError>)> {
         // [168s]  PN_LOCAL  ::=  (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
         let mut i = 0;
-        let mut buffer = None; // Buffer if there are some escaped characters
         let mut position_that_is_already_in_buffer = 0;
         let mut might_be_invalid_iri = false;
         let mut ends_with_unescaped_dot = 0;
+        self.string_buffer.clear();
         loop {
             if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
                 match r {
@@ -421,10 +425,9 @@ impl N3Lexer {
                                     i..=i, format!("The character that are allowed to be escaped in IRIs are _~.-!$&'()*+,;=/?#@%, found '{a}'")
                                 ).into())));
                             }
-                            let buffer = buffer.get_or_insert_with(String::new);
                             // We add the missing bytes
                             if i - position_that_is_already_in_buffer > 1 {
-                                buffer.push_str(
+                                self.string_buffer.push_str(
                                     match str_from_utf8(
                                         &data[position_that_is_already_in_buffer..i - 1],
                                         position_that_is_already_in_buffer..i - 1,
@@ -434,14 +437,14 @@ impl N3Lexer {
                                     },
                                 )
                             }
-                            buffer.push(a);
+                            self.string_buffer.push(a);
                             i += 1;
                             position_that_is_already_in_buffer = i;
                             ends_with_unescaped_dot = 0;
                         } else if i == 0 {
                             if !(Self::is_possible_pn_chars_u(c) || c == ':' || c.is_ascii_digit())
                             {
-                                return Some((0, Ok((Cow::Borrowed(""), false))));
+                                return Some((0, Ok((OxString::default(), false))));
                             }
                             if !self.lenient {
                                 might_be_invalid_iri |=
@@ -461,8 +464,17 @@ impl N3Lexer {
                             i += consumed;
                             ends_with_unescaped_dot += 1;
                         } else {
-                            let buffer = if let Some(mut buffer) = buffer {
-                                buffer.push_str(
+                            let buffer = if self.string_buffer.is_empty() {
+                                let mut data = match str_from_utf8(&data[..i], 0..i) {
+                                    Ok(data) => data,
+                                    Err(e) => return Some((i, Err(e))),
+                                };
+                                // We do not include the last dots
+                                data = &data[..data.len() - ends_with_unescaped_dot];
+                                i -= ends_with_unescaped_dot;
+                                data.into()
+                            } else {
+                                self.string_buffer.push_str(
                                     match str_from_utf8(
                                         &data[position_that_is_already_in_buffer..i],
                                         position_that_is_already_in_buffer..i,
@@ -473,19 +485,10 @@ impl N3Lexer {
                                 );
                                 // We do not include the last dots
                                 for _ in 0..ends_with_unescaped_dot {
-                                    buffer.pop();
+                                    self.string_buffer.pop();
                                 }
                                 i -= ends_with_unescaped_dot;
-                                Cow::Owned(buffer)
-                            } else {
-                                let mut data = match str_from_utf8(&data[..i], 0..i) {
-                                    Ok(data) => data,
-                                    Err(e) => return Some((i, Err(e))),
-                                };
-                                // We do not include the last dots
-                                data = &data[..data.len() - ends_with_unescaped_dot];
-                                i -= ends_with_unescaped_dot;
-                                Cow::Borrowed(data)
+                                OxString::new_owned(&self.string_buffer)
                             };
                             return Some((i, Ok((buffer, might_be_invalid_iri))));
                         }
@@ -493,14 +496,7 @@ impl N3Lexer {
                     Err(e) => return Some((e.location.end, Err(e))),
                 }
             } else if is_ending {
-                let buffer = if let Some(mut buffer) = buffer {
-                    // We do not include the last dot
-                    while buffer.ends_with('.') {
-                        buffer.pop();
-                        i -= 1;
-                    }
-                    Cow::Owned(buffer)
-                } else {
+                let buffer = if self.string_buffer.is_empty() {
                     let mut data = match str_from_utf8(&data[..i], 0..i) {
                         Ok(data) => data,
                         Err(e) => return Some((i, Err(e))),
@@ -510,7 +506,14 @@ impl N3Lexer {
                         data = d;
                         i -= 1;
                     }
-                    Cow::Borrowed(data)
+                    data.into()
+                } else {
+                    // We do not include the last dot
+                    while self.string_buffer.ends_with('.') {
+                        self.string_buffer.pop();
+                        i -= 1;
+                    }
+                    OxString::new_owned(&self.string_buffer)
                 };
                 return Some((i, Ok((buffer, might_be_invalid_iri))));
             } else {
@@ -664,13 +667,13 @@ impl N3Lexer {
         })
     }
     fn recognize_string(
-        &self,
+        &mut self,
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
         // [22]  STRING_LITERAL_QUOTE         ::=  '"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
         // [23]  STRING_LITERAL_SINGLE_QUOTE  ::=  "'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
-        let mut string = String::new();
+        self.raw_buffer.clear();
         let mut i = 1;
         loop {
             let mut end = memchr2(delimiter, b'\\', &data[i..])?;
@@ -680,21 +683,33 @@ impl N3Lexer {
                     end = line_jump_end;
                 }
             }
-            match str_from_utf8(&data[i..i + end], i..i + end) {
-                Ok(s) => string.push_str(s),
-                Err(e) => return Some((end, Err(e))),
-            }
+
+            let extra_data = &data[i..i + end];
             i += end;
             match data[i] {
                 c if c == delimiter => {
-                    return Some((i + 1, Ok(N3Token::String(string))));
+                    return Some((
+                        i + 1,
+                        str_from_utf8(
+                            if self.raw_buffer.is_empty() {
+                                &data[1..i]
+                            } else {
+                                self.raw_buffer.extend_from_slice(extra_data);
+                                &self.raw_buffer
+                            },
+                            1..i,
+                        )
+                        .map(|s| N3Token::String(OxString::new_owned(s))),
+                    ));
                 }
                 b'\\' => {
+                    self.raw_buffer.extend_from_slice(extra_data);
                     let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
                     i += additional + 1;
                     match c {
                         Ok(c) => {
-                            string.push(c);
+                            self.raw_buffer
+                                .extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
                         }
                         Err(e) => {
                             // We read until the end of string char
@@ -721,35 +736,47 @@ impl N3Lexer {
     }
 
     fn recognize_long_string(
-        &self,
+        &mut self,
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
         // [24]  STRING_LITERAL_LONG_SINGLE_QUOTE  ::=  "'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
         // [25]  STRING_LITERAL_LONG_QUOTE         ::=  '"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
-        let mut string = String::new();
+        self.raw_buffer.clear();
         let mut i = 3;
         loop {
             let end = memchr2(delimiter, b'\\', &data[i..])?;
-            match str_from_utf8(&data[i..i + end], i..i + end) {
-                Ok(s) => string.push_str(s),
-                Err(e) => return Some((end, Err(e))),
-            }
+            let extra_data = &data[i..i + end];
             i += end;
             match data[i] {
                 c if c == delimiter => {
                     if *data.get(i + 1)? == delimiter && *data.get(i + 2)? == delimiter {
-                        return Some((i + 3, Ok(N3Token::LongString(string))));
+                        return Some((
+                            i + 3,
+                            str_from_utf8(
+                                if self.raw_buffer.is_empty() {
+                                    &data[3..i]
+                                } else {
+                                    self.raw_buffer.extend_from_slice(extra_data);
+                                    &self.raw_buffer
+                                },
+                                1..i,
+                            )
+                            .map(|s| N3Token::LongString(OxString::new_owned(s))),
+                        ));
                     }
                     i += 1;
-                    string.push(char::from(delimiter));
+                    self.raw_buffer.extend_from_slice(extra_data);
+                    self.raw_buffer.push(delimiter);
                 }
                 b'\\' => {
+                    self.raw_buffer.extend_from_slice(extra_data);
                     let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
                     i += additional + 1;
                     match c {
                         Ok(c) => {
-                            string.push(c);
+                            self.raw_buffer
+                                .extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
                         }
                         Err(e) => return Some((i, Err(e))),
                     }
@@ -1137,10 +1164,10 @@ pub fn resolve_local_name(
     prefix: &str,
     local: &str,
     might_be_invalid_iri: bool,
-    prefixes: &HashMap<String, Iri<String>>,
+    prefixes: &HashMap<OxString, Iri<OxString>>,
 ) -> Result<NamedNode, String> {
     if let Some(start) = prefixes.get(prefix) {
-        let iri = format!("{start}{local}");
+        let iri = OxString::concat([start.as_str(), local]);
         if might_be_invalid_iri || start.path().is_empty() {
             // We validate again. We always validate if the local part might be the IRI authority.
             if let Err(e) = Iri::parse(iri.as_str()) {
@@ -1165,13 +1192,8 @@ fn str_from_utf8(data: &[u8], range: Range<usize>) -> Result<&str, TokenRecogniz
     })
 }
 
-fn string_from_utf8(data: Vec<u8>, range: Range<usize>) -> Result<String, TokenRecognizerError> {
-    String::from_utf8(data).map_err(|e| {
-        (
-            range.start + e.utf8_error().valid_up_to()
-                ..min(range.end, range.start + e.utf8_error().valid_up_to() + 4),
-            format!("Invalid UTF-8: {e}"),
-        )
-            .into()
-    })
+pub fn to_lowercase(v: &str) -> OxString {
+    let mut v = OxString::new_owned(v);
+    v.make_mut().make_ascii_lowercase();
+    v
 }

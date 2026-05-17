@@ -1,5 +1,6 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
+use oxrdf::OxString;
 use oxrdf::vocab::xsd;
 use rand::random;
 use spargebra::algebra::{
@@ -193,14 +194,17 @@ impl Expression {
 
     pub fn effective_boolean_value(&self) -> Option<bool> {
         if let Self::Literal(literal) = self {
-            match literal.datatype() {
-                xsd::BOOLEAN => match literal.value() {
+            let datatype = literal.datatype();
+            if *datatype == xsd::BOOLEAN {
+                match literal.value() {
                     "true" | "1" => Some(true),
                     "false" | "0" => Some(false),
                     _ => None, // TODO
-                },
-                xsd::STRING => Some(!literal.value().is_empty()),
-                _ => None, // TODO
+                }
+            } else if *datatype == xsd::STRING {
+                Some(!literal.value().is_empty())
+            } else {
+                None
             }
         } else {
             None
@@ -381,7 +385,7 @@ impl Expression {
             ) => true,
             #[cfg(feature = "sparql-12")]
             Self::FunctionCall(Function::IsTriple, _) => true,
-            Self::Literal(literal) => literal.datatype() == xsd::BOOLEAN,
+            Self::Literal(literal) => *literal.datatype() == xsd::BOOLEAN,
             Self::If(_, a, b) => a.returns_boolean() && b.returns_boolean(),
             _ => false,
         }
@@ -1434,7 +1438,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                 ..
             } => {
                 let empty_expr = if let Expression::Literal(l) = expression {
-                    l.datatype() == xsd::BOOLEAN && l.value() == "true"
+                    *l.datatype() == xsd::BOOLEAN && l.value() == "true"
                 } else {
                     false
                 };
@@ -1659,7 +1663,7 @@ impl From<&OrderExpression> for AlOrderExpression {
 }
 
 fn new_var() -> Variable {
-    Variable::new_unchecked(format!("{:x}", random::<u128>()))
+    Variable::new_unchecked(OxString::new_owned(&format!("{:x}", random::<u128>())))
 }
 
 fn order_pair<T: Hash>(a: T, b: T) -> (T, T) {

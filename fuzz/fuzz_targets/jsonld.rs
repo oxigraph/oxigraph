@@ -28,7 +28,7 @@ fn parse(
     for result in &mut parser {
         match result {
             Ok(quad) => {
-                quads.insert(&quad);
+                quads.insert(quad);
             }
             Err(error) => errors.push(error.to_string()),
         }
@@ -51,14 +51,14 @@ fn serialize_quads(
 ) -> Vec<u8> {
     let mut serializer = JsonLdSerializer::new();
     for (prefix_name, prefix_iri) in prefixes {
-        serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+        serializer = serializer.with_prefix(&prefix_name, &prefix_iri).unwrap();
     }
     if let Some(base_iri) = base_iri {
-        serializer = serializer.with_base_iri(base_iri).unwrap();
+        serializer = serializer.with_base_iri(&base_iri).unwrap();
     }
     let mut serializer = serializer.for_writer(Vec::new());
     for quad in quads {
-        serializer.serialize_quad(quad).unwrap();
+        serializer.serialize_quad(&quad).unwrap();
     }
     serializer.finish().unwrap()
 }
@@ -82,7 +82,7 @@ fuzz_target!(|data: &[u8]| {
 
     let bnodes_count = quads
         .iter()
-        .map(|q| count_quad_blank_nodes(q))
+        .map(|q| count_quad_blank_nodes(&q))
         .sum::<usize>();
 
     if errors_streaming.is_empty() && bnodes_count <= 4 {

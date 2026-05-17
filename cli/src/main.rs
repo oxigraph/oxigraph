@@ -14,9 +14,7 @@ use oxhttp::model::header::{
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
 use oxigraph::io::{JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSerializer};
-use oxigraph::model::{
-    GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
-};
+use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxString};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
@@ -114,7 +112,7 @@ pub fn main() -> anyhow::Result<()> {
             };
             let graph = if let Some(iri) = &graph {
                 Some(
-                    NamedNode::new(iri)
+                    NamedNode::new(OxString::new_owned(iri))
                         .with_context(|| format!("The target graph name {iri} is invalid"))?,
                 )
             } else {
@@ -257,9 +255,9 @@ pub fn main() -> anyhow::Result<()> {
             };
             let graph = if let Some(graph) = &graph {
                 Some(if graph.eq_ignore_ascii_case("default") {
-                    GraphNameRef::DefaultGraph
+                    GraphName::DefaultGraph
                 } else {
-                    NamedNodeRef::new(graph)
+                    NamedNode::new(OxString::new_owned(graph))
                         .with_context(|| format!("The target graph name {graph} is invalid"))?
                         .into()
                 })
@@ -271,10 +269,10 @@ pub fn main() -> anyhow::Result<()> {
                     &store,
                     BufWriter::new(File::create(file)?),
                     format,
-                    graph,
+                    graph.as_ref(),
                 )?)?;
             } else {
-                dump(&store, stdout().lock(), format, graph)?.flush()?;
+                dump(&store, stdout().lock(), format, graph.as_ref())?.flush()?;
             }
             Ok(())
         }
@@ -402,13 +400,13 @@ pub fn main() -> anyhow::Result<()> {
                             let mut serializer =
                                 serializer.for_writer(BufWriter::new(File::create(results_file)?));
                             for triple in triples {
-                                serializer.serialize_triple(triple?.as_ref())?;
+                                serializer.serialize_triple(&triple?)?;
                             }
                             close_file_writer(serializer.finish()?)?;
                         } else {
                             let mut serializer = serializer.for_writer(stdout().lock());
                             for triple in triples {
-                                serializer.serialize_triple(triple?.as_ref())?;
+                                serializer.serialize_triple(&triple?)?;
                             }
                             serializer.finish()?.flush()?;
                         }
@@ -502,9 +500,9 @@ pub fn main() -> anyhow::Result<()> {
             };
             let serializer = RdfSerializer::from_format(to_format);
 
-            let from_graph = if let Some(from_graph) = from_graph {
+            let from_graph = if let Some(from_graph) = &from_graph {
                 Some(
-                    NamedNode::new(&from_graph)
+                    NamedNode::new(OxString::new_owned(from_graph))
                         .with_context(|| format!("The source graph name {from_graph} is invalid"))?
                         .into(),
                 )
@@ -513,8 +511,8 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
-            let to_graph = if let Some(to_graph) = to_graph {
-                NamedNode::new(&to_graph)
+            let to_graph = if let Some(to_graph) = &to_graph {
+                NamedNode::new(OxString::new_owned(to_graph))
                     .with_context(|| format!("The target graph name {to_graph} is invalid"))?
                     .into()
             } else {
@@ -622,7 +620,7 @@ fn dump<W: Write>(
     store: &Store,
     writer: W,
     format: RdfFormat,
-    from_graph_name: Option<GraphNameRef<'_>>,
+    from_graph_name: Option<&GraphName>,
 ) -> anyhow::Result<W> {
     ensure!(
         format.supports_datasets() || from_graph_name.is_some(),
@@ -1047,12 +1045,7 @@ fn handle_request(
                 assert_that_graph_exists(&store, &target)?;
                 let format = rdf_content_negotiation(request)?;
 
-                let quads = store.quads_for_pattern(
-                    None,
-                    None,
-                    None,
-                    Some(GraphName::from(target).as_ref()),
-                );
+                let quads = store.quads_for_pattern(None, None, None, Some(&target.into()));
                 ReadForWrite::build_response(
                     move |w| Ok((RdfSerializer::from_format(format).for_writer(w), quads)),
                     |(mut serializer, mut quads)| {
@@ -1105,21 +1098,23 @@ fn handle_request(
                 let new = !match &target {
                     NamedGraphName::NamedNode(target) => {
                         if store
-                            .contains_named_graph(target)
+                            .contains_named_graph(&target.clone().into())
                             .map_err(internal_server_error)?
                         {
-                            store.clear_graph(target).map_err(internal_server_error)?;
+                            store
+                                .clear_graph(&target.clone().into())
+                                .map_err(internal_server_error)?;
                             true
                         } else {
                             store
-                                .insert_named_graph(target)
+                                .insert_named_graph(target.clone())
                                 .map_err(internal_server_error)?;
                             false
                         }
                     }
                     NamedGraphName::DefaultGraph => {
                         store
-                            .clear_graph(GraphNameRef::DefaultGraph)
+                            .clear_graph(&GraphName::DefaultGraph)
                             .map_err(internal_server_error)?;
                         true
                     }
@@ -1151,15 +1146,15 @@ fn handle_request(
             if let Some(target) = store_target(request)? {
                 match target {
                     NamedGraphName::DefaultGraph => store
-                        .clear_graph(GraphNameRef::DefaultGraph)
+                        .clear_graph(&GraphName::DefaultGraph)
                         .map_err(internal_server_error)?,
                     NamedGraphName::NamedNode(target) => {
                         if store
-                            .contains_named_graph(&target)
+                            .contains_named_graph(&target.clone().into())
                             .map_err(internal_server_error)?
                         {
                             store
-                                .remove_named_graph(&target)
+                                .remove_named_graph(&target.clone().into())
                                 .map_err(internal_server_error)?;
                         } else {
                             return Err((
@@ -1208,7 +1203,7 @@ fn handle_request(
                     web_load_graph(&store, request, format, &graph.clone().into())?;
                     Response::builder()
                         .status(StatusCode::CREATED)
-                        .header(LOCATION, graph.into_string())
+                        .header(LOCATION, graph.as_str())
                 }
                 .body(Body::empty())
                 .map_err(internal_server_error)
@@ -1250,11 +1245,13 @@ fn base_url(request: &Request<Body>) -> String {
 }
 
 fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, HttpError> {
-    Ok(Iri::parse(base_url(request))
-        .map_err(bad_request)?
-        .resolve(url)
-        .map_err(bad_request)?
-        .into())
+    Ok(NamedNode::new_unchecked(
+        Iri::parse(base_url(request))
+            .map_err(bad_request)?
+            .resolve(url)
+            .map_err(bad_request)?
+            .into_inner(),
+    ))
 }
 
 fn url_has_query_parameter(request: &Request<Body>, param: &str) -> bool {
@@ -1381,7 +1378,7 @@ fn evaluate_sparql_query(
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
     let mut evaluator = evaluator
-        .with_base_iri(base_url(request))
+        .with_base_iri(&base_url(request))
         .map_err(bad_request)?;
 
     if let Some(timeout) = timeout {
@@ -1604,7 +1601,7 @@ fn assert_that_graph_exists(store: &Store, target: &NamedGraphName) -> Result<()
     if match target {
         NamedGraphName::DefaultGraph => true,
         NamedGraphName::NamedNode(target) => store
-            .contains_named_graph(target)
+            .contains_named_graph(&target.clone().into())
             .map_err(internal_server_error)?,
     } {
         Ok(())
@@ -1753,7 +1750,7 @@ fn service_description_response(
         format,
         kind,
         union_default_graph,
-        &request_original_target_url(request)?.to_string(),
+        request_original_target_url(request)?.to_string().into(),
     );
     Response::builder()
         .header(CONTENT_TYPE, format.media_type())

@@ -48,7 +48,7 @@ impl<W: Write> WriterCsvSolutionsSerializer<W> {
 
     pub fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
         self.writer.write_all(self.buffer.as_bytes())?;
@@ -84,7 +84,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterCsvSolutionsSerializer<W> {
 
     pub async fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
         self.writer.write_all(self.buffer.as_bytes()).await?;
@@ -119,11 +119,11 @@ impl InnerCsvSolutionsSerializer {
     fn write<'a>(
         &self,
         output: &mut String,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
-            if let Some(position) = self.variables.iter().position(|v| *v == variable) {
+            if let Some(position) = self.variables.iter().position(|v| v == variable) {
                 values[position] = Some(value);
             }
         }
@@ -142,23 +142,32 @@ impl InnerCsvSolutionsSerializer {
     }
 }
 
-fn write_csv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
-    match term.into() {
-        TermRef::NamedNode(uri) => output.push_str(uri.as_str()),
-        TermRef::BlankNode(bnode) => {
-            output.push_str("_:");
-            output.push_str(bnode.as_str())
-        }
-        TermRef::Literal(literal) => write_escaped_csv_string(output, literal.value()),
+fn write_csv_term(output: &mut String, term: &Term) {
+    match term {
+        Term::NamedNode(uri) => write_csv_named_node(output, uri),
+        Term::BlankNode(bnode) => write_csv_blank_node(output, bnode),
+        Term::Literal(literal) => write_escaped_csv_string(output, literal.value()),
         #[cfg(feature = "sparql-12")]
-        TermRef::Triple(triple) => {
-            write_csv_term(output, &triple.subject);
+        Term::Triple(triple) => {
+            match &triple.subject {
+                NamedOrBlankNode::NamedNode(uri) => write_csv_named_node(output, uri),
+                NamedOrBlankNode::BlankNode(bnode) => write_csv_blank_node(output, bnode),
+            }
             output.push(' ');
-            write_csv_term(output, &triple.predicate);
+            write_csv_named_node(output, &triple.predicate);
             output.push(' ');
             write_csv_term(output, &triple.object)
         }
     }
+}
+
+fn write_csv_named_node(output: &mut String, uri: &NamedNode) {
+    output.push_str(uri.as_str())
+}
+
+fn write_csv_blank_node(output: &mut String, bnode: &BlankNode) {
+    output.push_str("_:");
+    output.push_str(bnode.as_str())
 }
 
 fn write_escaped_csv_string(output: &mut String, s: &str) {
@@ -199,7 +208,7 @@ impl<W: Write> WriterTsvSolutionsSerializer<W> {
 
     pub fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
         self.writer.write_all(self.buffer.as_bytes())?;
@@ -235,7 +244,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTsvSolutionsSerializer<W> {
 
     pub async fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
         self.writer.write_all(self.buffer.as_bytes()).await?;
@@ -271,11 +280,11 @@ impl InnerTsvSolutionsSerializer {
     fn write<'a>(
         &self,
         output: &mut String,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
-            if let Some(position) = self.variables.iter().position(|v| *v == variable) {
+            if let Some(position) = self.variables.iter().position(|v| v == variable) {
                 values[position] = Some(value);
             }
         }
@@ -294,18 +303,11 @@ impl InnerTsvSolutionsSerializer {
     }
 }
 
-fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
-    match term.into() {
-        TermRef::NamedNode(node) => {
-            output.push('<');
-            output.push_str(node.as_str());
-            output.push('>');
-        }
-        TermRef::BlankNode(node) => {
-            output.push_str("_:");
-            output.push_str(node.as_str());
-        }
-        TermRef::Literal(literal) => {
+fn write_tsv_term(output: &mut String, term: &Term) {
+    match term {
+        Term::NamedNode(node) => write_tsv_named_node(output, node),
+        Term::BlankNode(node) => write_tsv_blank_node(output, node),
+        Term::Literal(literal) => {
             let value = literal.value();
             if let Some(language) = literal.language() {
                 write_tsv_quoted_str(output, value);
@@ -319,31 +321,47 @@ fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
                     })
                 }
             } else {
-                match literal.datatype() {
-                    xsd::BOOLEAN if is_turtle_boolean(value) => output.push_str(value),
-                    xsd::INTEGER if is_turtle_integer(value) => output.push_str(value),
-                    xsd::DECIMAL if is_turtle_decimal(value) => output.push_str(value),
-                    xsd::DOUBLE if is_turtle_double(value) => output.push_str(value),
-                    xsd::STRING => write_tsv_quoted_str(output, value),
-                    datatype => {
-                        write_tsv_quoted_str(output, value);
+                let datatype = literal.datatype();
+                if *datatype == xsd::BOOLEAN && is_turtle_boolean(value)
+                    || *datatype == xsd::INTEGER && is_turtle_integer(value)
+                    || *datatype == xsd::DECIMAL && is_turtle_decimal(value)
+                    || *datatype == xsd::DOUBLE && is_turtle_double(value)
+                {
+                    output.push_str(value)
+                } else {
+                    write_tsv_quoted_str(output, value);
+                    if *datatype != xsd::STRING {
                         output.push_str("^^");
-                        write_tsv_term(output, datatype);
+                        write_tsv_named_node(output, datatype);
                     }
                 }
             }
         }
         #[cfg(feature = "sparql-12")]
-        TermRef::Triple(triple) => {
+        Term::Triple(triple) => {
             output.push_str("<<( ");
-            write_tsv_term(output, &triple.subject);
+            match &triple.subject {
+                NamedOrBlankNode::NamedNode(node) => write_tsv_named_node(output, node),
+                NamedOrBlankNode::BlankNode(node) => write_tsv_blank_node(output, node),
+            }
             output.push(' ');
-            write_tsv_term(output, &triple.predicate);
+            write_tsv_named_node(output, &triple.predicate);
             output.push(' ');
             write_tsv_term(output, &triple.object);
             output.push_str(" )>>");
         }
     }
+}
+
+fn write_tsv_named_node(output: &mut String, node: &NamedNode) {
+    output.push('<');
+    output.push_str(node.as_str());
+    output.push('>');
+}
+
+fn write_tsv_blank_node(output: &mut String, node: &BlankNode) {
+    output.push_str("_:");
+    output.push_str(node.as_str());
 }
 
 fn write_tsv_quoted_str(output: &mut String, string: &str) {
@@ -893,7 +911,7 @@ mod tests {
                 variables
                     .iter()
                     .zip(&solution)
-                    .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
+                    .filter_map(|(v, s)| s.as_ref().map(|s| (v, s))),
             );
         }
         #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
@@ -918,7 +936,7 @@ mod tests {
                 variables
                     .iter()
                     .zip(solution)
-                    .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
+                    .filter_map(|(v, s)| s.as_ref().map(|s| (v, s))),
             );
         }
         #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]

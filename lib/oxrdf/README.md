@@ -27,12 +27,12 @@ use oxrdf::*;
 let mut graph = Graph::default();
 
 // insertion
-let ex = NamedNodeRef::new("http://example.com").unwrap();
-let triple = TripleRef::new(ex, ex, ex);
-graph.insert(triple);
+let ex = NamedNode::new("http://example.com").unwrap();
+let triple = Triple::new(ex.clone(), ex.clone(), ex.clone());
+graph.insert(triple.clone());
 
 // simple filter
-let results: Vec<_> = graph.triples_for_subject(ex).collect();
+let results: Vec<_> = graph.triples_for_subject(&ex).collect();
 assert_eq!(vec![triple], results);
 ```
 

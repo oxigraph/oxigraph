@@ -1,7 +1,6 @@
 use crate::io::RdfParseError;
-use crate::model::NamedNode;
+use crate::model::{NamedNode, Term, Variable};
 use crate::store::{CorruptionError, StorageError};
-use oxrdf::{Term, Variable};
 use spareval::QueryEvaluationError;
 use spargebra::SparqlSyntaxError;
 use std::convert::Infallible;

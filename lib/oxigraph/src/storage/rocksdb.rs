@@ -1,8 +1,8 @@
 #[cfg(feature = "rdf-12")]
 use crate::model::vocab::rdf;
 #[cfg(feature = "rdf-12")]
-use crate::model::{BlankNode, GraphName, Term, Triple};
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
+use crate::model::{BlankNode, Triple};
+use crate::model::{GraphName, NamedOrBlankNode, OxString, Quad, Term};
 use crate::storage::binary_encoder::{
     QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
     encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
@@ -29,6 +29,7 @@ use std::hash::BuildHasherDefault;
 use std::hash::Hash;
 use std::mem::take;
 use std::path::{Path, PathBuf};
+use std::str::Utf8Error;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::{io, thread};
@@ -252,17 +253,18 @@ impl RocksDbStorage {
                 let mut hasher = SipHasher24::new();
                 triple.hash(&mut hasher);
                 let reifier = BlankNode::new_from_unique_id(hasher.finish128().as_u128());
-                w.insert(QuadRef::new(
-                    &reifier,
+                let encoded_reifier = (&reifier).into();
+                w.insert(Quad::new(
+                    reifier,
                     rdf::REIFIES,
-                    &Term::from(triple),
-                    &if *graph_name == EncodedTerm::DefaultGraph {
+                    triple,
+                    if *graph_name == EncodedTerm::DefaultGraph {
                         GraphName::DefaultGraph
                     } else {
                         r.decode_named_or_blank_node(graph_name)?.into()
                     },
                 ));
-                Ok(reifier.as_ref().into())
+                Ok(encoded_reifier)
             }
 
             if !self.db.is_writable() {
@@ -309,7 +311,7 @@ impl RocksDbStorage {
                             &mut w,
                         )?;
                     }
-                    w.insert(snapshot.decode_quad(&new_quad)?.as_ref());
+                    w.insert(snapshot.decode_quad(&new_quad)?);
                     w.remove_encoded(&quad);
                     w.commit()?;
                 }
@@ -922,11 +924,11 @@ impl Iterator for RocksDbDecodingGraphIterator<'_> {
 }
 
 impl StrLookup for RocksDbStorageReader<'_> {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
         Ok(self
             .reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .map(|v| String::from_utf8(v.into()))
+            .map(|v| Ok::<_, Utf8Error>(OxString::new_owned(str::from_utf8(&v)?)))
             .transpose()
             .map_err(CorruptionError::new)?)
     }
@@ -940,8 +942,8 @@ pub struct RocksDbStorageTransaction<'a> {
 }
 
 impl RocksDbStorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
-        let encoded = quad.into();
+    pub fn insert(&mut self, quad: Quad) {
+        let encoded = (&quad).into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, &encoded);
@@ -1003,8 +1005,8 @@ impl RocksDbStorageTransaction<'_> {
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
-        let encoded_graph_name = graph_name.into();
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNode) {
+        let encoded_graph_name = (&graph_name).into();
 
         self.buffer.clear();
         write_term(&mut self.buffer, &encoded_graph_name);
@@ -1013,15 +1015,17 @@ impl RocksDbStorageTransaction<'_> {
         self.insert_term(graph_name.into(), &encoded_graph_name);
     }
 
-    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+    fn insert_term(&mut self, term: Term, encoded: &EncodedTerm) {
+        insert_term(term, encoded, &mut |key, value| {
+            self.insert_str(key, &value)
+        })
     }
 
-    fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
+    fn insert_graph_name(&mut self, graph_name: GraphName, encoded: &EncodedTerm) {
         match graph_name {
-            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => (),
+            GraphName::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphName::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphName::DefaultGraph => (),
         }
     }
 
@@ -1033,7 +1037,7 @@ impl RocksDbStorageTransaction<'_> {
         )
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove(&mut self, quad: &Quad) {
         self.remove_encoded(&quad.into())
     }
 
@@ -1137,8 +1141,8 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
-        let encoded = quad.into();
+    pub fn insert(&mut self, quad: Quad) {
+        let encoded = (&quad).into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, &encoded);
@@ -1200,8 +1204,8 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
-        let encoded_graph_name = graph_name.into();
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNode) {
+        let encoded_graph_name = (&graph_name).into();
 
         self.buffer.clear();
         write_term(&mut self.buffer, &encoded_graph_name);
@@ -1210,15 +1214,17 @@ impl RocksDbStorageReadableTransaction<'_> {
         self.insert_term(graph_name.into(), &encoded_graph_name)
     }
 
-    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+    fn insert_term(&mut self, term: Term, encoded: &EncodedTerm) {
+        insert_term(term, encoded, &mut |key, value| {
+            self.insert_str(key, &value)
+        })
     }
 
-    fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
+    fn insert_graph_name(&mut self, graph_name: GraphName, encoded: &EncodedTerm) {
         match graph_name {
-            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => (),
+            GraphName::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphName::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphName::DefaultGraph => (),
         }
     }
 
@@ -1230,7 +1236,7 @@ impl RocksDbStorageReadableTransaction<'_> {
         );
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove(&mut self, quad: &Quad) {
         self.remove_encoded(&quad.into())
     }
 
@@ -1273,7 +1279,7 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
+    pub fn clear_graph(&mut self, graph_name: &GraphName) -> Result<(), StorageError> {
         self.clear_encoded_graph(&graph_name.into())
     }
 
@@ -1311,12 +1317,12 @@ impl RocksDbStorageReadableTransaction<'_> {
 
     pub fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
         self.clear_all_named_graphs()?;
-        self.clear_graph(GraphNameRef::DefaultGraph)
+        self.clear_graph(&GraphName::DefaultGraph)
     }
 
     pub fn remove_named_graph(
         &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
+        graph_name: &NamedOrBlankNode,
     ) -> Result<(), StorageError> {
         self.remove_encoded_named_graph(&graph_name.into())
     }
@@ -1348,7 +1354,7 @@ impl RocksDbStorageReadableTransaction<'_> {
 
     pub fn clear(&mut self) -> Result<(), StorageError> {
         self.remove_all_named_graphs()?;
-        self.clear_graph(GraphNameRef::DefaultGraph)
+        self.clear_graph(&GraphName::DefaultGraph)
     }
 
     pub fn commit(self) -> Result<(), StorageError> {
@@ -1522,24 +1528,24 @@ impl<'a> FileBulkLoader<'a> {
 
     fn encode(&mut self, quads: Vec<Quad>) -> Result<(), StorageError> {
         for quad in quads {
-            let encoded = EncodedQuad::from(quad.as_ref());
+            let encoded = EncodedQuad::from(&quad);
             if quad.graph_name.is_default_graph() {
                 if self.triples.insert(encoded.clone()) {
-                    self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
-                    self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
-                    self.insert_term(quad.object.as_ref(), &encoded.object);
+                    self.insert_term(quad.subject.into(), &encoded.subject);
+                    self.insert_term(quad.predicate.into(), &encoded.predicate);
+                    self.insert_term(quad.object, &encoded.object);
                 }
             } else if self.quads.insert(encoded.clone()) {
-                self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
-                self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
-                self.insert_term(quad.object.as_ref(), &encoded.object);
+                self.insert_term(quad.subject.into(), &encoded.subject);
+                self.insert_term(quad.predicate.into(), &encoded.predicate);
+                self.insert_term(quad.object, &encoded.object);
 
                 if self.graphs.insert(encoded.graph_name.clone()) {
                     self.insert_term(
-                        match quad.graph_name.as_ref() {
-                            GraphNameRef::NamedNode(n) => n.into(),
-                            GraphNameRef::BlankNode(n) => n.into(),
-                            GraphNameRef::DefaultGraph => {
+                        match quad.graph_name {
+                            GraphName::NamedNode(n) => n.into(),
+                            GraphName::BlankNode(n) => n.into(),
+                            GraphName::DefaultGraph => {
                                 return Err(CorruptionError::new(
                                     "Default graph this not the default graph",
                                 )
@@ -1682,9 +1688,11 @@ impl<'a> FileBulkLoader<'a> {
         self.fail_if_cancelled()
     }
 
-    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
+    fn insert_term(&mut self, term: Term, encoded: &EncodedTerm) {
         insert_term(term, encoded, &mut |key, value| {
-            self.id2str.entry(*key).or_insert_with(|| value.into());
+            self.id2str
+                .entry(*key)
+                .or_insert_with(|| value.as_ref().into());
         })
     }
 
@@ -1713,7 +1721,7 @@ impl<'a> FileBulkLoader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxrdf::NamedNodeRef;
+    use crate::model::NamedNode;
     use tempfile::TempDir;
 
     #[test]
@@ -1728,14 +1736,24 @@ mod tests {
     #[test]
     #[expect(clippy::panic_in_result_fn)]
     fn test_transaction() -> Result<(), StorageError> {
-        let example = NamedNodeRef::new_unchecked("http://example.com/1");
-        let example2 = NamedNodeRef::new_unchecked("http://example.com/2");
-        let encoded_example = EncodedTerm::from(example);
-        let encoded_example2 = EncodedTerm::from(example2);
-        let default_quad = QuadRef::new(example, example, example, GraphNameRef::DefaultGraph);
-        let encoded_default_quad = EncodedQuad::from(default_quad);
-        let named_graph_quad = QuadRef::new(example, example, example, example);
-        let encoded_named_graph_quad = EncodedQuad::from(named_graph_quad);
+        let example = NamedNode::new_unchecked("http://example.com/1");
+        let example2 = NamedNode::new_unchecked("http://example.com/2");
+        let encoded_example = EncodedTerm::from(&example);
+        let encoded_example2 = EncodedTerm::from(&example2);
+        let default_quad = Quad::new(
+            example.clone(),
+            example.clone(),
+            example.clone(),
+            GraphName::DefaultGraph,
+        );
+        let encoded_default_quad = EncodedQuad::from(&default_quad);
+        let named_graph_quad = Quad::new(
+            example.clone(),
+            example.clone(),
+            example.clone(),
+            example.clone(),
+        );
+        let encoded_named_graph_quad = EncodedQuad::from(&named_graph_quad);
 
         let path = TempDir::new()?;
         let storage = RocksDbStorage::open(path.as_ref())?;
@@ -1743,7 +1761,7 @@ mod tests {
         // We start with a graph
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction()?;
-        transaction.insert_named_graph(example.into());
+        transaction.insert_named_graph(example.clone().into());
         transaction.commit()?;
         assert!(!snapshot.contains_named_graph(&encoded_example)?);
         assert!(storage.snapshot().contains_named_graph(&encoded_example)?);
@@ -1752,8 +1770,8 @@ mod tests {
         // We add two quads
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction()?;
-        transaction.insert(default_quad);
-        transaction.insert(named_graph_quad);
+        transaction.insert(default_quad.clone());
+        transaction.insert(named_graph_quad.clone());
         transaction.commit()?;
         assert!(!snapshot.contains(&encoded_default_quad)?);
         assert!(!snapshot.contains(&encoded_named_graph_quad)?);
@@ -1764,8 +1782,9 @@ mod tests {
         // We remove the quads
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_readable_transaction()?;
-        transaction.remove(default_quad);
-        transaction.remove_named_graph(example.into())?;
+        transaction.remove(&default_quad);
+        let example_graph: NamedOrBlankNode = example.into();
+        transaction.remove_named_graph(&example_graph)?;
         transaction.commit()?;
         assert!(snapshot.contains(&encoded_default_quad)?);
         assert!(snapshot.contains(&encoded_named_graph_quad)?);
@@ -1778,9 +1797,9 @@ mod tests {
         // We add the quads again but rollback
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction()?;
-        transaction.insert(default_quad);
-        transaction.insert(named_graph_quad);
-        transaction.insert_named_graph(example2.into());
+        transaction.insert(default_quad.clone());
+        transaction.insert(named_graph_quad.clone());
+        transaction.insert_named_graph(example2.clone().into());
         drop(transaction);
         assert!(!snapshot.contains(&encoded_default_quad)?);
         assert!(!snapshot.contains(&encoded_named_graph_quad)?);
@@ -1794,10 +1813,7 @@ mod tests {
 
         // We add quads and graph, then clear
         let mut loader = storage.bulk_loader();
-        loader.load_batch(
-            vec![default_quad.into_owned(), named_graph_quad.into_owned()],
-            1,
-        )?;
+        loader.load_batch(vec![default_quad, named_graph_quad], 1)?;
         loader.commit()?;
         let mut transaction = storage.start_transaction()?;
         transaction.insert_named_graph(example2.into());

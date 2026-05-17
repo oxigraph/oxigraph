@@ -1,13 +1,15 @@
 //! Shared parser implementation for Turtle and TriG.
 
-use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name};
+use crate::lexer::{
+    N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
+};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 
@@ -26,11 +28,11 @@ pub struct TriGRecognizer {
 pub struct TriGRecognizerContext {
     pub lexer_options: N3LexerOptions,
     pub with_graph_name: bool,
-    prefixes: HashMap<String, Iri<String>>,
+    prefixes: HashMap<OxString, Iri<OxString>>,
 }
 
 impl TriGRecognizerContext {
-    pub fn prefixes(&self) -> Iter<'_, String, Iri<String>> {
+    pub fn prefixes(&self) -> Iter<'_, OxString, Iri<OxString>> {
         self.prefixes.iter()
     }
 }
@@ -163,7 +165,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::PrefixExpectPrefix => match token {
                     N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
                         self.stack.push(TriGState::PrefixExpectIri {
-                            name: prefix.to_owned(),
+                            name: OxString::new_owned(prefix),
                         });
                         self
                     }
@@ -220,7 +222,7 @@ impl RuleRecognizer for TriGRecognizer {
                     N3Token::BlankNodeLabel(label) => {
                         self.stack
                             .push(TriGState::WrappedGraphOrPredicateObjectList {
-                                term: BlankNode::new_unchecked(label).into(),
+                                term: BlankNode::new_unchecked(OxString::new_owned(label)).into(),
                             });
                         self
                     }
@@ -304,7 +306,7 @@ impl RuleRecognizer for TriGRecognizer {
                         let root = BlankNode::default();
                         self.cur_subject.push(root.clone().into());
                         self.cur_subject.push(root.into());
-                        self.cur_predicate.push(rdf::FIRST.into());
+                        self.cur_predicate.push(rdf::FIRST);
                         self.stack.push(TriGState::SubjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
@@ -401,7 +403,7 @@ impl RuleRecognizer for TriGRecognizer {
                     },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_subject
-                            .push(BlankNode::new_unchecked(label).into());
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
@@ -457,7 +459,8 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_graph = BlankNode::new_unchecked(label).into();
+                        self.cur_graph =
+                            BlankNode::new_unchecked(OxString::new_owned(label)).into();
                         self
                     }
                     N3Token::Punctuation("[") => {
@@ -600,7 +603,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [21] 	predicate 	::= 	iri
                 TriGState::Verb => match token {
                     N3Token::PlainKeyword("a") => {
-                        self.cur_predicate.push(rdf::TYPE.into());
+                        self.cur_predicate.push(rdf::TYPE);
                         self
                     }
                     N3Token::IriRef(iri) => {
@@ -660,7 +663,8 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_object.push(BlankNode::new_unchecked(label).into());
+                        self.cur_object
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self.emit_quad(results);
                         self
                     }
@@ -679,20 +683,23 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                        );
                         self.emit_quad(results);
                         self
                     }
@@ -763,7 +770,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_object.push(root.clone().into());
                         self.emit_quad(results);
                         self.cur_subject.push(root.into());
-                        self.cur_predicate.push(rdf::FIRST.into());
+                        self.cur_predicate.push(rdf::FIRST);
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
@@ -800,13 +807,13 @@ impl RuleRecognizer for TriGRecognizer {
                             if let Some(direction) = direction {
                                 Literal::new_directional_language_tagged_literal_unchecked(
                                     value,
-                                    language.to_ascii_lowercase(),
+                                    to_lowercase(language),
                                     direction,
                                 )
                             } else {
                                 Literal::new_language_tagged_literal_unchecked(
                                     value,
-                                    language.to_ascii_lowercase(),
+                                    to_lowercase(language),
                                 )
                             }
                             .into(),
@@ -821,7 +828,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_object.push(
                             Literal::new_language_tagged_literal_unchecked(
                                 value,
-                                language.to_ascii_lowercase(),
+                                to_lowercase(language),
                             )
                             .into(),
                         );
@@ -1027,7 +1034,7 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                     },
                     N3Token::BlankNodeLabel(bnode) => {
-                        let reifier = BlankNode::new_unchecked(bnode);
+                        let reifier = BlankNode::new_unchecked(OxString::new_owned(bnode));
                         results.push(Quad::new(
                             reifier.clone(),
                             rdf::REIFIES,
@@ -1080,7 +1087,7 @@ impl RuleRecognizer for TriGRecognizer {
                     },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_subject
-                            .push(BlankNode::new_unchecked(label).into());
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self
                     }
                     N3Token::Punctuation("<<") if is_reified => {
@@ -1128,7 +1135,8 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e),
                     },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_object.push(BlankNode::new_unchecked(label).into());
+                        self.cur_object
+                            .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                         self
                     }
                     N3Token::String(value) => {
@@ -1137,18 +1145,21 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                        );
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                        );
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                        );
                         self
                     }
                     N3Token::PlainKeyword("true") => {
@@ -1224,7 +1235,7 @@ impl RuleRecognizer for TriGRecognizer {
             }
             [.., TriGState::LiteralPossibleSuffix { value, emit: true }] => {
                 self.cur_object
-                    .push(Literal::new_simple_literal(value).into());
+                    .push(Literal::new_simple_literal(value.clone()).into());
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }
@@ -1243,8 +1254,8 @@ impl TriGRecognizer {
         is_ending: bool,
         with_graph_name: bool,
         lenient: bool,
-        base_iri: Option<Iri<String>>,
-        prefixes: HashMap<String, Iri<String>>,
+        base_iri: Option<Iri<OxString>>,
+        prefixes: HashMap<OxString, Iri<OxString>>,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
@@ -1305,7 +1316,7 @@ enum TriGState {
     BaseExpectIri,
     PrefixExpectPrefix,
     PrefixExpectIri {
-        name: String,
+        name: OxString,
     },
     #[cfg(feature = "rdf-12")]
     VersionExpectVersion,
@@ -1345,11 +1356,11 @@ enum TriGState {
     ObjectCollectionBeginning,
     ObjectCollectionPossibleEnd,
     LiteralPossibleSuffix {
-        value: String,
+        value: OxString,
         emit: bool,
     },
     LiteralExpectDatatype {
-        value: String,
+        value: OxString,
         emit: bool,
     },
     #[cfg(feature = "rdf-12")]

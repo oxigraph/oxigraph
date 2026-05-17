@@ -9,15 +9,14 @@ mod http;
 pub mod results;
 mod update;
 
-use crate::model::{NamedNode, Term};
+use crate::model::{IriParseError, NamedNode, Term};
+pub use crate::model::{Variable, VariableNameParseError};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::update::{BoundPreparedSparqlUpdate, PreparedSparqlUpdate};
 use crate::store::{Store, Transaction};
-use oxrdf::IriParseError;
-pub use oxrdf::{Variable, VariableNameParseError};
 pub use spareval::{
     AggregateFunctionAccumulator, CancellationToken, DefaultServiceHandler,
     QueryDatasetSpecification, QueryEvaluationError, QueryExplanation, QueryResults, QuerySolution,
@@ -95,7 +94,7 @@ impl SparqlEvaluator {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.parser = self.parser.with_base_iri(base_iri)?;
         Ok(self)
     }
@@ -123,8 +122,8 @@ impl SparqlEvaluator {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         self.parser = self.parser.with_prefix(prefix_name, prefix_iri)?;
         Ok(self)
@@ -301,11 +300,11 @@ impl SparqlEvaluator {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// store.insert(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com/s")?,
-    ///     NamedNodeRef::new("http://example.com/p")?,
-    ///     NamedNodeRef::new("http://example.com/o")?,
-    ///     GraphNameRef::DefaultGraph,
+    /// store.insert(Quad::new(
+    ///     NamedNode::new("http://example.com/s")?,
+    ///     NamedNode::new("http://example.com/p")?,
+    ///     NamedNode::new("http://example.com/o")?,
+    ///     GraphName::DefaultGraph,
     /// ))?;
     /// let cancellation_token = CancellationToken::new();
     /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
@@ -350,15 +349,20 @@ impl SparqlEvaluator {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     ///
     /// let prepared_query = SparqlEvaluator::new().parse_query("SELECT ?s WHERE { ?s ?p ?o }")?;
     ///
     /// if let QueryResults::Solutions(mut solutions) = prepared_query.on_store(&store).execute()? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("s"),
-    ///         Some(&ex.into_owned().into())
+    ///         Some(&ex.clone().into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -381,8 +385,13 @@ impl SparqlEvaluator {
     /// use spargebra::SparqlParser;
     ///
     /// let store = Store::new()?;
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     ///
     /// let query = SparqlParser::new().parse_query("SELECT ?s WHERE { ?s ?p ?o }")?;
     ///
@@ -391,7 +400,7 @@ impl SparqlEvaluator {
     /// if let QueryResults::Solutions(mut solutions) = prepared_query.on_store(&store).execute()? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("s"),
-    ///         Some(&ex.into_owned().into())
+    ///         Some(&ex.clone().into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())

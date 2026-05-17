@@ -1,7 +1,7 @@
+use crate::model::{NamedNode, OxString};
 use oxhttp::model::header::{ACCEPT, CONTENT_TYPE};
 use oxhttp::model::{Body, Method, Request};
 use oxiri::Iri;
-use oxrdf::NamedNode;
 use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
 use spargebra::algebra::GraphPattern;
@@ -109,7 +109,7 @@ impl DefaultServiceHandler for HttpServiceHandler {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> std::result::Result<QuerySolutionIter<'static>, Self::Error> {
         let (content_type, body) = self
             .client

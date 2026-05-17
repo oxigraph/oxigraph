@@ -8,7 +8,7 @@
 use crate::geosparql;
 use geo::Geometry;
 use geojson::{GeoJson, Geometry as GeoJsonGeometry};
-use oxrdf::{Literal, Term};
+use oxrdf::{Literal, OxString, Term};
 use std::str::FromStr;
 use wkt::{ToWkt, TryFromWkt};
 
@@ -24,9 +24,9 @@ pub fn extract_argument(term: &Term) -> Option<Geometry> {
     let Term::Literal(literal) = term else {
         return None;
     };
-    if literal.datatype() == geosparql::WKT_LITERAL {
+    if *literal.datatype() == geosparql::WKT_LITERAL {
         parse_wkt_literal(literal.value().trim())
-    } else if literal.datatype() == geosparql::GEO_JSON_LITERAL {
+    } else if *literal.datatype() == geosparql::GEO_JSON_LITERAL {
         parse_geo_json_literal(literal.value().trim())
     } else {
         None
@@ -62,13 +62,16 @@ pub fn parse_geo_json_literal(value: &str) -> Option<Geometry> {
 pub fn result_to_wkt_literal(geom: &Geometry) -> Literal {
     let wkt_body = geom.wkt_string();
     let value = format!("<{CRS84_URI}> {wkt_body}");
-    Literal::new_typed_literal(value, geosparql::WKT_LITERAL)
+    Literal::new_typed_literal(OxString::new_owned(&value), geosparql::WKT_LITERAL)
 }
 
 /// Serialize a geometry as a `geoJSONLiteral`.
 pub fn result_to_geojson_literal(geom: &Geometry) -> Literal {
     let gj = GeoJsonGeometry::from(geom);
-    Literal::new_typed_literal(gj.to_string(), geosparql::GEO_JSON_LITERAL)
+    Literal::new_typed_literal(
+        OxString::new_owned(&gj.to_string()),
+        geosparql::GEO_JSON_LITERAL,
+    )
 }
 
 #[cfg(test)]
@@ -139,7 +142,7 @@ mod tests {
     fn result_literal_roundtrips_through_parse() {
         let original = parse_wkt_literal("POINT(3 4)").expect("parses");
         let literal = result_to_wkt_literal(&original);
-        assert_eq!(literal.datatype(), geosparql::WKT_LITERAL);
+        assert_eq!(*literal.datatype(), geosparql::WKT_LITERAL);
         assert!(literal.value().starts_with('<'));
         let parsed = parse_wkt_literal(literal.value()).expect("roundtrip parses");
         match parsed {

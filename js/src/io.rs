@@ -41,7 +41,7 @@ pub fn parse(input: &JsValue, options: &JsValue) -> Result<JsValue, JsValue> {
         parser = parser.with_default_graph(to_graph_name);
     }
     if let Some(base_iri) = base_iri {
-        parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
+        parser = parser.with_base_iri(&base_iri).map_err(JsError::from)?;
     }
     if lenient {
         parser = parser.lenient();
@@ -50,7 +50,7 @@ pub fn parse(input: &JsValue, options: &JsValue) -> Result<JsValue, JsValue> {
     if let Some(buffer) = buffer_from_js_value(input) {
         Ok(parser
             .for_slice(&buffer)
-            .map(|v| v.map(|q| from_quad(&data_factory, q.as_ref())))
+            .map(|v| v.map(|q| from_quad(&data_factory, &q)))
             .collect::<Result<Vec<_>, _>>()
             .map_err(JsError::from)?
             .into())
@@ -90,7 +90,7 @@ pub fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
     if let Some(value) = value.as_string() {
         Ok(Some(value))
     } else if let Ok(value) = to_named_node(value) {
-        Ok(Some(value.into_string()))
+        Ok(Some(value.into_string().as_str().to_owned()))
     } else {
         Err(format_err!(
             "If provided, the base IRI must be a NamedNode or a string"
@@ -200,7 +200,7 @@ impl ParserIterator {
                 .next()
                 .transpose()
                 .map_err(convert_rdf_parse_error)?
-                .map(|q| from_quad(&self.data_factory, q.as_ref())),
+                .map(|q| from_quad(&self.data_factory, &q)),
         ))
     }
 
@@ -225,7 +225,7 @@ impl AsyncParserIterator {
                 .await
                 .transpose()
                 .map_err(convert_rdf_parse_error)?
-                .map(|q| from_quad(&self.data_factory, q.as_ref())),
+                .map(|q| from_quad(&self.data_factory, &q)),
         ))
     }
 

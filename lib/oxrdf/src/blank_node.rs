@@ -1,5 +1,6 @@
 #![expect(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 
+use crate::OxString;
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -8,9 +9,9 @@ use std::{fmt, str};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the [`BlankNode::default()`] function.
+/// The common way to create a new blank node is to use the [`BlankNode::default`] function.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new()`] function.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
@@ -25,7 +26,7 @@ pub struct BlankNode(BlankNodeContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum BlankNodeContent {
-    Named(String),
+    Named(OxString),
     Anonymous { id: [u8; 16], str: IdStr },
 }
 
@@ -34,9 +35,9 @@ impl BlankNode {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`]
     /// that creates a random ID that could be easily inlined by Oxigraph stores.
-    pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
+    pub fn new(id: impl Into<OxString>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
         Ok(Self::new_unchecked(id))
@@ -47,9 +48,9 @@ impl BlankNode {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// [`BlankNode::new()`] is a safe version of this constructor and should be used for untrusted data.
+    /// [`BlankNode::new`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(id: impl Into<String>) -> Self {
+    pub fn new_unchecked(id: impl Into<OxString>) -> Self {
         let id = id.into();
         if let Some(numerical_id) = to_integer_id(&id) {
             Self::new_from_unique_id(numerical_id)
@@ -60,7 +61,7 @@ impl BlankNode {
 
     /// Creates a blank node from a unique numerical id.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`].
     #[inline]
     pub fn new_from_unique_id(id: u128) -> Self {
         Self(BlankNodeContent::Anonymous {
@@ -80,10 +81,10 @@ impl BlankNode {
 
     /// Returns the underlying ID of this blank node.
     #[inline]
-    pub fn into_string(self) -> String {
+    pub fn into_string(self) -> OxString {
         match self.0 {
             BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => str.as_str().to_owned(),
+            BlankNodeContent::Anonymous { str, .. } => OxString::new_owned(str.as_str()),
         }
     }
 
@@ -96,6 +97,23 @@ impl BlankNode {
                 str: str.as_str(),
             },
         })
+    }
+
+    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`].
+    ///
+    /// ```
+    /// use oxrdf::BlankNode;
+    ///
+    /// assert_eq!(BlankNode::new_from_unique_id(128).unique_id(), Some(128));
+    /// assert_eq!(BlankNode::new("foo")?.unique_id(), None);
+    /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
+    /// ```
+    #[inline]
+    pub const fn unique_id(&self) -> Option<u128> {
+        match self.0 {
+            BlankNodeContent::Named(_) => None,
+            BlankNodeContent::Anonymous { id, .. } => Some(u128::from_ne_bytes(id)),
+        }
     }
 }
 
@@ -128,7 +146,7 @@ impl Default for BlankNode {
 ///
 /// The common way to create a new blank node is to use the [`BlankNode::default`] trait method.
 ///
-/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new()`] function.
+/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
@@ -152,7 +170,7 @@ impl<'a> BlankNodeRef<'a> {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`].
     /// that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
         validate_blank_node_identifier(id)?;
@@ -164,7 +182,7 @@ impl<'a> BlankNodeRef<'a> {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// [`BlankNodeRef::new()`) is a safe version of this constructor and should be used for untrusted data.
+    /// [`BlankNodeRef::new`) is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
@@ -209,7 +227,7 @@ impl<'a> BlankNodeRef<'a> {
     #[inline]
     pub fn into_owned(self) -> BlankNode {
         BlankNode(match self.0 {
-            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
+            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(OxString::new_owned(id)),
             BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
                 id,
                 str: IdStr::new(u128::from_ne_bytes(id)),
@@ -386,7 +404,7 @@ impl<'de> Deserialize<'de> for BlankNode {
         #[derive(Deserialize)]
         #[serde(rename = "BlankNode")]
         struct Value {
-            value: String,
+            value: OxString,
         }
         Self::new(Value::deserialize(deserializer)?.value).map_err(de::Error::custom)
     }

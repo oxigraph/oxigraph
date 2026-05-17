@@ -149,7 +149,7 @@ impl RdfParser {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?, f),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
@@ -638,7 +638,7 @@ impl<R: Read> ReaderQuadParser<R> {
     /// A callback to load remote documents during parsing like JSON-LD contexts.
     ///
     /// ```
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
@@ -649,7 +649,7 @@ impl<R: Read> ReaderQuadParser<R> {
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in RdfParser::from_format(RdfFormat::JsonLd {
     ///     profile: JsonLdProfileSet::empty(),
@@ -666,7 +666,7 @@ impl<R: Read> ReaderQuadParser<R> {
     ///     })
     /// }) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -695,7 +695,7 @@ impl<R: Read> ReaderQuadParser<R> {
                     }
                     Ok(JsonLdRemoteDocument {
                         document: response.content,
-                        document_url: response.url,
+                        document_url: response.url.into(),
                     })
                 }))
             }
@@ -935,7 +935,7 @@ impl SliceQuadParser<'_> {
     /// A callback to load remote documents during parsing like JSON-LD contexts.
     ///
     /// ```
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
@@ -946,7 +946,7 @@ impl SliceQuadParser<'_> {
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let schema_person = NamedNode::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in RdfParser::from_format(RdfFormat::JsonLd {
     ///     profile: JsonLdProfileSet::empty(),
@@ -963,7 +963,7 @@ impl SliceQuadParser<'_> {
     ///     })
     /// }) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person {
     ///         count += 1;
     ///     }
     /// }
@@ -992,7 +992,7 @@ impl SliceQuadParser<'_> {
                     }
                     Ok(JsonLdRemoteDocument {
                         document: response.content,
-                        document_url: response.url,
+                        document_url: response.url.into(),
                     })
                 }))
             }

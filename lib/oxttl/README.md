@@ -15,7 +15,7 @@ It is designed as a low level parser compatible with both synchronous and asynch
 
 Usage example counting the number of people in a Turtle file:
 ```rust
-use oxrdf::{NamedNodeRef, vocab::rdf};
+use oxrdf::{NamedNode, vocab::rdf};
 use oxttl::TurtleParser;
 
 let file = b"@base <http://example.com/> .
@@ -25,11 +25,11 @@ let file = b"@base <http://example.com/> .
 <bar> a schema:Person ;
     schema:name \"Bar\" .";
 
-let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
+let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
 let mut count = 0;
 for triple in TurtleParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
-    if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    if triple.predicate == rdf::TYPE && triple.object == schema_person {
         count += 1;
     }
 }
