@@ -23,7 +23,7 @@ use crate::escaping::unescape_unicode_codepoints;
 use crate::lexer::lex_sparql;
 use crate::parser::{parse_sparql_query, parse_sparql_update};
 use oxiri::{Iri, IriParseError};
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, OxString};
 pub use query::Query;
 use std::collections::{HashMap, HashSet};
 pub use update::Update;
@@ -41,8 +41,8 @@ pub use update::Update;
 #[must_use]
 #[derive(Clone, Default)]
 pub struct SparqlParser {
-    base_iri: Option<Iri<String>>,
-    prefixes: HashMap<String, String>,
+    base_iri: Option<Iri<OxString>>,
+    prefixes: HashMap<OxString, OxString>,
     custom_aggregate_functions: HashSet<NamedNode>,
 }
 
@@ -62,8 +62,8 @@ impl SparqlParser {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base_iri = Some(Iri::parse(base_iri.into())?);
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
+        self.base_iri = Some(Iri::parse(OxString::new_owned(base_iri))?);
         Ok(self)
     }
 
@@ -84,12 +84,12 @@ impl SparqlParser {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         self.prefixes.insert(
-            prefix_name.into(),
-            Iri::parse(prefix_iri.into())?.into_inner(),
+            OxString::new_owned(prefix_name),
+            Iri::parse(OxString::new_owned(prefix_iri))?.into_inner(),
         );
         Ok(self)
     }

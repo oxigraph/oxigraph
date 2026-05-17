@@ -6,7 +6,7 @@ use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Term, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, OxString, Term, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, TimezoneOffset, YearMonthDuration};
 use oxsdatatypes::{DateTime, Decimal, Double, Float, Integer};
@@ -55,7 +55,7 @@ pub trait ExpressionEvaluatorContext<'a> {
         &mut self,
     ) -> impl Fn(Self::Term) -> Option<ExpressionTerm> + 'a; // TODO: return result
     fn now(&mut self) -> DateTime;
-    fn base_iri(&mut self) -> Option<Arc<Iri<String>>>;
+    fn base_iri(&mut self) -> Option<Iri<OxString>>;
     fn custom_functions(&mut self) -> &CustomFunctionRegistry;
 }
 
@@ -470,7 +470,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     Some(ExpressionTerm::StringLiteral(match e(tuple)?.into() {
                         Term::NamedNode(term) => term.into_string(),
                         Term::BlankNode(_) => return None,
-                        Term::Literal(term) => term.destruct().0,
+                        Term::Literal(term) => term.into_value(),
                         #[cfg(feature = "sparql-12")]
                         Term::Triple(_) => return None,
                     }))
@@ -488,7 +488,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         }
                         #[cfg(feature = "sparql-12")]
                         ExpressionTerm::Triple(_) => return None,
-                        _ => String::new(),
+                        _ => OxString::default(),
                     }))
                 })
             }
@@ -500,12 +500,12 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     else {
                         return None;
                     };
-                    language_tag.make_ascii_lowercase();
+                    language_tag.make_mut().make_ascii_lowercase();
                     let ExpressionTerm::StringLiteral(mut language_range) = language_range(tuple)?
                     else {
                         return None;
                     };
-                    language_range.make_ascii_lowercase();
+                    language_range.make_mut().make_ascii_lowercase();
                     Some(
                         if &*language_range == "*" {
                             !language_tag.is_empty()
@@ -537,7 +537,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         }
                         #[cfg(feature = "sparql-12")]
                         ExpressionTerm::Triple(_) => return None,
-                        _ => String::new(),
+                        _ => OxString::default(),
                     }))
                 })
             }
@@ -545,38 +545,36 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {
                     Some(ExpressionTerm::NamedNode(match e(tuple)? {
-                        ExpressionTerm::StringLiteral(_) => xsd::STRING.into(),
-                        ExpressionTerm::LangStringLiteral { .. } => rdf::LANG_STRING.into(),
+                        ExpressionTerm::StringLiteral(_) => xsd::STRING,
+                        ExpressionTerm::LangStringLiteral { .. } => rdf::LANG_STRING,
                         #[cfg(feature = "sparql-12")]
-                        ExpressionTerm::DirLangStringLiteral { .. } => rdf::DIR_LANG_STRING.into(),
-                        ExpressionTerm::BooleanLiteral(_) => xsd::BOOLEAN.into(),
-                        ExpressionTerm::IntegerLiteral(_) => xsd::INTEGER.into(),
-                        ExpressionTerm::DecimalLiteral(_) => xsd::DECIMAL.into(),
-                        ExpressionTerm::FloatLiteral(_) => xsd::FLOAT.into(),
-                        ExpressionTerm::DoubleLiteral(_) => xsd::DOUBLE.into(),
-                        ExpressionTerm::DateTimeLiteral(_) => xsd::DATE_TIME.into(),
+                        ExpressionTerm::DirLangStringLiteral { .. } => rdf::DIR_LANG_STRING,
+                        ExpressionTerm::BooleanLiteral(_) => xsd::BOOLEAN,
+                        ExpressionTerm::IntegerLiteral(_) => xsd::INTEGER,
+                        ExpressionTerm::DecimalLiteral(_) => xsd::DECIMAL,
+                        ExpressionTerm::FloatLiteral(_) => xsd::FLOAT,
+                        ExpressionTerm::DoubleLiteral(_) => xsd::DOUBLE,
+                        ExpressionTerm::DateTimeLiteral(_) => xsd::DATE_TIME,
                         #[cfg(feature = "sep-0002")]
-                        ExpressionTerm::DateLiteral(_) => xsd::DATE.into(),
+                        ExpressionTerm::DateLiteral(_) => xsd::DATE,
                         #[cfg(feature = "sep-0002")]
-                        ExpressionTerm::TimeLiteral(_) => xsd::TIME.into(),
+                        ExpressionTerm::TimeLiteral(_) => xsd::TIME,
                         #[cfg(feature = "calendar-ext")]
-                        ExpressionTerm::GYearLiteral(_) => xsd::G_YEAR.into(),
+                        ExpressionTerm::GYearLiteral(_) => xsd::G_YEAR,
                         #[cfg(feature = "calendar-ext")]
-                        ExpressionTerm::GYearMonthLiteral(_) => xsd::G_YEAR_MONTH.into(),
+                        ExpressionTerm::GYearMonthLiteral(_) => xsd::G_YEAR_MONTH,
                         #[cfg(feature = "calendar-ext")]
-                        ExpressionTerm::GMonthLiteral(_) => xsd::G_MONTH.into(),
+                        ExpressionTerm::GMonthLiteral(_) => xsd::G_MONTH,
                         #[cfg(feature = "calendar-ext")]
-                        ExpressionTerm::GMonthDayLiteral(_) => xsd::G_MONTH_DAY.into(),
+                        ExpressionTerm::GMonthDayLiteral(_) => xsd::G_MONTH_DAY,
                         #[cfg(feature = "calendar-ext")]
-                        ExpressionTerm::GDayLiteral(_) => xsd::G_DAY.into(),
+                        ExpressionTerm::GDayLiteral(_) => xsd::G_DAY,
                         #[cfg(feature = "sep-0002")]
-                        ExpressionTerm::DurationLiteral(_) => xsd::DURATION.into(),
+                        ExpressionTerm::DurationLiteral(_) => xsd::DURATION,
                         #[cfg(feature = "sep-0002")]
-                        ExpressionTerm::YearMonthDurationLiteral(_) => {
-                            xsd::YEAR_MONTH_DURATION.into()
-                        }
+                        ExpressionTerm::YearMonthDurationLiteral(_) => xsd::YEAR_MONTH_DURATION,
                         #[cfg(feature = "sep-0002")]
-                        ExpressionTerm::DayTimeDurationLiteral(_) => xsd::DAY_TIME_DURATION.into(),
+                        ExpressionTerm::DayTimeDurationLiteral(_) => xsd::DAY_TIME_DURATION,
                         ExpressionTerm::OtherTypedLiteral { datatype, .. } => datatype,
                         ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                             return None;
@@ -592,13 +590,13 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 Rc::new(move |tuple| {
                     Some(ExpressionTerm::NamedNode(match e(tuple)? {
                         ExpressionTerm::NamedNode(iri) => iri,
-                        ExpressionTerm::StringLiteral(iri) => if let Some(base_iri) = &base_iri {
-                            base_iri.resolve(&iri)
-                        } else {
-                            Iri::parse(iri)
+                        ExpressionTerm::StringLiteral(iri) => {
+                            NamedNode::new_unchecked(if let Some(base_iri) = &base_iri {
+                                OxString::new_owned(&base_iri.resolve(&iri).ok()?.into_inner())
+                            } else {
+                                Iri::parse(iri).ok()?.into_inner()
+                            })
                         }
-                        .ok()?
-                        .into(),
                         _ => return None,
                     }))
                 })
@@ -696,7 +694,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     .map(|e| build_expression_evaluator(e, context))
                     .collect::<Result<Vec<_>, _>>()?;
                 Rc::new(move |tuple| {
-                    let mut result = String::default();
+                    let mut args = Vec::with_capacity(l.len());
                     let mut language = None;
                     for e in &l {
                         let (value, e_language) = to_string_and_language(e(tuple)?)?;
@@ -707,9 +705,12 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         } else {
                             language = Some(e_language)
                         }
-                        result += &value
+                        args.push(value);
                     }
-                    Some(build_plain_literal(result, language.flatten()))
+                    Some(build_plain_literal(
+                        OxString::concat(args),
+                        language.flatten(),
+                    ))
                 })
             }
             Function::SubStr => {
@@ -744,7 +745,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         .skip(starting_location.checked_sub(1)?)
                         .peekable();
                     let result = if let Some((start_position, _)) = start_iter.peek().copied() {
-                        if let Some(length) = length {
+                        OxString::new_owned(if let Some(length) = length {
                             let mut end_iter = start_iter.skip(length).peekable();
                             if let Some((end_position, _)) = end_iter.peek() {
                                 &source[start_position..*end_position]
@@ -753,11 +754,11 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                             }
                         } else {
                             &source[start_position..]
-                        }
+                        })
                     } else {
-                        ""
+                        OxString::default()
                     };
-                    Some(build_plain_literal(result.into(), language))
+                    Some(build_plain_literal(result, language))
                 })
             }
             Function::StrLen => {
@@ -781,8 +782,8 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                             return None;
                         };
                         Some(build_plain_literal(
-                            match regex.replace_all(&text, &replacement) {
-                                Cow::Owned(replaced) => replaced,
+                            match regex.replace_all(text.as_str(), replacement.as_str()) {
+                                Cow::Owned(replaced) => OxString::new_owned(&replaced),
                                 Cow::Borrowed(_) => text,
                             },
                             language,
@@ -812,8 +813,8 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                             return None;
                         };
                         Some(build_plain_literal(
-                            match regex.replace_all(&text, &replacement) {
-                                Cow::Owned(replaced) => replaced,
+                            match regex.replace_all(text.as_str(), replacement.as_str()) {
+                                Cow::Owned(replaced) => OxString::new_owned(&replaced),
                                 Cow::Borrowed(_) => text,
                             },
                             language,
@@ -824,15 +825,27 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             Function::UCase => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {
-                    let (value, language) = to_string_and_language(e(tuple)?)?;
-                    Some(build_plain_literal(value.to_uppercase(), language))
+                    let (mut value, language) = to_string_and_language(e(tuple)?)?;
+                    let value = if value.is_ascii() {
+                        value.make_mut().make_ascii_uppercase();
+                        value
+                    } else {
+                        OxString::new_owned(&value.to_uppercase())
+                    };
+                    Some(build_plain_literal(value, language))
                 })
             }
             Function::LCase => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {
-                    let (value, language) = to_string_and_language(e(tuple)?)?;
-                    Some(build_plain_literal(value.to_lowercase(), language))
+                    let (mut value, language) = to_string_and_language(e(tuple)?)?;
+                    let value = if value.is_ascii() {
+                        value.make_mut().make_ascii_lowercase();
+                        value
+                    } else {
+                        OxString::new_owned(&value.to_lowercase())
+                    };
+                    Some(build_plain_literal(value, language))
                 })
             }
             Function::StrStarts => {
@@ -871,9 +884,9 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                             }
                         }
                     }
-                    Some(ExpressionTerm::StringLiteral(
-                        String::from_utf8(result).ok()?,
-                    ))
+                    Some(ExpressionTerm::StringLiteral(OxString::new_owned(
+                        str::from_utf8(&result).ok()?,
+                    )))
                 })
             }
             Function::StrEnds => {
@@ -901,9 +914,9 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(if let Some(position) = arg1.find(arg2.as_str()) {
-                        build_plain_literal(arg1[..position].into(), language)
+                        build_plain_literal(OxString::new_owned(&arg1[..position]), language)
                     } else {
-                        ExpressionTerm::StringLiteral(String::new())
+                        ExpressionTerm::StringLiteral(OxString::default())
                     })
                 })
             }
@@ -914,9 +927,12 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(arg1(tuple)?, arg2(tuple)?)?;
                     Some(if let Some(position) = arg1.find(arg2.as_str()) {
-                        build_plain_literal(arg1[position + arg2.len()..].into(), language)
+                        build_plain_literal(
+                            OxString::new_owned(&arg1[position + arg2.len()..]),
+                            language,
+                        )
                     } else {
-                        ExpressionTerm::StringLiteral(String::new())
+                        ExpressionTerm::StringLiteral(OxString::default())
                     })
                 })
             }
@@ -1043,8 +1059,8 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     #[cfg(not(feature = "sep-0002"))]
                     {
                         Some(ExpressionTerm::OtherTypedLiteral {
-                            value: result.to_string(),
-                            datatype: xsd::DAY_TIME_DURATION.into(),
+                            value: OxString::new_owned(&result.to_string()),
+                            datatype: xsd::DAY_TIME_DURATION,
                         })
                     }
                 })
@@ -1073,7 +1089,9 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                         _ => return None,
                     };
                     Some(ExpressionTerm::StringLiteral(
-                        timezone_offset.map_or_else(String::new, |o| o.to_string()),
+                        timezone_offset.map_or_else(OxString::default, |o| {
+                            OxString::new_owned(o.to_string().as_str())
+                        }),
                     ))
                 })
             }
@@ -1134,12 +1152,14 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 let mut buffer = String::with_capacity(44);
                 buffer.push_str("urn:uuid:");
                 generate_uuid(&mut buffer);
-                Some(ExpressionTerm::NamedNode(NamedNode::new_unchecked(buffer)))
+                Some(ExpressionTerm::NamedNode(NamedNode::new_unchecked(
+                    OxString::new_owned(&buffer),
+                )))
             }),
             Function::StrUuid => Rc::new(move |_| {
                 let mut buffer = String::with_capacity(36);
                 generate_uuid(&mut buffer);
-                Some(ExpressionTerm::StringLiteral(buffer))
+                Some(ExpressionTerm::StringLiteral(OxString::new_owned(&buffer)))
             }),
             Function::Md5 => build_hash_expression_evaluator::<_, Md5>(parameters, context)?,
             Function::Sha1 => build_hash_expression_evaluator::<_, Sha1>(parameters, context)?,
@@ -1361,240 +1381,202 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 }
 
                 macro_rules! cast_fn {
-                    ($eval:expr) => {{
-                        if parameters.len() != 1 {
-                            return Err(
-                                ExpressionEvaluationError::UnsupportedCustomFunctionArity {
-                                    name: function_name.clone(),
-                                    expected: 1..=1,
-                                    actual: parameters.len(),
-                                },
-                            );
+                    ($name:expr, $eval:expr) => {{
+                        if *function_name == $name {
+                            if parameters.len() != 1 {
+                                return Err(
+                                    ExpressionEvaluationError::UnsupportedCustomFunctionArity {
+                                        name: function_name.clone(),
+                                        expected: 1..=1,
+                                        actual: parameters.len(),
+                                    },
+                                );
+                            }
+                            let e = build_expression_evaluator(&parameters[0], context)?;
+                            return Ok(Rc::new(move |tuple| ($eval)(e(tuple)?)));
                         }
-                        let e = build_expression_evaluator(&parameters[0], context)?;
-                        Rc::new(move |tuple| ($eval)(e(tuple)?))
                     }};
                 }
 
-                match function_name.as_ref() {
-                    xsd::STRING => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::StringLiteral(
-                            match t.into() {
-                                Term::NamedNode(term) => term.into_string(),
-                                Term::BlankNode(_) => return None,
-                                Term::Literal(term) => term.destruct().0,
-                                #[cfg(feature = "sparql-12")]
-                                Term::Triple(_) => return None,
-                            }
-                        )))
-                    }
-                    xsd::BOOLEAN => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::BooleanLiteral(
-                            match t {
-                                ExpressionTerm::BooleanLiteral(value) => value,
-                                ExpressionTerm::FloatLiteral(value) => value.into(),
-                                ExpressionTerm::DoubleLiteral(value) => value.into(),
-                                ExpressionTerm::IntegerLiteral(value) => value.into(),
-                                ExpressionTerm::DecimalLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    xsd::DOUBLE => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::DoubleLiteral(match t {
-                                ExpressionTerm::FloatLiteral(value) => value.into(),
-                                ExpressionTerm::DoubleLiteral(value) => value,
-                                ExpressionTerm::IntegerLiteral(value) => value.into(),
-                                ExpressionTerm::DecimalLiteral(value) => value.into(),
-                                ExpressionTerm::BooleanLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    xsd::FLOAT => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::FloatLiteral(match t {
-                                ExpressionTerm::FloatLiteral(value) => value,
-                                ExpressionTerm::DoubleLiteral(value) => value.into(),
-                                ExpressionTerm::IntegerLiteral(value) => value.into(),
-                                ExpressionTerm::DecimalLiteral(value) => value.into(),
-                                ExpressionTerm::BooleanLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    xsd::INTEGER => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::IntegerLiteral(
-                            match t {
-                                ExpressionTerm::FloatLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::DoubleLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::IntegerLiteral(value) => value,
-                                ExpressionTerm::DecimalLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::BooleanLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    xsd::DECIMAL => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::DecimalLiteral(
-                            match t {
-                                ExpressionTerm::FloatLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::DoubleLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::IntegerLiteral(value) => value.into(),
-                                ExpressionTerm::DecimalLiteral(value) => value,
-                                ExpressionTerm::BooleanLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    xsd::DATE => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::DateLiteral(match t {
-                                ExpressionTerm::DateLiteral(value) => value,
-                                ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    xsd::TIME => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::TimeLiteral(match t {
-                                ExpressionTerm::TimeLiteral(value) => value,
-                                ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    xsd::DATE_TIME => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::DateTimeLiteral(
-                            match t {
-                                ExpressionTerm::DateTimeLiteral(value) => value,
-                                #[cfg(feature = "sep-0002")]
-                                ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    xsd::DURATION => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::DurationLiteral(
-                            match t {
-                                ExpressionTerm::DurationLiteral(value) => value,
-                                ExpressionTerm::YearMonthDurationLiteral(value) => value.into(),
-                                ExpressionTerm::DayTimeDurationLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    xsd::YEAR_MONTH_DURATION => {
-                        cast_fn!(|t: ExpressionTerm| Some(
-                            ExpressionTerm::YearMonthDurationLiteral(match t {
-                                ExpressionTerm::DurationLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::YearMonthDurationLiteral(value) => value,
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            })
-                        ))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    xsd::DAY_TIME_DURATION => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::DayTimeDurationLiteral(
-                                match t {
-                                    ExpressionTerm::DurationLiteral(value) =>
-                                        value.try_into().ok()?,
-                                    ExpressionTerm::DayTimeDurationLiteral(value) => value,
-                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                    _ => return None,
-                                }
-                            ))
-                        )
-                    }
-                    #[cfg(feature = "calendar-ext")]
-                    xsd::G_YEAR => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::GYearLiteral(match t {
-                                ExpressionTerm::GYearLiteral(value) => value,
-                                ExpressionTerm::GYearMonthLiteral(value) => {
-                                    value.try_into().ok()?
-                                }
-                                ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    #[cfg(feature = "calendar-ext")]
-                    xsd::G_YEAR_MONTH => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::GYearMonthLiteral(
-                            match t {
-                                ExpressionTerm::GYearMonthLiteral(value) => value,
-                                ExpressionTerm::DateLiteral(value) => value.into(),
-                                ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    #[cfg(feature = "calendar-ext")]
-                    xsd::G_MONTH => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::GMonthLiteral(match t {
-                                ExpressionTerm::GMonthLiteral(value) => value,
-                                ExpressionTerm::GYearMonthLiteral(value) => value.into(),
-                                ExpressionTerm::GMonthDayLiteral(value) => value.into(),
-                                ExpressionTerm::DateLiteral(value) => value.into(),
-                                ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    #[cfg(feature = "calendar-ext")]
-                    xsd::G_MONTH_DAY => {
-                        cast_fn!(|t: ExpressionTerm| Some(ExpressionTerm::GMonthDayLiteral(
-                            match t {
-                                ExpressionTerm::GMonthDayLiteral(value) => value,
-                                ExpressionTerm::DateLiteral(value) => value.into(),
-                                ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }
-                        )))
-                    }
-                    #[cfg(feature = "calendar-ext")]
-                    xsd::G_DAY => {
-                        cast_fn!(
-                            |t: ExpressionTerm| Some(ExpressionTerm::GDayLiteral(match t {
-                                ExpressionTerm::GDayLiteral(value) => value,
-                                ExpressionTerm::GMonthDayLiteral(value) => value.into(),
-                                ExpressionTerm::DateLiteral(value) => value.into(),
-                                ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                                ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
-                                _ => return None,
-                            }))
-                        )
-                    }
-                    _ => {
-                        return Err(ExpressionEvaluationError::UnsupportedCustomFunction(
-                            function_name.clone(),
-                        ));
-                    }
-                }
+                cast_fn!(xsd::STRING, |t: ExpressionTerm| Some(
+                    ExpressionTerm::StringLiteral(match t.into() {
+                        Term::NamedNode(term) => term.into_string(),
+                        Term::BlankNode(_) => return None,
+                        Term::Literal(term) => term.into_value(),
+                        #[cfg(feature = "sparql-12")]
+                        Term::Triple(_) => return None,
+                    })
+                ));
+                cast_fn!(xsd::BOOLEAN, |t: ExpressionTerm| Some(
+                    ExpressionTerm::BooleanLiteral(match t {
+                        ExpressionTerm::BooleanLiteral(value) => value,
+                        ExpressionTerm::FloatLiteral(value) => value.into(),
+                        ExpressionTerm::DoubleLiteral(value) => value.into(),
+                        ExpressionTerm::IntegerLiteral(value) => value.into(),
+                        ExpressionTerm::DecimalLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                cast_fn!(xsd::DOUBLE, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DoubleLiteral(match t {
+                        ExpressionTerm::FloatLiteral(value) => value.into(),
+                        ExpressionTerm::DoubleLiteral(value) => value,
+                        ExpressionTerm::IntegerLiteral(value) => value.into(),
+                        ExpressionTerm::DecimalLiteral(value) => value.into(),
+                        ExpressionTerm::BooleanLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                cast_fn!(xsd::FLOAT, |t: ExpressionTerm| Some(
+                    ExpressionTerm::FloatLiteral(match t {
+                        ExpressionTerm::FloatLiteral(value) => value,
+                        ExpressionTerm::DoubleLiteral(value) => value.into(),
+                        ExpressionTerm::IntegerLiteral(value) => value.into(),
+                        ExpressionTerm::DecimalLiteral(value) => value.into(),
+                        ExpressionTerm::BooleanLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+
+                cast_fn!(xsd::INTEGER, |t: ExpressionTerm| Some(
+                    ExpressionTerm::IntegerLiteral(match t {
+                        ExpressionTerm::FloatLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::DoubleLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::IntegerLiteral(value) => value,
+                        ExpressionTerm::DecimalLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::BooleanLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                cast_fn!(xsd::DECIMAL, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DecimalLiteral(match t {
+                        ExpressionTerm::FloatLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::DoubleLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::IntegerLiteral(value) => value.into(),
+                        ExpressionTerm::DecimalLiteral(value) => value,
+                        ExpressionTerm::BooleanLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "sep-0002")]
+                cast_fn!(xsd::DATE, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DateLiteral(match t {
+                        ExpressionTerm::DateLiteral(value) => value,
+                        ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "sep-0002")]
+                cast_fn!(xsd::TIME, |t: ExpressionTerm| Some(
+                    ExpressionTerm::TimeLiteral(match t {
+                        ExpressionTerm::TimeLiteral(value) => value,
+                        ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                cast_fn!(xsd::DATE_TIME, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DateTimeLiteral(match t {
+                        ExpressionTerm::DateTimeLiteral(value) => value,
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "sep-0002")]
+                cast_fn!(xsd::DURATION, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DurationLiteral(match t {
+                        ExpressionTerm::DurationLiteral(value) => value,
+                        ExpressionTerm::YearMonthDurationLiteral(value) => value.into(),
+                        ExpressionTerm::DayTimeDurationLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "sep-0002")]
+                cast_fn!(xsd::YEAR_MONTH_DURATION, |t: ExpressionTerm| Some(
+                    ExpressionTerm::YearMonthDurationLiteral(match t {
+                        ExpressionTerm::DurationLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::YearMonthDurationLiteral(value) => value,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "sep-0002")]
+                cast_fn!(xsd::DAY_TIME_DURATION, |t: ExpressionTerm| Some(
+                    ExpressionTerm::DayTimeDurationLiteral(match t {
+                        ExpressionTerm::DurationLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::DayTimeDurationLiteral(value) => value,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "calendar-ext")]
+                cast_fn!(xsd::G_YEAR, |t: ExpressionTerm| Some(
+                    ExpressionTerm::GYearLiteral(match t {
+                        ExpressionTerm::GYearLiteral(value) => value,
+                        ExpressionTerm::GYearMonthLiteral(value) => {
+                            value.try_into().ok()?
+                        }
+                        ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "calendar-ext")]
+                cast_fn!(xsd::G_YEAR_MONTH, |t: ExpressionTerm| Some(
+                    ExpressionTerm::GYearMonthLiteral(match t {
+                        ExpressionTerm::GYearMonthLiteral(value) => value,
+                        ExpressionTerm::DateLiteral(value) => value.into(),
+                        ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "calendar-ext")]
+                cast_fn!(xsd::G_MONTH, |t: ExpressionTerm| Some(
+                    ExpressionTerm::GMonthLiteral(match t {
+                        ExpressionTerm::GMonthLiteral(value) => value,
+                        ExpressionTerm::GYearMonthLiteral(value) => value.into(),
+                        ExpressionTerm::GMonthDayLiteral(value) => value.into(),
+                        ExpressionTerm::DateLiteral(value) => value.into(),
+                        ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "calendar-ext")]
+                cast_fn!(xsd::G_MONTH_DAY, |t: ExpressionTerm| Some(
+                    ExpressionTerm::GMonthDayLiteral(match t {
+                        ExpressionTerm::GMonthDayLiteral(value) => value,
+                        ExpressionTerm::DateLiteral(value) => value.into(),
+                        ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                #[cfg(feature = "calendar-ext")]
+                cast_fn!(xsd::G_DAY, |t: ExpressionTerm| Some(
+                    ExpressionTerm::GDayLiteral(match t {
+                        ExpressionTerm::GDayLiteral(value) => value,
+                        ExpressionTerm::GMonthDayLiteral(value) => value.into(),
+                        ExpressionTerm::DateLiteral(value) => value.into(),
+                        ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                        ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                        _ => return None,
+                    })
+                ));
+                return Err(ExpressionEvaluationError::UnsupportedCustomFunction(
+                    function_name.clone(),
+                ));
             }
         },
     })
@@ -1670,19 +1652,19 @@ fn build_hash_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>, H: Dig
             return None;
         };
         let hash = hex::encode(H::new().chain_update(input.as_str()).finalize());
-        Some(ExpressionTerm::StringLiteral(hash))
+        Some(ExpressionTerm::StringLiteral(OxString::new_owned(&hash)))
     }))
 }
 
 #[cfg(feature = "sparql-12")]
-type LanguageWithMaybeBaseDirection = (String, Option<BaseDirection>);
+type LanguageWithMaybeBaseDirection = (OxString, Option<BaseDirection>);
 #[cfg(not(feature = "sparql-12"))]
-type LanguageWithMaybeBaseDirection = String;
+type LanguageWithMaybeBaseDirection = OxString;
 
 #[cfg(feature = "sparql-12")]
 fn to_string_and_language(
     term: ExpressionTerm,
-) -> Option<(String, Option<LanguageWithMaybeBaseDirection>)> {
+) -> Option<(OxString, Option<LanguageWithMaybeBaseDirection>)> {
     match term {
         ExpressionTerm::StringLiteral(value) => Some((value, None)),
         ExpressionTerm::LangStringLiteral { value, language } => {
@@ -1700,7 +1682,7 @@ fn to_string_and_language(
 #[cfg(not(feature = "sparql-12"))]
 fn to_string_and_language(
     term: ExpressionTerm,
-) -> Option<(String, Option<LanguageWithMaybeBaseDirection>)> {
+) -> Option<(OxString, Option<LanguageWithMaybeBaseDirection>)> {
     match term {
         ExpressionTerm::StringLiteral(value) => Some((value, None)),
         ExpressionTerm::LangStringLiteral { value, language } => Some((value, Some(language))),
@@ -1710,7 +1692,7 @@ fn to_string_and_language(
 
 #[cfg(feature = "sparql-12")]
 fn build_plain_literal(
-    value: String,
+    value: OxString,
     language: Option<LanguageWithMaybeBaseDirection>,
 ) -> ExpressionTerm {
     if let Some((language, direction)) = language {
@@ -1730,7 +1712,7 @@ fn build_plain_literal(
 
 #[cfg(not(feature = "sparql-12"))]
 fn build_plain_literal(
-    value: String,
+    value: OxString,
     language: Option<LanguageWithMaybeBaseDirection>,
 ) -> ExpressionTerm {
     if let Some(language) = language {
@@ -1743,7 +1725,7 @@ fn build_plain_literal(
 fn to_argument_compatible_strings(
     arg1: ExpressionTerm,
     arg2: ExpressionTerm,
-) -> Option<(String, String, Option<LanguageWithMaybeBaseDirection>)> {
+) -> Option<(OxString, OxString, Option<LanguageWithMaybeBaseDirection>)> {
     let (value1, language1) = to_string_and_language(arg1)?;
     let (value2, language2) = to_string_and_language(arg2)?;
     (language2.is_none() || language1 == language2).then_some((value1, value2, language1))
@@ -1754,13 +1736,13 @@ fn compile_static_pattern_if_exists(
     options: Option<&Expression>,
 ) -> Option<Regex> {
     let static_pattern = if let Expression::Literal(pattern) = pattern {
-        (pattern.datatype() == xsd::STRING).then(|| pattern.value())
+        (*pattern.datatype() == xsd::STRING).then(|| pattern.value())
     } else {
         None
     };
     let static_options = if let Some(options) = options {
         if let Expression::Literal(options) = options {
-            (options.datatype() == xsd::STRING).then(|| Some(options.value()))
+            (*options.datatype() == xsd::STRING).then(|| Some(options.value()))
         } else {
             None
         }

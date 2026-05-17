@@ -1,4 +1,4 @@
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
+use crate::model::{GraphName, NamedOrBlankNode, OxString, Quad};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
@@ -11,7 +11,6 @@ use crate::storage::rocksdb::{
     RocksDbStorageBulkLoader, RocksDbStorageOptions, RocksDbStorageReadableTransaction,
     RocksDbStorageReader, RocksDbStorageTransaction,
 };
-use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 #[cfg(not(target_family = "wasm"))]
@@ -332,7 +331,7 @@ impl Iterator for DecodingGraphIterator<'_> {
 }
 
 impl StrLookup for StorageReader<'_> {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.get_str(key),
@@ -357,7 +356,7 @@ enum StorageTransactionKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl StorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert(&mut self, quad: Quad) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.insert(quad),
@@ -367,7 +366,7 @@ impl StorageTransaction<'_> {
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNode) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => {
@@ -379,7 +378,7 @@ impl StorageTransaction<'_> {
         }
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove(&mut self, quad: &Quad) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.remove(quad),
@@ -392,7 +391,7 @@ impl StorageTransaction<'_> {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.clear_default_graph(),
             StorageTransactionKind::Memory(transaction) => {
-                transaction.clear_graph(GraphNameRef::DefaultGraph)
+                transaction.clear_graph(&GraphName::DefaultGraph)
             }
         }
     }
@@ -471,7 +470,7 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert(&mut self, quad: Quad) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.insert(quad),
@@ -481,7 +480,7 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNode) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => {
@@ -493,7 +492,7 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove(&mut self, quad: &Quad) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.remove(quad),
@@ -501,7 +500,7 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
+    pub fn clear_graph(&mut self, graph_name: &GraphName) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => {
@@ -540,7 +539,7 @@ impl StorageReadableTransaction<'_> {
 
     pub fn remove_named_graph(
         &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
+        graph_name: &NamedOrBlankNode,
     ) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]

@@ -5,7 +5,7 @@ use crate::io::{
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{RdfParser, RdfSerializer};
-use oxigraph::model::GraphNameRef;
+use oxigraph::model::GraphName;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -103,7 +103,9 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     fn add(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
         py.detach(|| {
-            self.inner.insert(quad).map_err(map_storage_error)?;
+            self.inner
+                .insert(quad.clone().into())
+                .map_err(map_storage_error)?;
             Ok(())
         })
     }
@@ -128,7 +130,9 @@ impl PyStore {
             .map(|q| Ok(q?.extract()?))
             .collect::<PyResult<Vec<PyQuad>>>()?;
         py.detach(|| {
-            self.inner.extend(quads).map_err(map_storage_error)?;
+            self.inner
+                .extend(quads.into_iter().map(Into::into))
+                .map_err(map_storage_error)?;
             Ok(())
         })
     }
@@ -150,7 +154,9 @@ impl PyStore {
     fn bulk_extend(&self, quads: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut loader = self.inner.bulk_loader();
         loader.load_ok_quads::<PyErr, PythonOrStorageError>(
-            quads.try_iter()?.map(|q| Ok(q?.extract::<PyQuad>()?)),
+            quads
+                .try_iter()?
+                .map(|q| Ok::<_, PyErr>(q?.extract::<PyQuad>()?.into())),
         )?;
         loader.commit().map_err(map_storage_error)?;
         Ok(())
@@ -171,7 +177,9 @@ impl PyStore {
     /// []
     fn remove(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
         py.detach(|| {
-            self.inner.remove(quad).map_err(map_storage_error)?;
+            self.inner
+                .remove(&quad.clone().into())
+                .map_err(map_storage_error)?;
             Ok(())
         })
     }
@@ -194,21 +202,20 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn quads_for_pattern(
         &self,
-        subject: Option<PyNamedOrBlankNodeRef<'_>>,
-        predicate: Option<PyNamedNodeRef<'_>>,
-        object: Option<PyTermRef<'_>>,
-        graph_name: Option<PyGraphNameRef<'_>>,
+        subject: Option<PyNamedOrBlankNode>,
+        predicate: Option<PyNamedNode>,
+        object: Option<PyTerm>,
+        graph_name: Option<PyGraphName>,
     ) -> QuadIter {
         QuadIter {
             inner: self.inner.quads_for_pattern(
-                subject.as_ref().map(Into::into),
-                predicate.as_ref().map(Into::into),
-                object.as_ref().map(Into::into),
-                graph_name.as_ref().map(Into::into),
+                subject.map(Into::into).as_ref(),
+                predicate.map(Into::into).as_ref(),
+                object.map(Into::into).as_ref(),
+                graph_name.map(Into::into).as_ref(),
             ),
         }
     }
@@ -407,7 +414,6 @@ impl PyStore {
     /// >>> store.load(input='<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None, lenient=false))]
     fn load(
         &self,
@@ -415,11 +421,10 @@ impl PyStore {
         format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
-        to_graph: Option<PyGraphNameRef<'_>>,
+        to_graph: Option<PyGraphName>,
         lenient: bool,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
         let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
         py.detach(|| {
@@ -429,8 +434,8 @@ impl PyStore {
                     .with_base_iri(base_iri)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
-            if let Some(to_graph_name) = to_graph_name {
-                parser = parser.with_default_graph(to_graph_name);
+            if let Some(to_graph) = to_graph {
+                parser = parser.with_default_graph(to_graph);
             }
             if lenient {
                 parser = parser.lenient();
@@ -478,7 +483,6 @@ impl PyStore {
     /// >>> store.bulk_load(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None, lenient = false))]
     fn bulk_load(
         &self,
@@ -486,11 +490,10 @@ impl PyStore {
         format: Option<PyRdfFormat>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
-        to_graph: Option<PyGraphNameRef<'_>>,
+        to_graph: Option<PyGraphName>,
         lenient: bool,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
         let format = lookup_rdf_format(format, path.as_deref())?;
         let mut parser = RdfParser::from_format(format);
         if let Some(base_iri) = base_iri {
@@ -498,8 +501,8 @@ impl PyStore {
                 PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
             })?;
         }
-        if let Some(to_graph_name) = to_graph_name {
-            parser = parser.with_default_graph(to_graph_name);
+        if let Some(to_graph) = to_graph {
+            parser = parser.with_default_graph(to_graph);
         }
         if lenient {
             parser = parser.lenient();
@@ -585,18 +588,16 @@ impl PyStore {
     /// >>> store.dump(output, RdfFormat.TURTLE, from_graph=NamedNode("http://example.com/g"), prefixes={"ex": "http://example.com/"}, base_iri="http://example.com")
     /// >>> output.getvalue()
     /// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
-    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (output = None, format = None, *, from_graph = None, prefixes = None, base_iri = None))]
     fn dump(
         &self,
         output: Option<PyWritableOutput>,
         format: Option<PyRdfFormat>,
-        from_graph: Option<PyGraphNameRef<'_>>,
+        from_graph: Option<PyGraphName>,
         prefixes: Option<BTreeMap<String, String>>,
         base_iri: Option<&str>,
         py: Python<'_>,
     ) -> PyResult<Option<Vec<u8>>> {
-        let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
         PyWritable::do_write(
             |output, file_path| {
                 py.detach(|| {
@@ -619,9 +620,10 @@ impl PyStore {
                             PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
                         })?;
                     }
-                    if let Some(from_graph_name) = from_graph_name {
+                    if let Some(from_graph) = from_graph {
+                        let from_graph: GraphName = from_graph.into();
                         self.inner
-                            .dump_graph_to_writer(from_graph_name, serializer, output)
+                            .dump_graph_to_writer(&from_graph, serializer, output)
                     } else {
                         self.inner.dump_to_writer(serializer, output)
                     }
@@ -660,18 +662,16 @@ impl PyStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> store.contains_named_graph(NamedNode('http://example.com/g'))
     /// True
-    #[expect(clippy::needless_pass_by_value)]
-    fn contains_named_graph(
-        &self,
-        graph_name: PyGraphNameRef<'_>,
-        py: Python<'_>,
-    ) -> PyResult<bool> {
-        let graph_name = GraphNameRef::from(&graph_name);
+    fn contains_named_graph(&self, graph_name: PyGraphName, py: Python<'_>) -> PyResult<bool> {
         py.detach(|| {
-            match graph_name {
-                GraphNameRef::DefaultGraph => Ok(true),
-                GraphNameRef::NamedNode(graph_name) => self.inner.contains_named_graph(graph_name),
-                GraphNameRef::BlankNode(graph_name) => self.inner.contains_named_graph(graph_name),
+            match graph_name.into() {
+                GraphName::DefaultGraph => Ok(true),
+                GraphName::NamedNode(graph_name) => {
+                    self.inner.contains_named_graph(&graph_name.into())
+                }
+                GraphName::BlankNode(graph_name) => {
+                    self.inner.contains_named_graph(&graph_name.into())
+                }
             }
             .map_err(map_storage_error)
         })
@@ -688,14 +688,12 @@ impl PyStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[expect(clippy::needless_pass_by_value)]
-    fn add_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
-        let graph_name = GraphNameRef::from(&graph_name);
+    fn add_graph(&self, graph_name: PyGraphName, py: Python<'_>) -> PyResult<()> {
         py.detach(|| {
-            match graph_name {
-                GraphNameRef::DefaultGraph => Ok(()),
-                GraphNameRef::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
-                GraphNameRef::BlankNode(graph_name) => self.inner.insert_named_graph(graph_name),
+            match graph_name.into() {
+                GraphName::DefaultGraph => Ok(()),
+                GraphName::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
+                GraphName::BlankNode(graph_name) => self.inner.insert_named_graph(graph_name),
             }
             .map_err(map_storage_error)
         })
@@ -715,12 +713,10 @@ impl PyStore {
     /// []
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[expect(clippy::needless_pass_by_value)]
-    fn clear_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
-        let graph_name = GraphNameRef::from(&graph_name);
+    fn clear_graph(&self, graph_name: PyGraphName, py: Python<'_>) -> PyResult<()> {
         py.detach(|| {
             self.inner
-                .clear_graph(graph_name)
+                .clear_graph(&graph_name.into())
                 .map_err(map_storage_error)
         })
     }
@@ -739,14 +735,16 @@ impl PyStore {
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// []
-    #[expect(clippy::needless_pass_by_value)]
-    fn remove_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
-        let graph_name = GraphNameRef::from(&graph_name);
+    fn remove_graph(&self, graph_name: PyGraphName, py: Python<'_>) -> PyResult<()> {
         py.detach(|| {
-            match graph_name {
-                GraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
-                GraphNameRef::NamedNode(graph_name) => self.inner.remove_named_graph(graph_name),
-                GraphNameRef::BlankNode(graph_name) => self.inner.remove_named_graph(graph_name),
+            match graph_name.into() {
+                GraphName::DefaultGraph => self.inner.clear_graph(&GraphName::DefaultGraph),
+                GraphName::NamedNode(graph_name) => {
+                    self.inner.remove_named_graph(&graph_name.into())
+                }
+                GraphName::BlankNode(graph_name) => {
+                    self.inner.remove_named_graph(&graph_name.into())
+                }
             }
             .map_err(map_storage_error)
         })
@@ -829,7 +827,9 @@ impl PyStore {
     }
 
     fn __contains__(&self, quad: &PyQuad) -> PyResult<bool> {
-        self.inner.contains(quad).map_err(map_storage_error)
+        self.inner
+            .contains(&quad.clone().into())
+            .map_err(map_storage_error)
     }
 
     fn __iter__(&self) -> QuadIter {

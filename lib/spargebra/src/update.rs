@@ -4,6 +4,7 @@ use crate::algebra::*;
 use crate::error::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
+use oxrdf::OxString;
 use std::fmt;
 use std::str::FromStr;
 
@@ -21,7 +22,7 @@ use std::str::FromStr;
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
     /// The update base IRI.
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
     /// The [update operations](https://www.w3.org/TR/sparql11-update/#formalModelGraphUpdate).
     pub operations: Vec<GraphUpdateOperation>,
 }

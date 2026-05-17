@@ -1,4 +1,4 @@
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
+use crate::model::{GraphName, NamedOrBlankNode, OxString, Quad, Term};
 use crate::storage::CorruptionError;
 pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::{
@@ -7,7 +7,6 @@ use crate::storage::numeric_encoder::{
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
-use oxrdf::Quad;
 use rustc_hash::FxHasher;
 use std::borrow::Borrow;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
@@ -23,7 +22,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 #[derive(Clone)]
 pub struct MemoryStorage {
     content: Arc<Content>,
-    id2str: Arc<DashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
+    id2str: Arc<DashMap<StrHash, OxString, BuildHasherDefault<StrHashHasher>>>,
     version_counter: Arc<AtomicUsize>,
     transaction_counter: Arc<Mutex<usize>>,
 }
@@ -407,7 +406,7 @@ impl<'a> MemoryStorageReader<'a> {
 }
 
 impl StrLookup for MemoryStorageReader<'_> {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
         Ok(self.storage.id2str.view(key, |_, v| v.clone()))
     }
 }
@@ -431,8 +430,8 @@ impl MemoryStorageTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
-        let encoded: EncodedQuad = quad.into();
+    pub fn insert(&mut self, quad: Quad) {
+        let encoded = EncodedQuad::from(&quad);
         if let Some(node) = self
             .storage
             .content
@@ -525,25 +524,26 @@ impl MemoryStorageTransaction<'_> {
             self.insert_term(quad.object, &encoded.object);
 
             match quad.graph_name {
-                GraphNameRef::NamedNode(graph_name) => {
+                GraphName::NamedNode(graph_name) => {
                     self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
                 }
-                GraphNameRef::BlankNode(graph_name) => {
+                GraphName::BlankNode(graph_name) => {
                     self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
                 }
-                GraphNameRef::DefaultGraph => (),
+                GraphName::DefaultGraph => (),
             }
             self.log.push(LogEntry::QuadNode(node));
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
-        self.insert_encoded_named_graph(graph_name, graph_name.into())
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNode) {
+        let encoded_graph_name = (&graph_name).into();
+        self.insert_encoded_named_graph(graph_name, encoded_graph_name)
     }
 
     fn insert_encoded_named_graph(
         &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
+        graph_name: NamedOrBlankNode,
         encoded_graph_name: EncodedTerm,
     ) {
         let added = match self
@@ -564,20 +564,26 @@ impl MemoryStorageTransaction<'_> {
         }
     }
 
-    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+    fn insert_term(&self, term: Term, encoded: &EncodedTerm) {
+        insert_term(term, encoded, &mut |key, value| {
+            self.insert_str(key, &value)
+        })
     }
 
-    fn insert_str(&self, key: &StrHash, value: &str) {
+    fn insert_str(&self, key: &StrHash, value: &OxString) {
         let inserted = self
             .storage
             .id2str
             .entry(*key)
-            .or_insert_with(|| value.into());
-        debug_assert_eq!(*inserted, value, "Hash conflict for two strings");
+            .or_insert_with(|| value.clone());
+        debug_assert_eq!(
+            inserted.as_str(),
+            value.as_str(),
+            "Hash conflict for two strings"
+        );
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove(&mut self, quad: &Quad) {
         self.remove_encoded(&quad.into())
     }
 
@@ -597,7 +603,7 @@ impl MemoryStorageTransaction<'_> {
         }
     }
 
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) {
+    pub fn clear_graph(&mut self, graph_name: &GraphName) {
         self.clear_encoded_graph(&graph_name.into())
     }
 
@@ -630,7 +636,7 @@ impl MemoryStorageTransaction<'_> {
         });
     }
 
-    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
+    pub fn remove_named_graph(&mut self, graph_name: &NamedOrBlankNode) {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
@@ -814,7 +820,7 @@ impl MemoryStorageBulkLoader<'_> {
 
     pub fn load_batch(&mut self, new_quads: Vec<Quad>) {
         for quad in new_quads {
-            self.transaction.insert(quad.as_ref());
+            self.transaction.insert(quad);
             self.done += 1;
             if self.done.is_multiple_of(1_000_000) {
                 for hook in &self.hooks {
@@ -1019,7 +1025,7 @@ fn pop_boxed_slice<T: Copy>(slice: &[T]) -> Box<[T]> {
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    use oxrdf::NamedNodeRef;
+    use crate::model::NamedNode;
 
     #[test]
     fn test_range() {
@@ -1088,21 +1094,31 @@ mod tests {
 
     #[test]
     fn test_transaction() -> Result<(), StorageError> {
-        let example = NamedNodeRef::new_unchecked("http://example.com/1");
-        let example2 = NamedNodeRef::new_unchecked("http://example.com/2");
-        let encoded_example = EncodedTerm::from(example);
-        let encoded_example2 = EncodedTerm::from(example2);
-        let default_quad = QuadRef::new(example, example, example, GraphNameRef::DefaultGraph);
-        let encoded_default_quad = EncodedQuad::from(default_quad);
-        let named_graph_quad = QuadRef::new(example, example, example, example);
-        let encoded_named_graph_quad = EncodedQuad::from(named_graph_quad);
+        let example = NamedNode::new_unchecked("http://example.com/1");
+        let example2 = NamedNode::new_unchecked("http://example.com/2");
+        let encoded_example = EncodedTerm::from(&example);
+        let encoded_example2 = EncodedTerm::from(&example2);
+        let default_quad = Quad::new(
+            example.clone(),
+            example.clone(),
+            example.clone(),
+            GraphName::DefaultGraph,
+        );
+        let encoded_default_quad = EncodedQuad::from(&default_quad);
+        let named_graph_quad = Quad::new(
+            example.clone(),
+            example.clone(),
+            example.clone(),
+            example.clone(),
+        );
+        let encoded_named_graph_quad = EncodedQuad::from(&named_graph_quad);
 
         let storage = MemoryStorage::new();
 
         // We start with a graph
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction();
-        transaction.insert_named_graph(example.into());
+        transaction.insert_named_graph(example.clone().into());
         transaction.commit();
         assert!(!snapshot.contains_named_graph(&encoded_example));
         assert!(storage.snapshot().contains_named_graph(&encoded_example));
@@ -1111,8 +1127,8 @@ mod tests {
         // We add two quads
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction();
-        transaction.insert(default_quad);
-        transaction.insert(named_graph_quad);
+        transaction.insert(default_quad.clone());
+        transaction.insert(named_graph_quad.clone());
         transaction.commit();
         assert!(!snapshot.contains(&encoded_default_quad));
         assert!(!snapshot.contains(&encoded_named_graph_quad));
@@ -1123,8 +1139,8 @@ mod tests {
         // We remove the quads
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction();
-        transaction.remove(default_quad);
-        transaction.remove_named_graph(example.into());
+        transaction.remove(&default_quad);
+        transaction.remove_named_graph(&example.into());
         transaction.commit();
         assert!(snapshot.contains(&encoded_default_quad));
         assert!(snapshot.contains(&encoded_named_graph_quad));
@@ -1137,9 +1153,9 @@ mod tests {
         // We add the quads again but rollback
         let snapshot = storage.snapshot();
         let mut transaction = storage.start_transaction();
-        transaction.insert(default_quad);
-        transaction.insert(named_graph_quad);
-        transaction.insert_named_graph(example2.into());
+        transaction.insert(default_quad.clone());
+        transaction.insert(named_graph_quad.clone());
+        transaction.insert_named_graph(example2.clone().into());
         drop(transaction);
         assert!(!snapshot.contains(&encoded_default_quad));
         assert!(!snapshot.contains(&encoded_named_graph_quad));
@@ -1152,10 +1168,9 @@ mod tests {
         storage.snapshot().validate()?;
 
         // We add quads and graph, then clear
-        storage.bulk_loader().load_batch(vec![
-            default_quad.into_owned(),
-            named_graph_quad.into_owned(),
-        ]);
+        storage
+            .bulk_loader()
+            .load_batch(vec![default_quad, named_graph_quad]);
         let mut transaction = storage.start_transaction();
         transaction.insert_named_graph(example2.into());
         transaction.commit();

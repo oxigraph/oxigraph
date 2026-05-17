@@ -16,7 +16,7 @@ Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind
 Usage example counting the number of people in a RDF/XML file:
 
 ```rust
-use oxrdf::{NamedNodeRef, vocab::rdf};
+use oxrdf::{NamedNode, vocab::rdf};
 use oxrdfxml::RdfXmlParser;
 
 let file = br#"<?xml version="1.0"?>
@@ -28,11 +28,11 @@ let file = br#"<?xml version="1.0"?>
  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 </rdf:RDF>"#;
 
-let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
+let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
 let mut count = 0;
 for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
-    if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    if triple.predicate == rdf::TYPE && triple.object == schema_person {
         count += 1;
     }
 }

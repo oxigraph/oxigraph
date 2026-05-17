@@ -37,6 +37,50 @@ impl NamedOrBlankNode {
     }
 }
 
+impl PartialEq<NamedNode> for NamedOrBlankNode {
+    #[inline]
+    fn eq(&self, other: &NamedNode) -> bool {
+        if let NamedOrBlankNode::NamedNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<NamedOrBlankNode> for NamedNode {
+    #[inline]
+    fn eq(&self, other: &NamedOrBlankNode) -> bool {
+        if let NamedOrBlankNode::NamedNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<BlankNode> for NamedOrBlankNode {
+    #[inline]
+    fn eq(&self, other: &BlankNode) -> bool {
+        if let NamedOrBlankNode::BlankNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<NamedOrBlankNode> for BlankNode {
+    #[inline]
+    fn eq(&self, other: &NamedOrBlankNode) -> bool {
+        if let NamedOrBlankNode::BlankNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
 impl fmt::Display for NamedOrBlankNode {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -207,6 +251,96 @@ impl Term {
             Self::Literal(literal) => TermRef::Literal(literal.as_ref()),
             #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => TermRef::Triple(triple),
+        }
+    }
+}
+
+impl PartialEq<NamedNode> for Term {
+    #[inline]
+    fn eq(&self, other: &NamedNode) -> bool {
+        if let Term::NamedNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<Term> for NamedNode {
+    #[inline]
+    fn eq(&self, other: &Term) -> bool {
+        if let Term::NamedNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<BlankNode> for Term {
+    #[inline]
+    fn eq(&self, other: &BlankNode) -> bool {
+        if let Term::BlankNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<Term> for BlankNode {
+    #[inline]
+    fn eq(&self, other: &Term) -> bool {
+        if let Term::BlankNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<Literal> for Term {
+    #[inline]
+    fn eq(&self, other: &Literal) -> bool {
+        if let Term::Literal(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<Term> for Literal {
+    #[inline]
+    fn eq(&self, other: &Term) -> bool {
+        if let Term::Literal(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(feature = "rdf-12")]
+impl PartialEq<Triple> for Term {
+    #[inline]
+    fn eq(&self, other: &Triple) -> bool {
+        if let Term::Triple(this) = self {
+            **this == *other
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(feature = "rdf-12")]
+impl PartialEq<Term> for Triple {
+    #[inline]
+    fn eq(&self, other: &Term) -> bool {
+        if let Term::Triple(other) = other {
+            *self == **other
+        } else {
+            false
         }
     }
 }
@@ -535,6 +669,7 @@ impl<'a> From<TermRef<'a>> for Term {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(C)]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: NamedOrBlankNode,
@@ -735,6 +870,50 @@ impl GraphName {
     }
 }
 
+impl PartialEq<NamedNode> for GraphName {
+    #[inline]
+    fn eq(&self, other: &NamedNode) -> bool {
+        if let GraphName::NamedNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<GraphName> for NamedNode {
+    #[inline]
+    fn eq(&self, other: &GraphName) -> bool {
+        if let GraphName::NamedNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<BlankNode> for GraphName {
+    #[inline]
+    fn eq(&self, other: &BlankNode) -> bool {
+        if let GraphName::BlankNode(this) = self {
+            this == other
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialEq<GraphName> for BlankNode {
+    #[inline]
+    fn eq(&self, other: &GraphName) -> bool {
+        if let GraphName::BlankNode(other) = other {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
 impl fmt::Display for GraphName {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -917,7 +1096,9 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", expect(clippy::unsafe_derive_deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(C)]
 pub struct Quad {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: NamedOrBlankNode,
@@ -960,6 +1141,14 @@ impl Quad {
             graph_name: self.graph_name.as_ref(),
         }
     }
+
+    #[inline]
+    #[expect(unsafe_code)]
+    pub fn as_triple(&self) -> &Triple {
+        let this: *const Quad = self;
+        // SAFETY: Both Quad and Triple are repr(C) and Triple is a prefix of Quad.
+        unsafe { &*this.cast::<Triple>() }
+    }
 }
 
 impl fmt::Display for Quad {
@@ -977,6 +1166,13 @@ impl From<Quad> for Triple {
             predicate: quad.predicate,
             object: quad.object,
         }
+    }
+}
+
+impl<'a> From<&'a Quad> for &'a Triple {
+    #[inline]
+    fn from(quad: &'a Quad) -> Self {
+        quad.as_triple()
     }
 }
 

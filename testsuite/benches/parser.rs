@@ -183,7 +183,7 @@ fn canonicalization_test_data_from_testsuite() -> Dataset {
                 .rename_blank_nodes()
                 .for_reader(read_file(&test.action.unwrap()).unwrap())
             {
-                dataset.insert(&q.unwrap());
+                dataset.insert(q.unwrap());
             }
         }
     }

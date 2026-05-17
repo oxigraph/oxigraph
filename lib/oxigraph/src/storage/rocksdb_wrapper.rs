@@ -1090,12 +1090,6 @@ impl Borrow<[u8]> for PinnableSlice {
     }
 }
 
-impl From<PinnableSlice> for Vec<u8> {
-    fn from(value: PinnableSlice) -> Self {
-        value.to_vec()
-    }
-}
-
 pub struct Buffer {
     base: *mut u8,
     len: usize,

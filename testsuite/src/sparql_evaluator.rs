@@ -17,6 +17,7 @@ use oxigraph::sparql::results::{
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
+use oxrdf::OxString;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::SparqlParser;
 use spargebra::algebra::GraphPattern;
@@ -299,13 +300,13 @@ struct StaticServiceHandler {
 }
 
 impl StaticServiceHandler {
-    fn new(services: &[(String, String)]) -> Result<Self> {
+    fn new(services: &[(OxString, OxString)]) -> Result<Self> {
         Ok(Self {
             services: Arc::new(
                 services
                     .iter()
                     .map(|(name, data)| {
-                        let name = NamedNode::new(name)?;
+                        let name = NamedNode::new(name.clone())?;
                         let dataset = load_dataset(data, guess_rdf_format(data)?, false, false)?;
                         Ok((name, dataset))
                     })
@@ -322,7 +323,7 @@ impl DefaultServiceHandler for StaticServiceHandler {
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
-        base_iri: Option<&Iri<String>>,
+        base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         let dataset = self.services.get(service_name).ok_or_else(|| {
             QueryEvaluationError::Service(Box::new(io::Error::new(
@@ -363,10 +364,10 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
         QueryResults::Boolean(value) => {
             let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            graph.insert(TripleRef::new(&result_set, rdf::TYPE, rs::RESULT_SET));
+            graph.insert(TripleRef::new(&result_set, &rdf::TYPE, &rs::RESULT_SET));
             graph.insert(TripleRef::new(
                 &result_set,
-                rs::BOOLEAN,
+                &rs::BOOLEAN,
                 &Literal::from(value),
             ));
             graph
@@ -374,32 +375,32 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
         QueryResults::Solutions(solutions) => {
             let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            graph.insert(TripleRef::new(&result_set, rdf::TYPE, rs::RESULT_SET));
+            graph.insert(TripleRef::new(&result_set, &rdf::TYPE, &rs::RESULT_SET));
             for variable in solutions.variables() {
                 graph.insert(TripleRef::new(
                     &result_set,
-                    rs::RESULT_VARIABLE,
+                    &rs::RESULT_VARIABLE,
                     LiteralRef::new_simple_literal(variable.as_str()),
                 ));
             }
             for (i, solution) in solutions.enumerate() {
                 let solution = solution?;
                 let solution_id = BlankNode::default();
-                graph.insert(TripleRef::new(&result_set, rs::SOLUTION, &solution_id));
+                graph.insert(TripleRef::new(&result_set, &rs::SOLUTION, &solution_id));
                 for (variable, value) in &solution {
                     let binding = BlankNode::default();
-                    graph.insert(TripleRef::new(&solution_id, rs::BINDING, &binding));
-                    graph.insert(TripleRef::new(&binding, rs::VALUE, value));
+                    graph.insert(TripleRef::new(&solution_id, &rs::BINDING, &binding));
+                    graph.insert(TripleRef::new(&binding, &rs::VALUE, value));
                     graph.insert(TripleRef::new(
                         &binding,
-                        rs::VARIABLE,
+                        &rs::VARIABLE,
                         LiteralRef::new_simple_literal(variable.as_str()),
                     ));
                 }
                 if with_order {
                     graph.insert(TripleRef::new(
                         &solution_id,
-                        rs::INDEX,
+                        &rs::INDEX,
                         &Literal::from((i + 1) as i128),
                     ));
                 }
@@ -515,59 +516,56 @@ impl StaticQueryResults {
         // Hack to normalize literals
         let store = Store::new()?;
         for t in graph {
-            store.insert(t.in_graph(GraphNameRef::DefaultGraph))?;
+            store.insert(t.in_graph(GraphName::DefaultGraph))?;
         }
         let mut graph = store
             .iter()
             .map(|q| Ok(Triple::from(q?)))
             .collect::<Result<Graph>>()?;
 
-        if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
-            if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
+        if let Some(result_set) = graph.subject_for_predicate_object(&rdf::TYPE, &rs::RESULT_SET) {
+            if let Some(bool) = graph.object_for_subject_predicate(&result_set, &rs::BOOLEAN) {
                 // Boolean query
-                Ok(Self::Boolean(bool == Literal::from(true).as_ref().into()))
+                Ok(Self::Boolean(bool == Literal::from(true)))
             } else {
                 // Regular query
                 let mut variables: Vec<Variable> = graph
-                    .objects_for_subject_predicate(result_set, rs::RESULT_VARIABLE)
+                    .objects_for_subject_predicate(&result_set, &rs::RESULT_VARIABLE)
                     .map(|object| {
-                        let TermRef::Literal(l) = object else {
+                        let Term::Literal(l) = object else {
                             bail!("Invalid rs:resultVariable: {object}")
                         };
-                        Ok(Variable::new_unchecked(l.value()))
+                        Ok(Variable::new_unchecked(l.into_value()))
                     })
                     .collect::<Result<Vec<_>>>()?;
                 variables.sort();
 
                 let mut solutions = graph
-                    .objects_for_subject_predicate(result_set, rs::SOLUTION)
+                    .objects_for_subject_predicate(&result_set, &rs::SOLUTION)
                     .map(|object| {
-                        let TermRef::BlankNode(solution) = object else {
+                        let Term::BlankNode(solution) = object else {
                             bail!("Invalid rs:solution: {object}")
                         };
                         let mut bindings = graph
-                            .objects_for_subject_predicate(solution, rs::BINDING)
+                            .objects_for_subject_predicate(&solution, &rs::BINDING)
                             .map(|object| {
-                                let TermRef::BlankNode(binding) = object else {
+                                let Term::BlankNode(binding) = object else {
                                     bail!("Invalid rs:binding: {object}")
                                 };
-                                let (Some(TermRef::Literal(variable)), Some(value)) = (
-                                    graph.object_for_subject_predicate(binding, rs::VARIABLE),
-                                    graph.object_for_subject_predicate(binding, rs::VALUE),
+                                let (Some(Term::Literal(variable)), Some(value)) = (
+                                    graph.object_for_subject_predicate(&binding, &rs::VARIABLE),
+                                    graph.object_for_subject_predicate(&binding, &rs::VALUE),
                                 ) else {
                                     bail!("Invalid rs:binding: {binding}")
                                 };
-                                Ok((
-                                    Variable::new_unchecked(variable.value()),
-                                    value.into_owned(),
-                                ))
+                                Ok((Variable::new_unchecked(variable.into_value()), value))
                             })
                             .collect::<Result<Vec<_>>>()?;
                         bindings.sort_by(|(a, _), (b, _)| a.cmp(b));
                         let index = graph
-                            .object_for_subject_predicate(solution, rs::INDEX)
+                            .object_for_subject_predicate(&solution, &rs::INDEX)
                             .map(|object| {
-                                let TermRef::Literal(l) = object else {
+                                let Term::Literal(l) = object else {
                                     bail!("Invalid rs:index: {object}")
                                 };
                                 Ok(u64::from_str(l.value())?)
@@ -717,7 +715,7 @@ fn load_to_dataset(
     to_graph_name: impl Into<GraphName>,
 ) -> Result<()> {
     dataset.extend(
-        &RdfParser::from_format(guess_rdf_format(url)?)
+        RdfParser::from_format(guess_rdf_format(url)?)
             .with_base_iri(url)?
             .with_default_graph(to_graph_name)
             .rename_blank_nodes()

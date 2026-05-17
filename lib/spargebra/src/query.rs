@@ -5,6 +5,7 @@ use crate::algebra::*;
 use crate::error::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
+use oxrdf::OxString;
 use std::fmt;
 use std::str::FromStr;
 
@@ -56,7 +57,7 @@ impl Query {
     }
 
     #[inline]
-    pub fn base_iri(&self) -> Option<&Iri<String>> {
+    pub fn base_iri(&self) -> Option<&Iri<OxString>> {
         match self {
             Self::Select(query) => query.base_iri.as_ref(),
             Self::Construct(query) => query.base_iri.as_ref(),
@@ -126,7 +127,7 @@ pub struct SelectQuery {
     /// The query selection graph pattern.
     pub pattern: GraphPattern,
     /// The query base IRI.
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
 }
 
 impl SelectQuery {
@@ -184,7 +185,7 @@ pub struct ConstructQuery {
     /// The query selection graph pattern.
     pub pattern: GraphPattern,
     /// The query base IRI.
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
 }
 
 impl ConstructQuery {
@@ -262,7 +263,7 @@ pub struct DescribeQuery {
     /// The query selection graph pattern.
     pub pattern: GraphPattern,
     /// The query base IRI.
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
 }
 
 impl DescribeQuery {
@@ -361,7 +362,7 @@ pub struct AskQuery {
     /// The query selection graph pattern.
     pub pattern: GraphPattern,
     /// The query base IRI.
-    pub base_iri: Option<Iri<String>>,
+    pub base_iri: Option<Iri<OxString>>,
 }
 
 impl AskQuery {

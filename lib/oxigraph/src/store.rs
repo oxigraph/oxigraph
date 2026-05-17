@@ -13,7 +13,7 @@
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
 //! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-//! store.insert(&quad)?;
+//! store.insert(quad.clone())?;
 //!
 //! // quad filter
 //! let results: Result<Vec<Quad>, _> = store.quads_for_pattern(None, None, None, None).collect();
@@ -25,7 +25,10 @@
 //!     .on_store(&store)
 //!     .execute()?
 //! {
-//!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
+//!     assert_eq!(
+//!         solutions.next().unwrap()?.get("s"),
+//!         Some(&ex.clone().into())
+//!     );
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
@@ -79,7 +82,7 @@ use std::thread::available_parallelism;
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
 /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-/// store.insert(&quad)?;
+/// store.insert(quad.clone())?;
 ///
 /// // quad filter
 /// let results: Result<Vec<Quad>, _> = store.quads_for_pattern(None, None, None, None).collect();
@@ -218,21 +221,22 @@ impl Store {
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-    /// store.insert(&quad)?;
+    /// store.insert(quad.clone())?;
     ///
     /// // quad filter by object
+    /// let ex_term: Term = ex.clone().into();
     /// let results = store
-    ///     .quads_for_pattern(None, None, Some((&ex).into()), None)
+    ///     .quads_for_pattern(None, None, Some(&ex_term), None)
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(vec![quad], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
-        object: Option<TermRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
     ) -> QuadIter<'static> {
         let reader = self.storage.snapshot();
         QuadIter {
@@ -258,7 +262,7 @@ impl Store {
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-    /// store.insert(&quad)?;
+    /// store.insert(quad.clone())?;
     ///
     /// // quad filter by object
     /// let results = store.iter().collect::<Result<Vec<_>, _>>()?;
@@ -276,18 +280,18 @@ impl Store {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex);
     ///
     /// let store = Store::new()?;
-    /// assert!(!store.contains(quad)?);
+    /// assert!(!store.contains(&quad)?);
     ///
-    /// store.insert(quad)?;
-    /// assert!(store.contains(quad)?);
+    /// store.insert(quad.clone())?;
+    /// assert!(store.contains(&quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let quad = EncodedQuad::from(quad.into());
+    pub fn contains(&self, quad: &Quad) -> Result<bool, StorageError> {
+        let quad = EncodedQuad::from(quad);
         self.storage.snapshot().contains(&quad)
     }
 
@@ -300,10 +304,15 @@ impl Store {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()))?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex,
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     /// assert_eq!(2, store.len()?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -321,8 +330,8 @@ impl Store {
     /// let store = Store::new()?;
     /// assert!(store.is_empty()?);
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex))?;
     /// assert!(!store.is_empty()?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -347,20 +356,20 @@ impl Store {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// let a = NamedNodeRef::new("http://example.com/a")?;
-    /// let b = NamedNodeRef::new("http://example.com/b")?;
+    /// let a = NamedNode::new("http://example.com/a")?;
+    /// let b = NamedNode::new("http://example.com/b")?;
     ///
     /// // Copy all triples about ex:a to triples about ex:b
     /// let mut transaction = store.start_transaction()?;
     /// let triples = transaction
-    ///     .quads_for_pattern(Some(a.into()), None, None, None)
+    ///     .quads_for_pattern(Some(&a.clone().into()), None, None, None)
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// for triple in triples {
-    ///     transaction.insert(QuadRef::new(
-    ///         b,
-    ///         &triple.predicate,
-    ///         &triple.object,
-    ///         &triple.graph_name,
+    ///     transaction.insert(Quad::new(
+    ///         b.clone(),
+    ///         triple.predicate.clone(),
+    ///         triple.object.clone(),
+    ///         triple.graph_name.clone(),
     ///     ));
     /// }
     /// transaction.commit()?;
@@ -394,14 +403,14 @@ impl Store {
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file.as_bytes()
     /// )?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_reader(
@@ -411,7 +420,7 @@ impl Store {
     ) -> Result<(), LoaderError> {
         let mut transaction = self.storage.start_transaction()?;
         for quad in parser.into().rename_blank_nodes().for_reader(reader) {
-            transaction.insert(quad?.as_ref());
+            transaction.insert(quad?);
         }
         transaction.commit()?;
         Ok(())
@@ -439,14 +448,14 @@ impl Store {
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file
     /// )?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_slice(
@@ -456,7 +465,7 @@ impl Store {
     ) -> Result<(), LoaderError> {
         let mut transaction = self.storage.start_transaction()?;
         for quad in parser.into().rename_blank_nodes().for_slice(slice.as_ref()) {
-            transaction.insert(quad.map_err(RdfParseError::Syntax)?.as_ref());
+            transaction.insert(quad.map_err(RdfParseError::Syntax)?);
         }
         transaction.commit()?;
         Ok(())
@@ -469,18 +478,18 @@ impl Store {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// store.insert(quad)?;
+    /// store.insert(quad.clone())?;
     ///
-    /// assert!(store.contains(quad)?);
+    /// assert!(store.contains(&quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), StorageError> {
+    pub fn insert(&self, quad: Quad) -> Result<(), StorageError> {
         let mut transaction = self.storage.start_transaction()?;
-        transaction.insert(quad.into());
+        transaction.insert(quad);
         transaction.commit()?;
         Ok(())
     }
@@ -490,13 +499,10 @@ impl Store {
     /// <div class="warning">
     ///
     /// This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.</div>
-    pub fn extend(
-        &self,
-        quads: impl IntoIterator<Item = impl Into<Quad>>,
-    ) -> Result<(), StorageError> {
+    pub fn extend(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
         let mut transaction = self.storage.start_transaction()?;
         for quad in quads {
-            transaction.insert(quad.into().as_ref());
+            transaction.insert(quad);
         }
         transaction.commit()?;
         Ok(())
@@ -509,19 +515,19 @@ impl Store {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// store.insert(quad)?;
-    /// store.remove(quad)?;
+    /// store.insert(quad.clone())?;
+    /// store.remove(&quad)?;
     ///
-    /// assert!(!store.contains(quad)?);
+    /// assert!(!store.contains(&quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), StorageError> {
+    pub fn remove(&self, quad: &Quad) -> Result<(), StorageError> {
         let mut transaction = self.storage.start_transaction()?;
-        transaction.remove(quad.into());
+        transaction.remove(quad);
         transaction.commit()?;
         Ok(())
     }
@@ -563,7 +569,7 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::io::RdfFormat;
-    /// use oxigraph::model::GraphNameRef;
+    /// use oxigraph::model::GraphName;
     /// use oxigraph::store::Store;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n";
@@ -572,19 +578,19 @@ impl Store {
     /// store.load_from_slice(RdfFormat::NTriples, file)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
+    /// store.dump_graph_to_writer(&GraphName::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
     /// assert_eq!(file.as_bytes(), buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_graph_to_writer<'a, W: Write>(
+    pub fn dump_graph_to_writer<W: Write>(
         &self,
-        from_graph_name: impl Into<GraphNameRef<'a>>,
+        from_graph_name: &GraphName,
         serializer: impl Into<RdfSerializer>,
         writer: W,
     ) -> Result<W, SerializerError> {
         let mut serializer = serializer.into().for_writer(writer);
-        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
-            serializer.serialize_triple(quad?.as_ref())?;
+        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name)) {
+            serializer.serialize_triple(quad?.as_triple())?;
         }
         Ok(serializer.finish()?)
     }
@@ -598,8 +604,13 @@ impl Store {
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
-    /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph))?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()))?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     /// assert_eq!(
     ///     vec![NamedOrBlankNode::from(ex)],
     ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?
@@ -618,20 +629,20 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{NamedNode, QuadRef};
+    /// use oxigraph::model::{NamedNode, Quad};
     /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
-    /// assert!(store.contains_named_graph(&ex)?);
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()))?;
+    /// assert!(store.contains_named_graph(&ex.into())?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn contains_named_graph<'a>(
+    pub fn contains_named_graph(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: &NamedOrBlankNode,
     ) -> Result<bool, StorageError> {
-        let graph_name = EncodedTerm::from(graph_name.into());
+        let graph_name = EncodedTerm::from(graph_name);
         self.storage.snapshot().contains_named_graph(&graph_name)
     }
 
@@ -639,22 +650,22 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::NamedNodeRef;
+    /// use oxigraph::model::NamedNode;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert_named_graph(ex)?;
+    /// store.insert_named_graph(ex.clone())?;
     ///
     /// assert_eq!(
     ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?,
-    ///     vec![ex.into_owned().into()]
+    ///     vec![ex]
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn insert_named_graph<'a>(
+    pub fn insert_named_graph(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+        graph_name: impl Into<NamedOrBlankNode>,
     ) -> Result<(), StorageError> {
         let mut transaction = self.storage.start_transaction()?;
         transaction.insert_named_graph(graph_name.into());
@@ -666,25 +677,21 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::model::{NamedNode, Quad};
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     /// let store = Store::new()?;
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len()?);
     ///
-    /// store.clear_graph(ex)?;
+    /// store.clear_graph(&ex.clone().into())?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn clear_graph<'a>(
-        &self,
-        graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> Result<(), StorageError> {
-        let graph_name = graph_name.into();
+    pub fn clear_graph(&self, graph_name: &GraphName) -> Result<(), StorageError> {
         if graph_name.is_default_graph() {
             let mut transaction = self.storage.start_transaction()?;
             transaction.clear_default_graph();
@@ -700,26 +707,23 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::model::{NamedNode, Quad};
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     /// let store = Store::new()?;
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len()?);
     ///
-    /// store.remove_named_graph(ex)?;
+    /// store.remove_named_graph(&ex.clone().into())?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn remove_named_graph<'a>(
-        &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<(), StorageError> {
+    pub fn remove_named_graph(&self, graph_name: &NamedOrBlankNode) -> Result<(), StorageError> {
         let mut transaction = self.storage.start_readable_transaction()?;
-        transaction.remove_named_graph(graph_name.into())?;
+        transaction.remove_named_graph(graph_name)?;
         transaction.commit()?;
         Ok(())
     }
@@ -731,10 +735,15 @@ impl Store {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()))?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex,
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     /// assert_eq!(2, store.len()?);
     ///
     /// store.clear()?;
@@ -806,8 +815,8 @@ impl Store {
     /// loader.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn bulk_loader(&self) -> BulkLoader<'_> {
@@ -866,20 +875,20 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// let a = NamedNodeRef::new("http://example.com/a")?;
-    /// let b = NamedNodeRef::new("http://example.com/b")?;
+    /// let a = NamedNode::new("http://example.com/a")?;
+    /// let b = NamedNode::new("http://example.com/b")?;
     ///
     /// // Copy all triples about ex:a to triples about ex:b
     /// let mut transaction = store.start_transaction()?;
     /// let triples = transaction
-    ///     .quads_for_pattern(Some(a.into()), None, None, None)
+    ///     .quads_for_pattern(Some(&a.clone().into()), None, None, None)
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// for triple in triples {
-    ///     transaction.insert(QuadRef::new(
-    ///         b,
-    ///         &triple.predicate,
-    ///         &triple.object,
-    ///         &triple.graph_name,
+    ///     transaction.insert(Quad::new(
+    ///         b.clone(),
+    ///         triple.predicate.clone(),
+    ///         triple.object.clone(),
+    ///         triple.graph_name.clone(),
     ///     ));
     /// }
     /// transaction.commit()?;
@@ -887,10 +896,10 @@ impl<'a> Transaction<'a> {
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
-        object: Option<TermRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
     ) -> QuadIter<'_> {
         let reader = self.inner.reader();
         QuadIter {
@@ -910,8 +919,8 @@ impl<'a> Transaction<'a> {
     }
 
     /// Checks if this store contains a given quad.
-    pub fn contains<'b>(&self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
-        let quad = EncodedQuad::from(quad.into());
+    pub fn contains(&self, quad: &Quad) -> Result<bool, StorageError> {
+        let quad = EncodedQuad::from(quad);
         self.inner.reader().contains(&quad)
     }
 
@@ -953,15 +962,15 @@ impl<'a> Transaction<'a> {
     ///         .with_base_iri("http://example.com")
     ///         .unwrap()
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
     ///     file.as_bytes()
     /// )?;
     /// transaction.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_reader(
@@ -970,7 +979,7 @@ impl<'a> Transaction<'a> {
         reader: impl Read,
     ) -> Result<(), LoaderError> {
         for quad in parser.into().rename_blank_nodes().for_reader(reader) {
-            self.insert(quad?.as_ref());
+            self.insert(quad?);
         }
         Ok(())
     }
@@ -1001,15 +1010,15 @@ impl<'a> Transaction<'a> {
     ///         .with_base_iri("http://example.com")
     ///         .unwrap()
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
     ///     file
     /// )?;
     /// transaction.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_slice(
@@ -1018,7 +1027,7 @@ impl<'a> Transaction<'a> {
         slice: &(impl AsRef<[u8]> + ?Sized),
     ) -> Result<(), LoaderError> {
         for quad in parser.into().rename_blank_nodes().for_slice(slice) {
-            self.insert(quad.map_err(RdfParseError::Syntax)?.as_ref());
+            self.insert(quad.map_err(RdfParseError::Syntax)?);
         }
         Ok(())
     }
@@ -1030,18 +1039,18 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    /// let ex = NamedNode::new_unchecked("http://example.com");
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph);
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert(quad);
+    /// transaction.insert(quad.clone());
     /// transaction.commit()?;
-    /// assert!(store.contains(quad)?);
+    /// assert!(store.contains(&quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) {
-        self.inner.insert(quad.into())
+    pub fn insert(&mut self, quad: Quad) {
+        self.inner.insert(quad)
     }
 
     /// Adds a set of quads to this store.
@@ -1051,19 +1060,19 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    /// let ex = NamedNode::new_unchecked("http://example.com");
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph);
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.extend([quad]);
+    /// transaction.extend([quad.clone()]);
     /// transaction.commit()?;
-    /// assert!(store.contains(quad)?);
+    /// assert!(store.contains(&quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn extend<'b>(&mut self, quads: impl IntoIterator<Item = impl Into<QuadRef<'b>>>) {
+    pub fn extend(&mut self, quads: impl IntoIterator<Item = Quad>) {
         for quad in quads {
-            self.inner.insert(quad.into());
+            self.inner.insert(quad);
         }
     }
 
@@ -1074,18 +1083,18 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    /// let ex = NamedNode::new_unchecked("http://example.com");
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph);
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert(quad);
-    /// transaction.remove(quad);
+    /// transaction.insert(quad.clone());
+    /// transaction.remove(&quad);
     /// transaction.commit()?;
-    /// assert!(!store.contains(quad)?);
+    /// assert!(!store.contains(&quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn remove<'b>(&mut self, quad: impl Into<QuadRef<'b>>) {
-        self.inner.remove(quad.into())
+    pub fn remove(&mut self, quad: &Quad) {
+        self.inner.remove(quad)
     }
 
     /// Returns all the named graphs in the store.
@@ -1098,34 +1107,34 @@ impl<'a> Transaction<'a> {
     }
 
     /// Checks if the store contains a given graph.
-    pub fn contains_named_graph<'b>(
+    pub fn contains_named_graph(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
+        graph_name: &NamedOrBlankNode,
     ) -> Result<bool, StorageError> {
         self.inner
             .reader()
-            .contains_named_graph(&EncodedTerm::from(graph_name.into()))
+            .contains_named_graph(&EncodedTerm::from(graph_name))
     }
 
     /// Inserts a graph into this store.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::NamedNodeRef;
+    /// use oxigraph::model::NamedNode;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let ex = NamedNode::new_unchecked("http://example.com");
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert_named_graph(ex);
+    /// transaction.insert_named_graph(ex.clone());
     /// transaction.commit()?;
     /// assert_eq!(
     ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?,
-    ///     vec![ex.into_owned().into()]
+    ///     vec![ex]
     /// );
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn insert_named_graph<'b>(&mut self, graph_name: impl Into<NamedOrBlankNodeRef<'b>>) {
+    pub fn insert_named_graph(&mut self, graph_name: impl Into<NamedOrBlankNode>) {
         self.inner.insert_named_graph(graph_name.into())
     }
 
@@ -1133,50 +1142,47 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::model::{NamedNode, Quad};
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new_unchecked("http://example.com");
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
     /// transaction.insert(quad);
-    /// transaction.clear_graph(ex)?;
+    /// transaction.clear_graph(&ex.clone().into())?;
     /// transaction.commit()?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn clear_graph<'b>(
-        &mut self,
-        graph_name: impl Into<GraphNameRef<'b>>,
-    ) -> Result<(), StorageError> {
-        self.inner.clear_graph(graph_name.into())
+    pub fn clear_graph(&mut self, graph_name: &GraphName) -> Result<(), StorageError> {
+        self.inner.clear_graph(graph_name)
     }
 
     /// Removes a graph from this store.
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::model::{NamedNode, Quad};
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new_unchecked("http://example.com");
+    /// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
     /// transaction.insert(quad);
-    /// transaction.remove_named_graph(ex)?;
+    /// transaction.remove_named_graph(&ex.clone().into())?;
     /// transaction.commit()?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn remove_named_graph<'b>(
+    pub fn remove_named_graph(
         &mut self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
+        graph_name: &NamedOrBlankNode,
     ) -> Result<(), StorageError> {
-        self.inner.remove_named_graph(graph_name.into())
+        self.inner.remove_named_graph(graph_name)
     }
 
     /// Clears the store.
@@ -1186,10 +1192,10 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let ex = NamedNode::new_unchecked("http://example.com");
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert(QuadRef::new(ex, ex, ex, ex));
+    /// transaction.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex));
     /// transaction.clear()?;
     /// transaction.commit()?;
     /// assert!(store.is_empty()?);
@@ -1206,12 +1212,12 @@ impl<'a> Transaction<'a> {
     /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let ex = NamedNode::new_unchecked("http://example.com");
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert(QuadRef::new(ex, ex, ex, ex));
+    /// transaction.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
     /// transaction.commit()?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), ex))?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
     pub fn commit(self) -> Result<(), StorageError> {
@@ -1302,8 +1308,8 @@ impl Iterator for GraphNameIter<'_> {
 /// loader.commit()?;
 ///
 /// // we inspect the store contents
-/// let ex = NamedNodeRef::new("http://example.com")?;
-/// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+/// let ex = NamedNode::new("http://example.com")?;
+/// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), ex))?);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
@@ -1418,15 +1424,15 @@ impl BulkLoader<'_> {
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file.as_bytes()
     /// )?;
     /// loader.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_reader(
@@ -1489,15 +1495,15 @@ impl BulkLoader<'_> {
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file
     /// )?;
     /// loader.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn load_from_slice(
@@ -1562,15 +1568,15 @@ impl BulkLoader<'_> {
     ///     RdfParser::from_format(RdfFormat::NTriples)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file,
     /// )?;
     /// loader.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[cfg(not(target_family = "wasm"))]
@@ -1673,15 +1679,15 @@ impl BulkLoader<'_> {
     ///     RdfParser::from_format(RdfFormat::NTriples)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
-    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///         .with_default_graph(NamedNode::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     ///     file
     /// )?;
     /// loader.commit()?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
-    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g")?))?);
+    /// assert!(store.contains(&Quad::new(ex.clone(), ex.clone(), ex.clone(), NamedNode::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[cfg(not(target_family = "wasm"))]
@@ -1754,7 +1760,7 @@ impl BulkLoader<'_> {
     /// See [the struct](Self) documentation for more details.
     pub fn load_quads(
         &mut self,
-        quads: impl IntoIterator<Item = impl Into<Quad>>,
+        quads: impl IntoIterator<Item = Quad>,
     ) -> Result<(), StorageError> {
         self.load_ok_quads(quads.into_iter().map(Ok::<_, StorageError>))
     }
@@ -1764,13 +1770,13 @@ impl BulkLoader<'_> {
     /// See [the struct](Self) documentation for more details.
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
         &mut self,
-        quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
+        quads: impl IntoIterator<Item = Result<Quad, EI>>,
     ) -> Result<(), EO> {
         let target_num_threads = self.target_num_threads();
         let target_batch_size = self.target_batch_size();
         let mut batch = Vec::with_capacity(target_batch_size);
         for quad in quads {
-            batch.push(quad?.into());
+            batch.push(quad?);
             if batch.len() >= target_batch_size {
                 let mut batch_to_save = Vec::with_capacity(target_batch_size);
                 swap(&mut batch, &mut batch_to_save);
@@ -1855,65 +1861,55 @@ mod tests {
 
         let store = Store::new()?;
         for t in &default_quads {
-            store.insert(t)?;
+            store.insert(t.clone())?;
             assert!(store.contains(t)?);
         }
-        store.insert(&default_quad)?;
+        store.insert(default_quad.clone())?;
 
         store.remove(&default_quad)?;
         assert!(!store.contains(&default_quad)?);
         store.remove(&default_quad)?;
-        store.insert(&named_quad)?;
+        store.insert(named_quad.clone())?;
         assert!(store.contains(&named_quad)?);
-        store.insert(&named_quad)?;
-        store.insert(&default_quad)?;
-        store.insert(&default_quad)?;
+        store.insert(named_quad.clone())?;
+        store.insert(default_quad.clone())?;
+        store.insert(default_quad.clone())?;
         store.validate()?;
 
         assert_eq!(store.len()?, 4);
         assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);
         assert_eq!(
             store
-                .quads_for_pattern(Some(main_s.as_ref()), None, None, None)
+                .quads_for_pattern(Some(&main_s), None, None, None)
                 .collect::<Result<Vec<_>, _>>()?,
             all_quads
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(main_s.as_ref()), Some(main_p.as_ref()), None, None)
+                .quads_for_pattern(Some(&main_s), Some(&main_p), None, None)
                 .collect::<Result<Vec<_>, _>>()?,
             all_quads
         );
         assert_eq!(
             store
-                .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    Some(main_p.as_ref()),
-                    Some(main_o.as_ref()),
-                    None
-                )
+                .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), None)
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
                 .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    Some(main_p.as_ref()),
-                    Some(main_o.as_ref()),
-                    Some(GraphNameRef::DefaultGraph)
+                    Some(&main_s),
+                    Some(&main_p),
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
                 )
                 .collect::<Result<Vec<_>, _>>()?,
             vec![default_quad.clone()]
         );
         assert_eq!(
             store
-                .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    Some(main_p.as_ref()),
-                    Some(main_o.as_ref()),
-                    Some(main_g.as_ref())
-                )
+                .quads_for_pattern(Some(&main_s), Some(&main_p), Some(&main_o), Some(&main_g))
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone()]
         );
@@ -1921,74 +1917,64 @@ mod tests {
         assert_eq!(
             store
                 .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    Some(main_p.as_ref()),
+                    Some(&main_s),
+                    Some(&main_p),
                     None,
-                    Some(GraphNameRef::DefaultGraph)
+                    Some(&GraphName::DefaultGraph)
                 )
                 .collect::<Result<Vec<_>, _>>()?,
             default_quads
         );
         assert_eq!(
             store
-                .quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None)
+                .quads_for_pattern(Some(&main_s), None, Some(&main_o), None)
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
                 .quads_for_pattern(
-                    Some(main_s.as_ref()),
+                    Some(&main_s),
                     None,
-                    Some(main_o.as_ref()),
-                    Some(GraphNameRef::DefaultGraph)
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
                 )
                 .collect::<Result<Vec<_>, _>>()?,
             vec![default_quad.clone()]
         );
         assert_eq!(
             store
-                .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    None,
-                    Some(main_o.as_ref()),
-                    Some(main_g.as_ref())
-                )
+                .quads_for_pattern(Some(&main_s), None, Some(&main_o), Some(&main_g))
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone()]
         );
         assert_eq!(
             store
-                .quads_for_pattern(
-                    Some(main_s.as_ref()),
-                    None,
-                    None,
-                    Some(GraphNameRef::DefaultGraph)
-                )
+                .quads_for_pattern(Some(&main_s), None, None, Some(&GraphName::DefaultGraph))
                 .collect::<Result<Vec<_>, _>>()?,
             default_quads
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, Some(main_p.as_ref()), None, None)
+                .quads_for_pattern(None, Some(&main_p), None, None)
                 .collect::<Result<Vec<_>, _>>()?,
             all_quads
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None)
+                .quads_for_pattern(None, Some(&main_p), Some(&main_o), None)
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, None, Some(main_o.as_ref()), None)
+                .quads_for_pattern(None, None, Some(&main_o), None)
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
-                .quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
+                .quads_for_pattern(None, None, None, Some(&GraphName::DefaultGraph))
                 .collect::<Result<Vec<_>, _>>()?,
             default_quads
         );
@@ -1996,21 +1982,16 @@ mod tests {
             store
                 .quads_for_pattern(
                     None,
-                    Some(main_p.as_ref()),
-                    Some(main_o.as_ref()),
-                    Some(GraphNameRef::DefaultGraph)
+                    Some(&main_p),
+                    Some(&main_o),
+                    Some(&GraphName::DefaultGraph)
                 )
                 .collect::<Result<Vec<_>, _>>()?,
             vec![default_quad]
         );
         assert_eq!(
             store
-                .quads_for_pattern(
-                    None,
-                    Some(main_p.as_ref()),
-                    Some(main_o.as_ref()),
-                    Some(main_g.as_ref())
-                )
+                .quads_for_pattern(None, Some(&main_p), Some(&main_o), Some(&main_g))
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad]
         );

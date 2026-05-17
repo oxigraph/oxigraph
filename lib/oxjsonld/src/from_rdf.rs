@@ -6,9 +6,7 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::xsd;
-use oxrdf::{
-    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
-};
+use oxrdf::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -25,22 +23,22 @@ use tokio::io::AsyncWrite;
 /// Features like `@json` and `@list` generation are not implemented.
 ///
 /// ```
-/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphName, Literal, NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     GraphNameRef::DefaultGraph
+///     NamedNode::new("http://schema.org/Person")?,
+///     GraphName::DefaultGraph
 /// ))?;
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-///     GraphNameRef::DefaultGraph
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphName::DefaultGraph
 /// ))?;
 /// assert_eq!(
 ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
@@ -68,8 +66,8 @@ impl JsonLdSerializer {
     #[inline]
     pub fn with_prefix(
         mut self,
-        prefix_name: impl Into<String>,
-        prefix_iri: impl Into<String>,
+        prefix_name: &str,
+        prefix_iri: &str,
     ) -> Result<Self, IriParseError> {
         self.prefixes.insert(
             prefix_name.into(),
@@ -82,24 +80,24 @@ impl JsonLdSerializer {
     ///
     /// Corresponds to the [`base` option from the algorithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     /// ```
-    /// use oxrdf::{GraphNameRef, NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphName, NamedNode, Quad};
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new()
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
-    ///     GraphNameRef::DefaultGraph
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     NamedNode::new("http://example.com/ns#Person")?,
+    ///     GraphName::DefaultGraph
     /// ))?;
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://example.com/ns#parent")?,
-    ///     NamedNodeRef::new("http://example.com#other")?,
-    ///     GraphNameRef::DefaultGraph
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://example.com/ns#parent")?,
+    ///     NamedNode::new("http://example.com#other")?,
+    ///     GraphName::DefaultGraph
     /// ))?;
     /// assert_eq!(
     ///     b"{\"@context\":{\"@base\":\"http://example.com\",\"ex\":\"http://example.com/ns#\"},\"@graph\":[{\"@id\":\"#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"/ns#Person\"}],\"http://example.com/ns#parent\":[{\"@id\":\"#other\"}]}]}",
@@ -108,7 +106,7 @@ impl JsonLdSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+    pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
@@ -118,22 +116,22 @@ impl JsonLdSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphName, Literal, NamedNode, Quad};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
-    ///     GraphNameRef::DefaultGraph
+    ///     NamedNode::new("http://schema.org/Person")?,
+    ///     GraphName::DefaultGraph
     /// ))?;
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://schema.org/name")?,
-    ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-    ///     GraphNameRef::DefaultGraph
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://schema.org/name")?,
+    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     GraphName::DefaultGraph
     /// ))?;
     /// assert_eq!(
     ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
@@ -155,22 +153,22 @@ impl JsonLdSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
+    /// use oxrdf::{NamedNode, Quad, Literal, GraphName};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
     ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
-    ///     GraphNameRef::DefaultGraph
+    ///     NamedNode::new("http://schema.org/Person")?,
+    ///     GraphName::DefaultGraph
     /// )).await?;
-    /// serializer.serialize_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://schema.org/name")?,
-    ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-    ///     GraphNameRef::DefaultGraph
+    /// serializer.serialize_quad(&Quad::new(
+    ///     NamedNode::new("http://example.com#me")?,
+    ///     NamedNode::new("http://schema.org/name")?,
+    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     GraphName::DefaultGraph
     /// )).await?;
     /// assert_eq!(
     ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
@@ -208,22 +206,22 @@ impl JsonLdSerializer {
 /// Can be built using [`JsonLdSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphName, Literal, NamedNode, Quad};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     GraphNameRef::DefaultGraph
+///     NamedNode::new("http://schema.org/Person")?,
+///     GraphName::DefaultGraph
 /// ))?;
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-///     GraphNameRef::DefaultGraph
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphName::DefaultGraph
 /// ))?;
 /// assert_eq!(
 ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
@@ -239,9 +237,28 @@ pub struct WriterJsonLdSerializer<W: Write> {
 
 impl<W: Write> WriterJsonLdSerializer<W> {
     /// Serializes an extra quad.
-    pub fn serialize_quad<'a>(&mut self, t: impl Into<QuadRef<'a>>) -> io::Result<()> {
+    pub fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
         let mut buffer = Vec::new();
-        self.inner.serialize_quad(t, &mut buffer)?;
+        self.inner.serialize_quad(
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+            &quad.graph_name,
+            &mut buffer,
+        )?;
+        self.flush_buffer(&mut buffer)
+    }
+
+    #[doc(hidden)]
+    pub fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        let mut buffer = Vec::new();
+        self.inner.serialize_quad(
+            &triple.subject,
+            &triple.predicate,
+            &triple.object,
+            &GraphName::DefaultGraph,
+            &mut buffer,
+        )?;
         self.flush_buffer(&mut buffer)
     }
 
@@ -268,22 +285,22 @@ impl<W: Write> WriterJsonLdSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
+/// use oxrdf::{NamedNode, Quad, Literal, GraphName};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
 ///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     GraphNameRef::DefaultGraph
+///     NamedNode::new("http://schema.org/Person")?,
+///     GraphName::DefaultGraph
 /// )).await?;
-/// serializer.serialize_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-///     GraphNameRef::DefaultGraph
+/// serializer.serialize_quad(&Quad::new(
+///     NamedNode::new("http://example.com#me")?,
+///     NamedNode::new("http://schema.org/name")?,
+///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphName::DefaultGraph
 /// )).await?;
 /// assert_eq!(
 ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
@@ -302,9 +319,28 @@ pub struct TokioAsyncWriterJsonLdSerializer<W: AsyncWrite + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonLdSerializer<W> {
     /// Serializes an extra quad.
-    pub async fn serialize_quad<'a>(&mut self, t: impl Into<QuadRef<'a>>) -> io::Result<()> {
+    pub async fn serialize_quad(&mut self, quad: &Quad) -> io::Result<()> {
         let mut buffer = Vec::new();
-        self.inner.serialize_quad(t, &mut buffer)?;
+        self.inner.serialize_quad(
+            &quad.subject,
+            &quad.predicate,
+            &quad.object,
+            &quad.graph_name,
+            &mut buffer,
+        )?;
+        self.flush_buffer(&mut buffer).await
+    }
+
+    #[doc(hidden)]
+    pub async fn serialize_triple(&mut self, triple: &Triple) -> io::Result<()> {
+        let mut buffer = Vec::new();
+        self.inner.serialize_quad(
+            &triple.subject,
+            &triple.predicate,
+            &triple.object,
+            &GraphName::DefaultGraph,
+            &mut buffer,
+        )?;
         self.flush_buffer(&mut buffer).await
     }
 
@@ -329,7 +365,7 @@ pub struct InnerJsonLdWriter {
     current_graph_name: Option<GraphName>,
     current_subject: Option<NamedOrBlankNode>,
     current_predicate: Option<NamedNode>,
-    emitted_predicates: BTreeSet<String>,
+    emitted_predicates: BTreeSet<NamedNode>,
     prefixes: BTreeMap<String, String>,
     base_iri: Option<Iri<String>>,
 }
@@ -337,7 +373,10 @@ pub struct InnerJsonLdWriter {
 impl InnerJsonLdWriter {
     fn serialize_quad<'a>(
         &mut self,
-        quad: impl Into<QuadRef<'a>>,
+        subject: &'a NamedOrBlankNode,
+        predicate: &'a NamedNode,
+        object: &'a Term,
+        graph_name: &'a GraphName,
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         if !self.started {
@@ -345,11 +384,10 @@ impl InnerJsonLdWriter {
             self.started = true;
         }
 
-        let quad = quad.into();
         if self
             .current_graph_name
             .as_ref()
-            .is_some_and(|graph_name| graph_name.as_ref() != quad.graph_name)
+            .is_some_and(|current_graph_name| current_graph_name != graph_name)
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
@@ -368,12 +406,12 @@ impl InnerJsonLdWriter {
         } else if self
             .current_subject
             .as_ref()
-            .is_some_and(|subject| subject.as_ref() != quad.subject)
+            .is_some_and(|current_subject| current_subject != subject)
             || self
                 .current_predicate
                 .as_ref()
-                .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
-                && self.emitted_predicates.contains(quad.predicate.as_str())
+                .is_some_and(|current_predicate| current_predicate != predicate)
+                && self.emitted_predicates.contains(predicate)
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
@@ -383,53 +421,52 @@ impl InnerJsonLdWriter {
         } else if self
             .current_predicate
             .as_ref()
-            .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
+            .is_some_and(|current_predicate| current_predicate != predicate)
         {
             output.push(JsonEvent::EndArray);
             if let Some(current_predicate) = self.current_predicate.take() {
-                self.emitted_predicates
-                    .insert(current_predicate.into_string());
+                self.emitted_predicates.insert(current_predicate);
             }
         }
 
         if self.current_graph_name.is_none() {
-            if !quad.graph_name.is_default_graph() {
+            if !graph_name.is_default_graph() {
                 // We open a new graph name
                 output.push(JsonEvent::StartObject);
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(match quad.graph_name {
-                    GraphNameRef::NamedNode(iri) => iri.into(),
-                    GraphNameRef::BlankNode(bnode) => bnode.into(),
-                    GraphNameRef::DefaultGraph => unreachable!(),
-                })));
+                output.push(JsonEvent::String(match &graph_name {
+                    GraphName::NamedNode(iri) => self.named_node_id_value(iri),
+                    GraphName::BlankNode(bnode) => bnode.to_string().into(),
+                    GraphName::DefaultGraph => unreachable!(),
+                }));
                 output.push(JsonEvent::ObjectKey("@graph".into()));
                 output.push(JsonEvent::StartArray);
             }
-            self.current_graph_name = Some(quad.graph_name.into_owned());
+            self.current_graph_name = Some(graph_name.clone());
         }
 
         // We open a new subject block if useful (ie. new subject or already used predicate)
         if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
-            output.push(JsonEvent::String(self.id_value(match quad.subject {
-                NamedOrBlankNodeRef::NamedNode(iri) => iri.into(),
-                NamedOrBlankNodeRef::BlankNode(bnode) => bnode.into(),
-            })));
-            self.current_subject = Some(quad.subject.into_owned());
+            output.push(JsonEvent::String(match &subject {
+                NamedOrBlankNode::NamedNode(iri) => self.named_node_id_value(iri),
+                NamedOrBlankNode::BlankNode(bnode) => bnode.to_string().into(),
+            }));
+            self.current_subject = Some(subject.clone());
         }
 
         // We open a predicate key
         if self.current_predicate.is_none() {
             output.push(JsonEvent::ObjectKey(
                 // TODO: use @type
-                quad.predicate.as_str().into(), // TODO: prefixes including @vocab
+                predicate.as_str().into(), // TODO: prefixes including @vocab
             ));
             output.push(JsonEvent::StartArray);
-            self.current_predicate = Some(quad.predicate.into_owned());
+            self.current_predicate = Some(predicate.clone());
         }
 
-        self.serialize_term(quad.object, output)
+        self.serialize_term(object, output)
     }
 
     fn serialize_start(&self, output: &mut Vec<JsonEvent<'_>>) {
@@ -457,22 +494,22 @@ impl InnerJsonLdWriter {
 
     fn serialize_term<'a>(
         &self,
-        term: TermRef<'a>,
+        term: &'a Term,
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         output.push(JsonEvent::StartObject);
         #[cfg_attr(feature = "rdf-12", expect(clippy::match_wildcard_for_single_variants))]
         #[cfg_attr(not(feature = "rdf-12"), expect(unreachable_patterns))]
         match term {
-            TermRef::NamedNode(iri) => {
+            Term::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(iri.into())));
+                output.push(JsonEvent::String(self.named_node_id_value(iri)));
             }
-            TermRef::BlankNode(bnode) => {
+            Term::BlankNode(bnode) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(bnode.into())));
+                output.push(JsonEvent::String(bnode.to_string().into()));
             }
-            TermRef::Literal(literal) => {
+            Term::Literal(literal) => {
                 if let Some(language) = literal.language() {
                     output.push(JsonEvent::ObjectKey("@language".into()));
                     output.push(JsonEvent::String(language.into()));
@@ -487,11 +524,11 @@ impl InnerJsonLdWriter {
                             .into(),
                         ));
                     }
-                } else if literal.datatype() != xsd::STRING {
+                } else if *literal.datatype() != xsd::STRING {
                     output.push(JsonEvent::ObjectKey("@type".into()));
-                    output.push(JsonEvent::String(Self::type_value(
-                        literal.datatype().into(),
-                    )));
+                    output.push(JsonEvent::String(
+                        Self::named_node_type_value(literal.datatype()).into(),
+                    ));
                 }
                 output.push(JsonEvent::ObjectKey("@value".into()));
                 output.push(JsonEvent::String(literal.value().into()));
@@ -507,32 +544,25 @@ impl InnerJsonLdWriter {
         Ok(())
     }
 
-    fn id_value<'a>(&self, id: NamedOrBlankNodeRef<'a>) -> Cow<'a, str> {
-        match id {
-            NamedOrBlankNodeRef::NamedNode(iri) => {
-                if let Some(base_iri) = &self.base_iri {
-                    if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
-                        let relative = relative.into_inner();
-                        // We check the relative IRI is not considered as absolute or a keyword by IRI expansion
-                        if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
-                            prefix == "_" || suffix.starts_with("//")
-                        }) && !has_keyword_form(&relative)
-                        {
-                            return relative.into();
-                        }
-                    }
+    fn named_node_id_value<'a>(&self, iri: &'a NamedNode) -> Cow<'a, str> {
+        if let Some(base_iri) = &self.base_iri {
+            if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
+                let relative = relative.into_inner();
+                // We check the relative IRI is not considered as absolute or a keyword by IRI expansion
+                if !relative
+                    .split_once(':')
+                    .is_some_and(|(prefix, suffix)| prefix == "_" || suffix.starts_with("//"))
+                    && !has_keyword_form(&relative)
+                {
+                    return relative.into();
                 }
-                iri.as_str().into()
             }
-            NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
         }
+        iri.as_str().into()
     }
 
-    fn type_value(id: NamedOrBlankNodeRef<'_>) -> Cow<'_, str> {
-        match id {
-            NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),
-            NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
-        }
+    fn named_node_type_value(iri: &NamedNode) -> &str {
+        iri.as_str() // TODO: use prefixes?
     }
 
     fn finish(&mut self, output: &mut Vec<JsonEvent<'static>>) {

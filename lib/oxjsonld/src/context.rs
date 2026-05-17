@@ -2,6 +2,7 @@ use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use crate::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
+use oxrdf::{OxStr, OxString};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
@@ -20,27 +21,27 @@ type LoadDocumentCallback = dyn Fn(
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum JsonNode {
-    String(String),
-    Number(String),
+    String(OxString),
+    Number(OxString),
     Boolean(bool),
     Null,
     Array(Vec<JsonNode>),
-    Object(HashMap<String, JsonNode>),
+    Object(HashMap<OxString, JsonNode>),
 }
 
 #[derive(Default, Clone)]
 pub struct JsonLdContext {
-    pub base_iri: Option<Iri<String>>,
-    pub original_base_url: Option<Iri<String>>,
-    pub vocabulary_mapping: Option<String>,
-    pub default_language: Option<String>,
+    pub base_iri: Option<Iri<OxString>>,
+    pub original_base_url: Option<Iri<OxString>>,
+    pub vocabulary_mapping: Option<OxString>,
+    pub default_language: Option<OxString>,
     pub default_direction: Option<&'static str>,
-    pub term_definitions: HashMap<String, JsonLdTermDefinition>,
+    pub term_definitions: HashMap<OxString, JsonLdTermDefinition>,
     pub previous_context: Option<Arc<JsonLdContext>>,
 }
 
 impl JsonLdContext {
-    pub fn new_empty(original_base_url: Option<Iri<String>>) -> Self {
+    pub fn new_empty(original_base_url: Option<Iri<OxString>>) -> Self {
         JsonLdContext {
             base_iri: original_base_url.clone(),
             original_base_url,
@@ -56,25 +57,25 @@ impl JsonLdContext {
 #[derive(Clone)]
 pub struct JsonLdTermDefinition {
     // In the fields, None is unset Some(None) is set to null
-    pub iri_mapping: Option<Option<String>>,
+    pub iri_mapping: Option<Option<OxString>>,
     pub prefix_flag: bool,
     pub protected: bool,
     pub reverse_property: bool,
-    pub base_url: Option<Iri<String>>,
+    pub base_url: Option<Iri<OxString>>,
     pub context: Option<JsonNode>,
     pub container_mapping: &'static [&'static str],
     pub direction_mapping: Option<Option<&'static str>>,
-    pub index_mapping: Option<String>,
-    pub language_mapping: Option<Option<String>>,
-    pub nest_value: Option<String>,
-    pub type_mapping: Option<String>,
+    pub index_mapping: Option<OxString>,
+    pub language_mapping: Option<Option<OxString>>,
+    pub nest_value: Option<OxString>,
+    pub type_mapping: Option<OxString>,
 }
 
 pub struct JsonLdContextProcessor {
     pub processing_mode: JsonLdProcessingMode,
     pub lenient: bool, // Custom option to ignore invalid base IRIs
     pub max_context_recursion: usize,
-    pub remote_context_cache: Arc<Mutex<HashMap<String, (Option<Iri<String>>, JsonNode)>>>,
+    pub remote_context_cache: Arc<Mutex<HashMap<OxString, (Option<Iri<OxString>>, JsonNode)>>>,
     pub load_document_callback: Option<Arc<LoadDocumentCallback>>,
 }
 
@@ -89,7 +90,7 @@ pub struct JsonLdRemoteDocument {
     /// The retrieved document
     pub document: Vec<u8>,
     /// The final URL of the loaded document. This is important to handle HTTP redirects properly
-    pub document_url: String,
+    pub document_url: OxString,
 }
 
 impl JsonLdContextProcessor {
@@ -98,8 +99,8 @@ impl JsonLdContextProcessor {
         &self,
         active_context: &JsonLdContext,
         local_context: JsonNode,
-        base_url: Option<&Iri<String>>,
-        remote_contexts: &mut Vec<String>,
+        base_url: Option<&Iri<OxString>>,
+        remote_contexts: &mut Vec<OxString>,
         override_protected: bool,
         mut propagate: bool,
         validate_scoped_context: bool,
@@ -156,17 +157,14 @@ impl JsonLdContextProcessor {
                 // 5.2)
                 JsonNode::String(context) => {
                     // 5.2.1)
-                    let context = match if let Some(base_url) = base_url {
-                        base_url.resolve(&context)
-                    } else {
-                        Iri::parse(context.clone())
-                    } {
+                    let context = match self.resolve_iri(
+                        context,
+                        base_url,
+                        JsonLdErrorCode::LoadingDocumentFailed,
+                    ) {
                         Ok(url) => url.into_inner(),
                         Err(e) => {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                format!("Invalid remote context URL '{context}': {e}"),
-                                JsonLdErrorCode::LoadingDocumentFailed,
-                            ));
+                            errors.push(e);
                             continue;
                         }
                     };
@@ -187,7 +185,7 @@ impl JsonLdContextProcessor {
                     }
                     remote_contexts.push(context.clone());
                     let (loaded_context_base, loaded_context_content) =
-                        match self.load_remote_context(&context) {
+                        match self.load_remote_context(context.clone()) {
                             Ok(r) => r,
                             Err(e) => {
                                 errors.push(e);
@@ -266,9 +264,9 @@ impl JsonLdContextProcessor {
                 };
                 // 5.6.3)
                 let import = match if let Some(base_url) = base_url {
-                    base_url.resolve(&import)
+                    base_url.resolve(&import).map(|url| url.into_inner().into())
                 } else {
-                    Iri::parse(import.clone())
+                    Iri::parse(import.clone()).map(Iri::into_inner)
                 } {
                     Ok(import) => import,
                     Err(e) => {
@@ -280,7 +278,7 @@ impl JsonLdContextProcessor {
                     }
                 };
                 // 5.6.4)
-                let (_, loaded_context_content) = match self.load_remote_context(&import) {
+                let (_, loaded_context_content) = match self.load_remote_context(import.clone()) {
                     Ok(r) => r,
                     Err(e) => {
                         errors.push(e);
@@ -318,24 +316,13 @@ impl JsonLdContextProcessor {
                         }
                         // 5.7.3) and 5.7.4)
                         JsonNode::String(value) => {
-                            if self.lenient {
-                                result.base_iri = Some(if let Some(base_iri) = &result.base_iri {
-                                    base_iri.resolve_unchecked(&value)
-                                } else {
-                                    Iri::parse_unchecked(value.clone())
-                                })
-                            } else {
-                                match if let Some(base_iri) = &result.base_iri {
-                                    base_iri.resolve(&value)
-                                } else {
-                                    Iri::parse(value.clone())
-                                } {
-                                    Ok(iri) => result.base_iri = Some(iri),
-                                    Err(e) => errors.push(JsonLdSyntaxError::msg_and_code(
-                                        format!("Invalid @base '{value}': {e}"),
-                                        JsonLdErrorCode::InvalidBaseIri,
-                                    )),
-                                }
+                            match self.resolve_iri(
+                                value,
+                                result.base_iri.as_ref(),
+                                JsonLdErrorCode::InvalidBaseIri,
+                            ) {
+                                Ok(base_iri) => result.base_iri = Some(base_iri),
+                                Err(e) => errors.push(e),
                             }
                         }
                         _ => errors.push(JsonLdSyntaxError::msg_and_code(
@@ -357,7 +344,7 @@ impl JsonLdContextProcessor {
                         if let Some(vocab) = self
                             .expand_iri(
                                 &mut result,
-                                value.as_str().into(),
+                                value.clone(),
                                 true,
                                 true,
                                 None,
@@ -366,7 +353,7 @@ impl JsonLdContextProcessor {
                             )
                             .filter(|iri| !has_keyword_form(iri))
                         {
-                            result.vocabulary_mapping = Some(vocab.into());
+                            result.vocabulary_mapping = Some(vocab);
                         } else {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 format!("Invalid @vocab '{value}'"),
@@ -465,7 +452,7 @@ impl JsonLdContextProcessor {
                 self.create_term_definition(
                     &mut result,
                     &context,
-                    term,
+                    term.clone(),
                     &mut defined,
                     base_url,
                     protected,
@@ -483,17 +470,17 @@ impl JsonLdContextProcessor {
     fn create_term_definition(
         &self,
         active_context: &mut JsonLdContext,
-        local_context: &HashMap<String, JsonNode>,
-        term: &str,
-        defined: &mut HashMap<String, bool>,
-        base_url: Option<&Iri<String>>,
+        local_context: &HashMap<OxString, JsonNode>,
+        term: OxString,
+        defined: &mut HashMap<OxString, bool>,
+        base_url: Option<&Iri<OxString>>,
         protected: bool,
         override_protected: bool,
-        remote_contexts: &mut Vec<String>,
+        remote_contexts: &mut Vec<OxString>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         // 1)
-        if let Some(defined_value) = defined.get(term) {
+        if let Some(defined_value) = defined.get(&term) {
             if !defined_value {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     "Cyclic IRI mapping",
@@ -510,9 +497,9 @@ impl JsonLdContextProcessor {
             ));
             return;
         }
-        defined.insert(term.into(), false);
+        defined.insert(term.clone(), false);
         // 3)
-        let Some(value) = local_context.get(term) else {
+        let Some(value) = local_context.get(&term) else {
             unreachable!();
         };
         // 4)
@@ -568,9 +555,9 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             }
-        } else if has_keyword_form(term) {
+        } else if has_keyword_form(&term) {
             // 5)
-            if is_keyword(term) {
+            if is_keyword(&term) {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     format!("{term} keyword can't be redefined in context"),
                     JsonLdErrorCode::KeywordRedefinition,
@@ -579,13 +566,13 @@ impl JsonLdContextProcessor {
             return;
         }
         // 6)
-        let previous_definition = active_context.term_definitions.remove(term);
+        let previous_definition = active_context.term_definitions.remove(&term);
         let value = match value {
             // 7)
-            JsonNode::Null => Cow::Owned([("@id".to_owned(), JsonNode::Null)].into()),
+            JsonNode::Null => Cow::Owned([("@id".into(), JsonNode::Null)].into()),
             // 8)
             JsonNode::String(id) => {
-                Cow::Owned([("@id".to_owned(), JsonNode::String(id.clone()))].into())
+                Cow::Owned([("@id".into(), JsonNode::String(id.clone()))].into())
             }
             // 9)
             JsonNode::Object(map) => Cow::Borrowed(map),
@@ -642,7 +629,7 @@ impl JsonLdContextProcessor {
             // 12.2)
             let Some(r#type) = self.expand_iri(
                 active_context,
-                r#type.as_str().into(),
+                r#type.clone(),
                 false,
                 true,
                 Some(local_context),
@@ -683,7 +670,7 @@ impl JsonLdContextProcessor {
                 }
             }
             // 12.5)
-            definition.type_mapping = Some(r#type.into());
+            definition.type_mapping = Some(r#type);
         }
         // 13)
         if let Some(key_value) = value.get("@reverse") {
@@ -717,7 +704,7 @@ impl JsonLdContextProcessor {
             // 13.4)
             if let Some(iri) = self.expand_iri(
                 active_context,
-                key_value.into(),
+                key_value.clone(),
                 false,
                 true,
                 Some(local_context),
@@ -727,7 +714,7 @@ impl JsonLdContextProcessor {
                 if self.lenient && !has_keyword_form(&iri)
                     || !self.lenient && (iri.starts_with("_:") || Iri::parse(iri.as_ref()).is_ok())
                 {
-                    definition.iri_mapping = Some(Some(iri.into()));
+                    definition.iri_mapping = Some(Some(iri));
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         format!("{iri} is not a valid IRI or blank node"),
@@ -738,18 +725,15 @@ impl JsonLdContextProcessor {
             } else {
                 definition.iri_mapping = Some(None);
             }
-            definition.iri_mapping = Some(
-                self.expand_iri(
-                    active_context,
-                    key_value.into(),
-                    false,
-                    true,
-                    Some(local_context),
-                    defined,
-                    errors,
-                )
-                .map(Into::into),
-            );
+            definition.iri_mapping = Some(self.expand_iri(
+                active_context,
+                key_value.clone(),
+                false,
+                true,
+                Some(local_context),
+                defined,
+                errors,
+            ));
             // 13.5)
             if let Some(container_entry) = value.get("@container") {
                 match container_entry {
@@ -774,7 +758,7 @@ impl JsonLdContextProcessor {
             definition.reverse_property = true;
         } else if let Some(key_value) = value.get("@id").filter(|v| {
             if let JsonNode::String(v) = v {
-                v != term
+                *v != term
             } else {
                 true
             }
@@ -786,12 +770,12 @@ impl JsonLdContextProcessor {
                     definition.iri_mapping = Some(None);
                 }
                 JsonNode::String(id) => {
-                    if id == term {
+                    if *id == term {
                         return;
                     }
                     let Some(expanded) = self.expand_iri(
                         active_context,
-                        id.into(),
+                        id.clone(),
                         false,
                         true,
                         Some(local_context),
@@ -810,7 +794,7 @@ impl JsonLdContextProcessor {
                         ));
                         return;
                     }
-                    definition.iri_mapping = Some(Some(expanded.into()));
+                    definition.iri_mapping = Some(Some(expanded));
                     // 14.2.4)
                     if term
                         .as_bytes()
@@ -819,11 +803,11 @@ impl JsonLdContextProcessor {
                         || term.contains('/')
                     {
                         // 14.2.4.1)
-                        defined.insert(term.into(), true);
+                        defined.insert(term.clone(), true);
                         // 14.2.4.2)
                         let expended_term = self.expand_iri(
                             active_context,
-                            term.into(),
+                            term.clone(),
                             false,
                             true,
                             Some(local_context),
@@ -880,7 +864,7 @@ impl JsonLdContextProcessor {
                 self.create_term_definition(
                     active_context,
                     local_context,
-                    prefix,
+                    OxString::new_owned(prefix),
                     defined,
                     base_url,
                     false,
@@ -892,36 +876,31 @@ impl JsonLdContextProcessor {
             if let Some(term_definition) = active_context.term_definitions.get(prefix) {
                 // 15.2)
                 if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
-                    definition.iri_mapping = Some(Some(format!("{iri_mapping}{suffix}")));
+                    definition.iri_mapping = Some(Some(OxString::concat([iri_mapping, suffix])));
                 }
             } else {
                 // 15.3)
-                definition.iri_mapping = Some(Some(term.into()));
+                definition.iri_mapping = Some(Some(term.clone()));
             }
         } else if term.contains('/') {
             // 16)
-            let iri = match if let Some(base_url) = base_url {
-                base_url.resolve(term)
-            } else {
-                Iri::parse(term.to_owned())
-            } {
-                Ok(iri) => iri.into_inner(),
+            match self.resolve_iri(term.clone(), base_url, JsonLdErrorCode::InvalidIriMapping) {
+                Ok(iri) => {
+                    definition.iri_mapping = Some(Some(iri.into_inner()));
+                }
                 Err(e) => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        format!("Invalid term relative IRI '{term}': {e}"),
-                        JsonLdErrorCode::InvalidIriMapping,
-                    ));
+                    errors.push(e);
                     return;
                 }
-            };
-            definition.iri_mapping = Some(Some(iri));
+            }
         } else if term == "@type" {
             // 17)
             definition.iri_mapping = Some(Some("@type".into()));
         } else {
             // 18)
             if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                definition.iri_mapping = Some(Some(format!("{vocabulary_mapping}{term}")));
+                definition.iri_mapping =
+                    Some(Some(OxString::concat([vocabulary_mapping, term.as_str()])));
             } else {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     format!("No @vocab key to build an IRI from context {term} term definition"),
@@ -955,9 +934,9 @@ impl JsonLdContextProcessor {
             for value in if let JsonNode::Array(value) = key_value {
                 if self.processing_mode == JsonLdProcessingMode::JsonLd1_0 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@container definition with multiple values is not supported in JSON-LD 1.0",
-                                    JsonLdErrorCode::InvalidContainerMapping,
-                                ));
+                        "@container definition with multiple values is not supported in JSON-LD 1.0",
+                        JsonLdErrorCode::InvalidContainerMapping,
+                    ));
                 }
                 value.as_slice()
             } else {
@@ -1002,9 +981,9 @@ impl JsonLdContextProcessor {
                 if let Some(type_mapping) = &definition.type_mapping {
                     if !["@id", "@vocab"].contains(&type_mapping.as_str()) {
                         errors.push(JsonLdSyntaxError::msg_and_code(
-                                    format!("Type mapping must be @id or @vocab, not {type_mapping} when used with @type container"),
-                                    JsonLdErrorCode::InvalidTypeMapping,
-                                ));
+                            format!("Type mapping must be @id or @vocab, not {type_mapping} when used with @type container"),
+                            JsonLdErrorCode::InvalidTypeMapping,
+                        ));
                     }
                 } else {
                     definition.type_mapping = Some("@id".into());
@@ -1036,7 +1015,7 @@ impl JsonLdContextProcessor {
             };
             let Some(expanded_index) = self.expand_iri(
                 active_context,
-                index.into(),
+                index.clone(),
                 false,
                 true,
                 Some(local_context),
@@ -1060,7 +1039,7 @@ impl JsonLdContextProcessor {
                 return;
             }
             // 20.3)
-            definition.index_mapping = Some(index.into());
+            definition.index_mapping = Some(index.clone());
         }
         // 21)
         if let Some(key_value) = value.get("@context") {
@@ -1168,7 +1147,7 @@ impl JsonLdContextProcessor {
                 ));
                 return;
             }
-            definition.nest_value = Some(value.into());
+            definition.nest_value = Some(value.clone());
         }
         // 25)
         if let Some(key_value) = value.get("@prefix") {
@@ -1268,23 +1247,23 @@ impl JsonLdContextProcessor {
         // 28)
         active_context
             .term_definitions
-            .insert(term.into(), definition);
-        defined.insert(term.into(), true);
+            .insert(term.clone(), definition);
+        defined.insert(term, true);
     }
 
     /// [IRI Expansion](https://www.w3.org/TR/json-ld-api/#iri-expansion)
     ///
     /// Warning: take care of synchronizing this implementation with the full one in [`JsonLdExpansionConverter`].
-    pub fn expand_iri<'a>(
+    pub fn expand_iri(
         &self,
         active_context: &mut JsonLdContext,
-        value: Cow<'a, str>,
+        value: OxString,
         document_relative: bool,
         vocab: bool,
-        local_context: Option<&HashMap<String, JsonNode>>,
-        defined: &mut HashMap<String, bool>,
+        local_context: Option<&HashMap<OxString, JsonNode>>,
+        defined: &mut HashMap<OxString, bool>,
         errors: &mut Vec<JsonLdSyntaxError>,
-    ) -> Option<Cow<'a, str>> {
+    ) -> Option<OxString> {
         if has_keyword_form(&value) {
             // 1)
             return is_keyword(&value).then_some(value);
@@ -1297,7 +1276,7 @@ impl JsonLdContextProcessor {
                 self.create_term_definition(
                     active_context,
                     local_context,
-                    &value,
+                    value.clone(),
                     defined,
                     None,
                     false,
@@ -1307,16 +1286,16 @@ impl JsonLdContextProcessor {
                 )
             }
         }
-        if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
+        if let Some(term_definition) = active_context.term_definitions.get(&value) {
             if let Some(iri_mapping) = &term_definition.iri_mapping {
                 let iri_mapping = iri_mapping.as_ref()?;
                 // 4)
                 if is_keyword(iri_mapping) {
-                    return Some(iri_mapping.clone().into());
+                    return Some(iri_mapping.clone());
                 }
                 // 5)
                 if vocab {
-                    return Some(iri_mapping.clone().into());
+                    return Some(iri_mapping.clone());
                 }
             }
         }
@@ -1332,7 +1311,7 @@ impl JsonLdContextProcessor {
                     self.create_term_definition(
                         active_context,
                         local_context,
-                        prefix,
+                        OxStr::new_owned(prefix),
                         defined,
                         None,
                         false,
@@ -1346,7 +1325,7 @@ impl JsonLdContextProcessor {
             if let Some(term_definition) = active_context.term_definitions.get(prefix) {
                 if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
                     if term_definition.prefix_flag {
-                        return Some(format!("{iri_mapping}{suffix}").into());
+                        return Some(OxString::concat([iri_mapping, suffix]));
                     }
                 }
             }
@@ -1358,16 +1337,18 @@ impl JsonLdContextProcessor {
         // 7)
         if vocab {
             if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                return Some(format!("{vocabulary_mapping}{value}").into());
+                return Some(OxString::concat([vocabulary_mapping, &value]));
             }
         }
         // 8)
         if document_relative {
             if let Some(base_iri) = &active_context.base_iri {
-                if self.lenient {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
-                } else if let Ok(value) = base_iri.resolve(&value) {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
+                if let Ok(result) = self.resolve_iri(
+                    value.clone(),
+                    Some(base_iri),
+                    JsonLdErrorCode::InvalidBaseIri,
+                ) {
+                    return Some(result.into_inner());
                 }
             }
         }
@@ -1377,11 +1358,11 @@ impl JsonLdContextProcessor {
 
     fn load_remote_context(
         &self,
-        url: &str,
-    ) -> Result<(Option<Iri<String>>, JsonNode), JsonLdSyntaxError> {
+        url: OxString,
+    ) -> Result<(Option<Iri<OxString>>, JsonNode), JsonLdSyntaxError> {
         #[expect(clippy::unwrap_in_result)]
         let mut remote_context_cache = self.remote_context_cache.lock().unwrap();
-        if let Some(loaded_context) = remote_context_cache.get(url) {
+        if let Some(loaded_context) = remote_context_cache.get(&url) {
             // 5.2.4)
             return Ok(loaded_context.clone());
         }
@@ -1394,7 +1375,7 @@ impl JsonLdContextProcessor {
             ));
         };
         let context_document = match load_document_callback(
-            url,
+            &url,
             &JsonLdLoadDocumentOptions {
                 request_profile: JsonLdProfile::Context.into(),
             },
@@ -1432,8 +1413,34 @@ impl JsonLdContextProcessor {
             ));
         };
         let document_url = Iri::parse(context_document.document_url).ok();
-        remote_context_cache.insert(url.into(), (document_url.clone(), loaded_context.clone()));
+        remote_context_cache.insert(url, (document_url.clone(), loaded_context.clone()));
         Ok((document_url, loaded_context))
+    }
+
+    fn resolve_iri<'a>(
+        &self,
+        iri: OxStr<'a>,
+        base_iri: Option<&Iri<OxString>>,
+        error_code: JsonLdErrorCode,
+    ) -> Result<Iri<OxStr<'a>>, JsonLdSyntaxError> {
+        if self.lenient {
+            Ok(Iri::parse_unchecked(if let Some(base_iri) = &base_iri {
+                OxString::new_owned(&base_iri.resolve_unchecked(&iri))
+            } else {
+                iri
+            }))
+        } else {
+            if let Some(base_iri) = &base_iri {
+                base_iri
+                    .resolve(&iri)
+                    .map(|iri| Iri::parse_unchecked(OxString::new_owned(&iri.into_inner())))
+            } else {
+                Iri::parse(iri.clone())
+            }
+            .map_err(|e| {
+                JsonLdSyntaxError::msg_and_code(format!("Invalid URL '{iri}': {e}"), error_code)
+            })
+        }
     }
 }
 
@@ -1482,8 +1489,8 @@ fn json_slice_to_node(data: &[u8]) -> Result<JsonNode, JsonSyntaxError> {
 }
 
 enum BuildingObjectOrArrayNode {
-    Object(HashMap<String, JsonNode>),
-    ObjectWithPendingKey(HashMap<String, JsonNode>, String),
+    Object(HashMap<OxString, JsonNode>),
+    ObjectWithPendingKey(HashMap<OxString, JsonNode>, OxString),
     Array(Vec<JsonNode>),
 }
 
@@ -1494,10 +1501,10 @@ pub fn json_node_from_events<'a>(
     for event in events {
         if let Some(result) = match event? {
             JsonEvent::String(value) => {
-                after_to_node_event(&mut stack, JsonNode::String(value.into()))
+                after_to_node_event(&mut stack, JsonNode::String(OxString::new_owned(&value)))
             }
             JsonEvent::Number(value) => {
-                after_to_node_event(&mut stack, JsonNode::Number(value.into()))
+                after_to_node_event(&mut stack, JsonNode::Number(OxString::new_owned(&value)))
             }
             JsonEvent::Boolean(value) => after_to_node_event(&mut stack, JsonNode::Boolean(value)),
             JsonEvent::Null => after_to_node_event(&mut stack, JsonNode::Null),
@@ -1521,7 +1528,7 @@ pub fn json_node_from_events<'a>(
                 if let Some(BuildingObjectOrArrayNode::Object(object)) = stack.pop() {
                     stack.push(BuildingObjectOrArrayNode::ObjectWithPendingKey(
                         object,
-                        key.into(),
+                        OxString::new_owned(&key),
                     ));
                 }
                 None

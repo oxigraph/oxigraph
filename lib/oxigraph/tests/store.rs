@@ -74,54 +74,54 @@ GRAPH <http://www.wikidata.org/wiki/Special:EntityData/Q90> {
 "#;
 const NUMBER_OF_TRIPLES: usize = 8;
 
-fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> {
+fn quads(graph_name: impl Into<GraphName>) -> Vec<Quad> {
     let graph_name = graph_name.into();
-    let paris = NamedNodeRef::new_unchecked("http://www.wikidata.org/entity/Q90");
-    let france = NamedNodeRef::new_unchecked("http://www.wikidata.org/entity/Q142");
-    let city = NamedNodeRef::new_unchecked("http://schema.org/City");
-    let name = NamedNodeRef::new_unchecked("http://schema.org/name");
-    let country = NamedNodeRef::new_unchecked("http://schema.org/country");
-    let population = NamedNodeRef::new_unchecked("http://schema.org/population");
-    let start_date = NamedNodeRef::new_unchecked("http://schema.org/startDate");
-    let url = NamedNodeRef::new_unchecked("http://schema.org/url");
-    let postal_code = NamedNodeRef::new_unchecked("http://schema.org/postalCode");
+    let paris = NamedNode::new_unchecked("http://www.wikidata.org/entity/Q90");
+    let france = NamedNode::new_unchecked("http://www.wikidata.org/entity/Q142");
+    let city = NamedNode::new_unchecked("http://schema.org/City");
+    let name = NamedNode::new_unchecked("http://schema.org/name");
+    let country = NamedNode::new_unchecked("http://schema.org/country");
+    let population = NamedNode::new_unchecked("http://schema.org/population");
+    let start_date = NamedNode::new_unchecked("http://schema.org/startDate");
+    let url = NamedNode::new_unchecked("http://schema.org/url");
+    let postal_code = NamedNode::new_unchecked("http://schema.org/postalCode");
     vec![
-        QuadRef::new(paris, rdf::TYPE, city, graph_name),
-        QuadRef::new(
-            paris,
-            name,
-            LiteralRef::new_language_tagged_literal_unchecked("Paris", "fr"),
-            graph_name,
+        Quad::new(paris.clone(), rdf::TYPE, city, graph_name.clone()),
+        Quad::new(
+            paris.clone(),
+            name.clone(),
+            Literal::new_language_tagged_literal_unchecked("Paris", "fr"),
+            graph_name.clone(),
         ),
-        QuadRef::new(
-            paris,
+        Quad::new(
+            paris.clone(),
             name,
-            LiteralRef::new_language_tagged_literal_unchecked("la ville lumi\u{E8}re", "fr"),
-            graph_name,
+            Literal::new_language_tagged_literal_unchecked("la ville lumi\u{E8}re", "fr"),
+            graph_name.clone(),
         ),
-        QuadRef::new(paris, country, france, graph_name),
-        QuadRef::new(
-            paris,
+        Quad::new(paris.clone(), country, france, graph_name.clone()),
+        Quad::new(
+            paris.clone(),
             population,
-            LiteralRef::new_typed_literal("2000000", xsd::INTEGER),
-            graph_name,
+            Literal::new_typed_literal("2000000", xsd::INTEGER),
+            graph_name.clone(),
         ),
-        QuadRef::new(
-            paris,
+        Quad::new(
+            paris.clone(),
             start_date,
-            LiteralRef::new_typed_literal("-300", xsd::G_YEAR),
-            graph_name,
+            Literal::new_typed_literal("-300", xsd::G_YEAR),
+            graph_name.clone(),
         ),
-        QuadRef::new(
-            paris,
+        Quad::new(
+            paris.clone(),
             url,
-            LiteralRef::new_typed_literal("https://www.paris.fr/", xsd::ANY_URI),
-            graph_name,
+            Literal::new_typed_literal("https://www.paris.fr/", xsd::ANY_URI),
+            graph_name.clone(),
         ),
-        QuadRef::new(
-            paris,
+        Quad::new(
+            paris.clone(),
             postal_code,
-            LiteralRef::new_simple_literal("75001"),
+            Literal::new_simple_literal("75001"),
             graph_name,
         ),
     ]
@@ -131,8 +131,8 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
+    for q in quads(GraphName::DefaultGraph) {
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -144,8 +144,8 @@ fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::new()?;
     let store = Store::open(&dir)?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
+    for q in quads(GraphName::DefaultGraph) {
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -162,8 +162,8 @@ fn test_load_graph_on_disk_with_options() -> Result<(), Box<dyn Error>> {
             .with_fd_reserve(64),
     )?;
     store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
+    for q in quads(GraphName::DefaultGraph) {
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -175,8 +175,8 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     loader.commit()?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
+    for q in quads(GraphName::DefaultGraph) {
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -190,8 +190,8 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     loader.commit()?;
-    for q in quads(GraphNameRef::DefaultGraph) {
-        assert!(store.contains(q)?);
+    for q in quads(GraphName::DefaultGraph) {
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -207,11 +207,11 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     )?;
     loader.commit()?;
     assert_eq!(store.len()?, 1);
-    assert!(store.contains(QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com"),
-        NamedNodeRef::new_unchecked("http://example.com"),
-        NamedNodeRef::new_unchecked("http://example.com"),
-        GraphNameRef::DefaultGraph
+    assert!(store.contains(&Quad::new(
+        NamedNode::new_unchecked("http://example.com"),
+        NamedNode::new_unchecked("http://example.com"),
+        NamedNode::new_unchecked("http://example.com"),
+        GraphName::DefaultGraph
     ))?);
     store.validate()?;
     Ok(())
@@ -254,10 +254,10 @@ fn test_bulk_load_rollback() -> Result<(), Box<dyn Error>> {
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_from_reader(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
-    for q in quads(NamedNodeRef::new_unchecked(
+    for q in quads(NamedNode::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
-        assert!(store.contains(q)?);
+        assert!(store.contains(&q)?);
     }
     store.validate()?;
     Ok(())
@@ -270,11 +270,11 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     loader.load_from_slice(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     loader.commit()?;
     let graph_name =
-        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
-    for q in quads(graph_name) {
-        assert!(store.contains(q)?);
+        NamedNode::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
+    for q in quads(graph_name.clone()) {
+        assert!(store.contains(&q)?);
     }
-    assert!(store.contains_named_graph(graph_name)?);
+    assert!(store.contains_named_graph(&graph_name.into())?);
     store.validate()?;
     Ok(())
 }
@@ -295,12 +295,12 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    for q in quads(GraphNameRef::DefaultGraph) {
+    for q in quads(GraphName::DefaultGraph) {
         store.insert(q)?;
     }
 
     let mut buffer = Vec::new();
-    store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
+    store.dump_graph_to_writer(&GraphName::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES
@@ -311,7 +311,7 @@ fn test_dump_graph() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    for q in quads(GraphNameRef::DefaultGraph) {
+    for q in quads(GraphName::DefaultGraph) {
         store.insert(q)?;
     }
 
@@ -325,20 +325,17 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new("http://example.com/s")?,
-        NamedNodeRef::new("http://example.com/p")?,
-        NamedNodeRef::new("http://example.com/o")?,
-        NamedNodeRef::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
+    let quad = Quad::new(
+        NamedNode::new("http://example.com/s")?,
+        NamedNode::new("http://example.com/p")?,
+        NamedNode::new("http://example.com/o")?,
+        NamedNode::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
     );
     let store = Store::new()?;
-    store.insert(quad)?;
+    store.insert(quad.clone())?;
     let iter = store.iter();
-    store.remove(quad)?;
-    assert_eq!(
-        iter.collect::<Result<Vec<_>, _>>()?,
-        vec![quad.into_owned()]
-    );
+    store.remove(&quad)?;
+    assert_eq!(iter.collect::<Result<Vec<_>, _>>()?, vec![quad]);
     store.validate()?;
     Ok(())
 }
@@ -346,37 +343,34 @@ fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_snapshot_isolation_iterator_on_disk() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new("http://example.com/s")?,
-        NamedNodeRef::new("http://example.com/p")?,
-        NamedNodeRef::new("http://example.com/o")?,
-        NamedNodeRef::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
+    let quad = Quad::new(
+        NamedNode::new("http://example.com/s")?,
+        NamedNode::new("http://example.com/p")?,
+        NamedNode::new("http://example.com/o")?,
+        NamedNode::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
     );
     let dir = TempDir::new()?;
     let store = Store::open(&dir)?;
-    store.insert(quad)?;
+    store.insert(quad.clone())?;
     let iter = store.iter();
-    store.remove(quad)?;
-    assert_eq!(
-        iter.collect::<Result<Vec<_>, _>>()?,
-        vec![quad.into_owned()]
-    );
+    store.remove(&quad)?;
+    assert_eq!(iter.collect::<Result<Vec<_>, _>>()?, vec![quad]);
     store.validate()?;
     Ok(())
 }
 
 #[test]
 fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
+    let quad = Quad::new(
+        NamedNode::new_unchecked("http://example.com/s"),
+        NamedNode::new_unchecked("http://example.com/p"),
+        NamedNode::new_unchecked("http://example.com/o"),
+        NamedNode::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
     let store = Store::new()?;
-    store.remove(quad)?;
+    store.remove(&quad)?;
     let mut loader = store.bulk_loader();
-    loader.load_quads([quad.into_owned()])?;
+    loader.load_quads([quad])?;
     loader.commit()?;
     assert_eq!(store.len()?, 1);
     Ok(())
@@ -385,17 +379,17 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_bulk_load_on_existing_delete_overrides_the_delete_on_disk() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
+    let quad = Quad::new(
+        NamedNode::new_unchecked("http://example.com/s"),
+        NamedNode::new_unchecked("http://example.com/p"),
+        NamedNode::new_unchecked("http://example.com/o"),
+        NamedNode::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
     let dir = TempDir::new()?;
     let store = Store::open(&dir)?;
-    store.remove(quad)?;
+    store.remove(&quad)?;
     let mut loader = store.bulk_loader();
-    loader.load_quads([quad.into_owned()])?;
+    loader.load_quads([quad])?;
     loader.commit()?;
     assert_eq!(store.len()?, 1);
     Ok(())
@@ -433,11 +427,11 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_backup() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        GraphNameRef::DefaultGraph,
+    let quad = Quad::new(
+        NamedNode::new_unchecked("http://example.com/s"),
+        NamedNode::new_unchecked("http://example.com/p"),
+        NamedNode::new_unchecked("http://example.com/o"),
+        GraphName::DefaultGraph,
     );
     let store_dir = TempDir::new()?;
     let backup_from_rw_dir = TempDir::new()?;
@@ -446,19 +440,19 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     remove_dir(&backup_from_ro_dir)?;
 
     let store = Store::open(&store_dir)?;
-    store.insert(quad)?;
+    store.insert(quad.clone())?;
     store.backup(&backup_from_rw_dir)?;
-    store.remove(quad)?;
-    assert!(!store.contains(quad)?);
+    store.remove(&quad)?;
+    assert!(!store.contains(&quad)?);
 
     let backup_from_rw = Store::open_read_only(&backup_from_rw_dir)?;
     backup_from_rw.validate()?;
-    assert!(backup_from_rw.contains(quad)?);
+    assert!(backup_from_rw.contains(&quad)?);
     backup_from_rw.backup(&backup_from_ro_dir)?;
 
     let backup_from_ro = Store::open_read_only(&backup_from_ro_dir)?;
     backup_from_ro.validate()?;
-    assert!(backup_from_ro.contains(quad)?);
+    assert!(backup_from_ro.contains(&quad)?);
 
     Ok(())
 }
@@ -494,15 +488,15 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     let _reset = DirSaver::new("tests/rocksdb_bc_data")?;
     for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_data")?;
-        for q in quads(GraphNameRef::DefaultGraph) {
-            assert!(store.contains(q)?);
+        for q in quads(GraphName::DefaultGraph) {
+            assert!(store.contains(&q)?);
         }
         let graph_name =
-            NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
-        for q in quads(graph_name) {
-            assert!(store.contains(q)?);
+            NamedNode::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
+        for q in quads(graph_name.clone()) {
+            assert!(store.contains(&q)?);
         }
-        assert!(store.contains_named_graph(graph_name)?);
+        assert!(store.contains_named_graph(&graph_name.clone().into())?);
         assert_eq!(
             vec![NamedOrBlankNode::from(graph_name)],
             store.named_graphs().collect::<Result<Vec<_>, _>>()?
@@ -522,30 +516,45 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
 fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed
     let _reset = DirSaver::new("tests/rocksdb_bc_rdf_star_data")?;
-    let s = NamedNodeRef::new_unchecked("http://example.com/s");
-    let p = NamedNodeRef::new_unchecked("http://example.com/p");
-    let o = NamedNodeRef::new_unchecked("http://example.com/o");
-    let g = NamedNodeRef::new_unchecked("http://example.com/g");
-    let bnode = BlankNodeRef::new_unchecked("f2fef82410957224105241225fd0a648");
+    let s = NamedNode::new_unchecked("http://example.com/s");
+    let p = NamedNode::new_unchecked("http://example.com/p");
+    let o = NamedNode::new_unchecked("http://example.com/o");
+    let g = NamedNode::new_unchecked("http://example.com/g");
+    let bnode = BlankNode::new_unchecked("f2fef82410957224105241225fd0a648");
     for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_rdf_star_data")?;
-        assert!(store.contains(QuadRef::new(s, p, o, g))?);
-        assert!(store.contains(QuadRef::new(s, p, o, GraphNameRef::DefaultGraph))?);
-        assert!(store.contains(QuadRef::new(bnode, p, o, g))?);
-        assert!(store.contains(QuadRef::new(bnode, p, o, GraphNameRef::DefaultGraph))?);
-        assert!(store.contains(QuadRef::new(s, p, bnode, g))?);
-        assert!(store.contains(QuadRef::new(s, p, bnode, GraphNameRef::DefaultGraph))?);
-        assert!(store.contains(QuadRef::new(
-            bnode,
-            rdf::REIFIES,
-            &Term::from(Triple::new(s, p, o)),
-            g
+        assert!(store.contains(&Quad::new(s.clone(), p.clone(), o.clone(), g.clone()))?);
+        assert!(store.contains(&Quad::new(
+            s.clone(),
+            p.clone(),
+            o.clone(),
+            GraphName::DefaultGraph
         ))?);
-        assert!(store.contains(QuadRef::new(
-            bnode,
+        assert!(store.contains(&Quad::new(bnode.clone(), p.clone(), o.clone(), g.clone()))?);
+        assert!(store.contains(&Quad::new(
+            bnode.clone(),
+            p.clone(),
+            o.clone(),
+            GraphName::DefaultGraph
+        ))?);
+        assert!(store.contains(&Quad::new(s.clone(), p.clone(), bnode.clone(), g.clone()))?);
+        assert!(store.contains(&Quad::new(
+            s.clone(),
+            p.clone(),
+            bnode.clone(),
+            GraphName::DefaultGraph
+        ))?);
+        assert!(store.contains(&Quad::new(
+            bnode.clone(),
             rdf::REIFIES,
-            &Term::from(Triple::new(s, p, o)),
-            GraphNameRef::DefaultGraph
+            Triple::new(s.clone(), p.clone(), o.clone()),
+            g.clone()
+        ))?);
+        assert!(store.contains(&Quad::new(
+            bnode.clone(),
+            rdf::REIFIES,
+            Triple::new(s.clone(), p.clone(), o.clone()),
+            GraphName::DefaultGraph
         ))?);
     }
     Ok(())
@@ -554,47 +563,47 @@ fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_read_only() -> Result<(), Box<dyn Error>> {
-    let s = NamedNodeRef::new_unchecked("http://example.com/s");
-    let p = NamedNodeRef::new_unchecked("http://example.com/p");
-    let first_quad = QuadRef::new(
-        s,
-        p,
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        GraphNameRef::DefaultGraph,
+    let s = NamedNode::new_unchecked("http://example.com/s");
+    let p = NamedNode::new_unchecked("http://example.com/p");
+    let first_quad = Quad::new(
+        s.clone(),
+        p.clone(),
+        NamedNode::new_unchecked("http://example.com/o"),
+        GraphName::DefaultGraph,
     );
-    let second_quad = QuadRef::new(
+    let second_quad = Quad::new(
         s,
         p,
-        NamedNodeRef::new_unchecked("http://example.com/o2"),
-        GraphNameRef::DefaultGraph,
+        NamedNode::new_unchecked("http://example.com/o2"),
+        GraphName::DefaultGraph,
     );
     let store_dir = TempDir::new()?;
 
     // We write to the store and close it
     {
         let read_write = Store::open(&store_dir)?;
-        read_write.insert(first_quad)?;
+        read_write.insert(first_quad.clone())?;
         read_write.flush()?;
     }
 
     // We open as read-only
     let read_only = Store::open_read_only(&store_dir)?;
-    assert!(read_only.contains(first_quad)?);
+    assert!(read_only.contains(&first_quad)?);
     assert_eq!(
         read_only.iter().collect::<Result<Vec<_>, _>>()?,
-        vec![first_quad.into_owned()]
+        vec![first_quad]
     );
     read_only.validate()?;
 
     // We open as read-write again
     let read_write = Store::open(&store_dir)?;
-    read_write.insert(second_quad)?;
+    read_write.insert(second_quad.clone())?;
     read_write.flush()?;
     read_write.optimize()?; // Makes sure it's well flushed
 
     // The new quad is in the read-write instance but not the read-only instance
-    assert!(read_write.contains(second_quad)?);
-    assert!(!read_only.contains(second_quad)?);
+    assert!(read_write.contains(&second_quad)?);
+    assert!(!read_only.contains(&second_quad)?);
     read_only.validate()?;
 
     Ok(())
@@ -617,20 +626,17 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
 fn test_read_your_own_write_transaction() -> Result<(), Box<dyn Error>> {
     let store_dir = TempDir::new()?;
 
-    let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        GraphNameRef::DefaultGraph,
+    let quad = Quad::new(
+        NamedNode::new_unchecked("http://example.com/s"),
+        NamedNode::new_unchecked("http://example.com/p"),
+        NamedNode::new_unchecked("http://example.com/o"),
+        GraphName::DefaultGraph,
     );
 
     let store = Store::open(&store_dir)?;
     let mut transaction = store.start_transaction()?;
-    transaction.insert(quad);
-    assert_eq!(
-        transaction.iter().collect::<Result<Vec<_>, _>>()?,
-        [quad.into_owned()]
-    );
+    transaction.insert(quad.clone());
+    assert_eq!(transaction.iter().collect::<Result<Vec<_>, _>>()?, [quad]);
 
     Ok(())
 }

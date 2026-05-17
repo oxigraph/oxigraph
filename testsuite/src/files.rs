@@ -50,7 +50,7 @@ pub fn load_to_graph(
     for t in parser {
         match t {
             Ok(t) => {
-                graph.insert(&t.into());
+                graph.insert(t);
             }
             Err(e) => {
                 if !ignore_errors {
@@ -82,7 +82,7 @@ pub fn load_to_dataset(
     for q in parser.for_reader(read_file(url)?) {
         match q {
             Ok(q) => {
-                dataset.insert(&q);
+                dataset.insert(q);
             }
             Err(e) => {
                 if !ignore_errors {
@@ -115,7 +115,7 @@ pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
     let mut quads = Vec::new();
     for q in N3Parser::new()
         .with_base_iri(url)?
-        .with_prefix("", format!("{url}#"))?
+        .with_prefix("", &format!("{url}#"))?
         .for_reader(read_file(url)?)
     {
         match q {

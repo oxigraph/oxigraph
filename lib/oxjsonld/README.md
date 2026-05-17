@@ -19,7 +19,7 @@ The parser supports two modes:
 Usage example counting the number of people in a JSON-LD file:
 
 ```rust
-use oxrdf::{NamedNodeRef, vocab::rdf};
+use oxrdf::{NamedNode, vocab::rdf};
 use oxjsonld::JsonLdParser;
 
 let file = br#"{
@@ -37,11 +37,11 @@ let file = br#"{
     ]
 }"#;
 
-let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
+let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
 let mut count = 0;
 for triple in JsonLdParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
-    if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    if triple.predicate == rdf::TYPE && triple.object == schema_person {
         count += 1;
     }
 }

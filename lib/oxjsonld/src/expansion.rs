@@ -7,6 +7,7 @@ use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;
+use oxrdf::OxString;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
@@ -18,16 +19,16 @@ pub enum JsonLdEvent {
     StartObject,
     EndObject,
     StartProperty {
-        name: String,
+        name: OxString,
         reverse: bool,
     },
     EndProperty,
-    Id(String),
-    Type(String),
+    Id(OxString),
+    Type(OxString),
     Value {
         value: JsonLdValue,
-        r#type: Option<String>,
-        language: Option<String>,
+        r#type: Option<OxString>,
+        language: Option<OxString>,
         direction: Option<&'static str>,
     },
     Json(Vec<JsonEvent<'static>>),
@@ -42,56 +43,56 @@ pub enum JsonLdEvent {
 }
 
 pub enum JsonLdValue {
-    String(String),
-    Number(String),
+    String(OxString),
+    Number(OxString),
     Boolean(bool),
 }
 
 enum JsonLdExpansionState {
     Element {
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         is_array: bool,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     ObjectOrContainerStart {
-        buffer: Vec<(String, Vec<JsonEvent<'static>>)>,
+        buffer: Vec<(OxString, Vec<JsonEvent<'static>>)>,
         depth: usize,
-        current_key: Option<String>,
-        active_property: Option<String>,
+        current_key: Option<OxString>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     ObjectOrContainerStartStreaming {
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     Context {
         buffer: Vec<JsonEvent<'static>>,
         depth: usize,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     ObjectStartIsSingleIdOrValue {
         buffer: Vec<JsonEvent<'static>>,
         depth: usize,
         seen_type: bool,
         seen_id: bool,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         reverse: bool,
         in_included: bool,
@@ -99,36 +100,36 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
     },
     ObjectStart {
-        types: Vec<String>,
-        id: Option<String>,
+        types: Vec<OxString>,
+        id: Option<OxString>,
         seen_id: bool,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     ObjectType {
-        types: Vec<String>,
-        new_types: Vec<String>,
-        id: Option<String>,
+        types: Vec<OxString>,
+        new_types: Vec<OxString>,
+        id: Option<OxString>,
         is_array: bool,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         from_start: bool,
         reverse: bool,
         in_included: bool,
         nesting: usize,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     ObjectId {
         active_context: Arc<JsonLdContext>,
-        types: Vec<String>,
-        id: Option<String>,
+        types: Vec<OxString>,
+        id: Option<OxString>,
         from_start: bool,
         reverse: bool,
         nesting: usize,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     Object {
         active_context: Arc<JsonLdContext>,
@@ -145,35 +146,35 @@ enum JsonLdExpansionState {
     },
     Value {
         active_context: Arc<JsonLdContext>,
-        r#type: Option<String>,
+        r#type: Option<OxString>,
         value: Vec<JsonEvent<'static>>,
-        language: Option<String>,
+        language: Option<OxString>,
         direction: Option<&'static str>,
     },
     ValueValue {
         active_context: Arc<JsonLdContext>,
-        r#type: Option<String>,
+        r#type: Option<OxString>,
         value: Vec<JsonEvent<'static>>,
-        language: Option<String>,
+        language: Option<OxString>,
         direction: Option<&'static str>,
         nesting: usize,
     },
     ValueLanguage {
         active_context: Arc<JsonLdContext>,
-        r#type: Option<String>,
+        r#type: Option<OxString>,
         value: Vec<JsonEvent<'static>>,
         direction: Option<&'static str>,
     },
     ValueDirection {
         active_context: Arc<JsonLdContext>,
-        r#type: Option<String>,
+        r#type: Option<OxString>,
         value: Vec<JsonEvent<'static>>,
-        language: Option<String>,
+        language: Option<OxString>,
     },
     ValueType {
         active_context: Arc<JsonLdContext>,
         value: Vec<JsonEvent<'static>>,
-        language: Option<String>,
+        language: Option<OxString>,
         direction: Option<&'static str>,
     },
     Index,
@@ -187,20 +188,20 @@ enum JsonLdExpansionState {
     EndOfGraphContainer,
     IndexContainer {
         active_context: Arc<JsonLdContext>,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         container: &'static [&'static str],
     },
     IndexedGraphContainerElement {
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
         is_array: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
 
     IndexedGraphContainerElementWaitingForGraph {
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
     },
     LanguageContainer {
         active_context: Arc<JsonLdContext>,
@@ -208,7 +209,7 @@ enum JsonLdExpansionState {
     },
     LanguageContainerValue {
         active_context: Arc<JsonLdContext>,
-        language: String,
+        language: OxString,
         direction: Option<&'static str>,
         is_array: bool,
     },
@@ -235,7 +236,7 @@ pub struct JsonLdExpansionConverter {
     is_end: bool,
     streaming: bool,
     lenient: bool,
-    base_url: Option<Iri<String>>,
+    base_url: Option<Iri<OxString>>,
     context_processor: JsonLdContextProcessor,
     root_context: Arc<JsonLdContext>,
 }
@@ -243,7 +244,7 @@ pub struct JsonLdExpansionConverter {
 #[expect(clippy::expect_used)]
 impl JsonLdExpansionConverter {
     pub fn new(
-        base_url: Option<Iri<String>>,
+        base_url: Option<Iri<OxString>>,
         streaming: bool,
         lenient: bool,
         processing_mode: JsonLdProcessingMode,
@@ -544,8 +545,9 @@ impl JsonLdExpansionConverter {
                     }
                     JsonEvent::ObjectKey(key) => {
                         if depth == 1 {
-                            buffer.push((key.clone().into(), Vec::new()));
-                            current_key = Some(key.into());
+                            let key = OxString::new_owned(&key);
+                            buffer.push((key.clone(), Vec::new()));
+                            current_key = Some(key);
                         } else {
                             buffer
                                 .last_mut()
@@ -585,8 +587,7 @@ impl JsonLdExpansionConverter {
                     let mut graph_data = Vec::new();
                     let mut other_data = Vec::with_capacity(buffer.len());
                     for (key, value) in buffer {
-                        let expanded =
-                            self.expand_iri(&active_context, key.as_str().into(), false, true);
+                        let expanded = self.expand_iri(&active_context, key.clone(), false, true);
                         match expanded.as_deref() {
                             Some("@context") => errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@context is defined twice",
@@ -629,7 +630,11 @@ impl JsonLdExpansionConverter {
                         .chain(other_data)
                         .chain(graph_data)
                     {
-                        self.convert_event(JsonEvent::ObjectKey(key.into()), results, errors);
+                        self.convert_event(
+                            JsonEvent::ObjectKey(key.as_str().into()),
+                            results,
+                            errors,
+                        );
                         for event in value {
                             self.convert_event(event, results, errors);
                         }
@@ -661,7 +666,7 @@ impl JsonLdExpansionConverter {
                 let event = match event {
                     JsonEvent::ObjectKey(key) => {
                         match self
-                            .expand_iri(&active_context, key.as_ref().into(), false, true)
+                            .expand_iri(&active_context, OxString::new_owned(&key), false, true)
                             .as_deref()
                         {
                             Some("@context") => {
@@ -858,7 +863,7 @@ impl JsonLdExpansionConverter {
                 match event {
                     JsonEvent::ObjectKey(key) if depth == 1 => {
                         if let Some(iri) =
-                            self.expand_iri(&active_context, key.as_ref().into(), false, true)
+                            self.expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         {
                             match iri.as_ref() {
                                 "@index" | "@context" => (),
@@ -968,7 +973,7 @@ impl JsonLdExpansionConverter {
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) =
-                        self.expand_iri(&active_context, key.as_ref().into(), false, true)
+                        self.expand_iri(&active_context, OxString::new_owned(&key), false, true)
                     {
                         match iri.as_ref() {
                             "@index" => {
@@ -1039,7 +1044,7 @@ impl JsonLdExpansionConverter {
                                         in_included,
                                     });
                                     self.convert_event(
-                                        JsonEvent::ObjectKey(k.into()),
+                                        JsonEvent::ObjectKey(k.as_str().into()),
                                         results,
                                         errors,
                                     );
@@ -1107,13 +1112,10 @@ impl JsonLdExpansionConverter {
                                         results.push(JsonLdEvent::StartObject);
                                         let has_emitted_id = id.is_some();
                                         if let Some(id) = id {
-                                            if let Some(id) = self.expand_iri(
-                                                &active_context,
-                                                id.into(),
-                                                true,
-                                                false,
-                                            ) {
-                                                results.push(JsonLdEvent::Id(id.into()));
+                                            if let Some(id) =
+                                                self.expand_iri(&active_context, id, true, false)
+                                            {
+                                                results.push(JsonLdEvent::Id(id));
                                             }
                                         }
                                         results.extend(types.into_iter().map(JsonLdEvent::Type));
@@ -1160,15 +1162,19 @@ impl JsonLdExpansionConverter {
                             reverse,
                             in_included,
                         });
-                        self.convert_event(JsonEvent::ObjectKey(k.into()), results, errors);
+                        self.convert_event(
+                            JsonEvent::ObjectKey(k.as_str().into()),
+                            results,
+                            errors,
+                        );
                         self.convert_event(v, results, errors);
                         self.convert_event(JsonEvent::EndObject, results, errors);
                         return;
                     }
                     if let Some(id) = id {
-                        if let Some(id) = self.expand_iri(&active_context, id.into(), true, false) {
+                        if let Some(id) = self.expand_iri(&active_context, id, true, false) {
                             results.push(JsonLdEvent::StartObject);
-                            results.push(JsonLdEvent::Id(id.into()));
+                            results.push(JsonLdEvent::Id(id));
                             results.extend(types.into_iter().map(JsonLdEvent::Type));
                             results.push(JsonLdEvent::EndObject);
                         }
@@ -1244,7 +1250,7 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::String(value) => {
-                        new_types.push(value.into());
+                        new_types.push(OxString::new_owned(&value));
                         if is_array {
                             self.state.push(JsonLdExpansionState::ObjectType {
                                 types,
@@ -1351,7 +1357,7 @@ impl JsonLdExpansionConverter {
                     if from_start {
                         self.state.push(JsonLdExpansionState::ObjectStart {
                             types,
-                            id: Some(new_id.into()),
+                            id: Some(OxString::new_owned(&new_id)),
                             seen_id: true,
                             active_property: None,
                             active_context,
@@ -1360,9 +1366,13 @@ impl JsonLdExpansionConverter {
                             extra_node,
                         });
                     } else {
-                        if let Some(new_id) = self.expand_iri(&active_context, new_id, true, false)
-                        {
-                            results.push(JsonLdEvent::Id(new_id.into()));
+                        if let Some(new_id) = self.expand_iri(
+                            &active_context,
+                            OxString::new_owned(&new_id),
+                            true,
+                            false,
+                        ) {
+                            results.push(JsonLdEvent::Id(new_id));
                         }
                         self.state.push(JsonLdExpansionState::Object {
                             active_context,
@@ -1417,7 +1427,7 @@ impl JsonLdExpansionConverter {
                     }
                     JsonEvent::ObjectKey(key) => {
                         if let Some(iri) =
-                            self.expand_iri(&active_context, key.as_ref().into(), false, true)
+                            self.expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         {
                             match iri.as_ref() {
                                 "@id" => {
@@ -1489,7 +1499,7 @@ impl JsonLdExpansionConverter {
                                     self.state.push(JsonLdExpansionState::ObjectType {
                                         types: Vec::new(),
                                         new_types: Vec::new(),
-                                        id: has_emitted_id.then(String::new),
+                                        id: has_emitted_id.then(OxString::default),
                                         is_array: false,
                                         active_property: None,
                                         active_context,
@@ -1608,10 +1618,7 @@ impl JsonLdExpansionConverter {
                                                     == Some("@json"),
                                             )
                                         });
-                                    results.push(JsonLdEvent::StartProperty {
-                                        name: iri.into(),
-                                        reverse,
-                                    });
+                                    results.push(JsonLdEvent::StartProperty { name: iri, reverse });
                                     self.state.push(JsonLdExpansionState::Object {
                                         active_context: Arc::clone(&active_context),
                                         in_property: true,
@@ -1625,7 +1632,7 @@ impl JsonLdExpansionConverter {
                                         }
                                     } else {
                                         JsonLdExpansionState::Element {
-                                            active_property: Some(key.clone().into()),
+                                            active_property: Some(OxString::new_owned(&key)),
                                             active_context,
                                             is_array: false,
                                             container,
@@ -1684,7 +1691,7 @@ impl JsonLdExpansionConverter {
                     JsonEvent::EndObject => (),
                     JsonEvent::ObjectKey(key) => {
                         if let Some(iri) =
-                            self.expand_iri(&active_context, key.as_ref().into(), false, true)
+                            self.expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         {
                             if has_keyword_form(&iri) {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1710,16 +1717,13 @@ impl JsonLdExpansionConverter {
                                         )
                                     });
                                 let reverse = !reverse; // We are in @reverse
-                                results.push(JsonLdEvent::StartProperty {
-                                    name: iri.into(),
-                                    reverse,
-                                });
+                                results.push(JsonLdEvent::StartProperty { name: iri, reverse });
                                 self.state.push(JsonLdExpansionState::Reverse {
                                     active_context: Arc::clone(&active_context),
                                     in_property: true,
                                 });
                                 self.state.push(JsonLdExpansionState::Element {
-                                    active_property: Some(key.clone().into()),
+                                    active_property: Some(OxString::new_owned(&key)),
                                     active_context,
                                     is_array: false,
                                     container,
@@ -1756,7 +1760,9 @@ impl JsonLdExpansionConverter {
             } => {
                 match event {
                     JsonEvent::ObjectKey(key) => {
-                        if let Some(iri) = self.expand_iri(&active_context, key, false, true) {
+                        if let Some(iri) =
+                            self.expand_iri(&active_context, OxString::new_owned(&key), false, true)
+                        {
                             match iri.as_ref() {
                                 "@value" => {
                                     if value.is_empty() {
@@ -1982,8 +1988,12 @@ impl JsonLdExpansionConverter {
                             return;
                         }
                         let value = match value.into_iter().next().unwrap() {
-                            JsonEvent::String(value) => JsonLdValue::String(value.into_owned()),
-                            JsonEvent::Number(value) => JsonLdValue::Number(value.into_owned()),
+                            JsonEvent::String(value) => {
+                                JsonLdValue::String(OxString::new_owned(&value))
+                            }
+                            JsonEvent::Number(value) => {
+                                JsonLdValue::Number(OxString::new_owned(&value))
+                            }
                             JsonEvent::Boolean(value) => JsonLdValue::Boolean(value),
                             JsonEvent::Null => return,
                             _ => unreachable!(),
@@ -2062,7 +2072,7 @@ impl JsonLdExpansionConverter {
                         active_context,
                         r#type,
                         value,
-                        language: Some(language.into()),
+                        language: Some(OxString::new_owned(&language)),
                         direction,
                     })
                 } else {
@@ -2130,10 +2140,11 @@ impl JsonLdExpansionConverter {
                 direction,
             } => {
                 if let JsonEvent::String(t) = event {
-                    let r#type = self.expand_iri(&active_context, t, true, true);
+                    let r#type =
+                        self.expand_iri(&active_context, OxString::new_owned(&t), true, true);
                     self.state.push(JsonLdExpansionState::Value {
                         active_context,
-                        r#type: r#type.map(Into::into),
+                        r#type,
                         value,
                         language,
                         direction,
@@ -2203,9 +2214,12 @@ impl JsonLdExpansionConverter {
                                 end_event,
                                 active_context: Arc::clone(&active_context),
                             });
-                            if let Some(iri) =
-                                self.expand_iri(&active_context, key.as_ref().into(), false, true)
-                            {
+                            if let Some(iri) = self.expand_iri(
+                                &active_context,
+                                OxString::new_owned(&key),
+                                false,
+                                true,
+                            ) {
                                 if iri == "@index" {
                                     self.state.push(JsonLdExpansionState::Index);
                                 } else {
@@ -2248,7 +2262,7 @@ impl JsonLdExpansionConverter {
                         map_context = Arc::clone(parent_context);
                     }
                     let extra_node = if self
-                        .expand_iri(&active_context, key.as_ref().into(), false, true)
+                        .expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         .is_none_or(|k| k != "@none")
                     {
                         if container.contains(&"@id") {
@@ -2371,7 +2385,7 @@ impl JsonLdExpansionConverter {
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if self
-                        .expand_iri(&active_context, key.as_ref().into(), false, true)
+                        .expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         .as_deref()
                         != Some("@graph")
                     {
@@ -2433,7 +2447,7 @@ impl JsonLdExpansionConverter {
                     self.state
                         .push(JsonLdExpansionState::LanguageContainerValue {
                             active_context,
-                            language: language.into(),
+                            language: OxString::new_owned(&language),
                             is_array: false,
                             direction,
                         })
@@ -2468,15 +2482,11 @@ impl JsonLdExpansionConverter {
                             });
                     }
                     results.push(JsonLdEvent::Value {
-                        value: JsonLdValue::String(value.into()),
+                        value: JsonLdValue::String(OxString::new_owned(&value)),
                         r#type: None,
                         language: (language != "@none"
-                            && self.expand_iri(
-                                &active_context,
-                                language.as_str().into(),
-                                false,
-                                false,
-                            ) != Some("@none".into()))
+                            && self.expand_iri(&active_context, language.clone(), false, false)
+                                != Some("@none".into()))
                         .then_some(language),
                         direction,
                     })
@@ -2684,13 +2694,13 @@ impl JsonLdExpansionConverter {
     /// `local context` is always `null`
     ///
     /// Warning: take care of synchronizing this implementation with the full one in [`JsonLdContextProcessor`].
-    fn expand_iri<'a>(
+    fn expand_iri(
         &self,
         active_context: &JsonLdContext,
-        value: Cow<'a, str>,
+        value: OxString,
         document_relative: bool,
         vocab: bool,
-    ) -> Option<Cow<'a, str>> {
+    ) -> Option<OxString> {
         if has_keyword_form(&value) {
             // 1)
             return is_keyword(&value).then_some(value);
@@ -2700,11 +2710,11 @@ impl JsonLdExpansionConverter {
                 let iri_mapping = iri_mapping.as_ref()?;
                 // 4)
                 if is_keyword(iri_mapping) {
-                    return Some(iri_mapping.clone().into());
+                    return Some(iri_mapping.clone());
                 }
                 // 5)
                 if vocab {
-                    return Some(iri_mapping.clone().into());
+                    return Some(iri_mapping.clone());
                 }
             }
         }
@@ -2718,7 +2728,7 @@ impl JsonLdExpansionConverter {
             if let Some(term_definition) = active_context.term_definitions.get(prefix) {
                 if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
                     if term_definition.prefix_flag {
-                        return Some(format!("{iri_mapping}{suffix}").into());
+                        return Some(OxString::concat([iri_mapping, suffix]));
                     }
                 }
             }
@@ -2730,7 +2740,7 @@ impl JsonLdExpansionConverter {
         // 7)
         if vocab {
             if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                return Some(format!("{vocabulary_mapping}{value}").into());
+                return Some(OxString::concat([vocabulary_mapping, &value]));
             }
         }
         // 8)
@@ -2739,7 +2749,7 @@ impl JsonLdExpansionConverter {
                 if self.lenient {
                     return Some(base_iri.resolve_unchecked(&value).into_inner().into());
                 } else if let Ok(value) = base_iri.resolve(&value) {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
+                    return Some(value.into_inner().into());
                 }
             }
         }
@@ -2750,9 +2760,9 @@ impl JsonLdExpansionConverter {
     fn map_types(
         &self,
         mut active_context: Arc<JsonLdContext>,
-        mut types: Vec<String>,
+        mut types: Vec<OxString>,
         errors: &mut Vec<JsonLdSyntaxError>,
-    ) -> (Arc<JsonLdContext>, Vec<String>) {
+    ) -> (Arc<JsonLdContext>, Vec<OxString>) {
         let typed_scoped_context = Arc::clone(&active_context);
         types.sort();
         let types_to_emit = types
@@ -2766,8 +2776,8 @@ impl JsonLdExpansionConverter {
                 }
                 // 13.4.4.4)
                 Some(
-                    self.expand_iri(&typed_scoped_context, value.into(), true, true)?
-                        .into(),
+                    self.expand_iri(&typed_scoped_context, value.clone(), true, true)?
+                        .to_owned(),
                 )
             })
             .collect();
@@ -2779,12 +2789,12 @@ impl JsonLdExpansionConverter {
         &mut self,
         value: JsonEvent<'static>,
         active_context: Arc<JsonLdContext>,
-        active_property: Option<String>,
+        active_property: Option<OxString>,
         is_array: bool,
         container: &'static [&'static str],
         reverse: bool,
         in_included: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
@@ -2840,18 +2850,21 @@ impl JsonLdExpansionConverter {
     /// [Value Expansion](https://www.w3.org/TR/json-ld-api/#value-expansion)
     fn expand_value(
         &mut self,
-        active_property: String,
+        active_property: OxString,
         active_context: Arc<JsonLdContext>,
         value: JsonEvent<'static>,
         reverse: bool,
-        extra_node: Option<(String, JsonEvent<'static>)>,
+        extra_node: Option<(OxString, JsonEvent<'static>)>,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         let mut r#type = None;
         let mut language = None;
         let mut direction = None;
-        if let Some(term_definition) = active_context.term_definitions.get(&active_property) {
+        if let Some(term_definition) = active_context
+            .term_definitions
+            .get(active_property.as_ref())
+        {
             if let Some(type_mapping) = &term_definition.type_mapping {
                 match type_mapping.as_ref() {
                     // 1)
@@ -2859,7 +2872,7 @@ impl JsonLdExpansionConverter {
                         if let JsonEvent::String(value) = value {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types: Vec::new(),
-                                id: Some(value.into_owned()),
+                                id: Some(OxString::new_owned(&value)),
                                 seen_id: false,
                                 active_property: Some(active_property),
                                 active_context,
@@ -2877,8 +2890,13 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types: Vec::new(),
                                 id: self
-                                    .expand_iri(&active_context, value, true, true)
-                                    .map(Cow::into_owned),
+                                    .expand_iri(
+                                        &active_context,
+                                        OxString::new_owned(&value),
+                                        true,
+                                        true,
+                                    )
+                                    .map(|v| v.to_owned()),
                                 seen_id: false,
                                 active_property: Some(active_property),
                                 active_context: active_context
@@ -2931,7 +2949,7 @@ impl JsonLdExpansionConverter {
             direction,
         });
         if let Some((k, v)) = extra_node {
-            self.convert_event(JsonEvent::ObjectKey(k.into()), results, errors);
+            self.convert_event(JsonEvent::ObjectKey(k.as_ref().into()), results, errors);
             self.convert_event(v, results, errors);
         }
         self.convert_event(JsonEvent::EndObject, results, errors);

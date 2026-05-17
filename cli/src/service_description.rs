@@ -1,53 +1,55 @@
 use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::vocab::rdf;
-use oxigraph::model::{BlankNode, NamedNodeRef, TripleRef};
+use oxigraph::model::{BlankNode, NamedNode, OxString, Triple};
 use oxigraph::sparql::results::QueryResultsFormat;
 #[cfg(feature = "geosparql")]
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 
 mod sd {
-    use oxigraph::model::NamedNodeRef;
+    use oxigraph::model::NamedNode;
 
-    pub const SERVICE: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#Service");
+    pub const SERVICE: NamedNode =
+        NamedNode::new_const_unchecked("http://www.w3.org/ns/sparql-service-description#Service");
 
-    pub const DEFAULT_ENTAILMENT_REGIME: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const DEFAULT_ENTAILMENT_REGIME: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#defaultEntailmentRegime",
     );
-    pub const ENDPOINT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#endpoint");
+    pub const ENDPOINT: NamedNode =
+        NamedNode::new_const_unchecked("http://www.w3.org/ns/sparql-service-description#endpoint");
     #[cfg(feature = "geosparql")]
-    pub const EXTENSION_FUNCTION: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const EXTENSION_FUNCTION: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#extensionFunction",
     );
-    pub const FEATURE: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#feature");
-    pub const RESULT_FORMAT: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#resultFormat");
-    pub const SUPPORTED_LANGUAGE: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const FEATURE: NamedNode =
+        NamedNode::new_const_unchecked("http://www.w3.org/ns/sparql-service-description#feature");
+    pub const RESULT_FORMAT: NamedNode = NamedNode::new_const_unchecked(
+        "http://www.w3.org/ns/sparql-service-description#resultFormat",
+    );
+    pub const SUPPORTED_LANGUAGE: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#supportedLanguage",
     );
 
-    pub const EMPTY_GRAPHS: NamedNodeRef<'_> =
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#EmptyGraphs");
+    pub const EMPTY_GRAPHS: NamedNode = NamedNode::new_const_unchecked(
+        "http://www.w3.org/ns/sparql-service-description#EmptyGraphs",
+    );
     #[cfg(any(
         feature = "native-tls",
         feature = "rustls-native",
         feature = "rustls-webpki"
     ))]
-    pub const BASIC_FEDERATED_QUERY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const BASIC_FEDERATED_QUERY: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#BasicFederatedQuery",
     );
-    pub const SPARQL_10_QUERY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const SPARQL_10_QUERY: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#SPARQL10Query",
     );
-    pub const SPARQL_11_QUERY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const SPARQL_11_QUERY: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#SPARQL11Query",
     );
-    pub const SPARQL_11_UPDATE: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const SPARQL_11_UPDATE: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#SPARQL11Update",
     );
-    pub const UNION_DEFAULT_GRAPH: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+    pub const UNION_DEFAULT_GRAPH: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#UnionDefaultGraph",
     );
 }
@@ -62,22 +64,40 @@ pub fn generate_service_description(
     format: RdfFormat,
     kind: EndpointKind,
     union_default_graph: bool,
-    endpoint_base_url: &str,
+    endpoint_base_url: OxString,
 ) -> Vec<u8> {
+    let mut serializer = RdfSerializer::from_format(format)
+        .with_prefix("sd", "http://www.w3.org/ns/sparql-service-description#")
+        .unwrap()
+        .for_writer(Vec::new());
+    for t in
+        generate_service_description_graph(format, kind, union_default_graph, endpoint_base_url)
+    {
+        serializer.serialize_triple(&t).unwrap();
+    }
+    serializer.finish().unwrap()
+}
+
+fn generate_service_description_graph(
+    format: RdfFormat,
+    kind: EndpointKind,
+    union_default_graph: bool,
+    endpoint_base_url: OxString,
+) -> Vec<Triple> {
     let mut graph = Vec::new();
     let root = BlankNode::default();
-    graph.push(TripleRef::new(&root, rdf::TYPE, sd::SERVICE));
-    graph.push(TripleRef::new(
-        &root,
+    graph.push(Triple::new(root.clone(), rdf::TYPE, sd::SERVICE));
+    graph.push(Triple::new(
+        root.clone(),
         sd::ENDPOINT,
-        NamedNodeRef::new_unchecked(match format {
+        NamedNode::new_unchecked(match format {
             RdfFormat::Turtle
             | RdfFormat::TriG
             | RdfFormat::N3
             | RdfFormat::JsonLd { .. }
             | RdfFormat::RdfXml => {
                 // The document base URL is also the endpoint URL, so we can just use it
-                ""
+                OxString::default()
             }
             RdfFormat::NTriples | RdfFormat::NQuads | _ => {
                 // We need to return an absolute URL, we use the request target url
@@ -86,20 +106,20 @@ pub fn generate_service_description(
         }),
     ));
     if kind.query {
-        graph.push(TripleRef::new(
-            &root,
+        graph.push(Triple::new(
+            root.clone(),
             sd::SUPPORTED_LANGUAGE,
             sd::SPARQL_10_QUERY,
         ));
-        graph.push(TripleRef::new(
-            &root,
+        graph.push(Triple::new(
+            root.clone(),
             sd::SUPPORTED_LANGUAGE,
             sd::SPARQL_11_QUERY,
         ));
     }
     if kind.update {
-        graph.push(TripleRef::new(
-            &root,
+        graph.push(Triple::new(
+            root.clone(),
             sd::SUPPORTED_LANGUAGE,
             sd::SPARQL_11_UPDATE,
         ));
@@ -111,10 +131,10 @@ pub fn generate_service_description(
             QueryResultsFormat::Csv,
             QueryResultsFormat::Tsv,
         ] {
-            graph.push(TripleRef::new(
-                &root,
+            graph.push(Triple::new(
+                root.clone(),
                 sd::RESULT_FORMAT,
-                NamedNodeRef::new_unchecked(format.iri()),
+                NamedNode::new_const_unchecked(format.iri()),
             ));
         }
         for format in [
@@ -125,10 +145,10 @@ pub fn generate_service_description(
             RdfFormat::N3,
             RdfFormat::RdfXml,
         ] {
-            graph.push(TripleRef::new(
-                &root,
+            graph.push(Triple::new(
+                root.clone(),
                 sd::RESULT_FORMAT,
-                NamedNodeRef::new_unchecked(format.iri()),
+                NamedNode::new_const_unchecked(format.iri()),
             ));
         }
     }
@@ -138,32 +158,32 @@ pub fn generate_service_description(
         feature = "rustls-webpki"
     ))]
     if kind.query {
-        graph.push(TripleRef::new(
-            &root,
+        graph.push(Triple::new(
+            root.clone(),
             sd::FEATURE,
             sd::BASIC_FEDERATED_QUERY,
         ));
     }
-    graph.push(TripleRef::new(&root, sd::FEATURE, sd::EMPTY_GRAPHS));
+    graph.push(Triple::new(root.clone(), sd::FEATURE, sd::EMPTY_GRAPHS));
     if union_default_graph {
-        graph.push(TripleRef::new(&root, sd::FEATURE, sd::UNION_DEFAULT_GRAPH));
+        graph.push(Triple::new(
+            root.clone(),
+            sd::FEATURE,
+            sd::UNION_DEFAULT_GRAPH,
+        ));
     }
-    graph.push(TripleRef::new(
-        &root,
+    graph.push(Triple::new(
+        root.clone(),
         sd::DEFAULT_ENTAILMENT_REGIME,
-        NamedNodeRef::new_unchecked("http://www.w3.org/ns/entailment/Simple"),
+        NamedNode::new_const_unchecked("http://www.w3.org/ns/entailment/Simple"),
     ));
     #[cfg(feature = "geosparql")]
     for (function_name, _) in GEOSPARQL_EXTENSION_FUNCTIONS {
-        graph.push(TripleRef::new(&root, sd::EXTENSION_FUNCTION, function_name));
+        graph.push(Triple::new(
+            root.clone(),
+            sd::EXTENSION_FUNCTION,
+            function_name,
+        ));
     }
-
-    let mut serializer = RdfSerializer::from_format(format)
-        .with_prefix("sd", "http://www.w3.org/ns/sparql-service-description#")
-        .unwrap()
-        .for_writer(Vec::new());
-    for t in graph {
-        serializer.serialize_triple(t).unwrap();
-    }
-    serializer.finish().unwrap()
+    graph
 }

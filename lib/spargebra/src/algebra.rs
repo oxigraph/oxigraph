@@ -1,7 +1,7 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
 use crate::term::*;
-use oxrdf::LiteralRef;
+use oxrdf::OxString;
 use std::fmt;
 use std::fmt::Write as _;
 
@@ -1521,7 +1521,7 @@ impl AggregateExpression {
                     f.write_str("distinct ")?;
                 }
                 expr.fmt_sse(f)?;
-                write!(f, " {})", LiteralRef::new_simple_literal(separator))
+                write!(f, " {})", Literal::new_simple_literal(separator.clone()))
             }
             Self::FunctionCall {
                 name,
@@ -1570,14 +1570,14 @@ impl fmt::Display for AggregateExpression {
                         f,
                         "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
                         expr,
-                        LiteralRef::new_simple_literal(separator)
+                        Literal::new_simple_literal(separator.clone())
                     )
                 } else {
                     write!(
                         f,
                         "GROUP_CONCAT({}; SEPARATOR = {})",
                         expr,
-                        LiteralRef::new_simple_literal(separator)
+                        Literal::new_simple_literal(separator.clone())
                     )
                 }
             }
@@ -1611,7 +1611,7 @@ pub enum AggregateFunction {
     Max,
     /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
     GroupConcat {
-        separator: Option<String>,
+        separator: Option<OxString>,
     },
     /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
     Sample,

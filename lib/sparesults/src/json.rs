@@ -60,7 +60,7 @@ impl<W: Write> WriterJsonSolutionsSerializer<W> {
 
     pub fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         let mut buffer = Vec::with_capacity(48);
         self.inner.write(&mut buffer, solution);
@@ -103,7 +103,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonSolutionsSerializer<W> {
 
     pub async fn serialize<'a>(
         &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> io::Result<()> {
         let mut buffer = Vec::with_capacity(48);
         self.inner.write(&mut buffer, solution);
@@ -153,7 +153,7 @@ impl InnerJsonSolutionsSerializer {
     fn write<'a>(
         &self,
         output: &mut Vec<JsonEvent<'a>>,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+        solution: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) {
         output.push(JsonEvent::StartObject);
         for (variable, value) in solution {
@@ -171,25 +171,11 @@ impl InnerJsonSolutionsSerializer {
     }
 }
 
-fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
+fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: &'a Term) {
     match term {
-        TermRef::NamedNode(uri) => {
-            output.push(JsonEvent::StartObject);
-            output.push(JsonEvent::ObjectKey("type".into()));
-            output.push(JsonEvent::String("uri".into()));
-            output.push(JsonEvent::ObjectKey("value".into()));
-            output.push(JsonEvent::String(uri.as_str().into()));
-            output.push(JsonEvent::EndObject);
-        }
-        TermRef::BlankNode(bnode) => {
-            output.push(JsonEvent::StartObject);
-            output.push(JsonEvent::ObjectKey("type".into()));
-            output.push(JsonEvent::String("bnode".into()));
-            output.push(JsonEvent::ObjectKey("value".into()));
-            output.push(JsonEvent::String(bnode.as_str().into()));
-            output.push(JsonEvent::EndObject);
-        }
-        TermRef::Literal(literal) => {
+        Term::NamedNode(uri) => write_json_named_node(output, uri),
+        Term::BlankNode(bnode) => write_json_blank_node(output, bnode),
+        Term::Literal(literal) => {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("type".into()));
             output.push(JsonEvent::String("literal".into()));
@@ -209,32 +195,53 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
                         .into(),
                     ));
                 }
-            } else if literal.datatype() != xsd::STRING {
+            } else if *literal.datatype() != xsd::STRING {
                 output.push(JsonEvent::ObjectKey("datatype".into()));
                 output.push(JsonEvent::String(literal.datatype().as_str().into()));
             }
             output.push(JsonEvent::EndObject);
         }
         #[cfg(feature = "sparql-12")]
-        TermRef::Triple(triple) => {
+        Term::Triple(triple) => {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("type".into()));
             output.push(JsonEvent::String("triple".into()));
             output.push(JsonEvent::ObjectKey("value".into()));
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("subject".into()));
-            write_json_term(output, triple.subject.as_ref().into());
+            match &triple.subject {
+                NamedOrBlankNode::NamedNode(uri) => write_json_named_node(output, uri),
+                NamedOrBlankNode::BlankNode(bnode) => write_json_blank_node(output, bnode),
+            }
             output.push(JsonEvent::ObjectKey("predicate".into()));
-            write_json_term(output, triple.predicate.as_ref().into());
+            write_json_named_node(output, &triple.predicate);
             output.push(JsonEvent::ObjectKey("object".into()));
-            write_json_term(output, triple.object.as_ref());
+            write_json_term(output, &triple.object);
             output.push(JsonEvent::EndObject);
             output.push(JsonEvent::EndObject);
         }
     }
 }
+fn write_json_named_node<'a>(output: &mut Vec<JsonEvent<'a>>, uri: &'a NamedNode) {
+    output.push(JsonEvent::StartObject);
+    output.push(JsonEvent::ObjectKey("type".into()));
+    output.push(JsonEvent::String("uri".into()));
+    output.push(JsonEvent::ObjectKey("value".into()));
+    output.push(JsonEvent::String(uri.as_str().into()));
+    output.push(JsonEvent::EndObject);
+}
 
-#[expect(clippy::large_enum_variant)]
+fn write_json_blank_node<'a>(output: &mut Vec<JsonEvent<'a>>, bnode: &'a BlankNode) {
+    output.push(JsonEvent::StartObject);
+    output.push(JsonEvent::ObjectKey("type".into()));
+    output.push(JsonEvent::String("bnode".into()));
+    output.push(JsonEvent::ObjectKey("value".into()));
+    output.push(JsonEvent::String(bnode.as_str().into()));
+    output.push(JsonEvent::EndObject);
+}
+
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -415,7 +422,8 @@ enum JsonInnerQueryResults {
     Boolean(bool),
 }
 
-#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerSolutions {
     Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
@@ -424,14 +432,15 @@ enum JsonInnerSolutions {
 struct JsonInnerReader {
     state: JsonInnerReaderState,
     variables: Vec<Variable>,
-    current_solution_variables: Vec<String>,
+    current_solution_variables: Vec<OxString>,
     current_solution_values: Vec<Term>,
-    solutions: Vec<(Vec<String>, Vec<Term>)>,
+    solutions: Vec<(Vec<OxString>, Vec<Term>)>,
     vars_read: bool,
     solutions_read: bool,
 }
 
-#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerReaderState {
     Start,
     InRootObject,
@@ -448,7 +457,7 @@ enum JsonInnerReaderState {
     BetweenSolutionTerms,
     Term {
         reader: JsonInnerTermReader,
-        variable: String,
+        variable: OxString,
     },
     AfterBindings,
     BeforeBoolean,
@@ -567,25 +576,27 @@ impl JsonInnerReader {
                 }
             }
             JsonInnerReaderState::InVars => match event {
-                JsonEvent::String(variable) => match Variable::new(variable.clone()) {
-                    Ok(var) => {
-                        if self.variables.contains(&var) {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "The variable {var} is declared twice"
-                            )));
+                JsonEvent::String(variable) => {
+                    match Variable::new(OxString::new_owned(&variable)) {
+                        Ok(var) => {
+                            if self.variables.contains(&var) {
+                                return Err(QueryResultsSyntaxError::msg(format!(
+                                    "The variable {var} is declared twice"
+                                )));
+                            }
+                            self.variables.push(var);
+                            Ok(None)
                         }
-                        self.variables.push(var);
-                        Ok(None)
+                        Err(e) => Err(QueryResultsSyntaxError::msg(format!(
+                            "Invalid variable name '{variable}': {e}"
+                        ))),
                     }
-                    Err(e) => Err(QueryResultsSyntaxError::msg(format!(
-                        "Invalid variable name '{variable}': {e}"
-                    ))),
-                },
+                }
                 JsonEvent::EndArray => {
                     if self.solutions_read {
                         let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
-                            mapping.insert(var.as_str().to_owned(), i);
+                            mapping.insert(var.clone().into_string(), i);
                         }
                         Ok(Some(JsonInnerQueryResults::Solutions {
                             variables: take(&mut self.variables),
@@ -659,7 +670,7 @@ impl JsonInnerReader {
                     if self.vars_read {
                         let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
-                            mapping.insert(var.as_str().to_owned(), i);
+                            mapping.insert(var.clone().into_string(), i);
                         }
                         Ok(Some(JsonInnerQueryResults::Solutions {
                             variables: take(&mut self.variables),
@@ -696,7 +707,7 @@ impl JsonInnerReader {
                 JsonEvent::ObjectKey(key) => {
                     self.state = JsonInnerReaderState::Term {
                         reader: JsonInnerTermReader::default(),
-                        variable: key.into(),
+                        variable: OxString::new_owned(&key),
                     };
                     Ok(None)
                 }
@@ -779,11 +790,12 @@ impl JsonInnerReader {
 
 struct JsonInnerSolutionsParser {
     state: JsonInnerSolutionsParserState,
-    mapping: HashMap<String, usize>,
+    mapping: HashMap<OxString, usize>,
     new_bindings: Vec<Option<Term>>,
 }
 
-#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,
@@ -858,10 +870,10 @@ impl JsonInnerSolutionsParser {
 struct JsonInnerTermReader {
     state: JsonInnerTermReaderState,
     term_type: Option<TermType>,
-    value: Option<String>,
-    lang: Option<String>,
+    value: Option<OxString>,
+    lang: Option<OxString>,
     #[cfg(feature = "sparql-12")]
-    direction: Option<String>,
+    direction: Option<BaseDirection>,
     datatype: Option<NamedNode>,
     #[cfg(feature = "sparql-12")]
     subject: Option<Term>,
@@ -979,14 +991,8 @@ impl JsonInnerTermReader {
                                     }
                                     return Ok(Some(Literal::new_directional_language_tagged_literal(
                                         value,
-                                        &lang,
-                                        match direction.as_str() {
-                                            "ltr" => BaseDirection::Ltr,
-                                            "rtl" => BaseDirection::Rtl,
-                                            _ => return Err(QueryResultsSyntaxError::msg(format!(
-                                                "Invalid its:dir value '{direction}', expecting 'ltr' or 'rtl'"
-                                            )))
-                                        }
+                                        lang.clone(),
+                                        direction
                                     ).map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
                                             "Invalid xml:lang value '{lang}': {e}"
@@ -1000,7 +1006,7 @@ impl JsonInnerTermReader {
                                         )));
                                     }
                                 }
-                                Literal::new_language_tagged_literal(value, &lang)
+                                Literal::new_language_tagged_literal(value, lang.clone())
                                     .map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
                                             "Invalid xml:lang value '{lang}': {e}"
@@ -1095,7 +1101,7 @@ impl JsonInnerTermReader {
             }
             JsonInnerTermReaderState::Value => match event {
                 JsonEvent::String(value) => {
-                    self.value = Some(value.into_owned());
+                    self.value = Some(OxString::new_owned(&value));
                     self.state = JsonInnerTermReaderState::Middle;
                     Ok(None)
                 }
@@ -1106,38 +1112,42 @@ impl JsonInnerTermReader {
                 }
                 _ => {
                     self.state = JsonInnerTermReaderState::Middle;
-
                     Err(QueryResultsSyntaxError::msg("Term value must be a string"))
                 }
             },
             JsonInnerTermReaderState::Lang => {
-                let result = if let JsonEvent::String(value) = event {
-                    self.lang = Some(value.into_owned());
+                self.state = JsonInnerTermReaderState::Middle;
+                if let JsonEvent::String(value) = event {
+                    self.lang = Some(OxString::new_owned(&value));
                     Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Term lang must be strings"))
-                };
-                self.state = JsonInnerTermReaderState::Middle;
-
-                result
+                }
             }
             #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::BaseDirection => {
-                let result = if let JsonEvent::String(value) = event {
-                    self.direction = Some(value.into_owned());
+                self.state = JsonInnerTermReaderState::Middle;
+                if let JsonEvent::String(value) = event {
+                    self.direction = Some(match value.as_ref() {
+                        "ltr" => BaseDirection::Ltr,
+                        "rtl" => BaseDirection::Rtl,
+                        _ => {
+                            return Err(QueryResultsSyntaxError::msg(format!(
+                                "Invalid its:dir value '{value}', expecting 'ltr' or 'rtl'"
+                            )));
+                        }
+                    });
                     Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg(
                         "Term base directions must be strings",
                     ))
-                };
-                self.state = JsonInnerTermReaderState::Middle;
-
-                result
+                }
             }
             JsonInnerTermReaderState::Datatype => {
-                let result = if let JsonEvent::String(value) = event {
-                    match NamedNode::new(value) {
+                self.state = JsonInnerTermReaderState::Middle;
+                if let JsonEvent::String(value) = event {
+                    match NamedNode::new(OxString::new_owned(&value)) {
                         Ok(datatype) => {
                             self.datatype = Some(datatype);
                             Ok(None)
@@ -1148,10 +1158,7 @@ impl JsonInnerTermReader {
                     }
                 } else {
                     Err(QueryResultsSyntaxError::msg("Term lang must be strings"))
-                };
-                self.state = JsonInnerTermReaderState::Middle;
-
-                result
+                }
             }
             #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::InValue => match event {
@@ -1203,8 +1210,8 @@ impl JsonInnerTermReader {
 }
 
 pub struct JsonBufferedSolutionsIterator {
-    mapping: HashMap<String, usize>,
-    bindings: std::vec::IntoIter<(Vec<String>, Vec<Term>)>,
+    mapping: HashMap<OxString, usize>,
+    bindings: std::vec::IntoIter<(Vec<OxString>, Vec<Term>)>,
 }
 
 impl JsonBufferedSolutionsIterator {

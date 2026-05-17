@@ -1,3 +1,4 @@
+use crate::OxString;
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -12,14 +13,14 @@ use std::fmt;
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Variable {
-    name: String,
+    name: OxString,
 }
 
 impl Variable {
     /// Creates a variable name from a unique identifier.
     ///
     /// The variable identifier must be valid according to the SPARQL grammar.
-    pub fn new(name: impl Into<String>) -> Result<Self, VariableNameParseError> {
+    pub fn new(name: impl Into<OxString>) -> Result<Self, VariableNameParseError> {
         let name = name.into();
         validate_variable_identifier(&name)?;
         Ok(Self::new_unchecked(name))
@@ -30,9 +31,9 @@ impl Variable {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to the SPARQL grammar.
     ///
-    /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
+    /// [`Variable::new`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(name: impl Into<String>) -> Self {
+    pub fn new_unchecked(name: impl Into<OxString>) -> Self {
         Self { name: name.into() }
     }
 
@@ -42,7 +43,7 @@ impl Variable {
     }
 
     #[inline]
-    pub fn into_string(self) -> String {
+    pub fn into_string(self) -> OxString {
         self.name
     }
 
@@ -87,7 +88,7 @@ impl<'a> VariableRef<'a> {
     /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
     /// according to the SPARQL grammar.
     ///
-    /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
+    /// [`Variable::new`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub const fn new_unchecked(name: &'a str) -> Self {
         Self { name }
@@ -106,7 +107,7 @@ impl<'a> VariableRef<'a> {
     #[inline]
     pub fn into_owned(self) -> Variable {
         Variable {
-            name: self.name.to_owned(),
+            name: OxString::new_owned(self.name),
         }
     }
 }

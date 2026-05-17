@@ -59,9 +59,7 @@ fn canonical_nquads(dataset: &Dataset) -> String {
 
 fn hash_algorithm(test: &Test) -> Result<CanonicalizationHashAlgorithm> {
     Ok(
-        if let Some(Term::Literal(hash_algorithm)) =
-            test.option.get(&rdfc::HASH_ALGORITHM.into_owned())
-        {
+        if let Some(Term::Literal(hash_algorithm)) = test.option.get(&rdfc::HASH_ALGORITHM) {
             match hash_algorithm.value() {
                 "SHA256" => CanonicalizationHashAlgorithm::Sha256,
                 "SHA384" => CanonicalizationHashAlgorithm::Sha384,

@@ -37,11 +37,11 @@ let store = Store::new().unwrap();
 // insertion
 let ex = NamedNode::new("http://example.com").unwrap();
 let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-store.insert(&quad).unwrap();
+store.insert(quad.clone()).unwrap();
 
 // quad filter
 let results = store
-    .quads_for_pattern(Some(ex.as_ref().into()), None, None, None)
+    .quads_for_pattern(Some(&ex.clone().into()), None, None, None)
     .collect::<Result<Vec<Quad>, _>>()
     .unwrap();
 assert_eq!(vec![quad], results);

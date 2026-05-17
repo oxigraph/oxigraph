@@ -49,15 +49,12 @@ fuzz_target!(|data: &[u8]| {
     if errors.is_empty() {
         assert!(errors_unchecked.is_empty());
 
-        let bnodes_count = triples
-            .iter()
-            .map(|t| count_triple_blank_nodes(t.as_ref()))
-            .sum::<usize>();
+        let bnodes_count = triples.iter().map(count_triple_blank_nodes).sum::<usize>();
         if bnodes_count == 0 {
             assert_eq!(triples, triples_unchecked);
         } else if bnodes_count <= 4 {
-            let mut graph_with_split = triples.iter().collect::<Graph>();
-            let mut graph_unchecked = triples_unchecked.iter().collect::<Graph>();
+            let mut graph_with_split = triples.clone().into_iter().collect::<Graph>();
+            let mut graph_unchecked = triples_unchecked.into_iter().collect::<Graph>();
             graph_with_split.canonicalize(CanonicalizationAlgorithm::Unstable);
             graph_unchecked.canonicalize(CanonicalizationAlgorithm::Unstable);
             assert_eq!(graph_with_split, graph_unchecked);
@@ -67,10 +64,10 @@ fuzz_target!(|data: &[u8]| {
     // We serialize
     let mut serializer = RdfXmlSerializer::new();
     for (prefix_name, prefix_iri) in prefixes {
-        serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+        serializer = serializer.with_prefix(&prefix_name, &prefix_iri).unwrap();
     }
     if let Some(base_iri) = base_iri {
-        serializer = serializer.with_base_iri(base_iri).unwrap();
+        serializer = serializer.with_base_iri(&base_iri).unwrap();
     }
     let mut serializer = serializer.for_writer(Vec::new());
     for triple in &triples {

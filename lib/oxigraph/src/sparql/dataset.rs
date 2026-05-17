@@ -1,10 +1,10 @@
+use crate::model::{OxString, Term};
 #[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
-use oxrdf::Term;
 use oxsdatatypes::Boolean;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 pub struct DatasetView<'a> {
     reader: StorageReader<'a>,
-    extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
+    extra: RefCell<HashMap<StrHash, OxString, BuildHasherDefault<StrHashHasher>>>,
 }
 
 impl<'a> DatasetView<'a> {
@@ -29,10 +29,10 @@ impl<'a> DatasetView<'a> {
         }
     }
 
-    pub fn insert_str(&self, key: &StrHash, value: &str) {
+    pub fn insert_str(&self, key: &StrHash, value: OxString) {
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
             if !matches!(self.reader.contains_str(key), Ok(true)) {
-                e.insert(value.to_owned());
+                e.insert(value);
             }
         }
     }
@@ -82,8 +82,8 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
     }
 
     fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
-        let encoded = term.as_ref().into();
-        insert_term(term.as_ref(), &encoded, &mut |key, value| {
+        let encoded = (&term).into();
+        insert_term(term, &encoded, &mut |key, value| {
             self.insert_str(key, value)
         });
         Ok(encoded)
@@ -188,7 +188,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
 }
 
 impl StrLookup for DatasetView<'_> {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {

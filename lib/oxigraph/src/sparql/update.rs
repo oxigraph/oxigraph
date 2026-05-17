@@ -1,6 +1,6 @@
 #[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
-use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
+use crate::model::{GraphName as OxGraphName, OxString, Quad as OxQuad};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -238,7 +238,7 @@ enum UpdateTransaction<'a, 'b> {
 
 struct ReadableUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageReadableTransaction<'b>,
-    base_iri: Option<Iri<String>>,
+    base_iri: Option<Iri<OxString>>,
     query_evaluator: QueryEvaluator,
     #[cfg(feature = "http-client")]
     client: Client,
@@ -287,14 +287,14 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         let mut bnodes = FxHashMap::default();
         for quad in &operation.data {
             let quad = convert_quad(quad, &mut bnodes);
-            self.transaction.insert(quad.as_ref());
+            self.transaction.insert(quad);
         }
     }
 
     fn eval_delete_data(&mut self, operation: &DeleteDataOperation) {
         for quad in &operation.data {
             let quad = convert_ground_quad(quad);
-            self.transaction.remove(quad.as_ref());
+            self.transaction.remove(&quad);
         }
     }
 
@@ -312,8 +312,8 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             .collect::<Result<Vec<_>, _>>()?;
         for mutation in mutations {
             match mutation {
-                DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
-                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
+                DeleteInsertQuad::Delete(quad) => self.transaction.remove(&quad),
+                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad),
             }
         }
         Ok(())
@@ -324,7 +324,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             operation,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q.as_ref()),
+            |q| self.transaction.insert(q),
         ) {
             if operation.silent { Ok(()) } else { Err(error) }
         } else {
@@ -336,7 +336,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         if self
             .transaction
             .reader()
-            .contains_named_graph(&operation.graph.as_ref().into())?
+            .contains_named_graph(&(&operation.graph).into())?
         {
             if operation.silent {
                 Ok(())
@@ -347,7 +347,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             }
         } else {
             self.transaction
-                .insert_named_graph((&operation.graph).into());
+                .insert_named_graph(operation.graph.clone().into());
             Ok(())
         }
     }
@@ -358,9 +358,9 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 if self
                     .transaction
                     .reader()
-                    .contains_named_graph(&graph_name.as_ref().into())?
+                    .contains_named_graph(&graph_name.into())?
                 {
-                    Ok(self.transaction.clear_graph(graph_name.into())?)
+                    Ok(self.transaction.clear_graph(&graph_name.clone().into())?)
                 } else if operation.silent {
                     Ok(())
                 } else {
@@ -368,7 +368,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 }
             }
             GraphTarget::DefaultGraph => {
-                self.transaction.clear_graph(GraphNameRef::DefaultGraph)?;
+                self.transaction.clear_graph(&OxGraphName::DefaultGraph)?;
                 Ok(())
             }
             GraphTarget::NamedGraphs => Ok(self.transaction.clear_all_named_graphs()?),
@@ -382,9 +382,10 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 if self
                     .transaction
                     .reader()
-                    .contains_named_graph(&graph_name.as_ref().into())?
+                    .contains_named_graph(&graph_name.into())?
                 {
-                    self.transaction.remove_named_graph(graph_name.into())?;
+                    self.transaction
+                        .remove_named_graph(&graph_name.clone().into())?;
                     Ok(())
                 } else if operation.silent {
                     Ok(())
@@ -393,7 +394,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 }
             }
             GraphTarget::DefaultGraph => {
-                Ok(self.transaction.clear_graph(GraphNameRef::DefaultGraph)?)
+                Ok(self.transaction.clear_graph(&OxGraphName::DefaultGraph)?)
             }
             GraphTarget::NamedGraphs => Ok(self.transaction.remove_all_named_graphs()?),
             GraphTarget::AllGraphs => Ok(self.transaction.clear()?),
@@ -425,7 +426,7 @@ fn update_requires_read(update: &Update) -> bool {
 struct WriteOnlyUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageTransaction<'b>,
     storage_for_initial_read: Option<&'b Storage>,
-    base_iri: Option<Iri<String>>,
+    base_iri: Option<Iri<OxString>>,
     query_evaluator: QueryEvaluator,
     #[cfg(feature = "http-client")]
     client: Client,
@@ -475,14 +476,14 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         let mut bnodes = FxHashMap::default();
         for quad in &operation.data {
             let quad = convert_quad(quad, &mut bnodes);
-            self.transaction.insert(quad.as_ref());
+            self.transaction.insert(quad);
         }
     }
 
     fn eval_delete_data(&mut self, operation: &DeleteDataOperation) {
         for quad in &operation.data {
             let quad = convert_ground_quad(quad);
-            self.transaction.remove(quad.as_ref());
+            self.transaction.remove(&quad);
         }
     }
 
@@ -505,8 +506,8 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             .collect::<Result<Vec<_>, _>>()?;
         for mutation in mutations {
             match mutation {
-                DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
-                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
+                DeleteInsertQuad::Delete(quad) => self.transaction.remove(&quad),
+                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad),
             }
         }
         Ok(())
@@ -517,7 +518,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             operation,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q.as_ref()),
+            |q| self.transaction.insert(q),
         ) {
             if operation.silent { Ok(()) } else { Err(error) }
         } else {
@@ -532,7 +533,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             ));
         }
         self.transaction
-            .insert_named_graph((&operation.graph).into());
+            .insert_named_graph(operation.graph.clone().into());
         Ok(())
     }
 
@@ -592,8 +593,8 @@ fn eval_load(
     let format = RdfFormat::from_media_type(&content_type)
         .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?;
     let to_graph_name = match &operation.destination {
-        GraphName::NamedNode(graph_name) => graph_name.into(),
-        GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
+        GraphName::NamedNode(graph_name) => graph_name.clone().into(),
+        GraphName::DefaultGraph => OxGraphName::DefaultGraph,
     };
     let client = client.clone();
     let parser = RdfParser::from_format(format)

@@ -14,8 +14,8 @@ use crate::{
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
-use oxrdf::{BaseDirection, NamedOrBlankNode};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Term, Triple, Variable};
+use oxrdf::NamedOrBlankNode;
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, OxString, Term, Triple, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
 use spargebra::algebra::{AggregateFunction, PropertyPathExpression};
@@ -414,7 +414,7 @@ type InternalTuplesIterator<'a, T> =
 
 pub struct SimpleEvaluator<'a, D: QueryableDataset<'a>> {
     dataset: EvalDataset<'a, D>,
-    base_iri: Option<Arc<Iri<String>>>,
+    base_iri: Option<Iri<OxString>>,
     now: DateTime,
     service_handler: Rc<ServiceHandlerRegistry>,
     custom_functions: Rc<CustomFunctionRegistry>,
@@ -425,7 +425,7 @@ pub struct SimpleEvaluator<'a, D: QueryableDataset<'a>> {
 impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     pub fn new(
         dataset: D,
-        base_iri: Option<Arc<Iri<String>>>,
+        base_iri: Option<Iri<OxString>>,
         service_handler: Rc<ServiceHandlerRegistry>,
         custom_functions: Rc<CustomFunctionRegistry>,
         custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
@@ -1808,7 +1808,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         };
         let iter =
             self.service_handler
-                .handle(&service_name, graph_pattern, self.base_iri.as_deref())?;
+                .handle(&service_name, graph_pattern, self.base_iri.as_ref())?;
         Ok(encode_bindings(self.dataset.clone(), variables, iter))
     }
 
@@ -2186,71 +2186,12 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
         self.evaluator.now
     }
 
-    fn base_iri(&mut self) -> Option<Arc<Iri<String>>> {
-        self.evaluator.base_iri.as_ref().map(Arc::clone)
+    fn base_iri(&mut self) -> Option<Iri<OxString>> {
+        self.evaluator.base_iri.clone()
     }
 
     fn custom_functions(&mut self) -> &CustomFunctionRegistry {
         &self.evaluator.custom_functions
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-type LanguageWithMaybeBaseDirection = (String, Option<BaseDirection>);
-
-#[cfg(feature = "sparql-12")]
-fn to_string_and_language(
-    term: ExpressionTerm,
-) -> Option<(String, Option<LanguageWithMaybeBaseDirection>)> {
-    match term {
-        ExpressionTerm::StringLiteral(value) => Some((value, None)),
-        ExpressionTerm::LangStringLiteral { value, language } => {
-            Some((value, Some((language, None))))
-        }
-        ExpressionTerm::DirLangStringLiteral {
-            value,
-            language,
-            direction,
-        } => Some((value, Some((language, Some(direction))))),
-        _ => None,
-    }
-}
-
-#[cfg(not(feature = "sparql-12"))]
-fn to_string_and_language(term: ExpressionTerm) -> Option<(String, Option<String>)> {
-    match term {
-        ExpressionTerm::StringLiteral(value) => Some((value, None)),
-        ExpressionTerm::LangStringLiteral { value, language } => Some((value, Some(language))),
-        _ => None,
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-fn build_plain_literal(
-    value: String,
-    language: Option<LanguageWithMaybeBaseDirection>,
-) -> ExpressionTerm {
-    if let Some((language, direction)) = language {
-        if let Some(direction) = direction {
-            ExpressionTerm::DirLangStringLiteral {
-                value,
-                language,
-                direction,
-            }
-        } else {
-            ExpressionTerm::LangStringLiteral { value, language }
-        }
-    } else {
-        ExpressionTerm::StringLiteral(value)
-    }
-}
-
-#[cfg(not(feature = "sparql-12"))]
-fn build_plain_literal(value: String, language: Option<String>) -> ExpressionTerm {
-    if let Some(language) = language {
-        ExpressionTerm::LangStringLiteral { value, language }
-    } else {
-        ExpressionTerm::StringLiteral(value)
     }
 }
 
@@ -2617,9 +2558,15 @@ impl Accumulator for GroupConcatAccumulator {
         let Some(concat) = self.concat.as_mut() else {
             return;
         };
-        let Some((value, _)) = to_string_and_language(element) else {
-            self.concat = None;
-            return;
+        let value = match element {
+            ExpressionTerm::StringLiteral(value) => value,
+            ExpressionTerm::LangStringLiteral { value, .. } => value,
+            #[cfg(feature = "sparql-12")]
+            ExpressionTerm::DirLangStringLiteral { value, .. } => value,
+            _ => {
+                self.concat = None;
+                return;
+            }
         };
         if self.is_continue {
             concat.push_str(&self.separator);
@@ -2632,7 +2579,7 @@ impl Accumulator for GroupConcatAccumulator {
     fn finish(&mut self) -> Option<ExpressionTerm> {
         self.concat
             .take()
-            .map(|result| build_plain_literal(result, None))
+            .map(|result| ExpressionTerm::StringLiteral(OxString::new_owned(&result)))
     }
 }
 

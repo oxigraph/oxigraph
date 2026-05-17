@@ -20,33 +20,36 @@ use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, OxString, Variable};
 use rand::random;
+use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::ops::RangeInclusive;
 
 pub struct AlgebraBuilder<'a> {
-    base_iri: Option<Iri<String>>,
-    prefixes: HashMap<String, String>,
+    base_iri: Option<Iri<OxString>>,
+    prefixes: HashMap<OxString, OxString>,
     custom_aggregate_functions: &'a HashSet<NamedNode>,
+    buffer: String,
 }
 
 impl<'a> AlgebraBuilder<'a> {
     pub fn new(
-        base_iri: Option<Iri<String>>,
-        prefixes: HashMap<String, String>,
+        base_iri: Option<Iri<OxString>>,
+        prefixes: HashMap<OxString, OxString>,
         custom_aggregate_functions: &'a HashSet<NamedNode>,
     ) -> Self {
         Self {
             base_iri,
             prefixes,
             custom_aggregate_functions,
+            buffer: String::new(),
         }
     }
 
-    pub fn build_query(mut self, query: ast::Query<'_>) -> Result<Query, AlgebraBuilderError> {
+    pub fn build_query(mut self, query: ast::Query<'a>) -> Result<Query, AlgebraBuilderError> {
         self.apply_prologue(query.prologue)?;
         Ok(match query.variant {
             ast::QueryQuery::Select(select) => {
@@ -63,9 +66,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_select_query(
-        self,
-        query: ast::SelectQuery<'_>,
-        values_clause: Option<ast::ValuesClause<'_>>,
+        mut self,
+        query: ast::SelectQuery<'a>,
+        values_clause: Option<ast::ValuesClause<'a>>,
     ) -> Result<SelectQuery, AlgebraBuilderError> {
         Ok(SelectQuery {
             dataset: self.build_dataset(query.dataset_clause)?,
@@ -81,9 +84,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_construct_query(
-        self,
-        query: ast::ConstructQuery<'_>,
-        values_clause: Option<ast::ValuesClause<'_>>,
+        mut self,
+        query: ast::ConstructQuery<'a>,
+        values_clause: Option<ast::ValuesClause<'a>>,
     ) -> Result<ConstructQuery, AlgebraBuilderError> {
         let where_clause = query.where_clause.unwrap_or_else(|| {
             ast::GraphPattern::Group(vec![
@@ -129,9 +132,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_describe_query(
-        self,
-        query: ast::DescribeQuery<'_>,
-        values_clause: Option<ast::ValuesClause<'_>>,
+        mut self,
+        query: ast::DescribeQuery<'a>,
+        values_clause: Option<ast::ValuesClause<'a>>,
     ) -> Result<DescribeQuery, AlgebraBuilderError> {
         let mut pattern = self.build_select(
             ast::SelectClause {
@@ -166,7 +169,8 @@ impl<'a> AlgebraBuilder<'a> {
                 // We generate a variable
                 let variable = loop {
                     counter += 1;
-                    let variable = Variable::new_unchecked(format!("v{counter}"));
+                    let variable =
+                        Variable::new_unchecked(OxString::new_owned(&format!("v{counter}")));
                     // We look for name conflicts
                     let mut found_conflict = false;
                     pattern.on_in_scope_variable(|v| {
@@ -193,9 +197,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_ask_query(
-        self,
-        query: ast::AskQuery<'_>,
-        values_clause: Option<ast::ValuesClause<'_>>,
+        mut self,
+        query: ast::AskQuery<'a>,
+        values_clause: Option<ast::ValuesClause<'a>>,
     ) -> Result<AskQuery, AlgebraBuilderError> {
         Ok(AskQuery {
             dataset: self.build_dataset(query.dataset_clause)?,
@@ -215,7 +219,7 @@ impl<'a> AlgebraBuilder<'a> {
 
     fn apply_prologue(
         &mut self,
-        prologue: Vec<ast::PrologueDecl<'_>>,
+        prologue: Vec<ast::PrologueDecl<'a>>,
     ) -> Result<(), AlgebraBuilderError> {
         for decl in prologue {
             self.apply_prologue_decl(decl)?;
@@ -225,15 +229,15 @@ impl<'a> AlgebraBuilder<'a> {
 
     fn apply_prologue_decl(
         &mut self,
-        decl: ast::PrologueDecl<'_>,
+        decl: ast::PrologueDecl<'a>,
     ) -> Result<(), AlgebraBuilderError> {
         match decl {
             ast::PrologueDecl::Base(base_iri) => {
-                self.base_iri = Some(self.build_iri(base_iri)?);
+                self.base_iri = Some(Iri::parse_unchecked(self.build_iri(base_iri)?));
             }
             ast::PrologueDecl::Prefix(prefix, iri) => {
-                self.prefixes
-                    .insert(prefix.into(), self.build_iri(iri)?.into_inner());
+                let iri = self.build_iri(iri)?;
+                self.prefixes.insert(OxString::new_owned(prefix), iri);
             }
             #[cfg(feature = "sparql-12")]
             ast::PrologueDecl::Version(_) => (),
@@ -242,8 +246,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_dataset(
-        &self,
-        clauses: Vec<ast::GraphClause<'_>>,
+        &mut self,
+        clauses: Vec<ast::GraphClause<'a>>,
     ) -> Result<Option<QueryDataset>, AlgebraBuilderError> {
         if clauses.is_empty() {
             return Ok(None);
@@ -267,11 +271,11 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_select(
-        &self,
-        select_clause: ast::SelectClause<'_>,
-        where_clause: ast::GraphPattern<'_>,
-        solution_modifier: ast::SolutionModifier<'_>,
-        values_clause: Option<ast::ValuesClause<'_>>,
+        &mut self,
+        select_clause: ast::SelectClause<'a>,
+        where_clause: ast::GraphPattern<'a>,
+        solution_modifier: ast::SolutionModifier<'a>,
+        values_clause: Option<ast::ValuesClause<'a>>,
         is_select_explicit: bool,
     ) -> Result<GraphPattern, AlgebraBuilderError> {
         find_graph_pattern_blank_node_ids_and_validate_syntax_restrictions(&where_clause)?;
@@ -476,23 +480,20 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_triple_template(
-        &self,
-        template: Vec<(ast::GraphNode<'_>, ast::PropertyList<'_>)>,
+        &mut self,
+        template: Vec<(ast::GraphNode<'a>, ast::PropertyList<'a>)>,
     ) -> Result<Vec<TriplePattern>, AlgebraBuilderError> {
         let mut patterns = Vec::new();
         for (subject, property_list) in template {
-            self.build_property_list(
-                &self.build_graph_node(subject, &mut patterns)?,
-                property_list,
-                &mut patterns,
-            )?;
+            let subject = self.build_graph_node(subject, &mut patterns)?;
+            self.build_property_list(&subject, property_list, &mut patterns)?;
         }
         Ok(patterns)
     }
 
     fn build_values_clause(
-        &self,
-        values_clause: ast::ValuesClause<'_>,
+        &mut self,
+        values_clause: ast::ValuesClause<'a>,
     ) -> Result<GraphPattern, AlgebraBuilderError> {
         if let Some((vl, vr)) = values_clause
             .variables
@@ -539,8 +540,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_ground_term(
-        &self,
-        data_block_value: ast::DataBlockValue<'_>,
+        &mut self,
+        data_block_value: ast::DataBlockValue<'a>,
     ) -> Result<Option<GroundTerm>, AlgebraBuilderError> {
         Ok(match data_block_value {
             ast::DataBlockValue::Iri(n) => Some(self.build_named_node(n)?.into()),
@@ -553,14 +554,14 @@ impl<'a> AlgebraBuilder<'a> {
 
     #[cfg(feature = "sparql-12")]
     pub fn build_triple_term_data(
-        &self,
+        &mut self,
         t: ast::TripleTermData<'a>,
     ) -> Result<GroundTriple, AlgebraBuilderError> {
         Ok(GroundTriple {
             subject: self.build_named_node(t.subject)?,
             predicate: match t.predicate {
                 ast::IriOrA::Iri(p) => self.build_named_node(p)?,
-                ast::IriOrA::A => rdf::TYPE.into_owned(),
+                ast::IriOrA::A => rdf::TYPE,
             },
             object: match t.object {
                 ast::TripleTermDataObject::Iri(o) => self.build_named_node(o)?.into(),
@@ -571,8 +572,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_graph_pattern(
-        &self,
-        graph_pattern: ast::GraphPattern<'_>,
+        &mut self,
+        graph_pattern: ast::GraphPattern<'a>,
     ) -> Result<GraphPattern, AlgebraBuilderError> {
         Ok(match graph_pattern {
             ast::GraphPattern::SubSelect(sub_select) => self.build_select(
@@ -669,8 +670,9 @@ impl<'a> AlgebraBuilder<'a> {
                         ast::GraphPatternElement::Triples(triples) => {
                             let mut patterns = Vec::new();
                             for (subject, predicate_objects) in triples {
+                                let subject = self.build_graph_node_path(subject, &mut patterns)?;
                                 self.build_property_list_path(
-                                    &self.build_graph_node_path(subject, &mut patterns)?,
+                                    &subject,
                                     predicate_objects,
                                     &mut patterns,
                                 )?;
@@ -795,8 +797,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_order_expression(
-        &self,
-        expression: ast::OrderCondition<'_>,
+        &mut self,
+        expression: ast::OrderCondition<'a>,
         aggregates: &mut Vec<(Variable, AggregateExpression)>,
     ) -> Result<OrderExpression, AlgebraBuilderError> {
         Ok(match expression {
@@ -810,8 +812,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_aggregate(
-        &self,
-        aggregate: Spanned<ast::Aggregate<'_>>,
+        &mut self,
+        aggregate: Spanned<ast::Aggregate<'a>>,
     ) -> Result<AggregateExpression, AlgebraBuilderError> {
         let (name, expression, distinct) = match aggregate.inner {
             ast::Aggregate::Count(distinct, expression) => {
@@ -856,8 +858,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_expression_without_aggregates(
-        &self,
-        expression: Spanned<ast::Expression<'_>>,
+        &mut self,
+        expression: Spanned<ast::Expression<'a>>,
         error_message: &'static str,
     ) -> Result<Expression, AlgebraBuilderError> {
         let mut aggregates = Vec::new();
@@ -870,8 +872,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_expression(
-        &self,
-        expression: Spanned<ast::Expression<'_>>,
+        &mut self,
+        expression: Spanned<ast::Expression<'a>>,
         aggregates: &mut Vec<(Variable, AggregateExpression)>,
     ) -> Result<Expression, AlgebraBuilderError> {
         Ok(match expression.inner {
@@ -1123,8 +1125,8 @@ impl<'a> AlgebraBuilder<'a> {
 
     #[cfg(feature = "sparql-12")]
     fn build_expr_triple_term(
-        &self,
-        t: ast::ExprTripleTerm<'_>,
+        &mut self,
+        t: ast::ExprTripleTerm<'a>,
     ) -> Result<Expression, AlgebraBuilderError> {
         Ok(Expression::FunctionCall(
             Function::Triple,
@@ -1145,9 +1147,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_property_list(
-        &self,
+        &mut self,
         subject: &TermPattern,
-        property_list: ast::PropertyList<'_>,
+        property_list: ast::PropertyList<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<(), AlgebraBuilderError> {
         for (predicate, objects) in property_list {
@@ -1172,9 +1174,9 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_property_list_path(
-        &self,
+        &mut self,
         subject: &TermPattern,
-        property_list: ast::PropertyListPath<'_>,
+        property_list: ast::PropertyListPath<'a>,
         patterns: &mut Vec<TripleOrPathPattern>,
     ) -> Result<(), AlgebraBuilderError> {
         for (predicate, objects) in property_list {
@@ -1202,10 +1204,10 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_object(
-        &self,
+        &mut self,
         #[cfg(feature = "sparql-12")] subject: &TermPattern,
         #[cfg(feature = "sparql-12")] predicate: &NamedNodePattern,
-        object: ast::Object<'_>,
+        object: ast::Object<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         let object_pattern = self.build_graph_node(object.graph_node, patterns)?;
@@ -1233,7 +1235,7 @@ impl<'a> AlgebraBuilder<'a> {
                 if let Some(reifier) = reifier_to_emit {
                     patterns.push(TriplePattern::new(
                         reifier,
-                        rdf::REIFIES.into_owned(),
+                        rdf::REIFIES,
                         TriplePattern::new(
                             subject.clone(),
                             predicate.clone(),
@@ -1247,10 +1249,10 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_object_path(
-        &self,
+        &mut self,
         #[cfg(feature = "sparql-12")] subject: &TermPattern,
         #[cfg(feature = "sparql-12")] predicate: &VarOrPath,
-        object_path: ast::ObjectPath<'_>,
+        object_path: ast::ObjectPath<'a>,
         patterns: &mut Vec<TripleOrPathPattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         let object = self.build_graph_node_path(object_path.graph_node, patterns)?;
@@ -1291,7 +1293,7 @@ impl<'a> AlgebraBuilder<'a> {
                     };
                     patterns.push(TripleOrPathPattern::Triple(TriplePattern::new(
                         reifier.inner,
-                        rdf::REIFIES.into_owned(),
+                        rdf::REIFIES,
                         TriplePattern::new(subject.clone(), predicate.clone(), object.clone()),
                     )));
                 }
@@ -1302,8 +1304,8 @@ impl<'a> AlgebraBuilder<'a> {
 
     #[cfg(feature = "sparql-12")]
     fn build_reifier_id(
-        &self,
-        var_or_reifier_id: ast::VarOrReifierId<'_>,
+        &mut self,
+        var_or_reifier_id: ast::VarOrReifierId<'a>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         Ok(match var_or_reifier_id {
             ast::VarOrReifierId::Var(v) => Self::build_variable(v).into(),
@@ -1313,25 +1315,25 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_graph_node(
-        &self,
-        graph_node: ast::GraphNode<'_>,
+        &mut self,
+        graph_node: ast::GraphNode<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         match graph_node {
             ast::GraphNode::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
             ast::GraphNode::Collection(elements) => {
-                let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
+                let mut current_list_node = TermPattern::from(rdf::NIL);
                 for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node(element, patterns)?;
                     let new_blank_node = TermPattern::from(BlankNode::default());
                     patterns.push(TriplePattern::new(
                         new_blank_node.clone(),
-                        rdf::FIRST.into_owned(),
+                        rdf::FIRST,
                         element.clone(),
                     ));
                     patterns.push(TriplePattern::new(
                         new_blank_node.clone(),
-                        rdf::REST.into_owned(),
+                        rdf::REST,
                         current_list_node,
                     ));
                     current_list_node = new_blank_node;
@@ -1349,25 +1351,25 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_graph_node_path(
-        &self,
-        graph_node_path: ast::GraphNodePath<'_>,
+        &mut self,
+        graph_node_path: ast::GraphNodePath<'a>,
         patterns: &mut Vec<TripleOrPathPattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         match graph_node_path {
             ast::GraphNodePath::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
             ast::GraphNodePath::Collection(elements) => {
-                let mut current_list_node = TermPattern::from(rdf::NIL.into_owned());
+                let mut current_list_node = TermPattern::from(rdf::NIL);
                 for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node_path(element, patterns)?;
                     let new_blank_node = TermPattern::from(BlankNode::default());
                     patterns.push(TripleOrPathPattern::Triple(TriplePattern::new(
                         new_blank_node.clone(),
-                        rdf::FIRST.into_owned(),
+                        rdf::FIRST,
                         element.clone(),
                     )));
                     patterns.push(TripleOrPathPattern::Triple(TriplePattern::new(
                         new_blank_node.clone(),
-                        rdf::REST.into_owned(),
+                        rdf::REST,
                         current_list_node,
                     )));
                     current_list_node = new_blank_node;
@@ -1390,8 +1392,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_var_or_path(
-        &self,
-        var_or_path: ast::VarOrPath<'_>,
+        &mut self,
+        var_or_path: ast::VarOrPath<'a>,
     ) -> Result<VarOrPath, AlgebraBuilderError> {
         Ok(match var_or_path {
             ast::VarOrPath::Var(v) => VarOrPath::Var(Self::build_variable(v)),
@@ -1400,8 +1402,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_path(
-        &self,
-        path: ast::Path<'_>,
+        &mut self,
+        path: ast::Path<'a>,
     ) -> Result<PropertyPathExpression, AlgebraBuilderError> {
         Ok(match path {
             ast::Path::Alternative(l, r) => PropertyPathExpression::Alternative(
@@ -1425,7 +1427,7 @@ impl<'a> AlgebraBuilder<'a> {
                 PropertyPathExpression::OneOrMore(Box::new(self.build_path(*p)?))
             }
             ast::Path::Iri(p) => PropertyPathExpression::NamedNode(self.build_named_node(p)?),
-            ast::Path::A => PropertyPathExpression::NamedNode(rdf::TYPE.into_owned()),
+            ast::Path::A => PropertyPathExpression::NamedNode(rdf::TYPE),
             ast::Path::NegatedPropertySet(nps) => {
                 let mut direct = Vec::new();
                 let mut inverse = Vec::new();
@@ -1435,8 +1437,8 @@ impl<'a> AlgebraBuilder<'a> {
                         ast::PathOneInPropertySet::InverseIri(p) => {
                             inverse.push(self.build_named_node(p)?)
                         }
-                        ast::PathOneInPropertySet::A => direct.push(rdf::TYPE.into_owned()),
-                        ast::PathOneInPropertySet::InverseA => inverse.push(rdf::TYPE.into_owned()),
+                        ast::PathOneInPropertySet::A => direct.push(rdf::TYPE),
+                        ast::PathOneInPropertySet::InverseA => inverse.push(rdf::TYPE),
                     }
                 }
                 if inverse.is_empty() {
@@ -1457,24 +1459,24 @@ impl<'a> AlgebraBuilder<'a> {
         })
     }
 
-    fn build_verb(&self, verb: ast::Verb<'_>) -> Result<NamedNodePattern, AlgebraBuilderError> {
+    fn build_verb(&mut self, verb: ast::Verb<'a>) -> Result<NamedNodePattern, AlgebraBuilderError> {
         Ok(match verb {
             ast::Verb::Var(v) => Self::build_variable(v).into(),
             ast::Verb::Iri(n) => self.build_named_node(n)?.into(),
-            ast::Verb::A => rdf::TYPE.into_owned().into(),
+            ast::Verb::A => rdf::TYPE.into(),
         })
     }
 
     fn build_term_pattern(
-        &self,
-        var_or_term: ast::VarOrTerm<'_>,
+        &mut self,
+        var_or_term: ast::VarOrTerm<'a>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         Ok(match var_or_term {
             ast::VarOrTerm::Var(v) => Self::build_variable(v).into(),
             ast::VarOrTerm::Iri(n) => self.build_named_node(n)?.into(),
             ast::VarOrTerm::BlankNode(n) => Self::build_blank_node(n).into(),
             ast::VarOrTerm::Literal(l) => self.build_literal(l)?.into(),
-            ast::VarOrTerm::Nil => rdf::NIL.into_owned().into(),
+            ast::VarOrTerm::Nil => rdf::NIL.into(),
             #[cfg(feature = "sparql-12")]
             ast::VarOrTerm::TripleTerm(t) => {
                 TermPattern::Triple(Box::new(self.build_triple_term(*t)?))
@@ -1484,8 +1486,8 @@ impl<'a> AlgebraBuilder<'a> {
 
     #[cfg(feature = "sparql-12")]
     fn build_triple_term(
-        &self,
-        triple_term: ast::TripleTerm<'_>,
+        &mut self,
+        triple_term: ast::TripleTerm<'a>,
     ) -> Result<TriplePattern, AlgebraBuilderError> {
         Ok(TriplePattern::new(
             self.build_term_pattern(triple_term.subject)?,
@@ -1496,7 +1498,7 @@ impl<'a> AlgebraBuilder<'a> {
 
     #[cfg(feature = "sparql-12")]
     fn build_reified_triple(
-        &self,
+        &mut self,
         triple: ast::ReifiedTriple<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
@@ -1510,17 +1512,13 @@ impl<'a> AlgebraBuilder<'a> {
             self.build_verb(triple.predicate)?,
             self.build_reified_triple_subject_or_object(triple.object, patterns)?,
         );
-        patterns.push(TriplePattern::new(
-            reifier.clone(),
-            rdf::REIFIES.into_owned(),
-            triple,
-        ));
+        patterns.push(TriplePattern::new(reifier.clone(), rdf::REIFIES, triple));
         Ok(reifier)
     }
 
     #[cfg(feature = "sparql-12")]
     fn build_reified_triple_subject_or_object(
-        &self,
+        &mut self,
         triple_term: ast::ReifiedTripleSubjectOrObject<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
@@ -1539,8 +1537,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_named_node_pattern(
-        &self,
-        var_or_iri: ast::VarOrIri<'_>,
+        &mut self,
+        var_or_iri: ast::VarOrIri<'a>,
     ) -> Result<NamedNodePattern, AlgebraBuilderError> {
         Ok(match var_or_iri {
             ast::VarOrIri::Var(v) => Self::build_variable(v).into(),
@@ -1548,22 +1546,28 @@ impl<'a> AlgebraBuilder<'a> {
         })
     }
 
-    fn build_variable(var: Spanned<ast::Var<'_>>) -> Variable {
-        Variable::new_unchecked(var.0)
+    fn build_variable(var: Spanned<ast::Var<'a>>) -> Variable {
+        Variable::new_unchecked(OxString::new_owned(var.0))
     }
 
-    fn build_literal(&self, literal: ast::Literal<'_>) -> Result<Literal, AlgebraBuilderError> {
+    fn build_literal(&mut self, literal: ast::Literal<'a>) -> Result<Literal, AlgebraBuilderError> {
         Ok(match literal {
             ast::Literal::Boolean(v) => {
                 Literal::new_typed_literal(if v { "true" } else { "false" }, xsd::BOOLEAN)
             }
-            ast::Literal::Integer(v) => Literal::new_typed_literal(v, xsd::INTEGER),
-            ast::Literal::Decimal(v) => Literal::new_typed_literal(v, xsd::DECIMAL),
-            ast::Literal::Double(v) => Literal::new_typed_literal(v, xsd::DOUBLE),
+            ast::Literal::Integer(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER)
+            }
+            ast::Literal::Decimal(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL)
+            }
+            ast::Literal::Double(v) => {
+                Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE)
+            }
             ast::Literal::String(v) => Literal::new_simple_literal(Self::build_string(v)?),
             ast::Literal::LangString(v, l) => Literal::new_language_tagged_literal(
                 Self::build_string(v)?,
-                l.inner,
+                OxString::new_owned(l.inner),
             )
             .map_err(|e| {
                 AlgebraBuilderError::new(l.span, format!("Invalid language tag '{}': {e}", l.inner))
@@ -1571,7 +1575,7 @@ impl<'a> AlgebraBuilder<'a> {
             #[cfg(feature = "sparql-12")]
             ast::Literal::DirLangString(v, l) => Literal::new_directional_language_tagged_literal(
                 Self::build_string(v)?,
-                l.inner.0,
+                OxString::new_owned(l.inner.0),
                 match l.inner.1 {
                     "ltr" => BaseDirection::Ltr,
                     "rtl" => BaseDirection::Rtl,
@@ -1598,48 +1602,44 @@ impl<'a> AlgebraBuilder<'a> {
         })
     }
 
-    fn build_blank_node(blank_node: Spanned<ast::BlankNode<'_>>) -> BlankNode {
+    fn build_blank_node(blank_node: Spanned<ast::BlankNode<'a>>) -> BlankNode {
         if let Some(id) = blank_node.inner.0 {
-            BlankNode::new_unchecked(id)
+            BlankNode::new_unchecked(OxString::new_owned(id))
         } else {
             BlankNode::default()
         }
     }
 
-    fn build_string(string: Spanned<ast::String<'_>>) -> Result<String, AlgebraBuilderError> {
+    fn build_string(string: Spanned<ast::String<'a>>) -> Result<OxString, AlgebraBuilderError> {
         unescape_string(string.inner.0, string.span)
     }
 
-    fn build_named_node(&self, iri: ast::Iri<'_>) -> Result<NamedNode, AlgebraBuilderError> {
-        Ok(NamedNode::new_unchecked(
-            match iri {
-                ast::Iri::IriRef(iri) => self.build_iri(iri),
-                ast::Iri::PrefixedName(pname) => self.build_prefixed_name(pname),
-            }?
-            .into_inner(),
-        ))
+    fn build_named_node(&mut self, iri: ast::Iri<'a>) -> Result<NamedNode, AlgebraBuilderError> {
+        Ok(NamedNode::new_unchecked(match iri {
+            ast::Iri::IriRef(iri) => self.build_iri(iri),
+            ast::Iri::PrefixedName(pname) => self.build_prefixed_name(pname),
+        }?))
     }
 
     fn build_prefixed_name(
-        &self,
-        pname: Spanned<ast::PrefixedName<'_>>,
-    ) -> Result<Iri<String>, AlgebraBuilderError> {
+        &mut self,
+        pname: Spanned<ast::PrefixedName<'a>>,
+    ) -> Result<OxString, AlgebraBuilderError> {
         if let Some(base) = self.prefixes.get(pname.inner.0) {
-            let mut iri = String::with_capacity(base.len() + pname.inner.1.len());
-            iri.push_str(base);
-            for chunk in pname.inner.1.split('\\') {
-                // We remove \
-                iri.push_str(chunk);
+            let (pname_local, might_be_invalid_iri) = unescape_local_name(pname.inner.1);
+            let iri = OxString::concat([base.as_str(), pname_local.as_ref()]);
+            if might_be_invalid_iri {
+                Iri::parse(iri.as_str()).map_err(|e| {
+                    AlgebraBuilderError::new(
+                        pname.span,
+                        format!(
+                            "Invalid IRI built from '{}:{}': {e}",
+                            pname.inner.0, pname.inner.1
+                        ),
+                    )
+                })?;
             }
-            Iri::parse(iri).map_err(|e| {
-                AlgebraBuilderError::new(
-                    pname.span,
-                    format!(
-                        "Invalid IRI built from '{}:{}': {e}",
-                        pname.inner.0, pname.inner.1
-                    ),
-                )
-            })
+            Ok(iri)
         } else {
             Err(AlgebraBuilderError::new(
                 pname.span,
@@ -1648,30 +1648,42 @@ impl<'a> AlgebraBuilder<'a> {
         }
     }
 
-    fn build_iri(&self, iri: Spanned<ast::IriRef<'_>>) -> Result<Iri<String>, AlgebraBuilderError> {
+    fn build_iri(
+        &mut self,
+        iri: Spanned<ast::IriRef<'a>>,
+    ) -> Result<OxString, AlgebraBuilderError> {
         #[cfg(feature = "standard-unicode-escaping")]
         let iri_value = iri.inner.0;
         #[cfg(not(feature = "standard-unicode-escaping"))]
         let iri_value = unescape_iriref(iri.inner.0, iri.span)?;
-        if let Some(base_iri) = &self.base_iri {
+        Ok(if let Some(base_iri) = &self.base_iri {
+            self.buffer.clear();
             #[cfg_attr(feature = "standard-unicode-escaping", expect(clippy::needless_borrow))]
-            base_iri.resolve(&iri_value)
+            base_iri
+                .resolve_into(&iri_value, &mut self.buffer)
+                .map_err(|e| {
+                    AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
+                })?;
+            OxString::new_owned(&self.buffer)
         } else {
             Iri::parse({
                 #[cfg(feature = "standard-unicode-escaping")]
                 {
-                    iri_value.to_owned()
+                    OxString::new_owned(iri_value)
                 }
                 #[cfg(not(feature = "standard-unicode-escaping"))]
                 {
                     iri_value.clone()
                 }
             })
-        }
-        .map_err(|e| AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}")))
+            .map_err(|e| {
+                AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
+            })?
+            .into_inner()
+        })
     }
 
-    pub fn build_update(mut self, update: ast::Update<'_>) -> Result<Update, AlgebraBuilderError> {
+    pub fn build_update(mut self, update: ast::Update<'a>) -> Result<Update, AlgebraBuilderError> {
         valid_update_operation_blank_node_id_syntax_restrictions(&update)?;
 
         let mut operations = Vec::new();
@@ -1853,8 +1865,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_ground_quad_patterns(
-        &self,
-        quads: ast::QuadPatterns<'_>,
+        &mut self,
+        quads: ast::QuadPatterns<'a>,
     ) -> Result<Vec<GroundQuadPattern>, AlgebraBuilderError> {
         let mut visitor = FindBlankNodeOrVariable::default();
         visitor.visit_quads(&quads);
@@ -1871,7 +1883,10 @@ impl<'a> AlgebraBuilder<'a> {
             .collect())
     }
 
-    fn build_quads(&self, quads: ast::QuadPatterns<'_>) -> Result<Vec<Quad>, AlgebraBuilderError> {
+    fn build_quads(
+        &mut self,
+        quads: ast::QuadPatterns<'a>,
+    ) -> Result<Vec<Quad>, AlgebraBuilderError> {
         let mut visitor = FindBlankNodeOrVariable::default();
         visitor.visit_quads(&quads);
         if let Some(variable) = visitor.variable {
@@ -1888,8 +1903,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_ground_quads(
-        &self,
-        quads: ast::QuadPatterns<'_>,
+        &mut self,
+        quads: ast::QuadPatterns<'a>,
     ) -> Result<Vec<GroundQuad>, AlgebraBuilderError> {
         let mut visitor = FindBlankNodeOrVariable::default();
         visitor.visit_quads(&quads);
@@ -1913,8 +1928,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_quad_patterns(
-        &self,
-        quads: ast::QuadPatterns<'_>,
+        &mut self,
+        quads: ast::QuadPatterns<'a>,
     ) -> Result<Vec<QuadPattern>, AlgebraBuilderError> {
         let mut patterns = Vec::new();
         for (graph_name, triples) in quads {
@@ -1936,8 +1951,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_graph_name(
-        &self,
-        graph_ref_all: ast::GraphOrDefault<'_>,
+        &mut self,
+        graph_ref_all: ast::GraphOrDefault<'a>,
     ) -> Result<GraphName, AlgebraBuilderError> {
         Ok(match graph_ref_all {
             ast::GraphOrDefault::Graph(n) => self.build_named_node(n)?.into(),
@@ -1946,8 +1961,8 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     fn build_graph_target(
-        &self,
-        graph_ref_all: ast::GraphRefAll<'_>,
+        &mut self,
+        graph_ref_all: ast::GraphRefAll<'a>,
     ) -> Result<GraphTarget, AlgebraBuilderError> {
         Ok(match graph_ref_all {
             ast::GraphRefAll::Graph(n) => self.build_named_node(n)?.into(),
@@ -1974,7 +1989,7 @@ fn register_aggregate(
 }
 
 fn random_variable() -> Variable {
-    Variable::new_unchecked(format!("{:x}", random::<u128>()))
+    Variable::new_unchecked(OxString::new_owned(&format!("{:x}", random::<u128>())))
 }
 
 fn find_unbound_variable<'a>(
@@ -2232,9 +2247,10 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
 }
 
 #[cfg(not(feature = "standard-unicode-escaping"))]
-fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraBuilderError> {
-    let mut output = String::with_capacity(input.len());
+fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
+    let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
+        let output: &mut String = output.get_or_insert_default();
         output.push_str(before);
         let mut after = after.chars();
         let (escape, after) = match after.next() {
@@ -2252,17 +2268,48 @@ fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraB
         output.push(escape);
         input = after;
     }
-    output.push_str(input);
-    Ok(output)
+    Ok(if let Some(mut output) = output {
+        output.push_str(input);
+        OxString::new_owned(&output)
+    } else {
+        OxString::new_owned(input)
+    })
+}
+
+fn unescape_local_name(mut input: &str) -> (Cow<'_, str>, bool) {
+    let mut output = None;
+    let mut might_be_invalid_iri = false;
+    while let Some((before, after)) = input.split_once('\\') {
+        let output: &mut String = output.get_or_insert_default();
+        output.push_str(before);
+        let Some(escape) = after.chars().next() else {
+            unreachable!("PNAME_LOCAL is not allowed to end with a '\\'");
+        };
+        output.push(escape);
+        if matches!(escape, '/' | '?' | '#' | '@' | '%') {
+            might_be_invalid_iri = true;
+        }
+        input = after;
+    }
+    (
+        if let Some(mut output) = output {
+            output.push_str(input);
+            output.into()
+        } else {
+            input.into()
+        },
+        might_be_invalid_iri,
+    )
 }
 
 #[cfg_attr(
     feature = "standard-unicode-escaping",
     expect(unused_variables, clippy::unnecessary_wraps)
 )]
-fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraBuilderError> {
-    let mut output = String::with_capacity(input.len());
+fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
+    let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
+        let output: &mut String = output.get_or_insert_default();
         output.push_str(before);
         let mut after = after.chars();
         let (escape, after) = match after.next() {
@@ -2288,8 +2335,12 @@ fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<String, AlgebraB
         output.push(escape);
         input = after;
     }
-    output.push_str(input);
-    Ok(output)
+    Ok(if let Some(mut output) = output {
+        output.push_str(input);
+        OxString::new_owned(&output)
+    } else {
+        OxString::new_owned(input)
+    })
 }
 
 #[cfg(not(feature = "standard-unicode-escaping"))]

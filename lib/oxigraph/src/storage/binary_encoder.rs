@@ -817,32 +817,29 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::TermRef;
+    use crate::model::{OxString, Term};
     use crate::storage::numeric_encoder::*;
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     #[derive(Default)]
     struct MemoryStrStore {
-        id2str: RefCell<HashMap<StrHash, String>>,
+        id2str: RefCell<HashMap<StrHash, OxString>>,
     }
 
     impl StrLookup for MemoryStrStore {
-        fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
             Ok(self.id2str.borrow().get(key).cloned())
         }
     }
 
     impl MemoryStrStore {
-        fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
+        fn insert_term(&self, term: Term, encoded: &EncodedTerm) {
             insert_term(term, encoded, &mut |h, v| self.insert_str(h, v));
         }
 
-        fn insert_str(&self, key: &StrHash, value: &str) {
-            self.id2str
-                .borrow_mut()
-                .entry(*key)
-                .or_insert_with(|| value.to_owned());
+        fn insert_str(&self, key: &StrHash, value: OxString) {
+            self.id2str.borrow_mut().entry(*key).or_insert(value);
         }
     }
 
@@ -968,9 +965,9 @@ mod tests {
             .into(),
         ];
         for term in terms {
-            let encoded = term.as_ref().into();
-            store.insert_term(term.as_ref(), &encoded);
-            assert_eq!(encoded, term.as_ref().into());
+            let encoded = (&term).into();
+            store.insert_term(term.clone(), &encoded);
+            assert_eq!(encoded, (&term).into());
             assert_eq!(term, store.decode_term(&encoded).unwrap());
 
             let mut buffer = Vec::new();

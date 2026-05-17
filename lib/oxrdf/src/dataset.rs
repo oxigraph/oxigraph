@@ -7,17 +7,17 @@
 //! let mut dataset = Dataset::default();
 //!
 //! // insertion
-//! let ex = NamedNodeRef::new("http://example.com")?;
-//! let quad = QuadRef::new(ex, ex, ex, ex);
-//! dataset.insert(quad);
+//! let ex = NamedNode::new("http://example.com")?;
+//! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
+//! dataset.insert(quad.clone());
 //!
 //! // simple filter
-//! let results: Vec<_> = dataset.quads_for_subject(ex).collect();
+//! let results: Vec<_> = dataset.quads_for_subject(&ex).collect();
 //! assert_eq!(vec![quad], results);
 //!
 //! // direct access to a dataset graph
-//! let results: Vec<_> = dataset.graph(ex).iter().collect();
-//! assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+//! let results: Vec<_> = dataset.graph(&ex).iter().collect();
+//! assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
 //!
 //! // Print
 //! assert_eq!(
@@ -53,17 +53,17 @@ use std::mem::take;
 /// let mut dataset = Dataset::default();
 ///
 /// // insertion
-/// let ex = NamedNodeRef::new("http://example.com")?;
-/// let quad = QuadRef::new(ex, ex, ex, ex);
-/// dataset.insert(quad);
+/// let ex = NamedNode::new("http://example.com")?;
+/// let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
+/// dataset.insert(quad.clone());
 ///
 /// // simple filter
-/// let results: Vec<_> = dataset.quads_for_subject(ex).collect();
+/// let results: Vec<_> = dataset.quads_for_subject(&ex).collect();
 /// assert_eq!(vec![quad], results);
 ///
 /// // direct access to a dataset graph
-/// let results: Vec<_> = dataset.graph(ex).iter().collect();
-/// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+/// let results: Vec<_> = dataset.graph(&ex).iter().collect();
+/// assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Debug, Default, Clone)]
@@ -119,11 +119,11 @@ impl Dataset {
     /// use oxrdf::*;
     ///
     /// let mut dataset = Dataset::default();
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// dataset.insert(QuadRef::new(ex, ex, ex, ex));
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// dataset.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
     ///
-    /// let results: Vec<_> = dataset.graph(ex).iter().collect();
-    /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+    /// let results: Vec<_> = dataset.graph(&ex).iter().collect();
+    /// assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn graph<'a, 'b>(&'a self, graph_name: impl Into<GraphNameRef<'b>>) -> GraphView<'a> {
@@ -142,25 +142,28 @@ impl Dataset {
     /// use oxrdf::*;
     ///
     /// let mut dataset = Dataset::default();
-    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// let ex = NamedNode::new("http://example.com")?;
     ///
     /// // We edit and query the dataset http://example.com graph
     /// {
-    ///     let mut graph = dataset.graph_mut(ex);
-    ///     graph.insert(TripleRef::new(ex, ex, ex));
+    ///     let mut graph = dataset.graph_mut(ex.clone());
+    ///     graph.insert(Triple::new(ex.clone(), ex.clone(), ex.clone()));
     ///     let results: Vec<_> = graph.iter().collect();
-    ///     assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+    ///     assert_eq!(
+    ///         vec![Triple::new(ex.clone(), ex.clone(), ex.clone())],
+    ///         results
+    ///     );
     /// }
     ///
     /// // We have also changes the dataset itself
     /// let results: Vec<_> = dataset.iter().collect();
-    /// assert_eq!(vec![QuadRef::new(ex, ex, ex, ex)], results);
+    /// assert_eq!(
+    ///     vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone())],
+    ///     results
+    /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn graph_mut<'a, 'b>(
-        &'a mut self,
-        graph_name: impl Into<GraphNameRef<'b>>,
-    ) -> GraphViewMut<'a> {
+    pub fn graph_mut(&mut self, graph_name: impl Into<GraphName>) -> GraphViewMut<'_> {
         let graph_name = InternedGraphName::encoded_into(graph_name.into(), &mut self.interner);
         GraphViewMut {
             dataset: self,
@@ -180,7 +183,7 @@ impl Dataset {
     pub fn quads_for_subject<'a, 'b>(
         &'a self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Quad> + 'a {
         let subject = self
             .encoded_named_or_blank_node(subject)
             .unwrap_or_else(InternedNamedOrBlankNode::impossible);
@@ -220,7 +223,7 @@ impl Dataset {
     pub fn quads_for_predicate<'a, 'b>(
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Quad> + 'a {
         let predicate = self
             .encoded_named_node(predicate)
             .unwrap_or_else(InternedNamedNode::impossible);
@@ -260,7 +263,7 @@ impl Dataset {
     pub fn quads_for_object<'a, 'b>(
         &'a self,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Quad> + 'a {
         let object = self
             .encoded_term(object)
             .unwrap_or_else(InternedTerm::impossible);
@@ -301,7 +304,7 @@ impl Dataset {
     pub fn quads_for_graph_name<'a, 'b>(
         &'a self,
         graph_name: impl Into<GraphNameRef<'b>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Quad> + 'a {
         let graph_name = self
             .encoded_graph_name(graph_name)
             .unwrap_or_else(InternedGraphName::impossible);
@@ -346,23 +349,28 @@ impl Dataset {
         predicate: Option<NamedNodeRef<'a>>,
         object: Option<TermRef<'a>>,
         graph_name: Option<GraphNameRef<'a>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Quad> + 'a {
         let iter: Box<dyn Iterator<Item = _>> = if let Some(subject) = subject {
             Box::new(self.quads_for_subject(subject).filter(move |q| {
                 predicate.as_ref().is_none_or(|p| *p == q.predicate)
-                    && object.as_ref().is_none_or(|o| *o == q.object)
-                    && graph_name.as_ref().is_none_or(|g| *g == q.graph_name)
+                    && object.as_ref().is_none_or(|o| *o == q.object.as_ref())
+                    && graph_name
+                        .as_ref()
+                        .is_none_or(|g| *g == q.graph_name.as_ref())
             }))
         } else if let Some(object) = object {
             Box::new(self.quads_for_object(object).filter(move |q| {
                 predicate.as_ref().is_none_or(|p| *p == q.predicate)
-                    && graph_name.as_ref().is_none_or(|g| *g == q.graph_name)
+                    && graph_name
+                        .as_ref()
+                        .is_none_or(|g| *g == q.graph_name.as_ref())
             }))
         } else if let Some(predicate) = predicate {
-            Box::new(
-                self.quads_for_predicate(predicate)
-                    .filter(move |q| graph_name.as_ref().is_none_or(|g| *g == q.graph_name)),
-            )
+            Box::new(self.quads_for_predicate(predicate).filter(move |q| {
+                graph_name
+                    .as_ref()
+                    .is_none_or(|g| *g == q.graph_name.as_ref())
+            }))
         } else if let Some(graph_name) = graph_name {
             Box::new(self.quads_for_graph_name(graph_name))
         } else {
@@ -391,7 +399,7 @@ impl Dataset {
     }
 
     /// Adds a quad to the dataset.
-    pub fn insert<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
+    pub fn insert(&mut self, quad: impl Into<Quad>) -> bool {
         let quad = self.encode_quad(quad.into());
         self.insert_encoded(quad)
     }
@@ -453,7 +461,7 @@ impl Dataset {
 
     fn encode_quad(
         &mut self,
-        quad: QuadRef<'_>,
+        quad: Quad,
     ) -> (
         InternedNamedOrBlankNode,
         InternedNamedNode,
@@ -518,8 +526,8 @@ impl Dataset {
             &InternedTerm,
             &InternedGraphName,
         ),
-    ) -> QuadRef<'_> {
-        QuadRef {
+    ) -> Quad {
+        Quad {
             subject: quad.0.decode_from(&self.interner),
             predicate: quad.1.decode_from(&self.interner),
             object: quad.2.decode_from(&self.interner),
@@ -530,8 +538,8 @@ impl Dataset {
     fn decode_spo(
         &self,
         triple: (&InternedNamedOrBlankNode, &InternedNamedNode, &InternedTerm),
-    ) -> TripleRef<'_> {
-        TripleRef {
+    ) -> Triple {
+        Triple {
             subject: triple.0.decode_from(&self.interner),
             predicate: triple.1.decode_from(&self.interner),
             object: triple.2.decode_from(&self.interner),
@@ -545,19 +553,17 @@ impl Dataset {
     /// use oxrdf::dataset::CanonicalizationAlgorithm;
     /// use oxrdf::*;
     ///
-    /// let iri = NamedNodeRef::new("http://example.com")?;
+    /// let iri = NamedNode::new("http://example.com")?;
     ///
     /// let mut graph1 = Graph::new();
     /// let bnode1 = BlankNode::default();
-    /// let g1 = BlankNode::default();
-    /// graph1.insert(QuadRef::new(iri, iri, &bnode1, &g1));
-    /// graph1.insert(QuadRef::new(&bnode1, iri, iri, &g1));
+    /// graph1.insert(Triple::new(iri.clone(), iri.clone(), bnode1.clone()));
+    /// graph1.insert(Triple::new(bnode1, iri.clone(), iri.clone()));
     ///
     /// let mut graph2 = Graph::new();
     /// let bnode2 = BlankNode::default();
-    /// let g2 = BlankNode::default();
-    /// graph2.insert(QuadRef::new(iri, iri, &bnode2, &g2));
-    /// graph2.insert(QuadRef::new(&bnode2, iri, iri, &g2));
+    /// graph2.insert(Triple::new(iri.clone(), iri.clone(), bnode2.clone()));
+    /// graph2.insert(Triple::new(bnode2, iri.clone(), iri));
     ///
     /// assert_ne!(graph1, graph2);
     /// graph1.canonicalize(CanonicalizationAlgorithm::Unstable);
@@ -592,7 +598,7 @@ impl Dataset {
     pub fn canonicalize_blank_nodes(
         &self,
         algorithm: CanonicalizationAlgorithm,
-    ) -> HashMap<BlankNodeRef<'_>, BlankNode> {
+    ) -> HashMap<BlankNode, BlankNode> {
         self.canonicalize_interned_blank_nodes(algorithm)
             .into_iter()
             .map(|(from, to)| (from.decode_from(&self.interner), to))
@@ -779,10 +785,10 @@ impl Dataset {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 // 2)
-                let issued_identifier = BlankNode::new_unchecked(format!(
+                let issued_identifier = BlankNode::new_unchecked(OxString::new_owned(&format!(
                     "{}{}",
                     issuer.identifier_prefix, issuer.identifier_counter
-                ));
+                )));
                 // 3)
                 entry.insert(issued_identifier.clone());
                 issuer.issued_identifier_order.push(blank_node);
@@ -836,7 +842,7 @@ impl Dataset {
         &self,
         term: &InternedNamedOrBlankNode,
         reference_blank_node_identifier: &InternedBlankNode,
-    ) -> NamedOrBlankNodeRef<'_> {
+    ) -> NamedOrBlankNode {
         match term {
             InternedNamedOrBlankNode::NamedNode(t) => t.decode_from(&self.interner).into(),
             InternedNamedOrBlankNode::BlankNode(t) => {
@@ -886,7 +892,7 @@ impl Dataset {
         &self,
         term: &InternedGraphName,
         reference_blank_node_identifier: &InternedBlankNode,
-    ) -> GraphNameRef<'_> {
+    ) -> GraphName {
         match term {
             InternedGraphName::NamedNode(t) => t.decode_from(&self.interner).into(),
             InternedGraphName::BlankNode(t) => {
@@ -897,7 +903,7 @@ impl Dataset {
                 })
                 .into()
             }
-            InternedGraphName::DefaultGraph => GraphNameRef::DefaultGraph,
+            InternedGraphName::DefaultGraph => GraphName::DefaultGraph,
         }
     }
 
@@ -1209,7 +1215,7 @@ impl Dataset {
                         InternedNamedOrBlankNode::NamedNode(_) => s,
                         InternedNamedOrBlankNode::BlankNode(bnode) => {
                             InternedNamedOrBlankNode::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].as_ref(),
+                                bnode_mapping[&bnode].clone(),
                                 &mut self.interner,
                             ))
                         }
@@ -1219,14 +1225,14 @@ impl Dataset {
                         InternedTerm::NamedNode(_) | InternedTerm::Literal(_) => o,
                         InternedTerm::BlankNode(bnode) => {
                             InternedTerm::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].as_ref(),
+                                bnode_mapping[&bnode].clone(),
                                 &mut self.interner,
                             ))
                         }
                         #[cfg(feature = "rdf-12")]
                         InternedTerm::Triple(triple) => {
                             InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
-                                self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
+                                self.map_triple_blank_nodes(&triple, bnode_mapping),
                                 &mut self.interner,
                             )))
                         }
@@ -1235,7 +1241,7 @@ impl Dataset {
                         InternedGraphName::NamedNode(_) | InternedGraphName::DefaultGraph => g,
                         InternedGraphName::BlankNode(bnode) => {
                             InternedGraphName::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].as_ref(),
+                                bnode_mapping[&bnode].clone(),
                                 &mut self.interner,
                             ))
                         }
@@ -1255,15 +1261,15 @@ impl Dataset {
             subject: if let InternedNamedOrBlankNode::BlankNode(bnode) = &triple.subject {
                 bnode_mapping[bnode].clone().into()
             } else {
-                triple.subject.decode_from(&self.interner).into_owned()
+                triple.subject.decode_from(&self.interner)
             },
-            predicate: triple.predicate.decode_from(&self.interner).into_owned(),
+            predicate: triple.predicate.decode_from(&self.interner),
             object: if let InternedTerm::BlankNode(bnode) = &triple.object {
                 bnode_mapping[bnode].clone().into()
             } else if let InternedTerm::Triple(t) = &triple.object {
                 self.map_triple_blank_nodes(t, bnode_mapping).into()
             } else {
-                triple.object.decode_from(&self.interner).into_owned()
+                triple.object.decode_from(&self.interner)
             },
         }
     }
@@ -1275,7 +1281,7 @@ impl PartialEq for Dataset {
             return false;
         }
         for q in self {
-            if !other.contains(q) {
+            if !other.contains(&q) {
                 return false;
             }
         }
@@ -1286,7 +1292,7 @@ impl PartialEq for Dataset {
 impl Eq for Dataset {}
 
 impl<'a> IntoIterator for &'a Dataset {
-    type Item = QuadRef<'a>;
+    type Item = Quad;
     type IntoIter = Iter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1294,34 +1300,18 @@ impl<'a> IntoIterator for &'a Dataset {
     }
 }
 
-impl FromIterator<Quad> for Dataset {
-    fn from_iter<I: IntoIterator<Item = Quad>>(iter: I) -> Self {
+impl<Q: Into<Quad>> FromIterator<Q> for Dataset {
+    fn from_iter<I: IntoIterator<Item = Q>>(iter: I) -> Self {
         let mut g = Self::new();
         g.extend(iter);
         g
     }
 }
 
-impl<'a, T: Into<QuadRef<'a>>> FromIterator<T> for Dataset {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut g = Self::new();
-        g.extend(iter);
-        g
-    }
-}
-
-impl Extend<Quad> for Dataset {
-    fn extend<I: IntoIterator<Item = Quad>>(&mut self, iter: I) {
-        for t in iter {
-            self.insert(&t);
-        }
-    }
-}
-
-impl<'a, T: Into<QuadRef<'a>>> Extend<T> for Dataset {
-    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        for t in iter {
-            self.insert(t);
+impl<Q: Into<Quad>> Extend<Q> for Dataset {
+    fn extend<I: IntoIterator<Item = Q>>(&mut self, iter: I) {
+        for q in iter {
+            self.insert(q);
         }
     }
 }
@@ -1344,11 +1334,11 @@ impl fmt::Display for Dataset {
 /// use oxrdf::*;
 ///
 /// let mut dataset = Dataset::default();
-/// let ex = NamedNodeRef::new("http://example.com")?;
-/// dataset.insert(QuadRef::new(ex, ex, ex, ex));
+/// let ex = NamedNode::new("http://example.com")?;
+/// dataset.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()));
 ///
-/// let results: Vec<_> = dataset.graph(ex).iter().collect();
-/// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+/// let results: Vec<_> = dataset.graph(&ex).iter().collect();
+/// assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone, Debug)]
@@ -1383,14 +1373,14 @@ impl<'a> GraphView<'a> {
     pub fn triples_for_subject<'b>(
         &self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
     }
 
     pub(super) fn triples_for_interned_subject(
         &self,
         subject: Option<InternedNamedOrBlankNode>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
         let ds = self.dataset;
         self.dataset
@@ -1419,7 +1409,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = TermRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Term> + 'a {
         self.objects_for_interned_subject_predicate(
             self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_named_node(predicate),
@@ -1430,7 +1420,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: Option<InternedNamedOrBlankNode>,
         predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = TermRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = Term> + use<'a> {
         let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let ds = self.dataset;
@@ -1452,7 +1442,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> Option<TermRef<'a>> {
+    ) -> Option<Term> {
         self.objects_for_subject_predicate(subject, predicate)
             .next()
     }
@@ -1461,7 +1451,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedNode> + 'a {
         self.predicates_for_interned_subject_object(
             self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_term(object),
@@ -1472,7 +1462,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: Option<InternedNamedOrBlankNode>,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedNodeRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = NamedNode> + use<'a> {
         let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
@@ -1498,14 +1488,14 @@ impl<'a> GraphView<'a> {
     pub fn triples_for_predicate<'b>(
         &self,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
     }
 
     pub(super) fn triples_for_interned_predicate(
         &self,
         predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let ds = self.dataset;
         self.dataset
@@ -1531,7 +1521,7 @@ impl<'a> GraphView<'a> {
         &self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a {
         self.subjects_for_interned_predicate_object(
             self.dataset.encoded_named_node(predicate),
             self.dataset.encoded_term(object),
@@ -1542,7 +1532,7 @@ impl<'a> GraphView<'a> {
         &self,
         predicate: Option<InternedNamedNode>,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = NamedOrBlankNode> + use<'a> {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
@@ -1569,21 +1559,21 @@ impl<'a> GraphView<'a> {
         &self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> Option<NamedOrBlankNodeRef<'a>> {
+    ) -> Option<NamedOrBlankNode> {
         self.subjects_for_predicate_object(predicate, object).next()
     }
 
     pub fn triples_for_object<'b>(
         &self,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.triples_for_interned_object(self.dataset.encoded_term(object))
     }
 
     pub(super) fn triples_for_interned_object(
         &self,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
         self.dataset
@@ -1611,24 +1601,24 @@ impl<'a> GraphView<'a> {
         subject: Option<NamedOrBlankNodeRef<'a>>,
         predicate: Option<NamedNodeRef<'a>>,
         object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         let iter: Box<dyn Iterator<Item = _>> = match (subject, predicate, object) {
             (Some(subject), Some(predicate), Some(object)) => {
-                let triple = TripleRef::new(subject, predicate, object);
-                Box::new(self.contains(triple).then_some(triple).into_iter())
+                let triple = Triple::new(subject, predicate, object);
+                Box::new(self.contains(&triple).then_some(triple).into_iter())
             }
             (Some(subject), Some(predicate), None) => Box::new(
                 self.objects_for_subject_predicate(subject, predicate)
-                    .map(move |object| TripleRef::new(subject, predicate, object)),
+                    .map(move |object| Triple::new(subject, predicate, object)),
             ),
             (Some(subject), None, Some(object)) => Box::new(
                 self.predicates_for_subject_object(subject, object)
-                    .map(move |predicate| TripleRef::new(subject, predicate, object)),
+                    .map(move |predicate| Triple::new(subject, predicate, object)),
             ),
             (Some(subject), None, None) => Box::new(self.triples_for_subject(subject)),
             (None, Some(predicate), Some(object)) => Box::new(
                 self.subjects_for_predicate_object(predicate, object)
-                    .map(move |subject| TripleRef::new(subject, predicate, object)),
+                    .map(move |subject| Triple::new(subject, predicate, object)),
             ),
             (None, Some(predicate), None) => Box::new(self.triples_for_predicate(predicate)),
             (None, None, Some(object)) => Box::new(self.triples_for_object(object)),
@@ -1671,7 +1661,7 @@ impl<'a> GraphView<'a> {
 }
 
 impl<'a> IntoIterator for GraphView<'a> {
-    type Item = TripleRef<'a>;
+    type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1680,7 +1670,7 @@ impl<'a> IntoIterator for GraphView<'a> {
 }
 
 impl<'a> IntoIterator for &GraphView<'a> {
-    type Item = TripleRef<'a>;
+    type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1706,19 +1696,25 @@ impl fmt::Display for GraphView<'_> {
 /// use oxrdf::*;
 ///
 /// let mut dataset = Dataset::default();
-/// let ex = NamedNodeRef::new("http://example.com")?;
+/// let ex = NamedNode::new("http://example.com")?;
 ///
 /// // We edit and query the dataset http://example.com graph
 /// {
-///     let mut graph = dataset.graph_mut(ex);
-///     graph.insert(TripleRef::new(ex, ex, ex));
+///     let mut graph = dataset.graph_mut(ex.clone());
+///     graph.insert(Triple::new(ex.clone(), ex.clone(), ex.clone()));
 ///     let results: Vec<_> = graph.iter().collect();
-///     assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+///     assert_eq!(
+///         vec![Triple::new(ex.clone(), ex.clone(), ex.clone())],
+///         results
+///     );
 /// }
 ///
 /// // We have also changes the dataset itself
 /// let results: Vec<_> = dataset.iter().collect();
-/// assert_eq!(vec![QuadRef::new(ex, ex, ex, ex)], results);
+/// assert_eq!(
+///     vec![Quad::new(ex.clone(), ex.clone(), ex.clone(), ex)],
+///     results
+/// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Debug)]
@@ -1736,7 +1732,7 @@ impl<'a> GraphViewMut<'a> {
     }
 
     /// Adds a triple to the graph.
-    pub fn insert<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
+    pub fn insert(&mut self, triple: impl Into<Triple>) -> bool {
         let triple = self.encode_triple(triple.into());
         self.dataset.insert_encoded((
             triple.subject,
@@ -1760,7 +1756,7 @@ impl<'a> GraphViewMut<'a> {
         }
     }
 
-    fn encode_triple(&mut self, triple: TripleRef<'_>) -> InternedTriple {
+    fn encode_triple(&mut self, triple: Triple) -> InternedTriple {
         InternedTriple {
             subject: InternedNamedOrBlankNode::encoded_into(
                 triple.subject,
@@ -1782,7 +1778,7 @@ impl<'a> GraphViewMut<'a> {
     pub fn triples_for_subject<'b>(
         &'a self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.read()
             .triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
     }
@@ -1791,7 +1787,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = TermRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Term> + 'a {
         self.read().objects_for_interned_subject_predicate(
             self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_named_node(predicate),
@@ -1802,7 +1798,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> Option<TermRef<'a>> {
+    ) -> Option<Term> {
         self.read().object_for_subject_predicate(subject, predicate)
     }
 
@@ -1810,7 +1806,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedNode> + 'a {
         self.read().predicates_for_interned_subject_object(
             self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_term(object),
@@ -1820,7 +1816,7 @@ impl<'a> GraphViewMut<'a> {
     pub fn triples_for_predicate<'b>(
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.read()
             .triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
     }
@@ -1829,7 +1825,7 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a {
         self.read().subjects_for_interned_predicate_object(
             self.dataset.encoded_named_node(predicate),
             self.dataset.encoded_term(object),
@@ -1840,14 +1836,14 @@ impl<'a> GraphViewMut<'a> {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> Option<NamedOrBlankNodeRef<'a>> {
+    ) -> Option<NamedOrBlankNode> {
         self.read().subject_for_predicate_object(predicate, object)
     }
 
     pub fn triples_for_object<'b>(
         &'a self,
         object: TermRef<'b>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = Triple> + 'a {
         self.read()
             .triples_for_interned_object(self.dataset.encoded_term(object))
     }
@@ -1868,15 +1864,7 @@ impl<'a> GraphViewMut<'a> {
     }
 }
 
-impl Extend<Triple> for GraphViewMut<'_> {
-    fn extend<I: IntoIterator<Item = Triple>>(&mut self, iter: I) {
-        for t in iter {
-            self.insert(&t);
-        }
-    }
-}
-
-impl<'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'_> {
+impl<T: Into<Triple>> Extend<T> for GraphViewMut<'_> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for t in iter {
             self.insert(t);
@@ -1885,7 +1873,7 @@ impl<'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'_> {
 }
 
 impl<'a> IntoIterator for &'a GraphViewMut<'a> {
-    type Item = TripleRef<'a>;
+    type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1916,8 +1904,8 @@ pub struct Iter<'a> {
     >,
 }
 
-impl<'a> Iterator for Iter<'a> {
-    type Item = QuadRef<'a>;
+impl Iterator for Iter<'_> {
+    type Item = Quad;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
@@ -1940,8 +1928,8 @@ pub struct GraphViewIter<'a> {
     >,
 }
 
-impl<'a> Iterator for GraphViewIter<'a> {
-    type Item = TripleRef<'a>;
+impl Iterator for GraphViewIter<'_> {
+    type Item = Triple;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner

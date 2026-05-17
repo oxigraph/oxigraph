@@ -79,7 +79,7 @@ pub fn area_iri_to_square_meter_factor(iri: &str) -> Option<f64> {
 pub fn extract_units_iri(term: &Term) -> Option<&str> {
     match term {
         Term::NamedNode(node) => Some(node.as_str()),
-        Term::Literal(literal) if literal.datatype() == xsd::ANY_URI => Some(literal.value()),
+        Term::Literal(literal) if *literal.datatype() == xsd::ANY_URI => Some(literal.value()),
         _ => None,
     }
 }

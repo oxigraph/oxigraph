@@ -459,16 +459,17 @@ impl EncodedTerm {
         matches!(self, Self::DefaultGraph)
     }
 }
-impl From<NamedNodeRef<'_>> for EncodedTerm {
-    fn from(named_node: NamedNodeRef<'_>) -> Self {
+
+impl From<&NamedNode> for EncodedTerm {
+    fn from(named_node: &NamedNode) -> Self {
         Self::NamedNode {
             iri_id: StrHash::new(named_node.as_str()),
         }
     }
 }
 
-impl From<BlankNodeRef<'_>> for EncodedTerm {
-    fn from(blank_node: BlankNodeRef<'_>) -> Self {
+impl From<&BlankNode> for EncodedTerm {
+    fn from(blank_node: &BlankNode) -> Self {
         if let Some(id) = blank_node.unique_id() {
             Self::NumericalBlankNode {
                 id: id.to_be_bytes(),
@@ -486,8 +487,8 @@ impl From<BlankNodeRef<'_>> for EncodedTerm {
     }
 }
 
-impl From<LiteralRef<'_>> for EncodedTerm {
-    fn from(literal: LiteralRef<'_>) -> Self {
+impl From<&Literal> for EncodedTerm {
+    fn from(literal: &Literal) -> Self {
         let value = literal.value();
         let datatype = literal.datatype().as_str();
         let native_encoding = match datatype {
@@ -629,40 +630,40 @@ impl From<LiteralRef<'_>> for EncodedTerm {
     }
 }
 
-impl From<NamedOrBlankNodeRef<'_>> for EncodedTerm {
-    fn from(term: NamedOrBlankNodeRef<'_>) -> Self {
+impl From<&NamedOrBlankNode> for EncodedTerm {
+    fn from(term: &NamedOrBlankNode) -> Self {
         match term {
-            NamedOrBlankNodeRef::NamedNode(named_node) => named_node.into(),
-            NamedOrBlankNodeRef::BlankNode(blank_node) => blank_node.into(),
+            NamedOrBlankNode::NamedNode(named_node) => named_node.into(),
+            NamedOrBlankNode::BlankNode(blank_node) => blank_node.into(),
         }
     }
 }
 
-impl From<TermRef<'_>> for EncodedTerm {
-    fn from(term: TermRef<'_>) -> Self {
+impl From<&Term> for EncodedTerm {
+    fn from(term: &Term) -> Self {
         match term {
-            TermRef::NamedNode(named_node) => named_node.into(),
-            TermRef::BlankNode(blank_node) => blank_node.into(),
-            TermRef::Literal(literal) => literal.into(),
+            Term::NamedNode(named_node) => named_node.into(),
+            Term::BlankNode(blank_node) => blank_node.into(),
+            Term::Literal(literal) => literal.into(),
             #[cfg(feature = "rdf-12")]
-            TermRef::Triple(triple) => triple.as_ref().into(),
+            Term::Triple(triple) => triple.as_ref().into(),
         }
     }
 }
 
-impl From<GraphNameRef<'_>> for EncodedTerm {
-    fn from(name: GraphNameRef<'_>) -> Self {
+impl From<&GraphName> for EncodedTerm {
+    fn from(name: &GraphName) -> Self {
         match name {
-            GraphNameRef::NamedNode(named_node) => named_node.into(),
-            GraphNameRef::BlankNode(blank_node) => blank_node.into(),
-            GraphNameRef::DefaultGraph => Self::DefaultGraph,
+            GraphName::NamedNode(named_node) => named_node.into(),
+            GraphName::BlankNode(blank_node) => blank_node.into(),
+            GraphName::DefaultGraph => Self::DefaultGraph,
         }
     }
 }
 
 #[cfg(feature = "rdf-12")]
-impl From<TripleRef<'_>> for EncodedTerm {
-    fn from(triple: TripleRef<'_>) -> Self {
+impl From<&Triple> for EncodedTerm {
+    fn from(triple: &Triple) -> Self {
         Self::Triple(Arc::new(triple.into()))
     }
 }
@@ -687,12 +688,12 @@ impl EncodedTriple {
 }
 
 #[cfg(feature = "rdf-12")]
-impl From<TripleRef<'_>> for EncodedTriple {
-    fn from(triple: TripleRef<'_>) -> Self {
+impl From<&Triple> for EncodedTriple {
+    fn from(triple: &Triple) -> Self {
         Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
+            subject: (&triple.subject).into(),
+            predicate: (&triple.predicate).into(),
+            object: (&triple.object).into(),
         }
     }
 }
@@ -721,73 +722,82 @@ impl EncodedQuad {
     }
 }
 
-impl From<QuadRef<'_>> for EncodedQuad {
-    fn from(quad: QuadRef<'_>) -> Self {
+impl From<&Quad> for EncodedQuad {
+    fn from(quad: &Quad) -> Self {
         Self {
-            subject: quad.subject.into(),
-            predicate: quad.predicate.into(),
-            object: quad.object.into(),
-            graph_name: quad.graph_name.into(),
+            subject: (&quad.subject).into(),
+            predicate: (&quad.predicate).into(),
+            object: (&quad.object).into(),
+            graph_name: (&quad.graph_name).into(),
         }
     }
 }
 
 pub trait StrLookup {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
+    fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError>;
 }
 
-pub fn insert_term<F: FnMut(&StrHash, &str)>(
-    term: TermRef<'_>,
+pub fn insert_term<F: FnMut(&StrHash, OxString)>(
+    term: Term,
     encoded: &EncodedTerm,
     insert_str: &mut F,
 ) {
     match term {
-        TermRef::NamedNode(node) => {
+        Term::NamedNode(node) => {
             let EncodedTerm::NamedNode { iri_id } = encoded else {
                 unreachable!("Invalid named node encoding: {encoded:?}");
             };
-            insert_str(iri_id, node.as_str());
+            insert_str(iri_id, node.into_string());
         }
-        TermRef::BlankNode(node) => match encoded {
+        Term::BlankNode(node) => match encoded {
             EncodedTerm::BigBlankNode { id_id } => {
-                insert_str(id_id, node.as_str());
+                insert_str(id_id, node.into_string());
             }
             EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => (),
             _ => unreachable!("Invalid named node encoding: {encoded:?}"),
         },
-        TermRef::Literal(literal) => match encoded {
+        Term::Literal(literal) => match encoded {
             EncodedTerm::BigStringLiteral { value_id }
             | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
-                insert_str(value_id, literal.value());
+                insert_str(value_id, literal.into_value());
             }
             EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
-                let Some(language) = literal.language() else {
-                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
-                };
-                insert_str(language_id, language);
+                #[cfg(feature = "rdf-12")]
+                let (_, _, language, _) = literal.destruct();
+                #[cfg(not(feature = "rdf-12"))]
+                let (_, _, language) = literal.destruct();
+                if let Some(language) = language {
+                    insert_str(language_id, language);
+                }
             }
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                insert_str(value_id, literal.value());
-                let Some(language) = literal.language() else {
-                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
-                };
-                insert_str(language_id, language);
+                #[cfg(feature = "rdf-12")]
+                let (value, _, language, _) = literal.destruct();
+                #[cfg(not(feature = "rdf-12"))]
+                let (value, _, language) = literal.destruct();
+                insert_str(value_id, value);
+                if let Some(language) = language {
+                    insert_str(language_id, language);
+                }
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlBigSmallDirLangStringLiteral { value_id, .. }
             | EncodedTerm::LtrBigSmallDirLangStringLiteral { value_id, .. } => {
-                insert_str(value_id, literal.value());
+                insert_str(value_id, literal.into_value());
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallBigDirLangStringLiteral { language_id, .. }
             | EncodedTerm::LtrSmallBigDirLangStringLiteral { language_id, .. } => {
-                let Some(language) = literal.language() else {
-                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
-                };
-                insert_str(language_id, language);
+                #[cfg(feature = "rdf-12")]
+                let (_, _, language, _) = literal.destruct();
+                #[cfg(not(feature = "rdf-12"))]
+                let (_, _, language) = literal.destruct();
+                if let Some(language) = language {
+                    insert_str(language_id, language);
+                }
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlBigBigDirLangStringLiteral {
@@ -798,21 +808,33 @@ pub fn insert_term<F: FnMut(&StrHash, &str)>(
                 value_id,
                 language_id,
             } => {
-                insert_str(value_id, literal.value());
-                let Some(language) = literal.language() else {
-                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
-                };
-                insert_str(language_id, language);
+                #[cfg(feature = "rdf-12")]
+                let (value, _, language, _) = literal.destruct();
+                #[cfg(not(feature = "rdf-12"))]
+                let (value, _, language) = literal.destruct();
+                insert_str(value_id, value);
+                if let Some(language) = language {
+                    insert_str(language_id, language);
+                }
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
-                insert_str(datatype_id, literal.datatype().as_str());
+                insert_str(
+                    datatype_id,
+                    OxString::new_owned(literal.datatype().as_str()),
+                );
             }
             EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                insert_str(value_id, literal.value());
-                insert_str(datatype_id, literal.datatype().as_str());
+                #[cfg(feature = "rdf-12")]
+                let (value, datatype, _, _) = literal.destruct();
+                #[cfg(not(feature = "rdf-12"))]
+                let (value, datatype, _) = literal.destruct();
+                insert_str(value_id, value);
+                if let Some(datatype) = datatype {
+                    insert_str(datatype_id, datatype.into_string());
+                }
             }
             EncodedTerm::SmallStringLiteral(..)
             | EncodedTerm::SmallSmallLangStringLiteral { .. }
@@ -835,20 +857,16 @@ pub fn insert_term<F: FnMut(&StrHash, &str)>(
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallSmallDirLangStringLiteral { .. }
             | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => (),
-            _ => unreachable!("Invalid literal encoding: {encoded:?} for {term}"),
+            _ => unreachable!("Invalid literal encoding: {encoded:?} for {literal}"),
         },
         #[cfg(feature = "rdf-12")]
-        TermRef::Triple(triple) => {
+        Term::Triple(triple) => {
             let EncodedTerm::Triple(encoded) = encoded else {
                 unreachable!("Invalid triple term encoding: {encoded:?}");
             };
-            insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str);
-            insert_term(
-                triple.predicate.as_ref().into(),
-                &encoded.predicate,
-                insert_str,
-            );
-            insert_term(triple.object.as_ref(), &encoded.object, insert_str);
+            insert_term(triple.subject.into(), &encoded.subject, insert_str);
+            insert_term(triple.predicate.into(), &encoded.predicate, insert_str);
+            insert_term(triple.object, &encoded.object, insert_str);
         }
     }
 }
@@ -1008,7 +1026,9 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NumericalBlankNode { id } => {
                 Ok(BlankNode::new_from_unique_id(u128::from_be_bytes(*id)).into())
             }
-            EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
+            EncodedTerm::SmallBlankNode(id) => {
+                Ok(BlankNode::new_unchecked(OxString::new_owned(id.as_str())).into())
+            }
             EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
@@ -1154,7 +1174,7 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, StorageError> {
+fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<OxString, StorageError> {
     Ok(lookup.get_str(id)?.ok_or_else(|| {
         CorruptionError::new(format!(
             "Not able to find the string with id {id:?} in the string store"
