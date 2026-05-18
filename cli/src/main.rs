@@ -15,7 +15,7 @@ use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
 use oxigraph::io::{JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
-    GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
+    GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode, OxString,
 };
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
@@ -114,7 +114,7 @@ pub fn main() -> anyhow::Result<()> {
             };
             let graph = if let Some(iri) = &graph {
                 Some(
-                    NamedNode::new(iri)
+                    NamedNode::new(OxString::new_owned(iri))
                         .with_context(|| format!("The target graph name {iri} is invalid"))?,
                 )
             } else {
@@ -502,9 +502,9 @@ pub fn main() -> anyhow::Result<()> {
             };
             let serializer = RdfSerializer::from_format(to_format);
 
-            let from_graph = if let Some(from_graph) = from_graph {
+            let from_graph = if let Some(from_graph) = &from_graph {
                 Some(
-                    NamedNode::new(&from_graph)
+                    NamedNode::new(OxString::new_owned(from_graph))
                         .with_context(|| format!("The source graph name {from_graph} is invalid"))?
                         .into(),
                 )
@@ -513,8 +513,8 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
-            let to_graph = if let Some(to_graph) = to_graph {
-                NamedNode::new(&to_graph)
+            let to_graph = if let Some(to_graph) = &to_graph {
+                NamedNode::new(OxString::new_owned(to_graph))
                     .with_context(|| format!("The target graph name {to_graph} is invalid"))?
                     .into()
             } else {
@@ -1208,7 +1208,7 @@ fn handle_request(
                     web_load_graph(&store, request, format, &graph.clone().into())?;
                     Response::builder()
                         .status(StatusCode::CREATED)
-                        .header(LOCATION, graph.into_string())
+                        .header(LOCATION, graph.into_string().as_str())
                 }
                 .body(Body::empty())
                 .map_err(internal_server_error)
@@ -1250,11 +1250,13 @@ fn base_url(request: &Request<Body>) -> String {
 }
 
 fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, HttpError> {
-    Ok(Iri::parse(base_url(request))
-        .map_err(bad_request)?
-        .resolve(url)
-        .map_err(bad_request)?
-        .into())
+    Ok(NamedNode::new_unchecked(
+        Iri::parse(base_url(request))
+            .map_err(bad_request)?
+            .resolve(url)
+            .map_err(bad_request)?
+            .into_inner(),
+    ))
 }
 
 fn url_has_query_parameter(request: &Request<Body>, param: &str) -> bool {

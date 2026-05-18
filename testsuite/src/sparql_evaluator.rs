@@ -17,6 +17,7 @@ use oxigraph::sparql::results::{
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
+use oxrdf::OxString;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::SparqlParser;
 use spargebra::algebra::GraphPattern;
@@ -299,13 +300,13 @@ struct StaticServiceHandler {
 }
 
 impl StaticServiceHandler {
-    fn new(services: &[(String, String)]) -> Result<Self> {
+    fn new(services: &[(OxString, String)]) -> Result<Self> {
         Ok(Self {
             services: Arc::new(
                 services
                     .iter()
                     .map(|(name, data)| {
-                        let name = NamedNode::new(name)?;
+                        let name = NamedNode::new(name.clone())?;
                         let dataset = load_dataset(data, guess_rdf_format(data)?, false, false)?;
                         Ok((name, dataset))
                     })

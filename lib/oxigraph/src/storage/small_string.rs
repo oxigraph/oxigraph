@@ -1,3 +1,4 @@
+use oxrdf::OxString;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
@@ -129,6 +130,13 @@ impl From<SmallString> for String {
     #[inline]
     fn from(value: SmallString) -> Self {
         value.as_str().into()
+    }
+}
+
+impl From<SmallString> for OxString {
+    #[inline]
+    fn from(value: SmallString) -> Self {
+        OxString::new_owned(value.as_str())
     }
 }
 

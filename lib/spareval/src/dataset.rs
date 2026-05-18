@@ -415,30 +415,44 @@ impl From<Term> for ExpressionTerm {
                     if let Some(language) = language {
                         if let Some(direction) = direction {
                             Self::DirLangStringLiteral {
-                                value,
-                                language,
+                                value: value.as_str().to_owned(),
+                                language: language.as_str().to_owned(),
                                 direction,
                             }
                         } else {
-                            Self::LangStringLiteral { value, language }
+                            Self::LangStringLiteral {
+                                value: value.as_str().to_owned(),
+                                language: language.as_str().to_owned(),
+                            }
                         }
                     } else if let Some(datatype) = datatype {
-                        parse_typed_literal(&value, datatype.as_str())
-                            .unwrap_or(Self::OtherTypedLiteral { value, datatype })
+                        parse_typed_literal(&value, datatype.as_str()).unwrap_or(
+                            Self::OtherTypedLiteral {
+                                value: value.as_str().to_owned(),
+                                datatype,
+                            },
+                        )
                     } else {
-                        Self::StringLiteral(value)
+                        Self::StringLiteral(value.as_str().to_owned())
                     }
                 }
                 #[cfg(not(feature = "sparql-12"))]
                 {
                     let (value, datatype, language) = t.destruct();
                     if let Some(language) = language {
-                        Self::LangStringLiteral { value, language }
+                        Self::LangStringLiteral {
+                            value: value.as_str().to_owned(),
+                            language: language.as_str().to_owned(),
+                        }
                     } else if let Some(datatype) = datatype {
-                        parse_typed_literal(&value, datatype.as_str())
-                            .unwrap_or(Self::OtherTypedLiteral { value, datatype })
+                        parse_typed_literal(&value, datatype.as_str()).unwrap_or(
+                            Self::OtherTypedLiteral {
+                                value: value.as_str().to_owned(),
+                                datatype,
+                            },
+                        )
                     } else {
-                        Self::StringLiteral(value)
+                        Self::StringLiteral(value.as_str().to_owned())
                     }
                 }
             }

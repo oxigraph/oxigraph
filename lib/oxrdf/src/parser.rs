@@ -3,7 +3,7 @@ use crate::BaseDirection;
 use crate::vocab::xsd;
 use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
-    NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
+    NamedNode, OxString, Quad, Term, Triple, Variable, VariableNameParseError,
 };
 use std::borrow::Cow;
 use std::char;
@@ -279,7 +279,7 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
         } else {
             Cow::Borrowed(value)
         };
-        let term = NamedNode::new(value.as_ref()).map_err(|error| {
+        let term = NamedNode::new(OxString::new_owned(&value)).map_err(|error| {
             TermParseError(TermParseErrorKind::Iri {
                 value: value.into_owned(),
                 error,
@@ -326,7 +326,7 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
             end -= 1;
         }
         let (value, remain) = remain.split_at(end);
-        let term = BlankNode::new(value).map_err(|error| {
+        let term = BlankNode::new(OxString::new_owned(value)).map_err(|error| {
             TermParseError(TermParseErrorKind::BlankNode {
                 value: value.to_owned(),
                 error,
@@ -357,7 +357,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         #[cfg(feature = "rdf-12")]
                         if let Some((language, direction)) = language.split_once("--") {
                             return Ok((
-                                Literal::new_directional_language_tagged_literal(value, language, match direction {
+                                Literal::new_directional_language_tagged_literal(value, OxString::new_owned(language), match direction {
                                     "ltr" => BaseDirection::Ltr,
                                     "rtl" => BaseDirection::Rtl,
                                     _ => return Err(TermParseError(TermParseErrorKind::Msg(format!("The only two possible base directions are 'rtl' and 'ltr', found '{direction}'"))))
@@ -373,14 +373,16 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                             ));
                         }
                         Ok((
-                            Literal::new_language_tagged_literal(value, language).map_err(
-                                |error| {
-                                    TermParseError(TermParseErrorKind::LanguageTag {
-                                        value: language.to_owned(),
-                                        error,
-                                    })
-                                },
-                            )?,
+                            Literal::new_language_tagged_literal(
+                                value,
+                                OxString::new_owned(language),
+                            )
+                            .map_err(|error| {
+                                TermParseError(TermParseErrorKind::LanguageTag {
+                                    value: language.to_owned(),
+                                    error,
+                                })
+                            })?,
                             remain,
                         ))
                     } else if let Some(remain) = remain.strip_prefix("^^") {
@@ -457,7 +459,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                 cursor += 1;
             }
             if count_exponent > 0 {
-                Ok((Literal::new_typed_literal(s, xsd::DOUBLE), &s[cursor..]))
+                Ok((
+                    Literal::new_typed_literal(OxString::new_owned(s), xsd::DOUBLE),
+                    &s[cursor..],
+                ))
             } else {
                 Err(TermParseError::msg(
                     "Double serialization with an invalid exponent",
@@ -465,14 +470,20 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
         } else if with_dot {
             if count_after > 0 {
-                Ok((Literal::new_typed_literal(s, xsd::DECIMAL), &s[cursor..]))
+                Ok((
+                    Literal::new_typed_literal(OxString::new_owned(s), xsd::DECIMAL),
+                    &s[cursor..],
+                ))
             } else {
                 Err(TermParseError::msg(
                     "Decimal serialization without floating part",
                 ))
             }
         } else if count_before > 0 {
-            Ok((Literal::new_typed_literal(s, xsd::INTEGER), &s[cursor..]))
+            Ok((
+                Literal::new_typed_literal(OxString::new_owned(s), xsd::INTEGER),
+                &s[cursor..],
+            ))
         } else {
             Err(TermParseError::msg("Empty integer serialization"))
         }

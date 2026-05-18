@@ -9,7 +9,9 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+use oxrdf::{
+    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, OxString, Quad,
+};
 use std::error::Error;
 use std::fmt::Write;
 use std::io::Read;
@@ -1227,9 +1229,9 @@ impl JsonLdToRdfConverter {
     fn convert_named_or_blank_node(&self, value: String) -> Option<NamedOrBlankNode> {
         Some(if let Some(bnode_id) = value.strip_prefix("_:") {
             if self.lenient {
-                Some(BlankNode::new_unchecked(bnode_id))
+                Some(BlankNode::new_unchecked(OxString::new_owned(bnode_id)))
             } else {
-                BlankNode::new(bnode_id).ok()
+                BlankNode::new(OxString::new_owned(bnode_id)).ok()
             }?
             .into()
         } else {
@@ -1241,7 +1243,7 @@ impl JsonLdToRdfConverter {
         if self.lenient {
             Some(NamedNode::new_unchecked(value))
         } else {
-            NamedNode::new(&value).ok()
+            NamedNode::new(value).ok()
         }
     }
 
@@ -1277,7 +1279,7 @@ impl JsonLdToRdfConverter {
                             ))
                         } else {
                             Literal::new_directional_language_tagged_literal(
-                                value, &language, direction,
+                                value, language, direction,
                             )
                             .ok()
                         };
@@ -1288,7 +1290,7 @@ impl JsonLdToRdfConverter {
                     if self.lenient {
                         Literal::new_language_tagged_literal_unchecked(value, language)
                     } else {
-                        Literal::new_language_tagged_literal(value, &language).ok()?
+                        Literal::new_language_tagged_literal(value, language).ok()?
                     }
                 } else if let Some(datatype) = r#type {
                     Literal::new_typed_literal(value, datatype)

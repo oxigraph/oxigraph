@@ -7,7 +7,8 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::BaseDirection;
 use oxrdf::vocab::xsd;
 use oxrdf::{
-    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
+    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, OxString, QuadRef,
+    TermRef,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -329,7 +330,7 @@ pub struct InnerJsonLdWriter {
     current_graph_name: Option<GraphName>,
     current_subject: Option<NamedOrBlankNode>,
     current_predicate: Option<NamedNode>,
-    emitted_predicates: BTreeSet<String>,
+    emitted_predicates: BTreeSet<OxString>,
     prefixes: BTreeMap<String, String>,
     base_iri: Option<Iri<String>>,
 }

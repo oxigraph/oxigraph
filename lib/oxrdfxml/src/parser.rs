@@ -5,7 +5,7 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, OxString, Term, Triple};
 use quick_xml::escape::{EscapeError, resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -1086,7 +1086,7 @@ impl<R> InternalRdfXmlParser<R> {
                         ))
                         .into());
                     }
-                    node_id_attr = Some(BlankNode::new_unchecked(id));
+                    node_id_attr = Some(BlankNode::new_unchecked(OxString::new_owned(&id)));
                 } else if *attribute_url == *RDF_ABOUT {
                     about_attr = Some(attribute);
                 } else if *attribute_url == *RDF_RESOURCE {
@@ -1207,7 +1207,7 @@ impl<R> InternalRdfXmlParser<R> {
                 ))
                 .into());
             }
-            Some(BlankNode::new_unchecked(id))
+            Some(BlankNode::new_unchecked(OxString::new_owned(&id)))
         } else {
             None
         };
@@ -1766,7 +1766,7 @@ impl<R> InternalRdfXmlParser<R> {
                         subject,
                         iri,
                         Literal::new_typed_literal(
-                            str::from_utf8(&object).map_err(|_| {
+                            String::from_utf8(object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
                                 )
@@ -1929,15 +1929,21 @@ impl<R> InternalRdfXmlParser<R> {
                         {
                             Literal::new_directional_language_tagged_literal_unchecked(
                                 literal_value,
-                                language,
+                                OxString::new_owned(language),
                                 base_direction,
                             )
                         } else {
-                            Literal::new_language_tagged_literal_unchecked(literal_value, language)
+                            Literal::new_language_tagged_literal_unchecked(
+                                literal_value,
+                                OxString::new_owned(language),
+                            )
                         }
                         #[cfg(not(feature = "rdf-12"))]
                         {
-                            Literal::new_language_tagged_literal_unchecked(literal_value, language)
+                            Literal::new_language_tagged_literal_unchecked(
+                                literal_value,
+                                OxString::new_owned(language),
+                            )
                         }
                     } else {
                         Literal::new_simple_literal(literal_value)

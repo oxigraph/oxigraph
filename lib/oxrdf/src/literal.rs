@@ -1,11 +1,11 @@
 use crate::named_node::{NamedNode, NamedNodeRef};
+use crate::string::OxString;
 use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
 
@@ -38,19 +38,19 @@ pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum LiteralContent {
-    String(String),
+    String(OxString),
     LanguageTaggedString {
-        value: String,
-        language: String,
+        value: OxString,
+        language: OxString,
     },
     #[cfg(feature = "rdf-12")]
     DirectionalLanguageTaggedString {
-        value: String,
-        language: String,
+        value: OxString,
+        language: OxString,
         direction: BaseDirection,
     },
     TypedLiteral {
-        value: String,
+        value: OxString,
         datatype: NamedNode,
     },
 }
@@ -58,13 +58,13 @@ enum LiteralContent {
 impl Literal {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
     #[inline]
-    pub fn new_simple_literal(value: impl Into<String>) -> Self {
+    pub fn new_simple_literal(value: impl Into<OxString>) -> Self {
         Self(LiteralContent::String(value.into()))
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     #[inline]
-    pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
+    pub fn new_typed_literal(value: impl Into<OxString>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
         Self(if datatype == xsd::STRING {
@@ -77,11 +77,13 @@ impl Literal {
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     #[inline]
     pub fn new_language_tagged_literal(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<OxString>,
+        language: impl Into<OxString>,
     ) -> Result<Self, LanguageTagParseError> {
         let mut language = language.into();
-        language.make_ascii_lowercase();
+        if !language.bytes().all(|b| b.is_ascii_lowercase()) {
+            language.make_mut().make_ascii_lowercase();
+        }
         Ok(Self::new_language_tagged_literal_unchecked(
             value,
             LanguageTag::parse(language)?.into_inner(),
@@ -97,8 +99,8 @@ impl Literal {
     /// [`Literal::new_language_tagged_literal()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_language_tagged_literal_unchecked(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<OxString>,
+        language: impl Into<OxString>,
     ) -> Self {
         Self(LiteralContent::LanguageTaggedString {
             value: value.into(),
@@ -110,12 +112,14 @@ impl Literal {
     #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn new_directional_language_tagged_literal(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<OxString>,
+        language: impl Into<OxString>,
         direction: impl Into<BaseDirection>,
     ) -> Result<Self, LanguageTagParseError> {
         let mut language = language.into();
-        language.make_ascii_lowercase();
+        if !language.bytes().all(|b| b.is_ascii_lowercase()) {
+            language.make_mut().make_ascii_lowercase();
+        }
         Ok(Self::new_directional_language_tagged_literal_unchecked(
             value,
             LanguageTag::parse(language)?.into_inner(),
@@ -133,8 +137,8 @@ impl Literal {
     #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn new_directional_language_tagged_literal_unchecked(
-        value: impl Into<String>,
-        language: impl Into<String>,
+        value: impl Into<OxString>,
+        language: impl Into<OxString>,
         direction: impl Into<BaseDirection>,
     ) -> Self {
         Self(LiteralContent::DirectionalLanguageTaggedString {
@@ -152,7 +156,7 @@ impl Literal {
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
     #[inline]
-    pub fn into_value(self) -> String {
+    pub fn into_value(self) -> OxString {
         match self.0 {
             LiteralContent::String(value)
             | LiteralContent::TypedLiteral { value, .. }
@@ -219,9 +223,9 @@ impl Literal {
     pub fn destruct(
         self,
     ) -> (
-        String,
+        OxString,
         Option<NamedNode>,
-        Option<String>,
+        Option<OxString>,
         Option<BaseDirection>,
     ) {
         match self.0 {
@@ -241,7 +245,7 @@ impl Literal {
     /// Extract components from this literal (value, datatype and language tag).
     #[cfg(not(feature = "rdf-12"))]
     #[inline]
-    pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
+    pub fn destruct(self) -> (OxString, Option<NamedNode>, Option<OxString>) {
         match self.0 {
             LiteralContent::String(s) => (s, None, None),
             LiteralContent::LanguageTaggedString { value, language } => {
@@ -262,21 +266,21 @@ impl fmt::Display for Literal {
 impl<'a> From<&'a str> for Literal {
     #[inline]
     fn from(value: &'a str) -> Self {
-        Self(LiteralContent::String(value.into()))
+        Self(LiteralContent::String(OxString::new_owned(value)))
     }
 }
 
 impl From<String> for Literal {
     #[inline]
     fn from(value: String) -> Self {
-        Self(LiteralContent::String(value))
+        Self(LiteralContent::String(value.into()))
     }
 }
 
-impl<'a> From<Cow<'a, str>> for Literal {
+impl From<OxString> for Literal {
     #[inline]
-    fn from(value: Cow<'a, str>) -> Self {
-        Self(LiteralContent::String(value.into()))
+    fn from(value: OxString) -> Self {
+        Self(LiteralContent::String(value))
     }
 }
 
@@ -284,7 +288,7 @@ impl From<bool> for Literal {
     #[inline]
     fn from(value: bool) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: if value { "true" } else { "false" }.into(),
             datatype: xsd::BOOLEAN.into(),
         })
     }
@@ -294,7 +298,7 @@ impl From<i128> for Literal {
     #[inline]
     fn from(value: i128) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -304,7 +308,7 @@ impl From<i64> for Literal {
     #[inline]
     fn from(value: i64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -314,7 +318,7 @@ impl From<i32> for Literal {
     #[inline]
     fn from(value: i32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -324,7 +328,7 @@ impl From<i16> for Literal {
     #[inline]
     fn from(value: i16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -334,7 +338,7 @@ impl From<u64> for Literal {
     #[inline]
     fn from(value: u64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -344,7 +348,7 @@ impl From<u32> for Literal {
     #[inline]
     fn from(value: u32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -354,7 +358,7 @@ impl From<u16> for Literal {
     #[inline]
     fn from(value: u16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: value.to_string(),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER.into(),
         })
     }
@@ -367,15 +371,15 @@ impl From<f32> for Literal {
             value: {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    Float::from(value).to_string()
+                    Float::from(value).to_string().into()
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f32::INFINITY {
-                    "INF".to_owned()
+                    "INF".into()
                 } else if value == f32::NEG_INFINITY {
-                    "-INF".to_owned()
+                    "-INF".into()
                 } else {
-                    value.to_string()
+                    value.to_string().into()
                 }
             },
             datatype: xsd::FLOAT.into(),
@@ -390,15 +394,15 @@ impl From<f64> for Literal {
             value: {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    Double::from(value).to_string()
+                    Double::from(value).to_string().into()
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f64::INFINITY {
-                    "INF".to_owned()
+                    "INF".into()
                 } else if value == f64::NEG_INFINITY {
-                    "-INF".to_owned()
+                    "-INF".into()
                 } else {
-                    value.to_string()
+                    value.to_string().into()
                 }
             },
             datatype: xsd::DOUBLE.into(),
@@ -680,11 +684,11 @@ impl<'a> LiteralRef<'a> {
     #[inline]
     pub fn into_owned(self) -> Literal {
         Literal(match self.0 {
-            LiteralRefContent::String(value) => LiteralContent::String(value.to_owned()),
+            LiteralRefContent::String(value) => LiteralContent::String(OxString::new_owned(value)),
             LiteralRefContent::LanguageTaggedString { value, language } => {
                 LiteralContent::LanguageTaggedString {
-                    value: value.to_owned(),
-                    language: language.to_owned(),
+                    value: OxString::new_owned(value),
+                    language: OxString::new_owned(language),
                 }
             }
             #[cfg(feature = "rdf-12")]
@@ -693,12 +697,12 @@ impl<'a> LiteralRef<'a> {
                 language,
                 direction,
             } => LiteralContent::DirectionalLanguageTaggedString {
-                value: value.to_owned(),
-                language: language.to_owned(),
+                value: OxString::new_owned(value),
+                language: OxString::new_owned(language),
                 direction,
             },
             LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
-                value: value.to_owned(),
+                value: OxString::new_owned(value),
                 datatype: datatype.into_owned(),
             },
         })
@@ -887,7 +891,7 @@ impl<'de> Deserialize<'de> for Literal {
             language: Option<String>,
             #[cfg(feature = "rdf-12")]
             direction: Option<BaseDirection>,
-            datatype: Option<String>,
+            datatype: Option<OxString>,
         }
         let Value {
             value,

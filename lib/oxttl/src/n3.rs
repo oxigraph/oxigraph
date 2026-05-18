@@ -13,7 +13,8 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
-    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Term, Variable,
+    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, OxString, Quad, Term,
+    Variable,
 };
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
@@ -1126,7 +1127,7 @@ impl RuleRecognizer for N3Recognizer {
                             Err(e) => self.error(errors, e)
                         }
                         N3Token::BlankNodeLabel(bnode) => {
-                            self.terms.push(BlankNode::new_unchecked(bnode).into());
+                            self.terms.push(BlankNode::new_unchecked(OxString::new_owned(bnode)).into());
                             self
                         }
                         N3Token::Variable(name) => {
@@ -1146,15 +1147,15 @@ impl RuleRecognizer for N3Recognizer {
                             self
                         }
                         N3Token::Integer(v) => {
-                            self.terms.push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into());
                             self
                         }
                         N3Token::Decimal(v) => {
-                            self.terms.push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into());
                             self
                         }
                         N3Token::Double(v) => {
-                            self.terms.push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into());
                             self
                         }
                         N3Token::PlainKeyword("true") => {

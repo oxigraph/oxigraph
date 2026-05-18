@@ -1,7 +1,7 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
 use crate::term::*;
-use oxrdf::LiteralRef;
+use oxrdf::{LiteralRef, OxString};
 use std::fmt;
 use std::fmt::Write as _;
 
@@ -1611,7 +1611,7 @@ pub enum AggregateFunction {
     Max,
     /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
     GroupConcat {
-        separator: Option<String>,
+        separator: Option<OxString>,
     },
     /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
     Sample,

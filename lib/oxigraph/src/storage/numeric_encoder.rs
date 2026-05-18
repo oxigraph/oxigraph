@@ -1008,7 +1008,9 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NumericalBlankNode { id } => {
                 Ok(BlankNode::new_from_unique_id(u128::from_be_bytes(*id)).into())
             }
-            EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
+            EncodedTerm::SmallBlankNode(id) => {
+                Ok(BlankNode::new_unchecked(OxString::new_owned(id.as_str())).into())
+            }
             EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
