@@ -1,0 +1,22 @@
+[package]
+name = "fixpoint-bench-reasonable"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Rust harness that times the reasonable OWL 2 RL reasoner on the subclass closure workload."
+
+[[bin]]
+name = "fixpoint_bench_reasonable"
+path = "src/main.rs"
+
+[dependencies]
+reasonable = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Standalone Cargo workspace. Reasonable 0.2 pulls an old oxigraph 0.3.5
+# which links rocksdb. Keeping this binary separate from the workspace's
+# local oxrocksdb-sys avoids the duplicate `links = "rocksdb"` conflict.
+[workspace]

@@ -17,8 +17,7 @@ use std::path::Path;
 #[cfg(not(target_family = "wasm"))]
 use std::{io, thread};
 
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-mod binary_encoder;
+pub mod binary_encoder;
 mod error;
 mod memory;
 pub mod numeric_encoder;

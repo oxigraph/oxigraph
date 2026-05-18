@@ -1,0 +1,35 @@
+[package]
+name = "spareval-fusion"
+version = "0.0.1-dev"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["SPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spareval-fusion"
+documentation = "https://docs.rs/spareval-fusion"
+description = "SPARQL evaluator"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+sparql-12 = ["spargebra/sparql-12", "sparesults/sparql-12", "spareval/sparql-12"]
+sep-0002 = ["spargebra/sep-0002"]
+sep-0006 = ["spargebra/sep-0006"]
+calendar-ext = ["sep-0002"] # Extended calendar arithmetic: gYear, gYearMonth, gMonth, gMonthDay, gDay
+
+[dependencies]
+datafusion = { workspace = true, features = ["backtrace", "array_expressions"] }
+oxsdatatypes.workspace = true
+oxrdf.workspace = true
+regex.workspace = true
+spargebra.workspace = true
+sparesults.workspace = true
+spareval.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

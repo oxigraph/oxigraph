@@ -11,6 +11,7 @@ publish = false
 [features]
 default = ["rdf-12"]
 rdf-12 = ["oxigraph/rdf-12"]
+datafusion = ["oxigraph/datafusion"]
 
 [dependencies]
 anyhow.workspace = true
