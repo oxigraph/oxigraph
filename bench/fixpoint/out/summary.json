@@ -1,17 +1,32 @@
 {
   "datafusion": [
     {
+      "size": "huge",
+      "triples_in": 1269530,
+      "answer_count": 8750000,
+      "load_ms_median": 2455.132,
+      "compute_ms_median": 703.714,
+      "total_ms_median": 3158.846,
+      "repeats": 3,
+      "timed_out": false
+    },
+    {
       "size": "large",
-      "timed_out": true,
-      "repeats": 1
+      "triples_in": 210260,
+      "answer_count": 1433600,
+      "load_ms_median": 361.569,
+      "compute_ms_median": 130.481,
+      "total_ms_median": 492.05,
+      "repeats": 3,
+      "timed_out": false
     },
     {
       "size": "medium",
       "triples_in": 32084,
       "answer_count": 184320,
-      "load_ms_median": 52.914,
-      "compute_ms_median": 6003.863,
-      "total_ms_median": 6056.777,
+      "load_ms_median": 52.516,
+      "compute_ms_median": 22.621,
+      "total_ms_median": 75.137,
       "repeats": 3,
       "timed_out": false
     },
@@ -19,9 +34,9 @@
       "size": "small",
       "triples_in": 1740,
       "answer_count": 8100,
-      "load_ms_median": 2.735,
-      "compute_ms_median": 118.764,
-      "total_ms_median": 121.499,
+      "load_ms_median": 2.663,
+      "compute_ms_median": 4.81,
+      "total_ms_median": 7.472999999999999,
       "repeats": 3,
       "timed_out": false
     }
@@ -31,9 +46,9 @@
       "size": "huge",
       "triples_in": 1269532,
       "answer_count": 10019011,
-      "load_ms_median": 1547.362,
-      "compute_ms_median": 10367.423,
-      "total_ms_median": 11914.785,
+      "load_ms_median": 1541.255,
+      "compute_ms_median": 9946.131,
+      "total_ms_median": 11487.385999999999,
       "repeats": 3,
       "timed_out": false
     },
@@ -41,9 +56,9 @@
       "size": "large",
       "triples_in": 210262,
       "answer_count": 1643863,
-      "load_ms_median": 229.302,
-      "compute_ms_median": 1190.263,
-      "total_ms_median": 1419.5649999999998,
+      "load_ms_median": 232.311,
+      "compute_ms_median": 1012.985,
+      "total_ms_median": 1245.296,
       "repeats": 3,
       "timed_out": false
     },
@@ -51,9 +66,9 @@
       "size": "medium",
       "triples_in": 32086,
       "answer_count": 216408,
-      "load_ms_median": 31.948,
-      "compute_ms_median": 124.993,
-      "total_ms_median": 156.941,
+      "load_ms_median": 31.01,
+      "compute_ms_median": 119.714,
+      "total_ms_median": 150.724,
       "repeats": 3,
       "timed_out": false
     },
@@ -61,9 +76,9 @@
       "size": "small",
       "triples_in": 1742,
       "answer_count": 9844,
-      "load_ms_median": 1.723,
-      "compute_ms_median": 5.179,
-      "total_ms_median": 6.902,
+      "load_ms_median": 1.663,
+      "compute_ms_median": 5.12,
+      "total_ms_median": 6.783,
       "repeats": 3,
       "timed_out": false
     }
@@ -73,9 +88,9 @@
       "size": "huge",
       "triples_in": 1269530,
       "answer_count": 8750000,
-      "load_ms_median": 2662.553,
-      "compute_ms_median": 3250.389,
-      "total_ms_median": 5912.942,
+      "load_ms_median": 2463.373,
+      "compute_ms_median": 3126.168,
+      "total_ms_median": 5589.541,
       "repeats": 3,
       "timed_out": false
     },
@@ -83,9 +98,9 @@
       "size": "large",
       "triples_in": 210260,
       "answer_count": 1433600,
-      "load_ms_median": 378.363,
-      "compute_ms_median": 526.495,
-      "total_ms_median": 904.858,
+      "load_ms_median": 362.224,
+      "compute_ms_median": 518.371,
+      "total_ms_median": 880.595,
       "repeats": 3,
       "timed_out": false
     },
@@ -93,9 +108,9 @@
       "size": "medium",
       "triples_in": 32084,
       "answer_count": 184320,
-      "load_ms_median": 52.79,
-      "compute_ms_median": 69.804,
-      "total_ms_median": 122.594,
+      "load_ms_median": 52.261,
+      "compute_ms_median": 70.021,
+      "total_ms_median": 122.28200000000001,
       "repeats": 3,
       "timed_out": false
     },
@@ -103,9 +118,9 @@
       "size": "small",
       "triples_in": 1740,
       "answer_count": 8100,
-      "load_ms_median": 2.823,
-      "compute_ms_median": 3.645,
-      "total_ms_median": 6.468,
+      "load_ms_median": 2.853,
+      "compute_ms_median": 3.478,
+      "total_ms_median": 6.331,
       "repeats": 3,
       "timed_out": false
     }

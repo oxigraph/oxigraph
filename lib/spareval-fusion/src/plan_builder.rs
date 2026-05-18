@@ -1160,7 +1160,21 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                                 "Correlated queries and property path is not implemented yet"
                             );
                         }
-                        let subject_object_plan = self.plan_for_triple_pattern(
+                        // Identity case of `p?`: emit a row `(?subject = ?object = t)`
+                        // for every term `t` that appears in the active graph,
+                        // unioned with the proper path plan.
+                        //
+                        // The original implementation built an array column of
+                        // [subject, object] and unnested it, materialising 2 * N
+                        // intermediate rows. We instead scan the quads once,
+                        // project subject and object into a single shared term
+                        // column, union the two projections with DISTINCT, and
+                        // then project the deduplicated terms as both variables.
+                        // This avoids the array round-trip and lets DataFusion's
+                        // optimiser fold the two scans into a single pass over
+                        // the quad table.
+                        let term_col_name = format!("#{}#", self.table_name.next("term"));
+                        let subjects_plan = self.plan_for_triple_pattern(
                             TermOrVariable::Variable(Variable::new_unchecked(SUBJECT_MAGIC_COLUMN)),
                             TermOrVariable::Variable(Variable::new_unchecked(
                                 PREDICATE_MAGIC_COLUMN,
@@ -1168,28 +1182,44 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                             TermOrVariable::Variable(Variable::new_unchecked(OBJECT_MAGIC_COLUMN)),
                             context,
                         )?;
-                        let term_column_expr = make_array(vec![
+                        let mut subjects_proj = vec![
                             Expr::from(
-                                schema_column(subject_object_plan.schema(), SUBJECT_MAGIC_COLUMN)
+                                schema_column(subjects_plan.schema(), SUBJECT_MAGIC_COLUMN)
                                     .unwrap(),
-                            ),
-                            Expr::from(
-                                schema_column(subject_object_plan.schema(), OBJECT_MAGIC_COLUMN)
-                                    .unwrap(),
-                            ),
-                        ]);
-                        let term_column =
-                            Column::new_unqualified(term_column_expr.name_for_alias()?);
-                        let mut projection = vec![term_column_expr];
+                            )
+                            .alias(&term_col_name),
+                        ];
                         if let Some(g) =
-                            schema_column(subject_object_plan.schema(), GRAPH_MAGIC_COLUMN)
+                            schema_column(subjects_plan.schema(), GRAPH_MAGIC_COLUMN)
                         {
-                            projection.push(g.clone().into());
+                            subjects_proj.push(g.clone().into());
                         }
-                        let graph_terms_plan = subject_object_plan
-                            .project(projection)?
-                            .unnest_column(term_column.clone())?;
-                        let mut projection = if subject == object {
+                        let subjects_plan = subjects_plan.project(subjects_proj)?;
+                        let objects_plan = self.plan_for_triple_pattern(
+                            TermOrVariable::Variable(Variable::new_unchecked(SUBJECT_MAGIC_COLUMN)),
+                            TermOrVariable::Variable(Variable::new_unchecked(
+                                PREDICATE_MAGIC_COLUMN,
+                            )),
+                            TermOrVariable::Variable(Variable::new_unchecked(OBJECT_MAGIC_COLUMN)),
+                            context,
+                        )?;
+                        let mut objects_proj = vec![
+                            Expr::from(
+                                schema_column(objects_plan.schema(), OBJECT_MAGIC_COLUMN)
+                                    .unwrap(),
+                            )
+                            .alias(&term_col_name),
+                        ];
+                        if let Some(g) =
+                            schema_column(objects_plan.schema(), GRAPH_MAGIC_COLUMN)
+                        {
+                            objects_proj.push(g.clone().into());
+                        }
+                        let objects_plan = objects_plan.project(objects_proj)?;
+                        let terms_plan =
+                            subjects_plan.union_by_name_distinct(objects_plan.build()?)?;
+                        let term_column = Column::new_unqualified(&term_col_name);
+                        let mut final_proj = if subject == object {
                             vec![Expr::from(term_column.clone()).alias(subject.as_str())]
                         } else {
                             vec![
@@ -1197,19 +1227,17 @@ impl<D: QueryableDatasetAccess> SparqlPlanBuilder<D> {
                                 Expr::from(term_column.clone()).alias(object.as_str()),
                             ]
                         };
-                        if let Some(g) =
-                            schema_column(graph_terms_plan.schema(), GRAPH_MAGIC_COLUMN)
-                        {
-                            projection.push(g.clone().into());
+                        if let Some(g) = schema_column(terms_plan.schema(), GRAPH_MAGIC_COLUMN) {
+                            final_proj.push(g.clone().into());
                         }
-                        let graph_terms_plan = graph_terms_plan.project(projection)?;
+                        let identity_plan = terms_plan.project(final_proj)?;
                         self.plan_for_property_path(
                             TermOrVariable::Variable(subject.clone()),
                             *p,
                             TermOrVariable::Variable(object.clone()),
                             context,
                         )?
-                        .union_by_name_distinct(graph_terms_plan.build()?)
+                        .union_by_name_distinct(identity_plan.build()?)
                     }
                 }
             }
