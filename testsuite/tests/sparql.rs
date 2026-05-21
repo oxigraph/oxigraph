@@ -19,14 +19,6 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             // Multiple writing of the same xsd:integer. Our system does some normalization.
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
-            // Simple literal vs xsd:string. We apply RDF 1.1
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-08",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-10",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-11",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12",
-            // DATATYPE("foo"@en) returns rdf:langString in RDF 1.1
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
             // We use XSD 1.1 equality on dates
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
             // This test relies on naive iteration on the input file
