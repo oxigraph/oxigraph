@@ -395,7 +395,7 @@ jobs:
           persist-credentials: false
       - run: bash trim_rocksdb.sh
         working-directory: ./oxrocksdb-sys
-      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
       - run: cargo publish
         working-directory: ./oxrocksdb-sys
