@@ -21,15 +21,21 @@ runs:
     - run: which rustup || sudo DEBIAN_FRONTEND=noninteractive apt-get -y install rustup
       shell: bash
       if: runner.os == 'Linux'
-    - run: rustup default ${{ inputs.version }}
+    - run: rustup default ${INPUTS_VERSION}
       shell: bash
-    - run: rustup component add ${{ inputs.component }}
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
+    - run: rustup component add ${INPUTS_COMPONENT}
       shell: bash
       if: ${{ inputs.component }}
-    - run: rustup target add ${{ inputs.target }}
+      env:
+        INPUTS_COMPONENT: ${{ inputs.component }}
+    - run: rustup target add ${INPUTS_TARGET}
       shell: bash
       if: ${{ inputs.target }}
-    - uses: Swatinem/rust-cache@v2
+      env:
+        INPUTS_TARGET: ${{ inputs.target }}
+    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       continue-on-error: true
       with:
         cache-all-crates: true
