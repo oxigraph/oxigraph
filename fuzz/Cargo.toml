@@ -16,6 +16,7 @@ libfuzzer-sys = "0.4"
 oxiri = "0.2"
 oxigraph = { path = "../lib/oxigraph", default-features = false, features = [
   "rdf-12",
+  "datafusion",
 ] }
 oxjsonld.path = "../lib/oxjsonld"
 oxrdf.path = "../lib/oxrdf"

@@ -2,6 +2,8 @@
 //!
 //! The entry point for SPARQL execution is the [`SparqlEvaluator`] type.
 
+#[cfg(feature = "datafusion")]
+mod datafusion;
 mod dataset;
 mod error;
 #[cfg(feature = "http-client")]
@@ -10,6 +12,8 @@ pub mod results;
 mod update;
 
 use crate::model::{NamedNode, Term};
+#[cfg(feature = "datafusion")]
+use crate::sparql::datafusion::DatafusionEvaluator;
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -560,6 +564,18 @@ impl PreparedSparqlQuery {
         let reader = store.storage().snapshot();
         let queryable_dataset = DatasetView::new(reader);
         self.on_queryable_dataset(queryable_dataset)
+    }
+
+    #[cfg(feature = "datafusion")]
+    pub fn datafusion(self, store: &Store) -> Result<QueryResults<'static>, QueryEvaluationError> {
+        let dataset = DatasetView::new(store.storage().snapshot());
+        DatafusionEvaluator::new()?.execute(dataset, &self.query)
+    }
+
+    #[cfg(feature = "datafusion")]
+    pub fn datafusion_explain(self, store: &Store) -> Result<String, QueryEvaluationError> {
+        let dataset = DatasetView::new(store.storage().snapshot());
+        DatafusionEvaluator::new()?.explain(dataset, &self.query)
     }
 
     /// Bind the prepared query to the [`Transaction`] it should be evaluated on.
