@@ -622,20 +622,40 @@ impl Optimizer {
                 let left_types = infer_graph_pattern_types(&left, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
-                    let right_for_lateral = Self::reorder_joins((*right).clone(), &left_types);
-                    let right_types = infer_graph_pattern_types(&right_for_lateral, left_types.clone());
-                    if is_fit_for_for_loop_join(&right_for_lateral, input_types, &left_types)
-                        && has_common_variables(&left_types, &right_types, input_types)
-                    {
-                        return GraphPattern::lateral(
-                            left,
-                            GraphPattern::left_join(
-                                GraphPattern::empty_singleton(),
-                                right_for_lateral,
-                                expression,
-                                LeftJoinAlgorithm::HashBuildRightProbeLeft { keys: Vec::new() },
-                            ),
-                        );
+                    let initial_right_types =
+                        infer_graph_pattern_types(&right, input_types.clone());
+                    if has_common_variables(&left_types, &initial_right_types, input_types) {
+                        let lateral_cost = estimate_graph_pattern_size(&left, input_types)
+                            .saturating_mul(estimate_graph_pattern_size(&right, &left_types));
+                        let keys =
+                            join_key_variables(&left_types, &initial_right_types, input_types);
+                        let join_cost = estimate_graph_pattern_size(&left, input_types)
+                            .saturating_mul(estimate_graph_pattern_size(&right, input_types))
+                            .saturating_div(
+                                1_000_u64.saturating_pow(keys.len().try_into().unwrap()),
+                            );
+
+                        if lateral_cost <= join_cost.saturating_mul(100) {
+                            let right_for_lateral =
+                                Self::reorder_joins((*right).clone(), &left_types);
+                            if is_fit_for_for_loop_join(
+                                &right_for_lateral,
+                                input_types,
+                                &left_types,
+                            ) {
+                                return GraphPattern::lateral(
+                                    left,
+                                    GraphPattern::left_join(
+                                        GraphPattern::empty_singleton(),
+                                        right_for_lateral,
+                                        expression,
+                                        LeftJoinAlgorithm::HashBuildRightProbeLeft {
+                                            keys: Vec::new(),
+                                        },
+                                    ),
+                                );
+                            }
+                        }
                     }
                 }
                 let right = Self::reorder_joins(*right, input_types);
@@ -891,7 +911,7 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             );
             if let NamedNodePattern::NamedNode(predicate) = predicate {
                 if *predicate == rdf::TYPE {
-                    size = size.saturating_mul(2);
+                    size = size.saturating_add(1);
                 }
             }
             size
@@ -986,6 +1006,7 @@ fn estimate_join_cost(
         }
     }
 }
+
 fn estimate_lateral_cost(
     left: &GraphPattern,
     left_types: &VariableTypes,
@@ -1005,11 +1026,11 @@ fn estimate_triple_pattern_size(
         (true, true, true) => 1,
         (true, true, false) => 10,
         (true, false, true) => 2,
-        (false, true, true) => 10_000,
+        (false, true, true) => 1_000,
         (true, false, false) => 100,
         (false, false, false) => 1_000_000_000,
         (false, true, false) => 1_000_000,
-        (false, false, true) => 100_000,
+        (false, false, true) => 10_000,
     }
 }
 
@@ -1084,9 +1105,9 @@ fn is_named_node_pattern_bound(pattern: &NamedNodePattern, input_types: &Variabl
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spargebra::SparqlParser;
-    use spargebra::Query;
     use crate::algebra::GraphPattern;
+    use spargebra::Query;
+    use spargebra::SparqlParser;
 
     #[test]
     fn test_optional_lateral_reordering() {
@@ -1107,50 +1128,59 @@ WHERE {
 ";
         let query = SparqlParser::new().parse_query(query_str).unwrap();
         if let Query::Select(select) = query {
-             let pattern = GraphPattern::from(&select.pattern);
-             let optimized = Optimizer::optimize_graph_pattern(pattern);
-             
-             // We want to make sure that the right side of the LeftJoin (now a Lateral)
-             // starts with the pattern that uses ?c, not the one that matches all orders.
-             #[cfg(feature = "sep-0006")]
-             {
-                 let mut current = &optimized;
-                 if let GraphPattern::Project { inner, .. } = current {
-                     current = inner;
-                 }
-                 if let GraphPattern::Extend { inner, .. } = current {
-                     current = inner;
-                 }
-                 if let GraphPattern::Group { inner, .. } = current {
-                     current = inner;
-                 }
-                 if let GraphPattern::Lateral { right, .. } = current {
-                     if let GraphPattern::LeftJoin { right: rhs, .. } = right.as_ref() {
-                         if let GraphPattern::Lateral { left: rhs_left, .. } = rhs.as_ref() {
-                             if let GraphPattern::Lateral { left: rhs_left_left, .. } = rhs_left.as_ref() {
-                                 if let GraphPattern::QuadPattern { predicate, .. } = rhs_left_left.as_ref() {
-                                     if let NamedNodePattern::NamedNode(n) = predicate {
-                                         // THE BUG: it matches rdf:type instead of schema:customer
-                                         assert_eq!(n.as_str(), "http://schema.org/customer");
-                                     } else {
-                                         panic!("Expected NamedNode predicate, found {:?}", predicate);
-                                     }
-                                 } else {
-                                     panic!("Expected QuadPattern, found {:?}", rhs_left_left);
-                                 }
-                             } else {
-                                 panic!("Expected Lateral left-left, found {:?}", rhs_left);
-                             }
-                         } else {
-                             panic!("Expected Lateral left, found {:?}", rhs);
-                         }
-                     } else {
-                         panic!("Expected LeftJoin, found {:?}", right);
-                     }
-                 } else {
-                     panic!("Expected Lateral, found {:?}", current);
-                 }
-             }
+            let pattern = GraphPattern::from(&select.pattern);
+            let optimized = Optimizer::optimize_graph_pattern(pattern);
+
+            // We want to make sure that the right side of the LeftJoin (now a Lateral)
+            // starts with the pattern that uses ?c, not the one that matches all orders.
+            #[cfg(feature = "sep-0006")]
+            {
+                let mut current = &optimized;
+                if let GraphPattern::Project { inner, .. } = current {
+                    current = inner;
+                }
+                if let GraphPattern::Extend { inner, .. } = current {
+                    current = inner;
+                }
+                if let GraphPattern::Group { inner, .. } = current {
+                    current = inner;
+                }
+                if let GraphPattern::Lateral { right, .. } = current {
+                    if let GraphPattern::LeftJoin { right: rhs, .. } = right.as_ref() {
+                        if let GraphPattern::Lateral { left: rhs_left, .. } = rhs.as_ref() {
+                            if let GraphPattern::Lateral {
+                                left: rhs_left_left,
+                                ..
+                            } = rhs_left.as_ref()
+                            {
+                                if let GraphPattern::QuadPattern { predicate, .. } =
+                                    rhs_left_left.as_ref()
+                                {
+                                    if let NamedNodePattern::NamedNode(n) = predicate {
+                                        // THE BUG: it matches rdf:type instead of schema:customer
+                                        assert_eq!(n.as_str(), "http://schema.org/customer");
+                                    } else {
+                                        panic!(
+                                            "Expected NamedNode predicate, found {:?}",
+                                            predicate
+                                        );
+                                    }
+                                } else {
+                                    panic!("Expected QuadPattern, found {:?}", rhs_left_left);
+                                }
+                            } else {
+                                panic!("Expected Lateral left-left, found {:?}", rhs_left);
+                            }
+                        } else {
+                            panic!("Expected Lateral left, found {:?}", rhs);
+                        }
+                    } else {
+                        panic!("Expected LeftJoin, found {:?}", right);
+                    }
+                } else {
+                    panic!("Expected Lateral, found {:?}", current);
+                }
+            }
         }
     }
 }
