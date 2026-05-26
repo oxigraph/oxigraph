@@ -184,27 +184,33 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         let memory_store = Store::new().unwrap();
         do_bulk_load(&memory_store, &data);
         group.bench_function(format!("BSBM explore {data_size} query in memory"), |b| {
-            b.iter(|| run_operation(&memory_store, &explore_query_operations, true))
+            b.iter(|| run_operations(&memory_store, &explore_query_operations, true))
         });
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} query in memory without optimizations"),
-                |b| b.iter(|| run_operation(&memory_store, &explore_query_operations, false)),
+                |b| b.iter(|| run_operations(&memory_store, &explore_query_operations, false)),
             );
         }
         group.bench_function(
             format!("BSBM explore {data_size} queryAndUpdate in memory"),
-            |b| b.iter(|| run_operation(&memory_store, &explore_operations, true)),
+            |b| b.iter(|| run_operations(&memory_store, &explore_operations, true)),
         );
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} queryAndUpdate in memory without optimizations"),
-                |b| b.iter(|| run_operation(&memory_store, &explore_operations, false)),
+                |b| b.iter(|| run_operations(&memory_store, &explore_operations, false)),
             );
             group.bench_function(
                 format!("BSBM business intelligence {data_size} in memory"),
-                |b| b.iter(|| run_operation(&memory_store, &business_operations, true)),
+                |b| b.iter(|| run_operations(&memory_store, &business_operations, true)),
             );
+            for (name, operations) in sparqloscope_operations() {
+                group.bench_function(
+                    format!("Sparqloscope BSBM {data_size} in memory - {name}"),
+                    |b| b.iter(|| run_operations(&memory_store, &operations, true)),
+                );
+            }
         }
     }
 
@@ -213,32 +219,38 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         let disk_store = Store::open(&path).unwrap();
         do_bulk_load(&disk_store, &data);
         group.bench_function(format!("BSBM explore {data_size} query on disk"), |b| {
-            b.iter(|| run_operation(&disk_store, &explore_query_operations, true))
+            b.iter(|| run_operations(&disk_store, &explore_query_operations, true))
         });
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} query on disk without optimizations"),
-                |b| b.iter(|| run_operation(&disk_store, &explore_query_operations, false)),
+                |b| b.iter(|| run_operations(&disk_store, &explore_query_operations, false)),
             );
         }
         group.bench_function(
             format!("BSBM explore {data_size} queryAndUpdate on disk"),
-            |b| b.iter(|| run_operation(&disk_store, &explore_operations, true)),
+            |b| b.iter(|| run_operations(&disk_store, &explore_operations, true)),
         );
         if without_ops {
             group.bench_function(
                 format!("BSBM explore {data_size} queryAndUpdate on disk without optimizations"),
-                |b| b.iter(|| run_operation(&disk_store, &explore_operations, false)),
+                |b| b.iter(|| run_operations(&disk_store, &explore_operations, false)),
             );
             group.bench_function(
                 format!("BSBM business intelligence {data_size} on disk"),
-                |b| b.iter(|| run_operation(&disk_store, &business_operations, true)),
+                |b| b.iter(|| run_operations(&disk_store, &business_operations, true)),
             );
+            for (name, operations) in sparqloscope_operations() {
+                group.bench_function(
+                    format!("Sparqloscope BSBM {data_size} on disk - {name}"),
+                    |b| b.iter(|| run_operations(&disk_store, &operations, true)),
+                );
+            }
         }
     }
 }
 
-fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
+fn run_operations(store: &Store, operations: &[Operation], with_opts: bool) {
     let mut evaluator = SparqlEvaluator::new();
     if !with_opts {
         evaluator = evaluator.without_optimizations();
@@ -351,6 +363,19 @@ fn bsbm_sparql_operation(file_name: &str) -> Vec<RawOperation> {
                 "update" => RawOperation::Update(l[2].into()),
                 _ => panic!("Unexpected operation kind {}", &l[1]),
             }
+        })
+        .collect()
+}
+
+fn sparqloscope_operations() -> Vec<(String, Vec<Operation>)> {
+    csv::Reader::from_reader(include_bytes!("sparqloscope-bsbm-5000.csv").as_slice())
+        .records()
+        .map(|record| {
+            let record = record.unwrap();
+            (
+                record[0].into(),
+                vec![Operation::Query(Query::from_str(&record[1]).unwrap())],
+            )
         })
         .collect()
 }
