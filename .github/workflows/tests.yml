@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
         with: { tool: taplo }
-      - run: taplo check --default-schema-catalogs
+      - run: taplo check
 
   clippy:
     runs-on: ubuntu-latest
@@ -259,20 +259,8 @@ jobs:
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: cargo test --workspace --exclude sparql-smith
 
-  test_linux_latest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          submodules: true
-          persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - run: rm Cargo.lock && cargo update
-      - run: cargo test
-
   test_linux_address_sanitizer:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -282,7 +270,7 @@ jobs:
         with:
           version: nightly
       - run: sudo apt-get update && sudo apt-get install -y llvm
-      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
+      - run: cargo test --tests --target x86_64-unknown-linux-gnu --package oxigraph
         env:
           RUSTFLAGS: -Z sanitizer=address
 
@@ -299,7 +287,7 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo test --tests --features oxrocksdb-sys/pkg-config
+      - run: cargo test --tests --package oxigraph --features oxrocksdb-sys/pkg-config
 
   test_wasip1:
     runs-on: ubuntu-latest
@@ -363,7 +351,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: uv run --locked -m unittest
         working-directory: ./python/tests
       - run: uv run --locked sphinx-build -M html . build
@@ -381,8 +369,8 @@ jobs:
       - run: uv run --locked sphinx-lint docs
         working-directory: ./python
 
-  python_msv:
-    runs-on: ubuntu-latest
+  python_msv_windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -398,34 +386,6 @@ jobs:
         with:
           python-version: "3.8"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
-      - run: uv run --locked -m unittest
-        working-directory: ./python/tests
-
-  python_pypy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          submodules: true
-          persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "pypy3.11"
-      - run: uv run --locked -m unittest
-        working-directory: ./python/tests
-
-  python_windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          submodules: true
-          persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.13"
       - run: uv run --locked -m unittest
         working-directory: ./python/tests
 
@@ -526,29 +486,40 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    strategy:
-      matrix:
-        build_args:
-          - "-p oxigraph --features http-client-native-tls"
-          - "-p oxigraph-testsuite"
-    continue-on-error: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-        with:
-          cache-key: ${{ matrix.build_args }}
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: lib/oxigraph/benches/data
-          key: bench-data-${{ matrix.build_args }}-${{ github.run_id }}
+          key: bench-data-${{ hashFiles('lib/oxigraph/benches/data') }}
           restore-keys: |
-            bench-data-${{ matrix.build_args }}
+            bench-data
       - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
         with: { tool: cargo-codspeed }
-      - run: cargo codspeed build ${{ matrix.build_args }}
+      - run: cargo codspeed build -p oxigraph --features http-client-native-tls
+      - uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4
+        with:
+          run: cargo codspeed run
+          mode: simulation
+
+  codspeed_testsuite:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+        with: { tool: cargo-codspeed }
+      - run: cargo codspeed build -p oxigraph-testsuite
       - uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4
         with:
           run: cargo codspeed run
@@ -577,11 +548,6 @@ jobs:
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           cargo llvm-cov clean --workspace
           cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
-          cd python
-          uv run --locked --only-dev maturin develop
-          cd tests
-          uv run --locked --only-dev -m unittest
-          cd ../..
           cargo llvm-cov report --codecov --output-path codecov.json
       - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:

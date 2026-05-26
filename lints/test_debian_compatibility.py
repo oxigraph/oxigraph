@@ -15,7 +15,8 @@ ALLOWED_MISSING_PACKAGES = {
     "getrandom",
     "rand",
     "chumsky",
-    "logos"
+    "logos",
+    "js-sys",
 }
 
 base_path = Path(__file__).parent.parent

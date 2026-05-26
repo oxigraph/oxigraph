@@ -20,7 +20,7 @@ LINT_BLACKLIST = {
     "cognitive_complexity",
     "doc_markdown",  # Too many false positives
     "default_numeric_fallback",
-    "doc_paragraphs_missing_punctuation", # TODO: very verbose
+    "doc_paragraphs_missing_punctuation",  # TODO: very verbose
     "else_if_without_else",
     "exhaustive_enums",
     "exhaustive_structs",
@@ -53,8 +53,8 @@ LINT_BLACKLIST = {
     "pub_use",
     "pub_with_shorthand",
     "question_mark_used",
-    "redundant_test_prefix", # TODO: might be nice
-    "ref_option", # TODO: might be nice
+    "redundant_test_prefix",  # TODO: might be nice
+    "ref_option",  # TODO: might be nice
     "self_named_module_files",  # TODO: might be nice
     "semicolon_if_nothing_returned",  # TODO: might be nice
     "semicolon_outside_block",
@@ -69,18 +69,27 @@ LINT_BLACKLIST = {
     "too_many_lines",
     "separated_literal_suffix",
     "unreachable",  # TODO: might be nice
-    "unused_trait_names", # TODO: might be nice
+    "unused_trait_names",  # TODO: might be nice
     "unwrap_used",  # TODO: might be nice to use expect instead
     "wildcard_enum_match_arm",  # TODO: might be nice
     "wildcard_imports",  # TODO: might be nice
 }
 
 lints = set()
-clippy_help = subprocess.check_output(["cargo", "clippy", "--", "-W", "help"], cwd=Path(__file__).parent.parent / "lib" / "oxrdf").decode()
-nursery_lints = [match.group(1) for match in re.finditer('clippy::([a-z-]+)', re.search('\n *clippy::nursery *(clippy::[a-z-]+,? *)*', clippy_help).group(0))]
-for match in re.finditer(r'\n *clippy::([a-z-]+)  allow   ', clippy_help):
+clippy_help = subprocess.check_output(
+    ["cargo", "clippy", "--", "-W", "help"],
+    cwd=Path(__file__).parent.parent / "lib" / "oxrdf",
+).decode()
+nursery_lints = [
+    match.group(1)
+    for match in re.finditer(
+        "clippy::([a-z-]+)",
+        re.search("\n *clippy::nursery *(clippy::[a-z-]+,? *)*", clippy_help).group(0),
+    )
+]
+for match in re.finditer(r"\n *clippy::([a-z-]+)  allow   ", clippy_help):
     if match.group(1) not in nursery_lints:
-        lints.add(match.group(1).replace('-', '_'))
+        lints.add(match.group(1).replace("-", "_"))
 
 for flag in LINT_BLACKLIST:
     if flag in lints:

@@ -52,17 +52,20 @@ if uname_key not in target_map:
     print(f"Platform {uname} is not supported for builds")
     exit(1)
 wasm_bindgen_dir_name = f"wasm-bindgen-{wasm_bindgen_version}-{target_map[uname_key]}"
-wasm_bindgen_path = target_dir / wasm_bindgen_dir_name
-if not wasm_bindgen_path.exists():
+wasm_bindgen_path = target_dir / wasm_bindgen_dir_name / "wasm-bindgen"
+if wasm_bindgen_path.exists():
+    print(f"Using cached wasm-bindgen {wasm_bindgen_path}")
+else:
     with urlopen(
         f"https://github.com/wasm-bindgen/wasm-bindgen/releases/download/{wasm_bindgen_version}/{wasm_bindgen_dir_name}.tar.gz"
     ) as response:
         with tarfile.open(fileobj=BytesIO(response.read())) as tar:
             tar.extractall(target_dir)
+    print(f"Downloaded wasm-bindgen to {wasm_bindgen_path}")
 
 # Wasm-bindgen
 wasm_bindgen_args = [
-    wasm_bindgen_path / "wasm-bindgen",
+    wasm_bindgen_path,
     target_dir
     / "wasm32-unknown-unknown"
     / ("debug" if args.debug else "release")
