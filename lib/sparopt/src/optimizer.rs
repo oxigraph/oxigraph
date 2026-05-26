@@ -3,6 +3,7 @@ use crate::type_inference::{
     VariableType, VariableTypes, infer_expression_type, infer_graph_pattern_types,
 };
 use oxrdf::Variable;
+use oxrdf::vocab::rdf;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{GroundTermPattern, NamedNodePattern};
 use std::cmp::{max, min};
@@ -619,24 +620,26 @@ impl Optimizer {
             } => {
                 let left = Self::reorder_joins(*left, input_types);
                 let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                let right = Self::reorder_joins(*right, input_types);
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
-                    if is_fit_for_for_loop_join(&right, input_types, &left_types)
+                    let right_for_lateral = Self::reorder_joins((*right).clone(), &left_types);
+                    let right_types = infer_graph_pattern_types(&right_for_lateral, left_types.clone());
+                    if is_fit_for_for_loop_join(&right_for_lateral, input_types, &left_types)
                         && has_common_variables(&left_types, &right_types, input_types)
                     {
                         return GraphPattern::lateral(
                             left,
                             GraphPattern::left_join(
                                 GraphPattern::empty_singleton(),
-                                right,
+                                right_for_lateral,
                                 expression,
                                 LeftJoinAlgorithm::HashBuildRightProbeLeft { keys: Vec::new() },
                             ),
                         );
                     }
                 }
+                let right = Self::reorder_joins(*right, input_types);
+                let right_types = infer_graph_pattern_types(&right, input_types.clone());
                 GraphPattern::left_join(
                     left,
                     right,
@@ -880,11 +883,19 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             predicate,
             object,
             ..
-        } => estimate_triple_pattern_size(
-            is_term_pattern_bound(subject, input_types),
-            is_named_node_pattern_bound(predicate, input_types),
-            is_term_pattern_bound(object, input_types),
-        ),
+        } => {
+            let mut size = estimate_triple_pattern_size(
+                is_term_pattern_bound(subject, input_types),
+                is_named_node_pattern_bound(predicate, input_types),
+                is_term_pattern_bound(object, input_types),
+            );
+            if let NamedNodePattern::NamedNode(predicate) = predicate {
+                if *predicate == rdf::TYPE {
+                    size = size.saturating_mul(2);
+                }
+            }
+            size
+        }
         GraphPattern::Path {
             subject,
             path,
@@ -1067,5 +1078,79 @@ fn is_named_node_pattern_bound(pattern: &NamedNodePattern, input_types: &Variabl
     match pattern {
         NamedNodePattern::NamedNode(_) => true,
         NamedNodePattern::Variable(v) => !input_types.get(v).undef,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spargebra::SparqlParser;
+    use spargebra::Query;
+    use crate::algebra::GraphPattern;
+
+    #[test]
+    fn test_optional_lateral_reordering() {
+        let query_str = "
+PREFIX schema: <http://schema.org/>
+PREFIX ex: <http://example.org/>
+SELECT ?country ?segment (COUNT(?order) AS ?n) (COALESCE(SUM(?total),0) AS ?r)
+WHERE {
+  ?c a schema:Person ;
+     schema:addressCountry ?country ;
+     ex:segment ?segment .
+  OPTIONAL {
+    ?order a schema:Order ;
+           schema:customer ?c ;
+           schema:totalPrice ?total .
+  }
+} GROUP BY ?country ?segment
+";
+        let query = SparqlParser::new().parse_query(query_str).unwrap();
+        if let Query::Select(select) = query {
+             let pattern = GraphPattern::from(&select.pattern);
+             let optimized = Optimizer::optimize_graph_pattern(pattern);
+             
+             // We want to make sure that the right side of the LeftJoin (now a Lateral)
+             // starts with the pattern that uses ?c, not the one that matches all orders.
+             #[cfg(feature = "sep-0006")]
+             {
+                 let mut current = &optimized;
+                 if let GraphPattern::Project { inner, .. } = current {
+                     current = inner;
+                 }
+                 if let GraphPattern::Extend { inner, .. } = current {
+                     current = inner;
+                 }
+                 if let GraphPattern::Group { inner, .. } = current {
+                     current = inner;
+                 }
+                 if let GraphPattern::Lateral { right, .. } = current {
+                     if let GraphPattern::LeftJoin { right: rhs, .. } = right.as_ref() {
+                         if let GraphPattern::Lateral { left: rhs_left, .. } = rhs.as_ref() {
+                             if let GraphPattern::Lateral { left: rhs_left_left, .. } = rhs_left.as_ref() {
+                                 if let GraphPattern::QuadPattern { predicate, .. } = rhs_left_left.as_ref() {
+                                     if let NamedNodePattern::NamedNode(n) = predicate {
+                                         // THE BUG: it matches rdf:type instead of schema:customer
+                                         assert_eq!(n.as_str(), "http://schema.org/customer");
+                                     } else {
+                                         panic!("Expected NamedNode predicate, found {:?}", predicate);
+                                     }
+                                 } else {
+                                     panic!("Expected QuadPattern, found {:?}", rhs_left_left);
+                                 }
+                             } else {
+                                 panic!("Expected Lateral left-left, found {:?}", rhs_left);
+                             }
+                         } else {
+                             panic!("Expected Lateral left, found {:?}", rhs);
+                         }
+                     } else {
+                         panic!("Expected LeftJoin, found {:?}", right);
+                     }
+                 } else {
+                     panic!("Expected Lateral, found {:?}", current);
+                 }
+             }
+        }
     }
 }
