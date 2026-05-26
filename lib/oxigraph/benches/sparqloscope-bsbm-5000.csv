@@ -1,0 +1,496 @@
+description,query
+JOIN of a small and a large predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s bsbm:productPropertyNumeric6 ?o1 . ?s rdf:type ?o2 }"
+JOIN of a large and a small predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 . ?s bsbm:productPropertyNumeric6 ?o2 }"
+JOIN of two large predicates,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 . ?s dc:publisher ?o2 }"
+JOIN of two predicates with the largest possible result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s rdf:type ?o1 .
+  ?s bsbm:productFeature ?o2 }"
+JOIN of two large predicates with a reasonably large result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s rdf:type ?o1 .
+  ?s bsbm:productFeature ?o2 }"
+JOIN of two large predicates with a small result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating1 ?o1 .
+  ?s bsbm:rating3 ?o2 }"
+JOIN star of three large predicates with the largest sum of join sizes,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  ?s rdf:type ?o2 .
+  ?s dc:date ?o3 .
+}"
+JOIN chain of three large predicates with the largest sum of join sizes,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  ?b rdf:type ?c .
+  ?c rdfs:comment ?d .
+}"
+JOIN star of many small predicates,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+ 
+  ?s bsbm:productPropertyNumeric6 ?o0 .
+ 
+  ?s rdfs:subClassOf ?o1 .
+ 
+  ?s foaf:homepage ?o2 .
+ 
+}"
+JOIN chain of many small predicates,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+ 
+  ?v0 bsbm:productPropertyNumeric6 ?v1 .
+ 
+  ?v1 rdfs:subClassOf ?v2 .
+ 
+  ?v2 foaf:homepage ?v3 .
+ 
+}"
+OPTIONAL JOIN of a small and a large predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s bsbm:productPropertyNumeric6 ?o1 OPTIONAL { ?s rdf:type ?o2 } }"
+OPTIONAL JOIN of a large and a small predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 OPTIONAL { ?s bsbm:productPropertyNumeric6 ?o2 } }"
+OPTIONAL JOIN of two large predicates,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 OPTIONAL { ?s dc:publisher ?o2 } }"
+OPTIONAL JOIN of two large predicates with a reasonably large join result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s rdf:type ?o1 .
+  OPTIONAL { ?s bsbm:productFeature ?o2 } }"
+OPTIONAL JOIN of two large predicates with a small join result 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating1 ?o1 .
+  OPTIONAL { ?s bsbm:rating3 ?o2 } }"
+OPTIONAL JOIN of two large predicates with a small join result 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating3 ?o1 .
+  OPTIONAL { ?s bsbm:rating1 ?o2 } }"
+OPTIONAL JOIN star of three large predicates with the largest sum of join sizes 1,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  ?s rdf:type ?o2 .
+  OPTIONAL {
+  ?s dc:date ?o3 . }
+}"
+OPTIONAL JOIN star of three large predicates with the largest sum of join sizes 2,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  OPTIONAL {
+  ?s rdf:type ?o2 .
+  ?s dc:date ?o3 . }
+}"
+OPTIONAL JOIN chain of three large predicates with the largest sum of join sizes 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  ?b rdf:type ?c .
+  OPTIONAL {
+  ?c rdfs:comment ?d . }
+}"
+OPTIONAL JOIN chain of three large predicates with the largest sum of join sizes 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  OPTIONAL {
+  ?b rdf:type ?c .
+  ?c rdfs:comment ?d . }
+}"
+MINUS JOIN of a small and a large predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s bsbm:productPropertyNumeric6 ?o1 MINUS { ?s rdf:type ?o2 } }"
+MINUS JOIN of a large and a small predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 MINUS { ?s bsbm:productPropertyNumeric6 ?o2 } }"
+MINUS JOIN of two large predicates,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 MINUS { ?s dc:publisher ?o2 } }"
+MINUS JOIN of two large predicates with a reasonably large join result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s rdf:type ?o1 .
+  MINUS { ?s bsbm:productFeature ?o2 } }"
+MINUS JOIN of two large predicates with a small join result 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating1 ?o1 .
+  MINUS { ?s bsbm:rating3 ?o2 } }"
+MINUS JOIN of two large predicates with a small join result 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating3 ?o1 .
+  MINUS { ?s bsbm:rating1 ?o2 } }"
+MINUS JOIN star of three large predicates with the largest sum of join sizes 1,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  ?s rdf:type ?o2 .
+  MINUS {
+  ?s dc:date ?o3 . }
+}"
+MINUS JOIN star of three large predicates with the largest sum of join sizes 2,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  MINUS {
+  ?s rdf:type ?o2 .
+  ?s dc:date ?o3 . }
+}"
+MINUS JOIN chain of three large predicates with the largest sum of join sizes 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  ?b rdf:type ?c .
+  MINUS {
+  ?c rdfs:comment ?d . }
+}"
+MINUS JOIN chain of three large predicates with the largest sum of join sizes 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  MINUS {
+  ?b rdf:type ?c .
+  ?c rdfs:comment ?d . }
+}"
+EXISTS JOIN of a small and a large predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s bsbm:productPropertyNumeric6 ?o1 FILTER EXISTS { ?s rdf:type ?o2 } }"
+EXISTS JOIN of a large and a small predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 FILTER EXISTS { ?s bsbm:productPropertyNumeric6 ?o2 } }"
+EXISTS JOIN of two large predicates,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdf:type ?o1 FILTER EXISTS { ?s dc:publisher ?o2 } }"
+EXISTS JOIN of two large predicates with a reasonably large join result,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s rdf:type ?o1 .
+  FILTER EXISTS { ?s bsbm:productFeature ?o2 } }"
+EXISTS JOIN of two large predicates with a small join result 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating3 ?o1 .
+  FILTER EXISTS { ?s bsbm:rating1 ?o2 } }"
+EXISTS JOIN of two large predicates with a small join result 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s bsbm:rating1 ?o1 .
+  FILTER EXISTS { ?s bsbm:rating3 ?o2 } }"
+EXISTS JOIN star of three large predicates with the largest sum of join sizes 1,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  ?s rdf:type ?o2 .
+  FILTER EXISTS {
+  ?s dc:date ?o3 . }
+}"
+EXISTS JOIN star of three large predicates with the largest sum of join sizes 2,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?s dc:publisher ?o1 .
+  FILTER EXISTS {
+  ?s rdf:type ?o2 .
+  ?s dc:date ?o3 . }
+}"
+EXISTS JOIN chain of three large predicates with the largest sum of join sizes 1,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  ?b rdf:type ?c .
+  FILTER EXISTS {
+  ?c rdfs:comment ?d . }
+}"
+EXISTS JOIN chain of three large predicates with the largest sum of join sizes 2,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE {
+  ?a bsbm:product ?b .
+  FILTER EXISTS {
+  ?b rdf:type ?c .
+  ?c rdfs:comment ?d . }
+}"
+"UNION of two large predicates, no constraint","PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count)
+WHERE { { ?s rdf:type ?o } UNION { ?s dc:publisher ?o } }"
+"UNION of two large predicates, constrained by a large predicate known to have join partners","PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count) WHERE {
+  { ?s dc:publisher ?o1 }
+  UNION { ?s rdf:type ?o1 }
+  ?s dc:date ?o2
+}"
+"UNION of two large predicates, constrained by a join with a small result","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(*) AS ?count) WHERE {
+  { ?s bsbm:rating1 ?o1 }
+  UNION { ?s rdf:type ?o1 }
+  ?s bsbm:rating3 ?o2
+}"
+"UNION of two large predicates, constrained by a join with a large result","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count) WHERE {
+  { ?s rdf:type ?o1 }
+  UNION { ?s dc:publisher ?o1 }
+  ?s bsbm:productFeature ?o2
+}"
+"UNION of two large predicates, constraint by restrictive FILTER","PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count) WHERE {
+  { ?s rdf:type ?o } UNION { ?s dc:publisher ?o }
+  FILTER (?s = ?o)
+}"
+Multicolumn JOIN small,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(*) AS ?count) WHERE { 
+  ?s bsbm:productPropertyNumeric5 ?o .
+  ?s bsbm:productPropertyNumeric4 ?o }"
+Multicolumn JOIN large,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(*) AS ?count) WHERE { 
+  ?s dc:publisher ?o .
+  ?s bsbm:vendor ?o }"
+"GROUP BY with COUNT, for object with high multiplicity","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT ?object (COUNT(?subject) AS ?count) {
+?subject bsbm:deliveryDays ?object .
+} GROUP BY ?object ORDER BY DESC(?count) LIMIT 10"
+"GROUP BY with COUNT, for object with low multiplicity","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT ?object (COUNT(?subject) AS ?count) {
+?subject bsbm:offerWebpage ?object .
+} GROUP BY ?object ORDER BY DESC(?count) LIMIT 10"
+"GROUP BY with COUNT, for object but not sorted by object","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT ?o1 (COUNT(?s) AS ?count) {
+  ?s bsbm:deliveryDays ?o1 .
+  ?s bsbm:offerWebpage ?o2 .
+} GROUP BY ?o1 ORDER BY DESC(?count) LIMIT 10"
+GROUP BY with COUNT and MIN and MAX and SAMPLE,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT ?o1 (COUNT(?s) AS ?count) (MIN(?s) AS ?min) (MAX(?s) AS ?max)
+  (SAMPLE(?s) AS ?sample) {
+  ?s bsbm:deliveryDays ?o1 .
+  ?s bsbm:offerWebpage ?o2 .
+} GROUP BY ?o1 ORDER BY DESC(?count) LIMIT 10"
+Implicit GROUP BY with COUNT on numeric predicate as baseline,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(?o) AS ?count) { ?s bsbm:deliveryDays ?o. }"
+Implicit GROUP BY with SUM on numeric predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(?o) AS ?sum) { ?s bsbm:deliveryDays ?o. }"
+Implicit GROUP BY with MIN on numeric predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (MIN(?o) AS ?min) { ?s bsbm:deliveryDays ?o. }"
+Implicit GROUP BY with MAX on numeric predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (MAX(?o) AS ?max) { ?s bsbm:deliveryDays ?o. }"
+Implicit GROUP BY with AVG on numeric predicate,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (AVG(?o) AS ?avg) { ?s bsbm:deliveryDays ?o. }"
+Implicit GROUP BY with COUNT on string predicate as baseline,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(?o) AS ?count) { ?s dc:title ?o. }"
+Implicit GROUP BY with MIN on string predicate,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (MIN(?o) AS ?min) { ?s dc:title ?o. }"
+Implicit GROUP BY with MAX on string predicate,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (MAX(?o) AS ?max) { ?s dc:title ?o. }"
+GROUP BY with GROUP_CONCAT on string predicate with high subject multiplicity,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (SUM(STRLEN(?cat)) AS ?sum) {
+{ SELECT (GROUP_CONCAT(?o; SEPARATOR="" "") AS ?cat) {
+  ?s dc:title ?o. } GROUP BY ?s } }"
+"COUNT DISTINCT, for object with high multiplicity","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(DISTINCT ?object) AS ?count) {
+  ?subject bsbm:deliveryDays ?object .
+}"
+"COUNT DISTINCT, for object with low multiplicity","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(DISTINCT ?object) AS ?count) {
+?subject bsbm:offerWebpage ?object .
+}"
+"COUNT DISTINCT, for object but not sorted by object","PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(DISTINCT ?o1) AS ?count) {
+  ?s bsbm:deliveryDays ?o1 .
+  ?s bsbm:offerWebpage ?o2 .
+}"
+Transitive path with plus,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count) { ?s rdfs:subClassOf+ ?o }"
+Transitive path with plus and a fixed subject,"PREFIX bsbm_inst: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count) {
+  bsbm_inst:ProductType263 rdfs:subClassOf+ ?o }"
+Transitive path with a large join and plus,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count) {
+  ?s rdf:type/rdfs:subClassOf+ ?o }"
+Transitive path with a small join and plus,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count) {
+  ?s rdf:type/rdfs:subClassOf+ ?o }"
+CONTAINS filter with fixed string of length 3,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?o FILTER CONTAINS(?o, ""com"") }"
+REGEX filter with fixed string of length 3,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?o FILTER REGEX(?o, ""com"") }"
+REGEX filter with expression of length 3,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?o FILTER REGEX(?o, ""c.m"") }"
+REGEX filter with prefix of length 1,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?o FILTER REGEX(?o, ""^C"") }"
+REGEX filter with prefix of length 2,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?object FILTER REGEX(?object, ""^Co"") }"
+REGEX filter with prefix of length 3,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (COUNT(*) AS ?count)
+WHERE { ?s rdfs:label ?object FILTER REGEX(?object, ""^Com"") }"
+String length for large string predicate,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (SUM(STRLEN(?o)) AS ?checksum)  {
+  ?s rdfs:label ?o . }"
+STRBEFORE string function,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (SUM(STRLEN(STRBEFORE(?o, ""a""))) AS ?checksum) {
+  ?s rdfs:label ?o . }"
+STRAFTER string function,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT (SUM(STRLEN(STRAFTER(?o, ""a""))) AS ?checksum) {
+  ?s rdfs:label ?o . }"
+STRSTARTS string function,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT (SUM(xsd:integer(STRSTARTS(?o, ""a""))) AS ?count) {
+  ?s rdfs:label ?o . }"
+STRENDS string function,"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT (SUM(xsd:integer(STRENDS(?o, ""a""))) AS ?count) {
+  ?s rdfs:label ?o . }"
+Export 10 tuples,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?s ?o
+WHERE { ?s rdf:type ?o }
+LIMIT 10"
+Export 1000 tuples,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?s ?o
+WHERE { ?s rdf:type ?o }
+LIMIT 1000"
+Export 100K tuples,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?s ?o
+WHERE { ?s rdf:type ?o }
+LIMIT 100000"
+Export 1M tuples,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?s ?o
+WHERE { ?s rdf:type ?o }
+LIMIT 1000000"
+Export 10M tuples,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?s ?o
+WHERE { ?s rdf:type ?o }
+LIMIT 10000000"
+Baseline for numeric queries,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(?o) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+ABS function,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(ABS(?o)) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+CEIL function,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(CEIL(?o)) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+FLOOR function,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(FLOOR(?o)) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+ROUND function,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(ROUND(?o)) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+Addition,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(?o + ?o) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+Greater than,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (SUM(?o > 0) AS ?sum)
+WHERE { ?s bsbm:deliveryDays ?o }"
+Numeric FILTER that filters out 50 percent of the values,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(?s) AS ?count) {
+  ?s bsbm:deliveryDays ?o .
+  FILTER (?o >= 3) }"
+Numeric FILTER that filters out 70 percent of the values,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(?s) AS ?count) {
+  ?s bsbm:deliveryDays ?o .
+  FILTER (?o >= 4) }"
+Numeric FILTER that filters out 95 percent of the values,"PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+SELECT (COUNT(?s) AS ?count) {
+  ?s bsbm:deliveryDays ?o .
+  FILTER (?o >= 6) }"
+FILTER that filters out most rows and has few results,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(?s) AS ?count) {
+  ?s rdf:type ?o . FILTER (?s = ?o) }"
+FILTER that filters out few rows and has many results,"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT (COUNT(?s) AS ?count) {
+  ?s rdf:type ?o . FILTER (?s != ?o) }"
+FILTER on string predicate for only English literals,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (COUNT(?s) AS ?count) {
+  ?s dc:title ?o . FILTER(LANG(?o) = ""en"") }"
+YEAR function,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (SUM(YEAR(?o)) AS ?sum)
+WHERE { ?s dc:date ?o }"
+MONTH function,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (SUM(MONTH(?o)) AS ?sum)
+WHERE { ?s dc:date ?o }"
+DAY function,"PREFIX dc: <http://purl.org/dc/elements/1.1/>
+SELECT (SUM(DAY(?o)) AS ?sum)
+WHERE { ?s dc:date ?o }"
+Total number of triples,"SELECT (COUNT(?s) AS ?count)
+WHERE { ?s ?p ?o }"
+Total number of distinct subjects,"SELECT (COUNT(DISTINCT ?s) AS ?count)
+WHERE { ?s ?p ?o }"
+Total number of distinct predicates,"SELECT (COUNT(DISTINCT ?p) AS ?count)
+WHERE { ?s ?p ?o }"
+Total number of distinct objects,"SELECT (COUNT(DISTINCT ?o) AS ?count)
+WHERE { ?s ?p ?o }"
+Total number of literals,"SELECT (COUNT(?o) AS ?count)
+WHERE { ?s ?p ?o FILTER ISLITERAL(?o) }"
+Total number of blank nodes,"SELECT (COUNT(?s) AS ?count)
+WHERE { ?s ?p ?o FILTER ISBLANK(?s) }"
