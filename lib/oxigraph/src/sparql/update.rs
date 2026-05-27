@@ -303,13 +303,9 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         operation: &DeleteInsertOperation,
         using: &QueryDatasetSpecification,
     ) -> Result<(), UpdateEvaluationError> {
-        let mut prepared = self.query_evaluator.prepare_delete_insert(
-            operation.delete.clone(),
-            operation.insert.clone(),
-            self.base_iri.clone(),
-            None,
-            &operation.pattern,
-        );
+        let mut prepared = self
+            .query_evaluator
+            .prepare_delete_insert(operation, self.base_iri.as_ref());
         *prepared.dataset_mut() = using.clone();
         let mutations = prepared
             .execute(DatasetView::new(self.transaction.reader()))?
@@ -500,13 +496,9 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
                 "It is not possible to evaluate delete/insert operations on a write-only transaction after other update operations".into(),
             ));
         };
-        let mut prepared = self.query_evaluator.prepare_delete_insert(
-            operation.delete.clone(),
-            operation.insert.clone(),
-            self.base_iri.clone(),
-            None,
-            &operation.pattern,
-        );
+        let mut prepared = self
+            .query_evaluator
+            .prepare_delete_insert(operation, self.base_iri.as_ref());
         *prepared.dataset_mut() = using.clone();
         let mutations = prepared
             .execute(DatasetView::new(storage.snapshot()))?

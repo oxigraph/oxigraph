@@ -31,7 +31,7 @@ use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, Term, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
 use spargebra::algebra::QueryDataset;
-use spargebra::term::{GroundQuadPattern, QuadPattern};
+use spargebra::update::DeleteInsertOperation;
 use sparopt::Optimizer;
 use sparopt::algebra::GraphPattern;
 use std::collections::HashMap;
@@ -447,13 +447,7 @@ impl QueryEvaluator {
     ///     unreachable!()
     /// };
     /// let results = QueryEvaluator::new()
-    ///     .prepare_delete_insert(
-    ///         operation.delete.clone(),
-    ///         operation.insert.clone(),
-    ///         None,
-    ///         None,
-    ///         &operation.pattern,
-    ///     )
+    ///     .prepare_delete_insert(&operation, None)
     ///     .execute(&dataset)?
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(
@@ -477,19 +471,15 @@ impl QueryEvaluator {
     /// ```
     pub fn prepare_delete_insert<'a>(
         &'a self,
-        delete: Vec<GroundQuadPattern>,
-        insert: Vec<QuadPattern>,
-        base_iri: Option<Iri<String>>,
-        using: Option<QueryDataset>,
-        pattern: &'a spargebra::algebra::GraphPattern,
+        operation: &'a DeleteInsertOperation,
+        base_iri: Option<&'a Iri<String>>,
     ) -> PreparedDeleteInsertUpdate<'a> {
+        let dataset = operation.using.clone().map(Into::into).unwrap_or_default();
         PreparedDeleteInsertUpdate {
             evaluator: self,
-            pattern,
-            delete,
-            insert,
+            operation,
             base_iri,
-            dataset: using.map(Into::into).unwrap_or_default(),
+            dataset,
         }
     }
 
@@ -497,11 +487,11 @@ impl QueryEvaluator {
         &self,
         dataset: D,
         dataset_spec: QueryDatasetSpecification,
-        base_iri: &Option<Iri<String>>,
+        base_iri: Option<&Iri<String>>,
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
         SimpleEvaluator::new(
             dataset,
-            base_iri.clone().map(Arc::new),
+            base_iri.cloned().map(Arc::new),
             Rc::new(self.service_handler.clone()),
             Rc::new(self.custom_functions.clone()),
             Rc::new(self.custom_aggregate_functions.clone()),
@@ -612,14 +602,14 @@ impl PreparedQuery<'_> {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
-                let (results, explanation) =
-                    match self
-                        .evaluator
-                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
-                    {
-                        Ok(evaluator) => evaluator.evaluate_select(&pattern, self.substitutions),
-                        Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
-                    };
+                let (results, explanation) = match self.evaluator.simple_evaluator(
+                    dataset,
+                    self.dataset,
+                    query.base_iri.as_ref(),
+                ) {
+                    Ok(evaluator) => evaluator.evaluate_select(&pattern, self.substitutions),
+                    Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
+                };
                 (
                     results.map(QueryResults::Solutions),
                     explanation,
@@ -632,14 +622,14 @@ impl PreparedQuery<'_> {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
-                let (results, explanation) =
-                    match self
-                        .evaluator
-                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
-                    {
-                        Ok(evaluator) => evaluator.evaluate_ask(&pattern, self.substitutions),
-                        Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
-                    };
+                let (results, explanation) = match self.evaluator.simple_evaluator(
+                    dataset,
+                    self.dataset,
+                    query.base_iri.as_ref(),
+                ) {
+                    Ok(evaluator) => evaluator.evaluate_ask(&pattern, self.substitutions),
+                    Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
+                };
                 (
                     results.map(QueryResults::Boolean),
                     explanation,
@@ -652,18 +642,16 @@ impl PreparedQuery<'_> {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
-                let (results, explanation) =
-                    match self
-                        .evaluator
-                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
-                    {
-                        Ok(evaluator) => evaluator.evaluate_construct(
-                            &pattern,
-                            &query.template,
-                            self.substitutions,
-                        ),
-                        Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
-                    };
+                let (results, explanation) = match self.evaluator.simple_evaluator(
+                    dataset,
+                    self.dataset,
+                    query.base_iri.as_ref(),
+                ) {
+                    Ok(evaluator) => {
+                        evaluator.evaluate_construct(&pattern, &query.template, self.substitutions)
+                    }
+                    Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
+                };
                 (
                     results.map(QueryResults::Graph),
                     explanation,
@@ -676,14 +664,14 @@ impl PreparedQuery<'_> {
                     pattern = Optimizer::optimize_graph_pattern(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
-                let (results, explanation) =
-                    match self
-                        .evaluator
-                        .simple_evaluator(dataset, self.dataset, &query.base_iri)
-                    {
-                        Ok(evaluator) => evaluator.evaluate_describe(&pattern, self.substitutions),
-                        Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
-                    };
+                let (results, explanation) = match self.evaluator.simple_evaluator(
+                    dataset,
+                    self.dataset,
+                    query.base_iri.as_ref(),
+                ) {
+                    Ok(evaluator) => evaluator.evaluate_describe(&pattern, self.substitutions),
+                    Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
+                };
                 (
                     results.map(QueryResults::Graph),
                     explanation,
@@ -725,13 +713,7 @@ impl PreparedQuery<'_> {
 ///     unreachable!()
 /// };
 /// let results = QueryEvaluator::new()
-///     .prepare_delete_insert(
-///         operation.delete.clone(),
-///         operation.insert.clone(),
-///         None,
-///         None,
-///         &operation.pattern,
-///     )
+///     .prepare_delete_insert(&operation, None)
 ///     .execute(&dataset)?
 ///     .collect::<Result<Vec<_>, _>>()?;
 /// assert_eq!(
@@ -757,14 +739,12 @@ impl PreparedQuery<'_> {
 #[must_use]
 pub struct PreparedDeleteInsertUpdate<'a> {
     evaluator: &'a QueryEvaluator,
-    pattern: &'a spargebra::algebra::GraphPattern,
-    delete: Vec<GroundQuadPattern>,
-    insert: Vec<QuadPattern>,
-    base_iri: Option<Iri<String>>,
+    operation: &'a DeleteInsertOperation,
+    base_iri: Option<&'a Iri<String>>,
     dataset: QueryDatasetSpecification,
 }
 
-impl PreparedDeleteInsertUpdate<'_> {
+impl<'a> PreparedDeleteInsertUpdate<'a> {
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) of this prepared update.
     #[inline]
     pub fn dataset(&self) -> &QueryDatasetSpecification {
@@ -780,16 +760,20 @@ impl PreparedDeleteInsertUpdate<'_> {
     pub fn execute<'b>(
         self,
         dataset: impl QueryableDataset<'b>,
-    ) -> Result<DeleteInsertIter<'b>, QueryEvaluationError> {
-        let mut pattern = GraphPattern::from(self.pattern);
+    ) -> Result<DeleteInsertIter<'b, 'a>, QueryEvaluationError> {
+        let mut pattern = GraphPattern::from(&*self.operation.pattern);
         if !self.evaluator.without_optimizations {
             pattern = Optimizer::optimize_graph_pattern(pattern);
         }
         let (solutions, _) = self
             .evaluator
-            .simple_evaluator(dataset, self.dataset, &self.base_iri)?
+            .simple_evaluator(dataset, self.dataset, self.base_iri)?
             .evaluate_select(&pattern, []);
-        Ok(DeleteInsertIter::new(solutions?, self.delete, self.insert))
+        Ok(DeleteInsertIter::new(
+            solutions?,
+            &self.operation.delete,
+            &self.operation.insert,
+        ))
     }
 }
 
