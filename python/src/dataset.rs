@@ -3,6 +3,7 @@ use oxigraph::model::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAl
 use oxigraph::model::{Quad, QuadRef};
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
+use std::fmt;
 
 /// An in-memory `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_.
 ///
@@ -20,7 +21,7 @@ use pyo3::prelude::*;
 ///
 /// >>> str(Dataset([Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), NamedNode('http://example.com/o'), NamedNode('http://example.com/g'))]))
 /// '<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n'
-#[pyclass(name = "Dataset", module = "pyoxigraph", eq)]
+#[pyclass(name = "Dataset", module = "pyoxigraph", eq, str)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct PyDataset {
     inner: Dataset,
@@ -217,10 +218,6 @@ impl PyDataset {
         self.inner.canonicalize(algorithm.inner)
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __bool__(&self) -> bool {
         self.inner.is_empty()
     }
@@ -243,6 +240,12 @@ impl PyDataset {
                 .collect::<Vec<_>>()
                 .into_iter(),
         }
+    }
+}
+
+impl fmt::Display for PyDataset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 

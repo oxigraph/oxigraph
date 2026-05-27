@@ -11,6 +11,7 @@ use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -37,7 +38,7 @@ use std::path::PathBuf;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(frozen, name = "Store", module = "pyoxigraph")]
+#[pyclass(frozen, name = "Store", module = "pyoxigraph", str)]
 pub struct PyStore {
     inner: Store,
 }
@@ -819,10 +820,6 @@ impl PyStore {
         })
     }
 
-    fn __str__(&self, py: Python<'_>) -> String {
-        py.detach(|| self.inner.to_string())
-    }
-
     fn __bool__(&self) -> PyResult<bool> {
         Ok(!self.inner.is_empty().map_err(map_storage_error)?)
     }
@@ -839,6 +836,12 @@ impl PyStore {
         QuadIter {
             inner: self.inner.iter(),
         }
+    }
+}
+
+impl fmt::Display for PyStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 

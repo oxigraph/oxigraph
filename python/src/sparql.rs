@@ -20,9 +20,9 @@ use pyo3::types::PyTuple;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
+use std::{fmt, io};
 
 pub fn prepare_sparql_query(
     evaluator: SparqlEvaluator,
@@ -633,6 +633,7 @@ pub fn parse_query_results(
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
@@ -740,10 +741,6 @@ impl PyQueryResultsFormat {
         })
     }
 
-    fn __str__(&self) -> &'static str {
-        self.inner.name()
-    }
-
     fn __repr__(&self) -> String {
         format!("<QueryResultsFormat {}>", self.inner.name())
     }
@@ -758,6 +755,12 @@ impl PyQueryResultsFormat {
     #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
+    }
+}
+
+impl fmt::Display for PyQueryResultsFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 

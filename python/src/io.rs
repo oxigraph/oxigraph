@@ -11,6 +11,7 @@ use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -262,6 +263,7 @@ impl PyQuadParser {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
@@ -405,10 +407,6 @@ impl PyRdfFormat {
         })
     }
 
-    fn __str__(&self) -> &'static str {
-        self.inner.name()
-    }
-
     fn __repr__(&self) -> String {
         format!("<RdfFormat {}>", self.inner.name())
     }
@@ -423,6 +421,12 @@ impl PyRdfFormat {
     #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
+    }
+}
+
+impl fmt::Display for PyRdfFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
