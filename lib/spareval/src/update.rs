@@ -20,19 +20,19 @@ pub enum DeleteInsertQuad {
 }
 
 /// Output of [`PreparedDeleteInsertUpdate::execute`](super::PreparedDeleteInsertUpdate::execute).
-pub struct DeleteInsertIter<'a> {
+pub struct DeleteInsertIter<'a, 'b> {
     solutions: QuerySolutionIter<'a>,
-    delete: Vec<GroundQuadPattern>,
-    insert: Vec<QuadPattern>,
+    delete: &'b [GroundQuadPattern],
+    insert: &'b [QuadPattern],
     buffer: VecDeque<DeleteInsertQuad>,
     bnodes: FxHashMap<BlankNode, BlankNode>,
 }
 
-impl<'a> DeleteInsertIter<'a> {
+impl<'a, 'b> DeleteInsertIter<'a, 'b> {
     pub(crate) fn new(
         solutions: QuerySolutionIter<'a>,
-        delete: Vec<GroundQuadPattern>,
-        insert: Vec<QuadPattern>,
+        delete: &'b [GroundQuadPattern],
+        insert: &'b [QuadPattern],
     ) -> Self {
         Self {
             solutions,
@@ -44,7 +44,7 @@ impl<'a> DeleteInsertIter<'a> {
     }
 }
 
-impl Iterator for DeleteInsertIter<'_> {
+impl Iterator for DeleteInsertIter<'_, '_> {
     type Item = Result<DeleteInsertQuad, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Result<DeleteInsertQuad, QueryEvaluationError>> {
@@ -56,12 +56,12 @@ impl Iterator for DeleteInsertIter<'_> {
                 Ok(solution) => solution,
                 Err(e) => return Some(Err(e)),
             };
-            for quad in &self.delete {
+            for quad in self.delete {
                 if let Some(quad) = fill_ground_quad_pattern(quad, &solution) {
                     self.buffer.push_back(DeleteInsertQuad::Delete(quad));
                 }
             }
-            for quad in &self.insert {
+            for quad in self.insert {
                 if let Some(quad) = fill_quad_pattern(quad, &solution, &mut self.bnodes) {
                     self.buffer.push_back(DeleteInsertQuad::Insert(quad));
                 }
