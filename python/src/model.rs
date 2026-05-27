@@ -6,6 +6,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyTuple};
+use std::fmt;
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -25,6 +26,7 @@ use std::vec::IntoIter;
     eq,
     ord,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -81,10 +83,6 @@ impl PyNamedNode {
         self.inner.as_str()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         named_node_repr(self.inner.as_ref(), &mut buffer);
@@ -114,6 +112,12 @@ impl PyNamedNode {
     }
 }
 
+impl fmt::Display for PyNamedNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
 ///
 /// :param value: the `blank node identifier <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node identifier is automatically generated).
@@ -130,6 +134,7 @@ impl PyNamedNode {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -190,10 +195,6 @@ impl PyBlankNode {
         self.inner.as_str()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         blank_node_repr(self.inner.as_ref(), &mut buffer);
@@ -220,6 +221,12 @@ impl PyBlankNode {
     #[classattr]
     fn __match_args__() -> (&'static str,) {
         ("value",)
+    }
+}
+
+impl fmt::Display for PyBlankNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
@@ -251,6 +258,7 @@ impl PyBlankNode {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -419,10 +427,6 @@ impl PyLiteral {
         self.inner.datatype().into_owned().into()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         literal_repr(self.inner.as_ref(), &mut buffer);
@@ -468,6 +472,12 @@ impl PyLiteral {
     }
 }
 
+impl fmt::Display for PyLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 /// A `directional language-tagged string <https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string>`_ `base-direction <https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction>`_
 ///
 /// :param value: the direction as a string (`ltr` or `rtl`).
@@ -484,6 +494,7 @@ impl PyLiteral {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -549,10 +560,6 @@ impl PyBaseDirection {
         }
     }
 
-    fn __str__(&self) -> &'static str {
-        self.value()
-    }
-
     fn __repr__(&self) -> &'static str {
         match self.inner {
             BaseDirection::Ltr => "<LtrBaseDirection>",
@@ -583,6 +590,13 @@ impl PyBaseDirection {
     }
 }
 
+#[cfg(feature = "rdf-12")]
+impl fmt::Display for PyBaseDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
 #[pyclass(
     frozen,
@@ -590,6 +604,7 @@ impl PyBaseDirection {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -606,10 +621,6 @@ impl PyDefaultGraph {
     #[new]
     fn new() -> Self {
         Self {}
-    }
-
-    fn __str__(&self) -> &'static str {
-        "DEFAULT"
     }
 
     fn __repr__(&self) -> &'static str {
@@ -631,6 +642,12 @@ impl PyDefaultGraph {
     #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
+    }
+}
+
+impl fmt::Display for PyDefaultGraph {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DEFAULT")
     }
 }
 
@@ -715,6 +732,7 @@ impl From<Term> for PyTerm {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -784,10 +802,6 @@ impl PyTriple {
         self.inner.object.clone().into()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         triple_repr(self.inner.as_ref(), &mut buffer);
@@ -838,6 +852,12 @@ impl PyTriple {
     #[classattr]
     fn __match_args__() -> (&'static str, &'static str, &'static str) {
         ("subject", "predicate", "object")
+    }
+}
+
+impl fmt::Display for PyTriple {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
@@ -898,6 +918,7 @@ impl From<GraphName> for PyGraphName {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -992,10 +1013,6 @@ impl PyQuad {
         Triple::from(self.inner.clone()).into()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         buffer.push_str("<Quad subject=");
@@ -1068,6 +1085,12 @@ impl PyQuad {
     }
 }
 
+impl fmt::Display for PyQuad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 /// A SPARQL query variable.
 ///
 /// :param value: the variable name as a string.
@@ -1084,6 +1107,7 @@ impl PyQuad {
     module = "pyoxigraph",
     eq,
     hash,
+    str,
     from_py_object
 )]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -1128,10 +1152,6 @@ impl PyVariable {
         self.inner.as_str()
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
     fn __repr__(&self) -> String {
         format!("<Variable value={}>", self.inner.as_str())
     }
@@ -1156,6 +1176,12 @@ impl PyVariable {
     #[classattr]
     fn __match_args__() -> (&'static str,) {
         ("value",)
+    }
+}
+
+impl fmt::Display for PyVariable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
