@@ -54,12 +54,14 @@ getrandom.workspace = true
 js-sys = { workspace = true, optional = true }
 rand = "0.10"
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 codspeed-criterion-compat.workspace = true
 csv.workspace = true
 oxhttp = { workspace = true, features = ["rustls-ring-native"] }
 bzip2.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]
