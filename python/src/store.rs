@@ -1,5 +1,5 @@
 use crate::io::{
-    PyRdfFormat, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
+    PyIo, PyRdfFormat, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
     map_parse_error,
 };
 use crate::model::*;
@@ -12,6 +12,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::fs::File;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -425,7 +426,6 @@ impl PyStore {
         lenient: bool,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
         py.detach(|| {
             let mut parser = RdfParser::from_format(format);
@@ -440,9 +440,24 @@ impl PyStore {
             if lenient {
                 parser = parser.lenient();
             }
-            self.inner
-                .load_from_reader(parser, input)
+            if let Some(input) = input {
+                match input {
+                    PyReadableInput::Bytes(bytes) => self.inner.load_from_slice(parser, &bytes),
+                    PyReadableInput::String(str) => {
+                        self.inner.load_from_slice(parser, str.as_bytes())
+                    }
+                    PyReadableInput::Io(io) => self.inner.load_from_reader(parser, PyIo::new(io)),
+                }
                 .map_err(|e| map_loader_error(e, path))
+            } else if let Some(path) = path {
+                self.inner
+                    .load_from_reader(parser, File::open(&path)?)
+                    .map_err(|e| map_loader_error(e, Some(path)))
+            } else {
+                Err(PyValueError::new_err(
+                    "Either input or file_path must be set",
+                ))
+            }
         })
     }
 
@@ -495,58 +510,57 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let format = lookup_rdf_format(format, path.as_deref())?;
-        let mut parser = RdfParser::from_format(format);
-        if let Some(base_iri) = base_iri {
-            parser = parser.with_base_iri(base_iri).map_err(|e| {
-                PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
-            })?;
-        }
-        if let Some(to_graph) = to_graph {
-            parser = parser.with_default_graph(to_graph);
-        }
-        if lenient {
-            parser = parser.lenient();
-        }
-        match (path, input) {
-            #[cfg(not(target_family = "wasm"))]
-            (Some(path), None) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
-                loader
-                    .parallel_load_from_file(parser, &path)
-                    .map_err(|e| map_loader_error(e, Some(path)))?;
-                loader.commit().map_err(map_storage_error)?;
-                Ok(())
-            }),
-            #[cfg(not(target_family = "wasm"))]
-            (None, Some(PyReadableInput::Bytes(input))) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
-                loader
-                    .parallel_load_from_slice(parser, &input)
-                    .map_err(|e| map_loader_error(e, None))?;
-                loader.commit().map_err(map_storage_error)?;
-                Ok(())
-            }),
-            #[cfg(not(target_family = "wasm"))]
-            (None, Some(PyReadableInput::String(input))) => py.detach(|| {
-                let mut loader = self.inner.bulk_loader();
-                loader
-                    .parallel_load_from_slice(parser, &input)
-                    .map_err(|e| map_loader_error(e, None))?;
-                loader.commit().map_err(map_storage_error)?;
-                Ok(())
-            }),
-            (path, input) => {
-                let input = PyReadable::from_args(&path, input, py)?;
-                py.detach(|| {
-                    let mut loader = self.inner.bulk_loader();
-                    loader
-                        .load_from_reader(parser, input)
-                        .map_err(|e| map_loader_error(e, path))?;
-                    loader.commit().map_err(map_storage_error)?;
-                    Ok(())
-                })
+        py.detach(|| {
+            let mut parser = RdfParser::from_format(format);
+            if let Some(base_iri) = base_iri {
+                parser = parser.with_base_iri(base_iri).map_err(|e| {
+                    PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+                })?;
             }
-        }
+            if let Some(to_graph) = to_graph {
+                parser = parser.with_default_graph(to_graph);
+            }
+            if lenient {
+                parser = parser.lenient();
+            }
+            let mut loader = self.inner.bulk_loader();
+            if let Some(input) = input {
+                match input {
+                    #[cfg(target_family = "wasm")]
+                    PyReadableInput::Bytes(bytes) => loader.load_from_slice(parser, &bytes),
+                    #[cfg(not(target_family = "wasm"))]
+                    PyReadableInput::Bytes(bytes) => {
+                        loader.parallel_load_from_slice(parser, &bytes)
+                    }
+                    #[cfg(target_family = "wasm")]
+                    PyReadableInput::String(str) => loader.load_from_slice(parser, str.as_bytes()),
+                    #[cfg(not(target_family = "wasm"))]
+                    PyReadableInput::String(str) => {
+                        loader.parallel_load_from_slice(parser, str.as_bytes())
+                    }
+                    PyReadableInput::Io(io) => loader.load_from_reader(parser, PyIo::new(io)),
+                }
+                .map_err(|e| map_loader_error(e, path))
+            } else if let Some(path) = path {
+                #[cfg(target_family = "wasm")]
+                {
+                    loader
+                        .load_from_reader(parser, File::open(&path)?)
+                        .map_err(|e| map_loader_error(e, Some(path)))
+                }
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    loader
+                        .parallel_load_from_file(parser, &path)
+                        .map_err(|e| map_loader_error(e, Some(path)))
+                }
+            } else {
+                Err(PyValueError::new_err(
+                    "Either input or file_path must be set",
+                ))
+            }?;
+            loader.commit().map_err(map_storage_error)
+        })
     }
 
     /// Dumps the store quads or triples into a file.
