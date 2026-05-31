@@ -19,7 +19,8 @@ use std::sync::atomic::{AtomicUsize, Ordering, fence};
 /// it allows storing a static string slice ([`&'static str`](std::str))
 /// or a reference-counted fixed-sized string ([`Arc<str>`](std::sync::Arc)), enabling cheap clones of owned data.
 ///
-/// When owned, cloning is cheap and increments an atomic reference count.
+/// Cloning is cheap: the only operation it does is an atomic reference count increment when content is reference-counted
+/// (and nothing when content is borrowed).
 ///
 /// See [`OxStr`] for implementation details.
 ///
@@ -42,7 +43,8 @@ pub type OxString = OxStr<'static>;
 /// If borrowed, the pointer directly targets the string bytes.
 /// If owned, the pointer points to a memory allocation with first the reference counter, then the string bytes.
 ///
-/// When owned, cloning is cheap and increments an atomic reference count.
+/// Cloning is cheap: the only operation it does is an atomic reference count increment when content is reference-counted
+/// (and nothing when content is borrowed).
 ///
 /// ```
 /// use oxrdf::OxStr;
@@ -324,6 +326,19 @@ impl<'a> OxStr<'a> {
             str::from_utf8_unchecked(NonNull::slice_from_raw_parts(self.data, self.len).as_ref())
         }
     }
+
+    /// Executes the deallocation itself
+    #[inline(never)]
+    unsafe fn do_owned_deallocating_drop(&mut self) {
+        // SAFETY: the fence here is matching the Ordering::Release operation in drop
+        unsafe {
+            fence(Ordering::Acquire);
+            dealloc(
+                self.data.as_mut(),
+                Self::owned_layout_for_len(self.owned_len()),
+            );
+        }
+    }
 }
 
 // SAFETY: We are using atomic operations for reference conting and using uniqueness checks for mutable access
@@ -343,11 +358,7 @@ impl Drop for OxStr<'_> {
                 if self.owned_counter().fetch_sub(1, Ordering::Release) != 1 {
                     return;
                 }
-                fence(Ordering::Acquire);
-                dealloc(
-                    self.data.as_mut(),
-                    Self::owned_layout_for_len(self.owned_len()),
-                );
+                self.do_owned_deallocating_drop();
             }
         }
     }
