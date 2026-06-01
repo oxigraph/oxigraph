@@ -1,7 +1,5 @@
 #![expect(unsafe_code)]
 
-// TODO: add safety guards with max refcount and max len
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::alloc::{Layout, alloc, dealloc};
@@ -10,8 +8,11 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering, fence};
+
+const MAX_REF_COUNTER: usize = isize::MAX as usize;
 
 /// Owned variant of [`OxStr`]: A compact string type for reference-counted owned data or static slices.
 ///
@@ -144,7 +145,7 @@ impl<'a> OxStr<'a> {
         let values = values.as_ref();
         let len = values.iter().map(|s| s.as_ref().len()).sum();
         if len & OWNED_FLAG != 0 {
-            return None;
+            return None; // The length is so long that it prevents using the "owned" flag, we fail to create the string
         }
 
         // SAFETY: we carefully choose the layout. Then we can allocate, check that allocation works and write to the allocation
@@ -192,7 +193,13 @@ impl<'a> OxStr<'a> {
         if self.is_owned() {
             // SAFETY: we just checked it's owned, the pointer points to the reference counter, and we can increment it to do a clone
             unsafe {
-                self.owned_counter().fetch_add(1, Ordering::Relaxed); // Arc is also using relaxed, I guess it's fine
+                let count = self.owned_counter().fetch_add(1, Ordering::Relaxed); // Arc is also using relaxed, I guess it's fine
+
+                // We guard against massive ref count in case of forgetting strings
+                if count > MAX_REF_COUNTER {
+                    abort();
+                }
+
                 OxStr {
                     len: self.len,
                     data: self.data,
@@ -358,8 +365,13 @@ impl Clone for OxStr<'_> {
     fn clone(&self) -> Self {
         if self.is_owned() {
             // SAFETY: we just checked it's the owned variant, we can call owned_counter
-            unsafe {
-                self.owned_counter().fetch_add(1, Ordering::Relaxed); // Arc is also using relaxed, I guess it's fine
+            let count = unsafe {
+                self.owned_counter().fetch_add(1, Ordering::Relaxed) // Arc is also using relaxed, I guess it's fine
+            };
+
+            // We guard against massive ref count in case of forgetting strings
+            if count > MAX_REF_COUNTER {
+                abort();
             }
         }
         Self {
