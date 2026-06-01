@@ -58,9 +58,24 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
         .collect();
 
     for p in &persons {
-        store.insert(QuadRef::new(p, rdf::TYPE, person_type, oxigraph::model::GraphNameRef::DefaultGraph))?;
-        store.insert(QuadRef::new(p, address_country, country.as_ref(), oxigraph::model::GraphNameRef::DefaultGraph))?;
-        store.insert(QuadRef::new(p, segment, seg.as_ref(), oxigraph::model::GraphNameRef::DefaultGraph))?;
+        store.insert(QuadRef::new(
+            p,
+            rdf::TYPE,
+            person_type,
+            oxigraph::model::GraphNameRef::DefaultGraph,
+        ))?;
+        store.insert(QuadRef::new(
+            p,
+            address_country,
+            country.as_ref(),
+            oxigraph::model::GraphNameRef::DefaultGraph,
+        ))?;
+        store.insert(QuadRef::new(
+            p,
+            segment,
+            seg.as_ref(),
+            oxigraph::model::GraphNameRef::DefaultGraph,
+        ))?;
     }
     let mut order_idx = 0;
     for p in &persons {
@@ -68,9 +83,24 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
             let order = NamedNode::new(format!("http://example.org/order/{order_idx}"))?;
             order_idx += 1;
             let price = Literal::new_simple_literal(format!("{}", 10 + order_idx));
-            store.insert(QuadRef::new(&order, rdf::TYPE, order_type, oxigraph::model::GraphNameRef::DefaultGraph))?;
-            store.insert(QuadRef::new(&order, customer, p.as_ref(), oxigraph::model::GraphNameRef::DefaultGraph))?;
-            store.insert(QuadRef::new(&order, total_price, price.as_ref(), oxigraph::model::GraphNameRef::DefaultGraph))?;
+            store.insert(QuadRef::new(
+                &order,
+                rdf::TYPE,
+                order_type,
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            ))?;
+            store.insert(QuadRef::new(
+                &order,
+                customer,
+                p.as_ref(),
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            ))?;
+            store.insert(QuadRef::new(
+                &order,
+                total_price,
+                price.as_ref(),
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            ))?;
         }
     }
 
