@@ -16,6 +16,7 @@
 //! to catch.
 
 #![cfg(test)]
+#![expect(clippy::panic, clippy::panic_in_result_fn)]
 
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::{Literal, NamedNode, NamedNodeRef, QuadRef};
@@ -58,24 +59,33 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
         .collect();
 
     for p in &persons {
-        store.insert(QuadRef::new(
-            p,
-            rdf::TYPE,
-            person_type,
-            oxigraph::model::GraphNameRef::DefaultGraph,
-        ))?;
-        store.insert(QuadRef::new(
-            p,
-            address_country,
-            country.as_ref(),
-            oxigraph::model::GraphNameRef::DefaultGraph,
-        ))?;
-        store.insert(QuadRef::new(
-            p,
-            segment,
-            seg.as_ref(),
-            oxigraph::model::GraphNameRef::DefaultGraph,
-        ))?;
+        store.insert(
+            QuadRef::new(
+                p,
+                &rdf::TYPE,
+                person_type,
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            )
+            .into_owned(),
+        )?;
+        store.insert(
+            QuadRef::new(
+                p,
+                address_country,
+                country.as_ref(),
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            )
+            .into_owned(),
+        )?;
+        store.insert(
+            QuadRef::new(
+                p,
+                segment,
+                seg.as_ref(),
+                oxigraph::model::GraphNameRef::DefaultGraph,
+            )
+            .into_owned(),
+        )?;
     }
     let mut order_idx = 0;
     for p in &persons {
@@ -83,24 +93,33 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
             let order = NamedNode::new(format!("http://example.org/order/{order_idx}"))?;
             order_idx += 1;
             let price = Literal::new_simple_literal(format!("{}", 10 + order_idx));
-            store.insert(QuadRef::new(
-                &order,
-                rdf::TYPE,
-                order_type,
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            ))?;
-            store.insert(QuadRef::new(
-                &order,
-                customer,
-                p.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            ))?;
-            store.insert(QuadRef::new(
-                &order,
-                total_price,
-                price.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            ))?;
+            store.insert(
+                QuadRef::new(
+                    &order,
+                    &rdf::TYPE,
+                    order_type,
+                    oxigraph::model::GraphNameRef::DefaultGraph,
+                )
+                .into_owned(),
+            )?;
+            store.insert(
+                QuadRef::new(
+                    &order,
+                    customer,
+                    p.as_ref(),
+                    oxigraph::model::GraphNameRef::DefaultGraph,
+                )
+                .into_owned(),
+            )?;
+            store.insert(
+                QuadRef::new(
+                    &order,
+                    total_price,
+                    price.as_ref(),
+                    oxigraph::model::GraphNameRef::DefaultGraph,
+                )
+                .into_owned(),
+            )?;
         }
     }
 
@@ -142,7 +161,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
     // ~N_PERSONS * total_orders.
     let max_quad_pattern_work = max_quad_pattern_exec_count(for_loop);
     assert!(
-        (max_quad_pattern_work as usize) < quadratic_floor / 4,
+        max_quad_pattern_work < (quadratic_floor / 4) as u64,
         "max inner QuadPattern exec_count = {max_quad_pattern_work} is in the quadratic regime (floor = {quadratic_floor}); plan:\n{plan:#}"
     );
 
@@ -161,8 +180,9 @@ fn max_quad_pattern_exec_count(node: &Value) -> u64 {
     let children = node
         .get("children")
         .and_then(Value::as_array)
-        .map(|c| c.iter().map(max_quad_pattern_exec_count).max().unwrap_or(0))
-        .unwrap_or(0);
+        .map_or(0, |c| {
+            c.iter().map(max_quad_pattern_exec_count).max().unwrap_or(0)
+        });
     here.max(children)
 }
 
@@ -170,8 +190,7 @@ fn find_label<'a>(node: &'a Value, needle: &str) -> Option<&'a Value> {
     if node
         .get("name")
         .and_then(Value::as_str)
-        .map(|n| n.contains(needle))
-        .unwrap_or(false)
+        .is_some_and(|n| n.contains(needle))
     {
         return Some(node);
     }
