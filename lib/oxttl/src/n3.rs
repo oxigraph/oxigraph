@@ -207,6 +207,11 @@ impl N3Parser {
         }
     }
 
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser but also the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set to 16MB, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
         self.max_buffer_size = max_buffer_size;
         self
