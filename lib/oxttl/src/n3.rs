@@ -1392,7 +1392,6 @@ impl RuleRecognizer for N3Recognizer {
 }
 
 impl N3Recognizer {
-    /// Create a new N3 parser an allow specifying a custom buffer size
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,
