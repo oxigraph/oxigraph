@@ -3,6 +3,7 @@ use crate::type_inference::{
     VariableType, VariableTypes, infer_expression_type, infer_graph_pattern_types,
 };
 use oxrdf::Variable;
+use oxrdf::vocab::rdf;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{GroundTermPattern, NamedNodePattern};
 use std::cmp::{max, min};
@@ -619,24 +620,46 @@ impl Optimizer {
             } => {
                 let left = Self::reorder_joins(*left, input_types);
                 let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                let right = Self::reorder_joins(*right, input_types);
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
-                    if is_fit_for_for_loop_join(&right, input_types, &left_types)
-                        && has_common_variables(&left_types, &right_types, input_types)
-                    {
-                        return GraphPattern::lateral(
-                            left,
-                            GraphPattern::left_join(
-                                GraphPattern::empty_singleton(),
-                                right,
-                                expression,
-                                LeftJoinAlgorithm::HashBuildRightProbeLeft { keys: Vec::new() },
-                            ),
-                        );
+                    let initial_right_types =
+                        infer_graph_pattern_types(&right, input_types.clone());
+                    if has_common_variables(&left_types, &initial_right_types, input_types) {
+                        let lateral_cost = estimate_graph_pattern_size(&left, input_types)
+                            .saturating_mul(estimate_graph_pattern_size(&right, &left_types));
+                        let keys =
+                            join_key_variables(&left_types, &initial_right_types, input_types);
+                        let join_cost = estimate_graph_pattern_size(&left, input_types)
+                            .saturating_mul(estimate_graph_pattern_size(&right, input_types))
+                            .saturating_div(
+                                1_000_u64.saturating_pow(keys.len().try_into().unwrap()),
+                            );
+
+                        if lateral_cost <= join_cost.saturating_mul(100) {
+                            let right_for_lateral =
+                                Self::reorder_joins((*right).clone(), &left_types);
+                            if is_fit_for_for_loop_join(
+                                &right_for_lateral,
+                                input_types,
+                                &left_types,
+                            ) {
+                                return GraphPattern::lateral(
+                                    left,
+                                    GraphPattern::left_join(
+                                        GraphPattern::empty_singleton(),
+                                        right_for_lateral,
+                                        expression,
+                                        LeftJoinAlgorithm::HashBuildRightProbeLeft {
+                                            keys: Vec::new(),
+                                        },
+                                    ),
+                                );
+                            }
+                        }
                     }
                 }
+                let right = Self::reorder_joins(*right, input_types);
+                let right_types = infer_graph_pattern_types(&right, input_types.clone());
                 GraphPattern::left_join(
                     left,
                     right,
@@ -880,11 +903,19 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             predicate,
             object,
             ..
-        } => estimate_triple_pattern_size(
-            is_term_pattern_bound(subject, input_types),
-            is_named_node_pattern_bound(predicate, input_types),
-            is_term_pattern_bound(object, input_types),
-        ),
+        } => {
+            let mut size = estimate_triple_pattern_size(
+                is_term_pattern_bound(subject, input_types),
+                is_named_node_pattern_bound(predicate, input_types),
+                is_term_pattern_bound(object, input_types),
+            );
+            if let NamedNodePattern::NamedNode(predicate) = predicate {
+                if *predicate == rdf::TYPE {
+                    size = size.saturating_add(1);
+                }
+            }
+            size
+        }
         GraphPattern::Path {
             subject,
             path,
@@ -975,6 +1006,7 @@ fn estimate_join_cost(
         }
     }
 }
+
 fn estimate_lateral_cost(
     left: &GraphPattern,
     left_types: &VariableTypes,
@@ -994,11 +1026,11 @@ fn estimate_triple_pattern_size(
         (true, true, true) => 1,
         (true, true, false) => 10,
         (true, false, true) => 2,
-        (false, true, true) => 10_000,
+        (false, true, true) => 1_000,
         (true, false, false) => 100,
         (false, false, false) => 1_000_000_000,
         (false, true, false) => 1_000_000,
-        (false, false, true) => 100_000,
+        (false, false, true) => 10_000,
     }
 }
 

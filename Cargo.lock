@@ -1742,6 +1742,7 @@ dependencies = [
  "oxsdatatypes",
  "rand",
  "rustc-hash",
+ "serde_json",
  "siphasher",
  "sparesults",
  "spareval",

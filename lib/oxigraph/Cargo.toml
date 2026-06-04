@@ -54,6 +54,9 @@ getrandom.workspace = true
 js-sys = { workspace = true, optional = true }
 rand = "0.10"
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 codspeed-criterion-compat.workspace = true
 csv.workspace = true

@@ -28,6 +28,7 @@
     :push_optional_filter
     :empty_union
     :bgp_join_reordering
+    :optional_lateral_reordering
     ) .
 
 
@@ -130,3 +131,8 @@
     mf:name "BGP join reordering" ;
     mf:action <bgp_join_reordering_input.rq> ;
     mf:result <bgp_join_reordering_output.rq> .
+
+:optional_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL converted to LATERAL reorders inner BGP by bound input" ;
+    mf:action <optional_lateral_reordering_input.rq> ;
+    mf:result <optional_lateral_reordering_output.rq> .
