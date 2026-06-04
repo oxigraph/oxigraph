@@ -4,7 +4,7 @@ use crate::lexer::{
     N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
 };
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
-use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -1249,13 +1249,14 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
-    pub fn new_parser<B>(
+    pub fn new_parser_with_custom_buffer_size<B>(
         data: B,
         is_ending: bool,
         with_graph_name: bool,
         lenient: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
+        max_buffer_size: usize,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
@@ -1263,7 +1264,7 @@ impl TriGRecognizer {
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
-                MAX_BUFFER_SIZE,
+                max_buffer_size,
                 Some(b"#"),
             ),
             Self {
@@ -1281,6 +1282,26 @@ impl TriGRecognizer {
                 prefixes,
                 lexer_options: N3LexerOptions { base_iri },
             },
+        )
+    }
+
+    pub fn new_parser<B>(
+        self,
+        data: B,
+        is_ending: bool,
+        with_graph_name: bool,
+        lenient: bool,
+        base_iri: Option<Iri<OxString>>,
+        prefixes: HashMap<OxString, Iri<OxString>>,
+    ) -> Parser<B, Self> {
+        Self::new_parser_with_custom_buffer_size(
+            data,
+            is_ending,
+            with_graph_name,
+            lenient,
+            base_iri,
+            prefixes,
+            DEFAULT_MAX_BUFFER_SIZE,
         )
     }
 

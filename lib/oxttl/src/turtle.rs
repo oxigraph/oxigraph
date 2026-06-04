@@ -50,6 +50,7 @@ pub struct TurtleParser {
     lenient: bool,
     base: Option<Iri<OxString>>,
     prefixes: HashMap<OxString, Iri<OxString>>,
+    max_buffer_size: usize,
 }
 
 impl TurtleParser {
@@ -57,6 +58,12 @@ impl TurtleParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -189,13 +196,14 @@ impl TurtleParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTurtleParser<'_> {
         SliceTurtleParser {
-            inner: TriGRecognizer::new_parser(
+            inner: TriGRecognizer::new_parser_with_custom_buffer_size(
                 slice.as_ref(),
                 true,
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size
             )
             .into_iter(),
         }
@@ -304,13 +312,14 @@ impl TurtleParser {
     /// ```
     pub fn low_level(self) -> LowLevelTurtleParser {
         LowLevelTurtleParser {
-            parser: TriGRecognizer::new_parser(
+            parser: TriGRecognizer::new_parser_with_custom_buffer_size(
                 Vec::new(),
                 false,
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             ),
         }
     }

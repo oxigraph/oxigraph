@@ -122,7 +122,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
                 format!(
-                    "Reached the buffer maximal size of {}",
+                    "Reached the buffer maximal size of {}. The buffer size can be increased at the cost of higher memory use if large data is required",
                     self.max_buffer_size
                 ),
             ));

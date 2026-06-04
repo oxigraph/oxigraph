@@ -9,7 +9,7 @@ use crate::toolkit::{
     Lexer, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
     TokenOrLineJump, TurtleSyntaxError,
 };
-use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -194,6 +194,7 @@ pub struct N3Parser {
     lenient: bool,
     base: Option<Iri<OxString>>,
     prefixes: HashMap<OxString, Iri<OxString>>,
+    max_buffer_size: usize,
 }
 
 impl N3Parser {
@@ -201,6 +202,11 @@ impl N3Parser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -337,8 +343,15 @@ impl N3Parser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceN3Parser<'_> {
         SliceN3Parser {
-            inner: N3Recognizer::new_parser(slice.as_ref(), true, false, self.base, self.prefixes)
-                .into_iter(),
+            inner: N3Recognizer::new_parser_with_custom_buffer_size(
+                slice.as_ref(),
+                true,
+                false,
+                self.base,
+                self.prefixes,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -383,12 +396,13 @@ impl N3Parser {
     /// ```
     pub fn low_level(self) -> LowLevelN3Parser {
         LowLevelN3Parser {
-            parser: N3Recognizer::new_parser(
+            parser: N3Recognizer::new_parser_with_custom_buffer_size(
                 Vec::new(),
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             ),
         }
     }
@@ -1375,12 +1389,14 @@ impl RuleRecognizer for N3Recognizer {
 }
 
 impl N3Recognizer {
-    pub fn new_parser<B>(
+    /// Create a new N3 parser an allow specifying a custom buffer size
+    pub fn new_parser_with_custom_buffer_size<B>(
         data: B,
         is_ending: bool,
         unchecked: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
+        max_buffer_size: usize,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
@@ -1388,7 +1404,7 @@ impl N3Recognizer {
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
-                MAX_BUFFER_SIZE,
+                max_buffer_size,
                 Some(b"#"),
             ),
             Self {
@@ -1401,6 +1417,24 @@ impl N3Recognizer {
                 lexer_options: N3LexerOptions { base_iri },
                 prefixes,
             },
+        )
+    }
+
+    /// Create a new N3 parser; the default buffer size of [`DEFAULT_MAX_BUFFER_SIZE`] is used
+    pub fn new_parser<B>(
+        data: B,
+        is_ending: bool,
+        unchecked: bool,
+        base_iri: Option<Iri<OxString>>,
+        prefixes: HashMap<OxString, Iri<OxString>>,
+    ) -> Parser<B, Self> {
+        Self::new_parser_with_custom_buffer_size(
+            data,
+            is_ending,
+            unchecked,
+            base_iri,
+            prefixes,
+            DEFAULT_MAX_BUFFER_SIZE,
         )
     }
 

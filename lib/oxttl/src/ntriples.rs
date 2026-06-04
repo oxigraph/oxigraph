@@ -41,6 +41,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[must_use]
 pub struct NTriplesParser {
     lenient: bool,
+    max_buffer_size: usize,
 }
 
 impl NTriplesParser {
@@ -48,6 +49,11 @@ impl NTriplesParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -152,8 +158,14 @@ impl NTriplesParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNTriplesParser<'_> {
         SliceNTriplesParser {
-            inner: NQuadsRecognizer::new_parser(slice.as_ref(), true, false, self.lenient)
-                .into_iter(),
+            inner: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+                slice.as_ref(),
+                true,
+                false,
+                self.lenient,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -299,7 +311,13 @@ impl NTriplesParser {
     /// ```
     pub fn low_level(self) -> LowLevelNTriplesParser {
         LowLevelNTriplesParser {
-            parser: NQuadsRecognizer::new_parser(Vec::new(), false, false, self.lenient),
+            parser: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+                Vec::new(),
+                false,
+                false,
+                self.lenient,
+                self.max_buffer_size,
+            ),
         }
     }
 }

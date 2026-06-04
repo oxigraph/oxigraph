@@ -41,6 +41,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[must_use]
 pub struct NQuadsParser {
     lenient: bool,
+    max_buffer_size: usize,
 }
 
 impl NQuadsParser {
@@ -48,6 +49,13 @@ impl NQuadsParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets the maximum buffer size.
+    #[inline]
+    pub fn max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -152,8 +160,14 @@ impl NQuadsParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
-            inner: NQuadsRecognizer::new_parser(slice.as_ref(), true, true, self.lenient)
-                .into_iter(),
+            inner: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+                slice.as_ref(),
+                true,
+                true,
+                self.lenient,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -299,7 +313,13 @@ impl NQuadsParser {
     /// ```
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
-            parser: NQuadsRecognizer::new_parser(Vec::new(), false, true, self.lenient),
+            parser: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+                Vec::new(),
+                false,
+                true,
+                self.lenient,
+                self.max_buffer_size,
+            ),
         }
     }
 }
