@@ -31,6 +31,7 @@
     :nested_bind_lateral_reordering
     :lateral_optional_service
     :filter_projection_scope
+    :optional_lateral_reordering
     ) .
 
 
@@ -149,3 +150,8 @@
     mf:name "Filter pushdown preserves subquery projection scope" ;
     mf:action <filter_projection_scope_input.rq> ;
     mf:result <filter_projection_scope_output.rq> .
+
+:optional_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL converted to LATERAL reorders inner BGP by bound input" ;
+    mf:action <optional_lateral_reordering_input.rq> ;
+    mf:result <optional_lateral_reordering_output.rq> .
