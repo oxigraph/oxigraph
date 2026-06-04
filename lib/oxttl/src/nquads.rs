@@ -1,12 +1,12 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`]
 //! and a serializer implemented by [`NQuadsSerializer`].
 
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxrdf::{Quad, Triple};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
@@ -48,7 +48,10 @@ impl NQuadsParser {
     /// Builds a new [`NQuadsParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            ..Self::default()
+        }
     }
 
     /// Sets the maximum buffer size.
@@ -160,7 +163,7 @@ impl NQuadsParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
-            inner: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+            inner: NQuadsRecognizer::new_parser(
                 slice.as_ref(),
                 true,
                 true,
@@ -313,7 +316,7 @@ impl NQuadsParser {
     /// ```
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
-            parser: NQuadsRecognizer::new_parser_with_custom_buffer_size(
+            parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
                 false,
                 true,

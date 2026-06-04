@@ -201,7 +201,10 @@ impl N3Parser {
     /// Builds a new [`N3Parser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            ..Self::default()
+        }
     }
 
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
@@ -343,7 +346,7 @@ impl N3Parser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceN3Parser<'_> {
         SliceN3Parser {
-            inner: N3Recognizer::new_parser_with_custom_buffer_size(
+            inner: N3Recognizer::new_parser(
                 slice.as_ref(),
                 true,
                 false,
@@ -396,7 +399,7 @@ impl N3Parser {
     /// ```
     pub fn low_level(self) -> LowLevelN3Parser {
         LowLevelN3Parser {
-            parser: N3Recognizer::new_parser_with_custom_buffer_size(
+            parser: N3Recognizer::new_parser(
                 Vec::new(),
                 false,
                 self.lenient,
@@ -1390,7 +1393,7 @@ impl RuleRecognizer for N3Recognizer {
 
 impl N3Recognizer {
     /// Create a new N3 parser an allow specifying a custom buffer size
-    pub fn new_parser_with_custom_buffer_size<B>(
+    pub fn new_parser<B>(
         data: B,
         is_ending: bool,
         unchecked: bool,
@@ -1417,24 +1420,6 @@ impl N3Recognizer {
                 lexer_options: N3LexerOptions { base_iri },
                 prefixes,
             },
-        )
-    }
-
-    /// Create a new N3 parser; the default buffer size of [`DEFAULT_MAX_BUFFER_SIZE`] is used
-    pub fn new_parser<B>(
-        data: B,
-        is_ending: bool,
-        unchecked: bool,
-        base_iri: Option<Iri<OxString>>,
-        prefixes: HashMap<OxString, Iri<OxString>>,
-    ) -> Parser<B, Self> {
-        Self::new_parser_with_custom_buffer_size(
-            data,
-            is_ending,
-            unchecked,
-            base_iri,
-            prefixes,
-            DEFAULT_MAX_BUFFER_SIZE,
         )
     }
 

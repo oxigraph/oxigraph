@@ -1,6 +1,7 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`]
 //! and a serializer implemented by [`TriGSerializer`].
 
+use crate::DEFAULT_MAX_BUFFER_SIZE;
 use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
@@ -57,7 +58,10 @@ impl TriGParser {
     /// Builds a new [`TriGParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            ..Self::default()
+        }
     }
 
     #[inline]
@@ -196,14 +200,14 @@ impl TriGParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTriGParser<'_> {
         SliceTriGParser {
-            inner: TriGRecognizer::new_parser_with_custom_buffer_size(
+            inner: TriGRecognizer::new_parser(
                 slice.as_ref(),
                 true,
                 true,
                 self.lenient,
                 self.base,
                 self.prefixes,
-                self.max_buffer_size
+                self.max_buffer_size,
             )
             .into_iter(),
         }
@@ -249,7 +253,7 @@ impl TriGParser {
     /// ```
     pub fn low_level(self) -> LowLevelTriGParser {
         LowLevelTriGParser {
-            parser: TriGRecognizer::new_parser_with_custom_buffer_size(
+            parser: TriGRecognizer::new_parser(
                 Vec::new(),
                 false,
                 true,

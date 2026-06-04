@@ -1,7 +1,6 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::get_turtle_slice_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
@@ -10,6 +9,7 @@ use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, Tu
 #[cfg(feature = "async-tokio")]
 use crate::trig::TokioAsyncWriterTriGSerializer;
 use crate::trig::{LowLevelTriGSerializer, TriGSerializer, WriterTriGSerializer};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{OxString, Triple};
 use std::collections::HashMap;
@@ -57,7 +57,10 @@ impl TurtleParser {
     /// Builds a new [`TurtleParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            ..Self::default()
+        }
     }
 
     #[inline]
@@ -196,14 +199,14 @@ impl TurtleParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTurtleParser<'_> {
         SliceTurtleParser {
-            inner: TriGRecognizer::new_parser_with_custom_buffer_size(
+            inner: TriGRecognizer::new_parser(
                 slice.as_ref(),
                 true,
                 false,
                 self.lenient,
                 self.base,
                 self.prefixes,
-                self.max_buffer_size
+                self.max_buffer_size,
             )
             .into_iter(),
         }
@@ -312,7 +315,7 @@ impl TurtleParser {
     /// ```
     pub fn low_level(self) -> LowLevelTurtleParser {
         LowLevelTurtleParser {
-            parser: TriGRecognizer::new_parser_with_custom_buffer_size(
+            parser: TriGRecognizer::new_parser(
                 Vec::new(),
                 false,
                 false,

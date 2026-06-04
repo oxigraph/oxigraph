@@ -1,8 +1,8 @@
 //! Shared parser implementation for N-Triples and N-Quads.
 
+use crate::MIN_BUFFER_SIZE;
 use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, to_lowercase};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
-use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::rdf;
@@ -368,7 +368,7 @@ impl RuleRecognizer for NQuadsRecognizer {
 }
 
 impl NQuadsRecognizer {
-    pub fn new_parser_with_custom_buffer_size<B>(
+    pub fn new_parser<B>(
         data: B,
         is_ending: bool,
         with_graph_name: bool,
@@ -395,21 +395,6 @@ impl NQuadsRecognizer {
                 with_graph_name,
                 lexer_options: N3LexerOptions::default(),
             },
-        )
-    }
-
-    pub fn new_parser<B>(
-        data: B,
-        is_ending: bool,
-        with_graph_name: bool,
-        lenient: bool,
-    ) -> Parser<B, Self> {
-        Self::new_parser_with_custom_buffer_size(
-            data,
-            is_ending,
-            with_graph_name,
-            lenient,
-            DEFAULT_MAX_BUFFER_SIZE,
         )
     }
 
