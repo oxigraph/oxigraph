@@ -552,6 +552,12 @@ pub enum PyWritableOutput {
 
 pub struct PyIo(Py<PyAny>);
 
+impl PyIo {
+    pub fn new(io: Py<PyAny>) -> Self {
+        Self(io)
+    }
+}
+
 impl Read for PyIo {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         Python::attach(|py| {
