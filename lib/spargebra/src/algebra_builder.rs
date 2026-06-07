@@ -1652,13 +1652,9 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         iri: Spanned<ast::IriRef<'a>>,
     ) -> Result<OxString, AlgebraBuilderError> {
-        #[cfg(feature = "standard-unicode-escaping")]
-        let iri_value = iri.inner.0;
-        #[cfg(not(feature = "standard-unicode-escaping"))]
         let iri_value = unescape_iriref(iri.inner.0, iri.span)?;
         Ok(if let Some(base_iri) = &self.base_iri {
             self.buffer.clear();
-            #[cfg_attr(feature = "standard-unicode-escaping", expect(clippy::needless_borrow))]
             base_iri
                 .resolve_into(&iri_value, &mut self.buffer)
                 .map_err(|e| {
@@ -1666,20 +1662,11 @@ impl<'a> AlgebraBuilder<'a> {
                 })?;
             OxString::new_owned(&self.buffer)
         } else {
-            Iri::parse({
-                #[cfg(feature = "standard-unicode-escaping")]
-                {
-                    OxString::new_owned(iri_value)
-                }
-                #[cfg(not(feature = "standard-unicode-escaping"))]
-                {
-                    iri_value.clone()
-                }
-            })
-            .map_err(|e| {
-                AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
-            })?
-            .into_inner()
+            Iri::parse(iri_value.clone())
+                .map_err(|e| {
+                    AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
+                })?
+                .into_inner()
         })
     }
 
@@ -2246,7 +2233,6 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
     }
 }
 
-#[cfg(not(feature = "standard-unicode-escaping"))]
 fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
     let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
@@ -2302,10 +2288,6 @@ fn unescape_local_name(mut input: &str) -> (Cow<'_, str>, bool) {
     )
 }
 
-#[cfg_attr(
-    feature = "standard-unicode-escaping",
-    expect(unused_variables, clippy::unnecessary_wraps)
-)]
 fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
     let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
@@ -2321,9 +2303,7 @@ fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, Algebr
             Some('"') => ('\u{0022}', after.as_str()),
             Some('\'') => ('\u{0027}', after.as_str()),
             Some('\\') => ('\u{005C}', after.as_str()),
-            #[cfg(not(feature = "standard-unicode-escaping"))]
             Some('u') => read_hex_char::<4>(after.as_str(), span)?,
-            #[cfg(not(feature = "standard-unicode-escaping"))]
             Some('U') => read_hex_char::<8>(after.as_str(), span)?,
             Some(c) => {
                 unreachable!("\\{c} is not an allowed escaping in strings");
@@ -2343,7 +2323,6 @@ fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, Algebr
     })
 }
 
-#[cfg(not(feature = "standard-unicode-escaping"))]
 #[expect(clippy::expect_used, clippy::unwrap_in_result)]
 fn read_hex_char<const SIZE: usize>(
     input: &str,
