@@ -133,7 +133,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         let upper_bound = self.resized_buffer_len();
         // Fill the buffer until the upper bound with 0s
         self.data.resize(upper_bound, 0);
-        // Read data from the reader into the buffer from the 
+        // Read data from the reader into the buffer from the
         // lower bound until the upper bound
         let bytes_read = reader.read(&mut self.data[lower_bound..])?;
         // Shrink the data to the length of the data read
@@ -164,7 +164,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         let upper_bound = self.resized_buffer_len();
         // Fill the buffer until the upper bound with 0s
         self.data.resize(upper_bound, 0);
-        // Read data from the reader into the buffer from the 
+        // Read data from the reader into the buffer from the
         // lower bound until the upper bound
         let bytes_read = reader.read(&mut self.data[lower_bound..]).await?;
         // Shrink the data to the length of the data read,
