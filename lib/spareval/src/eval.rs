@@ -2761,7 +2761,7 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
             }
             PropertyPath::ZeroOrMore(p) => {
                 if start == end {
-                    self.is_subject_or_object(start, graph_name)?
+                    true
                 } else {
                     look_in_transitive_closure(
                         self.eval_from(p, start, graph_name),
@@ -2777,10 +2777,10 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
             )?,
             PropertyPath::ZeroOrOne(p) => {
                 if start == end {
-                    self.is_subject_or_object(start, graph_name)
+                    true
                 } else {
-                    self.eval_closed(p, start, end, graph_name)
-                }?
+                    self.eval_closed(p, start, end, graph_name)?
+                }
             }
             PropertyPath::NegatedPropertySet(ps) => self
                 .dataset
@@ -2829,14 +2829,12 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                     .chain(self.eval_from(b, start, graph_name)),
             )),
             PropertyPath::ZeroOrMore(p) => {
-                self.run_if_term_is_a_graph_node(start, graph_name, || {
-                    let eval = self.clone();
-                    let p = Rc::clone(p);
-                    let graph_name2 = graph_name.cloned();
-                    transitive_closure(Some(Ok(start.clone())), move |e| {
-                        eval.eval_from(&p, &e, graph_name2.as_ref())
-                    })
-                })
+                let eval = self.clone();
+                let p = Rc::clone(p);
+                let graph_name2 = graph_name.cloned();
+                Box::new(transitive_closure(Some(Ok(start.clone())), move |e| {
+                    eval.eval_from(&p, &e, graph_name2.as_ref())
+                }))
             }
             PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
@@ -2847,13 +2845,9 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                     move |e| eval.eval_from(&p, &e, graph_name2.as_ref()),
                 ))
             }
-            PropertyPath::ZeroOrOne(p) => {
-                self.run_if_term_is_a_graph_node(start, graph_name, || {
-                    hash_deduplicate(
-                        once(Ok(start.clone())).chain(self.eval_from(p, start, graph_name)),
-                    )
-                })
-            }
+            PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+                once(Ok(start.clone())).chain(self.eval_from(p, start, graph_name)),
+            )),
             PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
@@ -2901,14 +2895,12 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                     .chain(self.eval_to(b, end, graph_name)),
             )),
             PropertyPath::ZeroOrMore(p) => {
-                self.run_if_term_is_a_graph_node(end, graph_name, || {
-                    let eval = self.clone();
-                    let p = Rc::clone(p);
-                    let graph_name2 = graph_name.cloned();
-                    transitive_closure(Some(Ok(end.clone())), move |e| {
-                        eval.eval_to(&p, &e, graph_name2.as_ref())
-                    })
-                })
+                let eval = self.clone();
+                let p = Rc::clone(p);
+                let graph_name2 = graph_name.cloned();
+                Box::new(transitive_closure(Some(Ok(end.clone())), move |e| {
+                    eval.eval_to(&p, &e, graph_name2.as_ref())
+                }))
             }
             PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
@@ -2919,9 +2911,9 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                     move |e| eval.eval_to(&p, &e, graph_name2.as_ref()),
                 ))
             }
-            PropertyPath::ZeroOrOne(p) => self.run_if_term_is_a_graph_node(end, graph_name, || {
-                hash_deduplicate(once(Ok(end.clone())).chain(self.eval_to(p, end, graph_name)))
-            }),
+            PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+                once(Ok(end.clone())).chain(self.eval_to(p, end, graph_name)),
+            )),
             PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
@@ -3039,43 +3031,6 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                     Ok((t.object.clone(), t.object)),
                 ]
             })
-    }
-
-    fn run_if_term_is_a_graph_node<
-        T: 'a,
-        I: Iterator<Item = Result<T, QueryEvaluationError>> + 'a,
-    >(
-        &self,
-        term: &D::InternalTerm,
-        graph_name: Option<&D::InternalTerm>,
-        f: impl FnOnce() -> I,
-    ) -> Box<dyn Iterator<Item = Result<T, QueryEvaluationError>> + 'a> {
-        match self.is_subject_or_object(term, graph_name) {
-            Ok(true) => Box::new(f()),
-            Ok(false) => {
-                Box::new(empty()) // Not in the database
-            }
-            Err(error) => Box::new(once(Err(error))),
-        }
-    }
-
-    fn is_subject_or_object(
-        &self,
-        term: &D::InternalTerm,
-        graph_name: Option<&D::InternalTerm>,
-    ) -> Result<bool, QueryEvaluationError> {
-        Ok(self
-            .dataset
-            .internal_quads_for_pattern(Some(term), None, None, Some(graph_name))
-            .next()
-            .transpose()?
-            .is_some()
-            || self
-                .dataset
-                .internal_quads_for_pattern(None, None, Some(term), Some(graph_name))
-                .next()
-                .transpose()?
-                .is_some())
     }
 }
 
