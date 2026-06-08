@@ -59,11 +59,6 @@ The library layers in Oxigraph. The elements above depend on the elements below:
 
 A preliminary benchmark [is provided](bench/README.md). There is also [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
-When cloning this codebase, don't forget to clone the submodules using
-`git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or
-`git submodule update --init` to add the submodules to the already cloned repository.
-
-
 ## Help
 
 Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
@@ -84,6 +79,10 @@ This project is licensed under either of
 at your option.
 
 ### Contribution
+
+When cloning this codebase, clone the submodules using
+`git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or
+`git submodule update --init` to add the submodules to the already cloned repository.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Oxigraph by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
