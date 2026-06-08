@@ -22,6 +22,7 @@ pub use crate::toolkit::{TextPosition, TurtleParseError, TurtleSyntaxError};
 pub use crate::trig::{TriGParser, TriGSerializer};
 pub use crate::turtle::{TurtleParser, TurtleSerializer};
 
+pub(crate) const MIN_BUFFER_SIZE: usize = 4096;
 /// Represents a reasonable default max buffer size in bytes for parsing
 /// rdf data
 pub(crate) const DEFAULT_MAX_BUFFER_SIZE: usize = 4096 * 4096;

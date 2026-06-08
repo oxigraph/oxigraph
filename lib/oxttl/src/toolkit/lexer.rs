@@ -60,6 +60,7 @@ pub struct Lexer<B, R: TokenRecognizer> {
     position: Position,
     previous_position: Position, // Lexer position before the last emitted token
     is_ending: bool,
+    min_buffer_size: usize,
     max_buffer_size: usize,
     line_comment_start: Option<&'static [u8]>,
 }
@@ -77,6 +78,7 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
         parser: R,
         data: B,
         is_ending: bool,
+        min_buffer_size: usize,
         max_buffer_size: usize,
         line_comment_start: Option<&'static [u8]>,
     ) -> Self {
@@ -96,6 +98,7 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
                 global_line: 0,
             },
             is_ending,
+            min_buffer_size,
             max_buffer_size,
             line_comment_start,
         }
@@ -115,7 +118,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
 
     pub fn extend_from_reader(&mut self, reader: &mut impl Read) -> io::Result<()> {
         self.shrink_data();
-        if self.data.len() == self.max_buffer_size {
+        if self.data.len() >= self.max_buffer_size {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
                 format!(
@@ -124,16 +127,19 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
                 ),
             ));
         }
-        let min_end = min(self.data.len() * 2, self.max_buffer_size);
-        let new_start = self.data.len();
-        self.data.resize(min_end, 0);
-        if self.data.len() < self.data.capacity() {
-            // We keep extending to have as much space as available without reallocation
-            self.data.resize(self.data.capacity(), 0);
-        }
-        let read = reader.read(&mut self.data[new_start..])?;
-        self.data.truncate(new_start + read);
-        self.is_ending = read == 0;
+        // The current buffer size is the lower bound
+        let lower_bound = self.data.len();
+
+        let upper_bound = self.resized_buffer_len();
+        // Fill the buffer until the upper bound with 0s
+        self.data.resize(upper_bound, 0);
+        // Read data from the reader into the buffer from the 
+        // lower bound until the upper bound
+        let bytes_read = reader.read(&mut self.data[lower_bound..])?;
+        // Shrink the data to the length of the data read
+        // minus any padding 0s present from the previous resize
+        self.data.truncate(lower_bound + bytes_read);
+        self.is_ending = bytes_read == 0;
         Ok(())
     }
 
@@ -143,7 +149,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         reader: &mut (impl AsyncRead + Unpin),
     ) -> io::Result<()> {
         self.shrink_data();
-        if self.data.len() == self.max_buffer_size {
+        if self.data.len() >= self.max_buffer_size {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
                 format!(
@@ -152,17 +158,39 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
                 ),
             ));
         }
-        let min_end = min(self.data.len() * 2, self.max_buffer_size);
-        let new_start = self.data.len();
-        self.data.resize(min_end, 0);
-        if self.data.len() < self.data.capacity() {
-            // We keep extending to have as much space as available without reallocation
-            self.data.resize(self.data.capacity(), 0);
-        }
-        let read = reader.read(&mut self.data[new_start..]).await?;
-        self.data.truncate(new_start + read);
-        self.is_ending = read == 0;
+        // The current buffer size is the lower bound
+        let lower_bound = self.data.len();
+
+        let upper_bound = self.resized_buffer_len();
+        // Fill the buffer until the upper bound with 0s
+        self.data.resize(upper_bound, 0);
+        // Read data from the reader into the buffer from the 
+        // lower bound until the upper bound
+        let bytes_read = reader.read(&mut self.data[lower_bound..]).await?;
+        // Shrink the data to the length of the data read,
+        // minus any padding 0s present from the previous resize
+        self.data.truncate(lower_bound + bytes_read);
+        self.is_ending = bytes_read == 0;
         Ok(())
+    }
+
+    // Return the new size for a buffer which exponentially
+    // grows in size
+    fn resized_buffer_len(&self) -> usize {
+        // If the buffer is empty, we use the predefined
+        // minimum buffer size to ensure the buffer always has some capacity
+        if self.data.is_empty() {
+            self.min_buffer_size
+        } else {
+            // Otherwise, we double the buffer size. If the
+            // size of the buffer would have caused an overflow,
+            // we fall back to the maximal buffer size and
+            // take the minimum
+            self.data
+                .len()
+                .checked_mul(2)
+                .map_or(self.max_buffer_size, |len| min(len, self.max_buffer_size))
+        }
     }
 
     fn shrink_data(&mut self) {
@@ -461,7 +489,7 @@ mod tests {
         let data = vec![0_u8; 1024];
         let mut reader = Cursor::new(data);
 
-        let mut lexer = Lexer::new(MockParser, vec![0_u8; 8], false, 1024, None);
+        let mut lexer = Lexer::new(MockParser, vec![0_u8; 8], false, 16, 1024, None);
 
         let mut previous_len = lexer.data.len();
 

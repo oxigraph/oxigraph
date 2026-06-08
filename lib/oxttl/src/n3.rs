@@ -9,7 +9,7 @@ use crate::toolkit::{
     Lexer, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
     TokenOrLineJump, TurtleSyntaxError,
 };
-use crate::{DEFAULT_MAX_BUFFER_SIZE, TurtleParseError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -1420,6 +1420,7 @@ impl N3Recognizer {
                 N3Lexer::new(N3LexerMode::N3, unchecked),
                 data,
                 is_ending,
+                MIN_BUFFER_SIZE,
                 max_buffer_size,
                 Some(b"#"),
             ),
