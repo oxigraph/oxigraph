@@ -545,7 +545,7 @@ impl LowLevelNTriplesParser {
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone)]
+#[derive(Default, Clone)]
 #[must_use]
 #[expect(clippy::empty_structs_with_brackets)]
 pub struct NTriplesSerializer {}
