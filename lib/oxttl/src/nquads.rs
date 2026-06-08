@@ -814,7 +814,7 @@ mod tests {
         for quad in bounded_parser.for_reader(file.as_bytes()) {
             let err = quad.unwrap_err();
             assert!(
-                matches!(err, TurtleParseError::Io(ref e)
+                matches!(&err, TurtleParseError::Io(e)
                     if e.kind() == ErrorKind::OutOfMemory
                 ),
                 "expected out of memory error, got {err:?}"

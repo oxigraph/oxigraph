@@ -458,10 +458,10 @@ mod tests {
             }
         }
 
-        let data = vec![0u8; 1024];
+        let data = vec![0_u8; 1024];
         let mut reader = Cursor::new(data);
 
-        let mut lexer = Lexer::new(MockParser, vec![0u8; 8], false, 1024, None);
+        let mut lexer = Lexer::new(MockParser, vec![0_u8; 8], false, 1024, None);
 
         let mut previous_len = lexer.data.len();
 
