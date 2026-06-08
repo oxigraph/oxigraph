@@ -60,7 +60,6 @@ pub struct Lexer<B, R: TokenRecognizer> {
     position: Position,
     previous_position: Position, // Lexer position before the last emitted token
     is_ending: bool,
-    min_buffer_size: usize,
     max_buffer_size: usize,
     line_comment_start: Option<&'static [u8]>,
 }
@@ -78,7 +77,6 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
         parser: R,
         data: B,
         is_ending: bool,
-        min_buffer_size: usize,
         max_buffer_size: usize,
         line_comment_start: Option<&'static [u8]>,
     ) -> Self {
@@ -98,7 +96,6 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
                 global_line: 0,
             },
             is_ending,
-            min_buffer_size,
             max_buffer_size,
             line_comment_start,
         }
@@ -127,7 +124,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
                 ),
             ));
         }
-        let min_end = min(self.data.len() + self.min_buffer_size, self.max_buffer_size);
+        let min_end = min(self.data.len() * 2, self.max_buffer_size);
         let new_start = self.data.len();
         self.data.resize(min_end, 0);
         if self.data.len() < self.data.capacity() {
@@ -155,7 +152,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
                 ),
             ));
         }
-        let min_end = min(self.data.len() + self.min_buffer_size, self.max_buffer_size);
+        let min_end = min(self.data.len() * 2, self.max_buffer_size);
         let new_start = self.data.len();
         self.data.resize(min_end, 0);
         if self.data.len() < self.data.capacity() {
@@ -427,6 +424,62 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                 } else {
                     Self::column_from_bytes(&bytes[..e.valid_up_to()])
                 }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buffer_grows_exponentially() {
+        // Ensure that the lexer buffer grows exponentially
+        // by doubling each time
+
+        use std::io::Cursor;
+
+        struct MockParser;
+
+        // Mock parser struct; we don't care about the parse logic
+        // just how the underlying buffer grows
+        impl TokenRecognizer for MockParser {
+            type Token<'a> = ();
+            type Options = ();
+
+            fn recognize_next_token<'a>(
+                &mut self,
+                _data: &'a [u8],
+                _is_ending: bool,
+                _options: &Self::Options,
+            ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)> {
+                None
+            }
+        }
+
+        let data = vec![0u8; 1024];
+        let mut reader = Cursor::new(data);
+
+        let mut lexer = Lexer::new(MockParser, vec![0u8; 8], false, 1024, None);
+
+        let mut previous_len = lexer.data.len();
+
+        for _ in 0..7 {
+            lexer.extend_from_reader(&mut reader).unwrap();
+
+            let expected = (previous_len * 2).min(lexer.max_buffer_size);
+
+            assert_eq!(
+                lexer.data.len(),
+                expected,
+                "buffer should double from {previous_len} to {expected}"
+            );
+
+            previous_len = lexer.data.len();
+
+            if previous_len == lexer.max_buffer_size {
+                break;
             }
         }
     }

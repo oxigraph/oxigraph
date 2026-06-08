@@ -1,6 +1,5 @@
 //! Shared parser implementation for Turtle and TriG.
 
-use crate::MIN_BUFFER_SIZE;
 use crate::lexer::{
     N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
 };
@@ -1263,7 +1262,6 @@ impl TriGRecognizer {
                 N3Lexer::new(N3LexerMode::Turtle, lenient),
                 data,
                 is_ending,
-                MIN_BUFFER_SIZE,
                 max_buffer_size,
                 Some(b"#"),
             ),

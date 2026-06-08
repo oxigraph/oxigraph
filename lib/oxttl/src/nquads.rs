@@ -791,3 +791,41 @@ impl LowLevelNQuadsSerializer {
         writeln!(writer, "{triple} .")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn test_parse_nquads_above_max_default_size() {
+        // Ensure that the parser can be configured to parse files above the default max buffer size
+        // and that it does not return an error when parsing such files
+        let unbound_parser = NQuadsParser::default().with_max_buffer_size(usize::MAX);
+        let bounded_parser = NQuadsParser::default();
+        assert_eq!(bounded_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
+
+        // Create a literal > 16 MiB (16 MiB + 1 byte)
+        let large_literal = "x".repeat(16 * 1024 * 1024 + 1);
+
+        let file =
+            format!(r#"<http://example.com/foo> <http://schema.org/name> "{large_literal}" ."#);
+
+        for quad in bounded_parser.for_reader(file.as_bytes()) {
+            let err = quad.unwrap_err();
+            assert!(
+                matches!(err, TurtleParseError::Io(ref e)
+                    if e.kind() == ErrorKind::OutOfMemory
+                ),
+                "expected out of memory error, got {err:?}"
+            );
+        }
+
+        for quad in unbound_parser.for_reader(file.as_bytes()) {
+            assert!(
+                quad.is_ok(),
+                "Expected no parsing issue when parsing a large literal with an unbound buffer but got {quad:?}"
+            );
+        }
+    }
+}
