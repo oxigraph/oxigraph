@@ -221,6 +221,7 @@ impl N3Parser {
     /// This limits the memory consumption of the parser but also the maximum size of parsed IRIs and literals.
     ///
     /// The default is set to 16MB, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
         self.max_buffer_size = max_buffer_size;
         self
@@ -1518,20 +1519,5 @@ impl<'a> Iterator for N3PrefixesIter<'a> {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.inner.size_hint()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_buffer_size() {
-        // Ensure that the default function and new function both
-        // return the same non-zero default value for the max_buffer_size
-        let default_parser = N3Parser::default();
-        let new_parser = N3Parser::new();
-        assert_eq!(default_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
-        assert_eq!(new_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
     }
 }

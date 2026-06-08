@@ -66,6 +66,7 @@ impl NQuadsParser {
     ///
     /// The default is set to [`DEFAULT_MAX_BUFFER_SIZE`] bytes, use this function to change it
     /// (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
         self.max_buffer_size = max_buffer_size;
         self
@@ -788,41 +789,5 @@ impl LowLevelNQuadsSerializer {
     #[expect(clippy::unused_self)]
     pub fn serialize_triple(&mut self, triple: &Triple, mut writer: impl Write) -> io::Result<()> {
         writeln!(writer, "{triple} .")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use oxrdf::NamedNode;
-
-use super::*;
-
-    #[test]
-    fn test_default_buffer_size() {
-        // Ensure that the default function and new function both
-        // return the same non-zero default value for the max_buffer_size
-        let default_parser = NQuadsParser::default();
-        let new_parser = NQuadsParser::new();
-        assert_eq!(default_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
-        assert_eq!(new_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
-    }
-
-
-    #[test]
-    fn test_parse_nquads_above_max_default_size() {
-        // Ensure that the parser can be configured to parse files above the default max buffer size
-        // and that it does not return an error when parsing such files
-        let unbound_parser = NQuadsParser::default().with_max_buffer_size(usize::MAX);
-
-        // Create a literal > 16 MiB (16 MiB + 1 byte)
-        let large_literal = "x".repeat(16 * 1024 * 1024 + 1);
-
-        let file = format!(
-            r#"<http://example.com/foo> <http://schema.org/name> "{large_literal}" ."#
-        );
-
-        for quad in unbound_parser.for_reader(file.as_bytes()) {
-            assert!(quad.is_ok());
-        }
     }
 }

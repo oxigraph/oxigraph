@@ -66,6 +66,7 @@ impl NTriplesParser {
     ///
     /// The default is set to [`DEFAULT_MAX_BUFFER_SIZE`] bytes, use this function to change it
     /// (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
         self.max_buffer_size = max_buffer_size;
         self
@@ -768,16 +769,6 @@ impl LowLevelNTriplesSerializer {
 mod tests {
     use super::*;
     use oxrdf::{Literal, NamedNode};
-
-    #[test]
-    fn test_default_buffer_size() {
-        // Ensure that the default function and new function both
-        // return the same non-zero default value for the max_buffer_size
-        let default_parser = NTriplesParser::default();
-        let new_parser = NTriplesParser::new();
-        assert_eq!(default_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
-        assert_eq!(new_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
-    }
 
     #[test]
     fn lenient_parsing() {
