@@ -23,8 +23,8 @@ pub use crate::trig::{TriGParser, TriGSerializer};
 pub use crate::turtle::{TurtleParser, TurtleSerializer};
 
 pub(crate) const MIN_BUFFER_SIZE: usize = 4096;
-/// Represents a reasonable default max buffer size for parsing to avoid OOM errors
-/// A different usize can be used or [`usize::MAX`] can be used to disable the limit
+/// Represents a reasonable default max buffer size in bytes for parsing
+/// rdf data
 pub(crate) const DEFAULT_MAX_BUFFER_SIZE: usize = 4096 * 4096;
 #[expect(clippy::decimal_literal_representation)]
 pub(crate) const MIN_PARALLEL_CHUNK_SIZE: usize = 16384;
