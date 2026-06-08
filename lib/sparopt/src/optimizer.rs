@@ -1012,9 +1012,12 @@ fn is_fit_for_for_loop_join(
 ) -> bool {
     // TODO: think more about it
     match pattern {
-        GraphPattern::Values { .. }
-        | GraphPattern::QuadPattern { .. }
-        | GraphPattern::Path { .. } => true,
+        GraphPattern::Values { .. } | GraphPattern::QuadPattern { .. } => true,
+        GraphPattern::Path {
+            subject,
+            path,
+            object,
+        } => is_path_fit_for_for_loop_join(subject, path, object, entry_types),
         #[cfg(feature = "sep-0006")]
         GraphPattern::Lateral { left, right } => {
             is_fit_for_for_loop_join(left, global_input_types, entry_types)
@@ -1086,6 +1089,42 @@ fn is_fit_for_for_loop_join(
         | GraphPattern::Slice { .. }
         | GraphPattern::Project { .. }
         | GraphPattern::Group { .. } => false,
+    }
+}
+
+fn is_path_fit_for_for_loop_join(
+    subject: &GroundTermPattern,
+    path: &PropertyPathExpression,
+    object: &GroundTermPattern,
+    entry_types: &VariableTypes,
+) -> bool {
+    match path {
+        PropertyPathExpression::NamedNode(_)
+        | PropertyPathExpression::OneOrMore(_)
+        | PropertyPathExpression::NegatedPropertySet(_) => true,
+        PropertyPathExpression::Reverse(path) => {
+            is_path_fit_for_for_loop_join(object, path, subject, entry_types)
+        }
+        PropertyPathExpression::Sequence(l, r) => {
+            let whatever = Variable::new_unchecked("#intermediate#").into();
+            is_path_fit_for_for_loop_join(subject, l, &whatever, entry_types)
+                || is_path_fit_for_for_loop_join(&whatever, r, subject, entry_types)
+        }
+        PropertyPathExpression::Alternative(l, r) => {
+            is_path_fit_for_for_loop_join(subject, l, object, entry_types)
+                && is_path_fit_for_for_loop_join(subject, r, object, entry_types)
+        }
+        PropertyPathExpression::ZeroOrMore(_) | PropertyPathExpression::ZeroOrOne(_) => {
+            // We don't want to set the left or right side of the zero or ... path because it could be returned in the result set even if it is not supported in the graph
+            if let (GroundTermPattern::Variable(subject), GroundTermPattern::Variable(object)) =
+                (subject, object)
+            {
+                entry_types.get(subject) == VariableType::UNDEF
+                    && entry_types.get(object) == VariableType::UNDEF
+            } else {
+                true
+            }
+        }
     }
 }
 

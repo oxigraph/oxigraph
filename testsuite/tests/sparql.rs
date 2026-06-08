@@ -35,11 +35,6 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
         &[
             // xsd:string cast is using xsd:double canonical serialization
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/cast/manifest#cast-string",
-            // Our property path handling is wrong
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_more_set_start",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_more_set_end",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_one_set_start",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/property-path/manifest#zero_or_one_set_end",
         ],
     )
 }
