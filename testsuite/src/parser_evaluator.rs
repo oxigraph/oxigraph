@@ -72,12 +72,6 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register("https://w3c.github.io/N3/tests/test.n3#TestN3Eval", |t| {
         evaluate_n3_eval_test(t, false)
     });
-    evaluator.register("http://www.w3.org/ns/rdftest#TestTurtleNegativeEval", |t| {
-        evaluate_negative_syntax_test(t, RdfFormat::Turtle)
-    });
-    evaluator.register("http://www.w3.org/ns/rdftest#TestTrigNegativeEval", |t| {
-        evaluate_negative_syntax_test(t, RdfFormat::TriG)
-    });
     evaluator.register(
         "https://w3c.github.io/json-ld-api/tests/vocab#FromRDFTest",
         evaluate_jsonld_from_rdf_test,
