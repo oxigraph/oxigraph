@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: taplo }
       - run: taplo check
 
@@ -172,7 +172,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-deny }
       - run: cargo deny check
 
@@ -184,7 +184,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-semver-checks }
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
@@ -305,7 +305,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: wasm32-wasip1
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: "wasmtime" }
       - run: cargo test --target wasm32-wasip1 --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
         env:
@@ -401,7 +401,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: typos-cli }
       - run: typos
 
@@ -504,10 +504,10 @@ jobs:
           key: bench-data-${{ hashFiles('lib/oxigraph/benches/data') }}
           restore-keys: |
             bench-data
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
-      - uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4
+      - uses: CodSpeedHQ/action@9d332c4d90b43981c3e55ae8e38e68709996240f # v4
         with:
           run: cargo codspeed run
           mode: simulation
@@ -523,10 +523,10 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph-testsuite
-      - uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4
+      - uses: CodSpeedHQ/action@9d332c4d90b43981c3e55ae8e38e68709996240f # v4
         with:
           run: cargo codspeed run
           mode: simulation
@@ -544,18 +544,10 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           component: llvm-tools-preview
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.13"
-      - uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2.79.4
+      - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-llvm-cov }
-      - run: |
-          source <(cargo llvm-cov show-env --export-prefix)
-          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
-          cargo llvm-cov clean --workspace
-          cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
-          cargo llvm-cov report --codecov --output-path codecov.json
-      - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
+      - run: cargo llvm-cov --features oxrdfio/async-tokio,sparesults/async-tokio --codecov --output-path codecov.json
+      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: codecov.json
           flags: rust

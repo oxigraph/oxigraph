@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::alloc::{Layout, alloc, dealloc};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -419,7 +419,7 @@ impl Borrow<str> for OxStr<'_> {
 impl PartialEq for OxStr<'_> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_str().eq(other.as_str())
+        self.as_str().eq(other)
     }
 }
 
@@ -433,7 +433,21 @@ impl PartialEq<str> for OxStr<'_> {
 impl PartialEq<&str> for OxStr<'_> {
     #[inline]
     fn eq(&self, other: &&str) -> bool {
-        self.eq(*other)
+        self.as_str().eq(*other)
+    }
+}
+
+impl PartialEq<String> for OxStr<'_> {
+    #[inline]
+    fn eq(&self, other: &String) -> bool {
+        self.as_str().eq(other)
+    }
+}
+
+impl PartialEq<Cow<'_, str>> for OxStr<'_> {
+    #[inline]
+    fn eq(&self, other: &Cow<'_, str>) -> bool {
+        self.as_str().eq(other)
     }
 }
 
@@ -447,7 +461,21 @@ impl PartialEq<OxStr<'_>> for str {
 impl PartialEq<OxStr<'_>> for &str {
     #[inline]
     fn eq(&self, other: &OxStr<'_>) -> bool {
-        (*self).eq(other)
+        (*self).eq(other.as_str())
+    }
+}
+
+impl PartialEq<OxStr<'_>> for String {
+    #[inline]
+    fn eq(&self, other: &OxStr<'_>) -> bool {
+        self.eq(other.as_str())
+    }
+}
+
+impl PartialEq<OxStr<'_>> for Cow<'_, str> {
+    #[inline]
+    fn eq(&self, other: &OxStr<'_>) -> bool {
+        self.eq(other.as_str())
     }
 }
 
