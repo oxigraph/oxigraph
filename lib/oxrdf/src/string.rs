@@ -7,12 +7,15 @@ use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::mem::transmute;
 use std::ops::Deref;
 use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering, fence};
 
 const MAX_REF_COUNTER: usize = isize::MAX as usize;
+const KIND_SHIFT: u32 = usize::BITS - 1;
+const OWNED_FLAG: usize = (OxStrKind::Owned as usize) << KIND_SHIFT;
 
 /// Owned variant of [`OxStr`]: A compact string type for reference-counted owned data or static slices.
 ///
@@ -59,8 +62,6 @@ pub struct OxStr<'a> {
     data: NonNull<u8>,
     _marker: PhantomData<&'a ()>,
 }
-
-const OWNED_FLAG: usize = 1 << (usize::BITS - 1);
 
 impl<'a> OxStr<'a> {
     /// Creates an `OxStr` borrowing from `value`.
@@ -144,7 +145,7 @@ impl<'a> OxStr<'a> {
     pub fn try_concat<T: AsRef<str>>(values: impl AsRef<[T]>) -> Option<Self> {
         let values = values.as_ref();
         let len = values.iter().map(|s| s.as_ref().len()).sum();
-        if len & OWNED_FLAG != 0 {
+        if len >> KIND_SHIFT != 0 {
             return None; // The length is so long that it prevents using the "owned" flag, we fail to create the string
         }
 
@@ -190,36 +191,39 @@ impl<'a> OxStr<'a> {
     /// ```
     #[inline]
     pub fn to_owned(&self) -> OxStr<'static> {
-        if self.is_owned() {
-            // SAFETY: we just checked it's owned, the pointer points to the reference counter, and we can increment it to do a clone
-            unsafe {
-                let count = self.owned_counter().fetch_add(1, Ordering::Relaxed); // Arc is also using relaxed, I guess it's fine
+        match self.kind() {
+            OxStrKind::Owned => {
+                // SAFETY: we just checked it's owned, the pointer points to the reference counter, and we can increment it to do a clone
+                unsafe {
+                    let count = self.owned_counter().fetch_add(1, Ordering::Relaxed); // Arc is also using relaxed, I guess it's fine
 
-                // We guard against massive ref count in case of forgetting strings
-                if count > MAX_REF_COUNTER {
-                    abort();
-                }
+                    // We guard against massive ref count in case of forgetting strings
+                    if count > MAX_REF_COUNTER {
+                        abort();
+                    }
 
-                OxStr {
-                    len: self.len,
-                    data: self.data,
-                    _marker: PhantomData,
+                    OxStr {
+                        len: self.len,
+                        data: self.data,
+                        _marker: PhantomData,
+                    }
                 }
             }
-        } else {
-            OxStr::new_owned(self.as_str())
+            OxStrKind::Borrowed => OxStr::new_owned(self.as_str()),
         }
     }
 
     /// Returns the inner string as a slice.
     #[inline]
     pub const fn as_str(&self) -> &str {
-        // SAFETY: we properly check the variant before calling methods for each cases
-        unsafe {
-            if self.is_owned() {
-                self.owned_str()
-            } else {
-                self.borrowed_str()
+        match self.kind() {
+            OxStrKind::Borrowed => {
+                // SAFETY: We know we are in the borrowed case
+                unsafe { self.borrowed_str() }
+            }
+            OxStrKind::Owned => {
+                // SAFETY: We know we are in the borrowed case
+                unsafe { self.owned_str() }
             }
         }
     }
@@ -275,14 +279,16 @@ impl<'a> OxStr<'a> {
     }
 
     #[inline]
-    const fn is_owned(&self) -> bool {
-        (self.len & OWNED_FLAG) != 0
+    const fn kind(&self) -> OxStrKind {
+        // SAFETY: we have repr(usize) on OxStrKind ensure the variant numbers are the same
+        unsafe { transmute(self.len >> KIND_SHIFT) }
     }
 
     #[inline]
     fn is_owned_and_unique(&self) -> bool {
         // SAFETY: the caller ensured the pointer targets the reference counter
-        self.is_owned() && unsafe { self.owned_counter().load(Ordering::Acquire) == 1 }
+        self.kind() == OxStrKind::Owned
+            && unsafe { self.owned_counter().load(Ordering::Acquire) == 1 }
     }
 
     #[inline]
@@ -341,7 +347,7 @@ unsafe impl Sync for OxStr<'_> {}
 impl Drop for OxStr<'_> {
     #[inline]
     fn drop(&mut self) {
-        if self.is_owned() {
+        if self.kind() == OxStrKind::Owned {
             // SAFETY: we just checked it's the owned variant, we can call owned_counter
             // and then after doing proper ordering checks taken from Arc we can allocate
             // using the same layout as alloc
@@ -363,7 +369,7 @@ impl Drop for OxStr<'_> {
 impl Clone for OxStr<'_> {
     #[inline]
     fn clone(&self) -> Self {
-        if self.is_owned() {
+        if self.kind() == OxStrKind::Owned {
             // SAFETY: we just checked it's the owned variant, we can call owned_counter
             let count = unsafe {
                 self.owned_counter().fetch_add(1, Ordering::Relaxed) // Arc is also using relaxed, I guess it's fine
@@ -565,6 +571,14 @@ impl<'de> Deserialize<'de> for OxStr<'_> {
 
         deserializer.deserialize_str(StrVisitor)
     }
+}
+
+#[derive(Eq, PartialEq)]
+#[repr(usize)]
+enum OxStrKind {
+    #[expect(unused)]
+    Borrowed = 0,
+    Owned = 1,
 }
 
 #[cfg(test)]
