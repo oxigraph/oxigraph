@@ -1,7 +1,7 @@
 use crate::toolkit::error::{TextPosition, TurtleSyntaxError};
 use memchr::{memchr2, memchr2_iter};
 use std::borrow::Cow;
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::io::{self, Read};
 use std::ops::{Deref, Range, RangeInclusive};
 use std::str;
@@ -182,14 +182,20 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         if self.data.is_empty() {
             self.min_buffer_size
         } else {
-            // Otherwise, we double the buffer size. If the
-            // size of the buffer would have caused an overflow,
-            // we fall back to the maximal buffer size and
-            // take the minimum
-            self.data
-                .len()
-                .checked_mul(2)
-                .map_or(self.max_buffer_size, |len| min(len, self.max_buffer_size))
+            // Each one of these expressions will at least double the
+            // size of the buffer, but in such a way that will not
+            // exceed the maximum buffer size or allocate under the minimum buffer size.
+            min(
+                self.max_buffer_size,
+
+                // We take the max here to ensure that 
+                // the buffer always has at least the size of the 
+                // data plus the minimum buffer size
+                max(
+                    self.data.len() + self.min_buffer_size,
+                    self.data.len().saturating_mul(2),
+                ),
+            )
         }
     }
 
@@ -496,12 +502,11 @@ mod tests {
         for _ in 0..7 {
             lexer.extend_from_reader(&mut reader).unwrap();
 
-            let expected = (previous_len * 2).min(lexer.max_buffer_size);
+            let double_previous = (previous_len * 2).min(lexer.max_buffer_size);
 
-            assert_eq!(
-                lexer.data.len(),
-                expected,
-                "buffer should double from {previous_len} to {expected}"
+            assert!(
+                lexer.data.len() >= double_previous,
+                "buffer should at least  double from {previous_len} to {double_previous}"
             );
 
             previous_len = lexer.data.len();
