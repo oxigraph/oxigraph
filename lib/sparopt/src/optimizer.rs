@@ -12,9 +12,11 @@ pub struct Optimizer;
 
 impl Optimizer {
     pub fn optimize_graph_pattern(pattern: GraphPattern) -> GraphPattern {
-        let pattern = Self::normalize_pattern(pattern, &VariableTypes::default());
-        let pattern = Self::reorder_joins(pattern, &VariableTypes::default());
-        Self::push_filters(pattern, Vec::new(), &VariableTypes::default())
+        let input_types = VariableTypes::default();
+        let pattern = Self::normalize_pattern(pattern, &input_types);
+        let pattern = Self::reorder_joins(pattern, &input_types);
+        let pattern = Self::push_filters(pattern, Vec::new(), &input_types);
+        Self::push_graph(pattern, None, &input_types)
     }
 
     /// Normalize the pattern, discarding any join ordering information
@@ -35,14 +37,14 @@ impl Optimizer {
                 subject,
                 path,
                 object,
-                graph_name,
             } => GraphPattern::Path {
                 subject,
                 path,
                 object,
-                graph_name,
             },
-            GraphPattern::Graph { graph_name } => GraphPattern::Graph { graph_name },
+            GraphPattern::Graph { graph_name, inner } => {
+                GraphPattern::graph(Self::normalize_pattern(*inner, input_types), graph_name)
+            }
             GraphPattern::Join {
                 left,
                 right,
@@ -265,7 +267,6 @@ impl Optimizer {
         match pattern {
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
-            | GraphPattern::Graph { .. }
             | GraphPattern::Values { .. } => {
                 GraphPattern::filter(pattern, Expression::and_all(filters))
             }
@@ -377,6 +378,32 @@ impl Optimizer {
                 Self::push_filters(*right, Vec::new(), input_types),
                 algorithm,
             ),
+            GraphPattern::Graph { inner, graph_name } => {
+                let mut filter_to_push = Vec::with_capacity(filters.len());
+                let mut filters_to_write = Vec::with_capacity(filters.len());
+                for filter in filters {
+                    if !does_contain_exists(&filter)
+                        && if let NamedNodePattern::Variable(v) = &graph_name {
+                            !filter.used_variables().contains(v)
+                        } else {
+                            true
+                        }
+                    {
+                        // The graph variable and EXISTS are not used, we can push the EXPRESSION further
+                        filter_to_push.push(filter);
+                    } else {
+                        filters_to_write.push(filter);
+                    }
+                }
+                let mut pattern = GraphPattern::graph(
+                    Self::push_filters(*inner, filter_to_push, input_types),
+                    graph_name,
+                );
+                if !filters_to_write.is_empty() {
+                    pattern = GraphPattern::filter(pattern, Expression::and_all(filters_to_write));
+                }
+                pattern
+            }
             GraphPattern::Extend {
                 inner,
                 expression,
@@ -460,12 +487,253 @@ impl Optimizer {
         }
     }
 
+    fn push_graph(
+        pattern: GraphPattern,
+        current_graph: Option<NamedNodePattern>,
+        input_types: &VariableTypes,
+    ) -> GraphPattern {
+        match pattern {
+            GraphPattern::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                if graph_name.is_some() {
+                    unreachable!("Already set quad pattern graph name")
+                }
+                GraphPattern::QuadPattern {
+                    subject,
+                    predicate,
+                    object,
+                    graph_name: current_graph,
+                }
+            }
+            GraphPattern::Path { .. } | GraphPattern::Values { .. } => {
+                wrap_in_possible_graph(pattern, current_graph)
+            }
+            GraphPattern::Graph { graph_name, inner } => {
+                if let Some(current_graph) = current_graph {
+                    if current_graph == graph_name {
+                        // Same graph name, no need to keep the outer one
+                        Self::push_graph(*inner, Some(graph_name), input_types)
+                    } else {
+                        GraphPattern::graph(
+                            Self::push_graph(*inner, Some(graph_name), input_types),
+                            current_graph,
+                        )
+                    }
+                } else {
+                    Self::push_graph(*inner, Some(graph_name), input_types)
+                }
+            }
+            GraphPattern::Join {
+                left,
+                right,
+                algorithm,
+            } => {
+                if matches!(*left, GraphPattern::Values { .. }) {
+                    GraphPattern::join(
+                        *left,
+                        Self::push_graph(*right, current_graph, input_types),
+                        algorithm,
+                    )
+                } else if matches!(*right, GraphPattern::Values { .. }) {
+                    GraphPattern::join(
+                        Self::push_graph(*left, current_graph, input_types),
+                        *right,
+                        algorithm,
+                    )
+                } else {
+                    GraphPattern::join(
+                        Self::push_graph(*left, current_graph.clone(), input_types),
+                        Self::push_graph(*right, current_graph, input_types),
+                        algorithm,
+                    )
+                }
+            }
+            GraphPattern::Filter { inner, expression } => {
+                if !does_contain_exists(&expression)
+                    && current_graph.as_ref().is_none_or(|pattern| {
+                        if let NamedNodePattern::Variable(v) = pattern {
+                            !expression.used_variables().contains(v)
+                        } else {
+                            true
+                        }
+                    })
+                {
+                    // The graph variable is not used, we can push the GRAPH operator further
+                    GraphPattern::filter(
+                        Self::push_graph(*inner, current_graph, input_types),
+                        expression,
+                    )
+                } else {
+                    wrap_in_possible_graph(
+                        GraphPattern::filter(
+                            Self::push_graph(*inner, None, input_types),
+                            expression,
+                        ),
+                        current_graph,
+                    )
+                }
+            }
+            GraphPattern::Union { inner } => GraphPattern::union_all(
+                inner
+                    .into_iter()
+                    .map(|c| Self::push_graph(c, current_graph.clone(), input_types)),
+            ),
+            GraphPattern::LeftJoin {
+                left,
+                right,
+                expression,
+                algorithm,
+            } => {
+                if !does_contain_exists(&expression)
+                    && current_graph.as_ref().is_none_or(|pattern| {
+                        if let NamedNodePattern::Variable(v) = pattern {
+                            !expression.used_variables().contains(v)
+                                && infer_graph_pattern_types(&right, input_types.clone()).get(v)
+                                    == VariableType::UNDEF
+                        } else {
+                            true
+                        }
+                    })
+                {
+                    // Expression is safe and the graph variable is not used in right
+                    GraphPattern::left_join(
+                        Self::push_graph(*left, current_graph.clone(), input_types),
+                        Self::push_graph(*right, current_graph, input_types),
+                        expression,
+                        algorithm,
+                    )
+                } else {
+                    wrap_in_possible_graph(
+                        GraphPattern::left_join(
+                            Self::push_graph(*left, None, input_types),
+                            Self::push_graph(*right, None, input_types),
+                            expression,
+                            algorithm,
+                        ),
+                        current_graph,
+                    )
+                }
+            }
+            #[cfg(feature = "sep-0006")]
+            GraphPattern::Lateral { left, right } => {
+                let left = Self::push_graph(*left, current_graph.clone(), input_types);
+                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+                let right = Self::push_graph(*right, current_graph, &left_types);
+                GraphPattern::lateral(left, right)
+            }
+            GraphPattern::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
+                if !does_contain_exists(&expression)
+                    && current_graph.as_ref().is_none_or(|pattern| {
+                        if let NamedNodePattern::Variable(v) = pattern {
+                            variable != *v && !expression.used_variables().contains(v)
+                        } else {
+                            true
+                        }
+                    })
+                {
+                    // The graph variable is not used, we can push the GRAPH operator further
+                    GraphPattern::extend(
+                        Self::push_graph(*inner, current_graph, input_types),
+                        variable,
+                        expression,
+                    )
+                } else {
+                    wrap_in_possible_graph(
+                        GraphPattern::extend(
+                            Self::push_graph(*inner, None, input_types),
+                            variable,
+                            expression,
+                        ),
+                        current_graph,
+                    )
+                }
+            }
+            GraphPattern::Minus {
+                left,
+                right,
+                algorithm,
+            } => {
+                let left_variables = infer_graph_pattern_types(&left, input_types.clone());
+                let right_variables = infer_graph_pattern_types(&right, input_types.clone());
+                if left_variables
+                    .iter()
+                    .any(|(v, t)| !t.undef && !right_variables.get(v).undef)
+                {
+                    // We know we are not in the disjoint case, we can propagate
+                    GraphPattern::minus(
+                        Self::push_graph(*left, current_graph.clone(), input_types),
+                        Self::push_graph(*right, current_graph, input_types),
+                        algorithm,
+                    )
+                } else {
+                    wrap_in_possible_graph(
+                        GraphPattern::minus(
+                            Self::push_graph(*left, None, input_types),
+                            Self::push_graph(*right, None, input_types),
+                            algorithm,
+                        ),
+                        current_graph,
+                    )
+                }
+            }
+            GraphPattern::OrderBy { inner, expression } => wrap_in_possible_graph(
+                GraphPattern::order_by(Self::push_graph(*inner, None, input_types), expression),
+                current_graph,
+            ),
+            GraphPattern::Project { inner, variables } => wrap_in_possible_graph(
+                GraphPattern::project(Self::push_graph(*inner, None, input_types), variables),
+                current_graph,
+            ),
+            GraphPattern::Distinct { inner } => {
+                GraphPattern::distinct(Self::push_graph(*inner, current_graph, input_types))
+            }
+            GraphPattern::Reduced { inner } => {
+                GraphPattern::distinct(Self::push_graph(*inner, current_graph, input_types))
+            }
+            GraphPattern::Slice {
+                inner,
+                start,
+                length,
+            } => wrap_in_possible_graph(
+                GraphPattern::slice(Self::push_graph(*inner, None, input_types), start, length),
+                current_graph,
+            ),
+            GraphPattern::Group {
+                inner,
+                variables,
+                aggregates,
+            } => wrap_in_possible_graph(
+                GraphPattern::group(
+                    Self::push_graph(*inner, None, input_types),
+                    variables,
+                    aggregates,
+                ),
+                current_graph,
+            ),
+            GraphPattern::Service {
+                name,
+                inner,
+                silent,
+            } => wrap_in_possible_graph(
+                GraphPattern::service(Self::push_graph(*inner, None, input_types), name, silent),
+                current_graph,
+            ),
+        }
+    }
+
     fn reorder_joins(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
         match pattern {
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. }
-            | GraphPattern::Graph { .. } => pattern,
+            | GraphPattern::Values { .. } => pattern,
             GraphPattern::Join { left, right, .. } => {
                 // We flatten the join operation
                 let mut to_reorder = Vec::new();
@@ -682,6 +950,9 @@ impl Optimizer {
                     },
                 )
             }
+            GraphPattern::Graph { graph_name, inner } => {
+                GraphPattern::graph(Self::reorder_joins(*inner, input_types), graph_name)
+            }
             GraphPattern::Extend {
                 inner,
                 expression,
@@ -742,8 +1013,7 @@ fn is_fit_for_for_loop_join(
     match pattern {
         GraphPattern::Values { .. }
         | GraphPattern::QuadPattern { .. }
-        | GraphPattern::Path { .. }
-        | GraphPattern::Graph { .. } => true,
+        | GraphPattern::Path { .. } => true,
         #[cfg(feature = "sep-0006")]
         GraphPattern::Lateral { left, right } => {
             is_fit_for_for_loop_join(left, global_input_types, entry_types)
@@ -797,6 +1067,14 @@ fn is_fit_for_for_loop_join(
                     &infer_graph_pattern_types(inner, global_input_types.clone()),
                     entry_types,
                 )
+        }
+        GraphPattern::Graph { inner, graph_name } => {
+            is_fit_for_for_loop_join(inner, global_input_types, entry_types)
+                && if let NamedNodePattern::Variable(variable) = graph_name {
+                    entry_types.get(variable) == VariableType::UNDEF
+                } else {
+                    true
+                }
         }
         GraphPattern::Join { .. }
         | GraphPattern::Minus { .. }
@@ -926,12 +1204,13 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             path,
             is_term_pattern_bound(object, input_types),
         ),
-        GraphPattern::Graph { graph_name } => {
-            if is_named_node_pattern_bound(graph_name, input_types) {
-                100
+        GraphPattern::Graph { graph_name, inner } => {
+            (if is_named_node_pattern_bound(graph_name, input_types) {
+                1_u64
             } else {
-                1
-            }
+                100
+            })
+            .saturating_mul(estimate_graph_pattern_size(inner, input_types))
         }
         GraphPattern::Join {
             left,
@@ -1099,5 +1378,46 @@ fn is_named_node_pattern_bound(pattern: &NamedNodePattern, input_types: &Variabl
     match pattern {
         NamedNodePattern::NamedNode(_) => true,
         NamedNodePattern::Variable(v) => !input_types.get(v).undef,
+    }
+}
+
+fn wrap_in_possible_graph(
+    pattern: GraphPattern,
+    graph_name: Option<NamedNodePattern>,
+) -> GraphPattern {
+    if let Some(graph_name) = graph_name {
+        GraphPattern::graph(pattern, graph_name)
+    } else {
+        pattern
+    }
+}
+
+fn does_contain_exists(expression: &Expression) -> bool {
+    match expression {
+        Expression::Exists(_) => true,
+        Expression::NamedNode(_)
+        | Expression::Literal(_)
+        | Expression::Variable(_)
+        | Expression::Bound(_) => false,
+        Expression::Or(e)
+        | Expression::And(e)
+        | Expression::Coalesce(e)
+        | Expression::FunctionCall(_, e) => e.iter().any(does_contain_exists),
+        Expression::Equal(l, r)
+        | Expression::SameTerm(l, r)
+        | Expression::Greater(l, r)
+        | Expression::GreaterOrEqual(l, r)
+        | Expression::Less(l, r)
+        | Expression::LessOrEqual(l, r)
+        | Expression::Add(l, r)
+        | Expression::Subtract(l, r)
+        | Expression::Multiply(l, r)
+        | Expression::Divide(l, r) => does_contain_exists(l) || does_contain_exists(r),
+        Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
+            does_contain_exists(e)
+        }
+        Expression::If(a, b, c) => {
+            does_contain_exists(a) || does_contain_exists(b) || does_contain_exists(c)
+        }
     }
 }

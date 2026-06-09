@@ -54,7 +54,7 @@
 
 :graph rdf:type mf:QueryEvaluationTest ;
     mf:name "LATERAL GRAPH test" ;
-    mf:action [ qt:query  <graph.rq> ] ;
+    mf:action [ qt:query  <graph.rq> ; qt:graphData <singleton.ttl> ] ;
     mf:result  <simple.srx> .
 
 :filter rdf:type mf:QueryEvaluationTest ;
