@@ -8,8 +8,6 @@ pub mod algebra;
 mod algebra_builder;
 mod ast;
 mod error;
-#[cfg(feature = "standard-unicode-escaping")]
-mod escaping;
 mod lexer;
 mod parser;
 pub mod query;
@@ -18,8 +16,6 @@ pub mod update;
 
 use crate::algebra_builder::AlgebraBuilder;
 pub use crate::error::{SparqlSyntaxError, TextPosition};
-#[cfg(feature = "standard-unicode-escaping")]
-use crate::escaping::unescape_unicode_codepoints;
 use crate::lexer::lex_sparql;
 use crate::parser::{parse_sparql_query, parse_sparql_update};
 use oxiri::{Iri, IriParseError};
@@ -123,23 +119,17 @@ impl SparqlParser {
     /// assert_eq!(query.to_string(), query_str);
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        expect(clippy::needless_borrow)
-    )]
     pub fn parse_query(&self, query: &str) -> Result<Query, SparqlSyntaxError> {
-        #[cfg(feature = "standard-unicode-escaping")]
-        let query = unescape_unicode_codepoints(query);
-        let tokens = lex_sparql(&query);
+        let tokens = lex_sparql(query);
         let ast = parse_sparql_query(&tokens, query.len())
-            .map_err(|e| SparqlSyntaxError::from_chumsky(e, &query))?;
+            .map_err(|e| SparqlSyntaxError::from_chumsky(e, query))?;
         AlgebraBuilder::new(
             self.base_iri.clone(),
             self.prefixes.clone(),
             &self.custom_aggregate_functions,
         )
         .build_query(ast)
-        .map_err(|e| SparqlSyntaxError::from_algebra_builder(e, &query))
+        .map_err(|e| SparqlSyntaxError::from_algebra_builder(e, query))
     }
 
     /// Parse the given update string using the already set options.
@@ -152,22 +142,16 @@ impl SparqlParser {
     /// assert_eq!(update.to_string().trim(), update_str);
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        expect(clippy::needless_borrow)
-    )]
     pub fn parse_update(&self, update: &str) -> Result<Update, SparqlSyntaxError> {
-        #[cfg(feature = "standard-unicode-escaping")]
-        let update = unescape_unicode_codepoints(update);
-        let tokens = lex_sparql(&update);
+        let tokens = lex_sparql(update);
         let ast = parse_sparql_update(&tokens, update.len())
-            .map_err(|e| SparqlSyntaxError::from_chumsky(e, &update))?;
+            .map_err(|e| SparqlSyntaxError::from_chumsky(e, update))?;
         AlgebraBuilder::new(
             self.base_iri.clone(),
             self.prefixes.clone(),
             &self.custom_aggregate_functions,
         )
         .build_update(ast)
-        .map_err(|e| SparqlSyntaxError::from_algebra_builder(e, &update))
+        .map_err(|e| SparqlSyntaxError::from_algebra_builder(e, update))
     }
 }

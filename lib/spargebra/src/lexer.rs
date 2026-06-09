@@ -17,14 +17,7 @@ pub fn lex_sparql(slice: &str) -> Vec<Spanned<Token<'_>>> {
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
 #[logos(skip r"([ \t\n\r]|#[^\r\n]*)+")]
 pub enum Token<'a> {
-    #[cfg_attr(
-        feature = "standard-unicode-escaping",
-        regex("<[^<>\"{}|^`\\\\\u{00}-\u{20}]*>")
-    )]
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        regex("<([^<>\"{}|^`\\\\\u{00}-\u{20}]|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*>")
-    )]
+    #[regex("<([^<>\"{}|^`\\\\\u{00}-\u{20}]|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*>")]
     IriRef(&'a str),
     #[regex(
         "([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}.]*[A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}])?)?:([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_:0-9]|%[0-9A-Fa-f]{2}|\\\\[_\\~.\\-!$&'()*+,;=/?#@%])(([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}.:]|%[0-9A-Fa-f]{2}|\\\\[_\\~.\\-!$&'()*+,;=/?#@%])*([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}:]|%[0-9A-Fa-f]{2}|\\\\[_\\~.\\-!$&'()*+,;=/?#@%]))?"
@@ -38,44 +31,14 @@ pub enum Token<'a> {
         "_:[A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_0-9]([A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}.]*[A-Za-z\u{00C0}-\u{00D6}\u{00D8}-\u{00F6}\u{00F8}-\u{02FF}\u{0370}-\u{037D}\u{037F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}_\\-0-9\u{00B7}\u{0300}-\u{036F}\u{203F}-\u{2040}])?"
     )]
     BlankNodeLabel(&'a str),
-    #[cfg_attr(
-        feature = "standard-unicode-escaping",
-        regex("'([^'\\\\\r\n]|\\\\[tbnrf\\\\\"'])*'")
-    )]
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        regex("'([^'\\\\\r\n]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*'")
-    )]
+    #[regex("'([^'\\\\\r\n]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*'")]
     StringLiteral1(&'a str),
-    #[cfg_attr(
-        feature = "standard-unicode-escaping",
-        regex("\"([^\"\\\\\r\n]|\\\\[tbnrf\\\\\"'])*\"")
-    )]
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        regex("\"([^\"\\\\\r\n]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*\"")
-    )]
+    #[regex("\"([^\"\\\\\r\n]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8})*\"")]
     StringLiteral2(&'a str),
-    #[cfg_attr(
-        feature = "standard-unicode-escaping",
-        regex("'''('{0,2}([^'\\\\]|\\\\[tbnrf\\\\\"']))*'''")
-    )]
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        regex(
-            "'''('{0,2}([^'\\\\]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8}))*'''"
-        )
-    )]
+    #[regex("'''('{0,2}([^'\\\\]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8}))*'''")]
     StringLiteralLong1(&'a str),
-    #[cfg_attr(
-        feature = "standard-unicode-escaping",
-        regex("\"\"\"(\"{0,2}([^\"\\\\]|\\\\[tbnrf\\\\\"']))*\"\"\"")
-    )]
-    #[cfg_attr(
-        not(feature = "standard-unicode-escaping"),
-        regex(
-            "\"\"\"(\"{0,2}([^\"\\\\]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8}))*\"\"\""
-        )
+    #[regex(
+        "\"\"\"(\"{0,2}([^\"\\\\]|\\\\[tbnrf\\\\\"']|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8}))*\"\"\""
     )]
     StringLiteralLong2(&'a str),
     #[regex("@[a-zA-Z]+(-[a-zA-Z0-9]+)*(--[a-zA-Z]+)?")]
