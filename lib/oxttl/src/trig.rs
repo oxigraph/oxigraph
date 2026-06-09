@@ -1,6 +1,7 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`]
 //! and a serializer implemented by [`TriGSerializer`].
 
+use crate::DEFAULT_MAX_BUFFER_SIZE;
 use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
@@ -44,19 +45,42 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[must_use]
 pub struct TriGParser {
     lenient: bool,
     base: Option<Iri<OxString>>,
     prefixes: HashMap<OxString, Iri<OxString>>,
+    max_buffer_size: usize,
+}
+
+impl Default for TriGParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TriGParser {
     /// Builds a new [`TriGParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            lenient: false,
+            base: None,
+            prefixes: HashMap::new(),
+        }
+    }
+
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser and the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -196,6 +220,7 @@ impl TriGParser {
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             )
             .into_iter(),
         }
@@ -248,6 +273,7 @@ impl TriGParser {
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             ),
         }
     }

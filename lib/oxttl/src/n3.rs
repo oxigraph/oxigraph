@@ -9,7 +9,7 @@ use crate::toolkit::{
     Lexer, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
     TokenOrLineJump, TurtleSyntaxError,
 };
-use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -188,19 +188,43 @@ impl From<Quad> for N3Quad {
 /// assert_eq!(2, count);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[must_use]
 pub struct N3Parser {
     lenient: bool,
     base: Option<Iri<OxString>>,
     prefixes: HashMap<OxString, Iri<OxString>>,
+    max_buffer_size: usize,
+}
+
+impl Default for N3Parser {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl N3Parser {
     /// Builds a new [`N3Parser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            lenient: false,
+            base: None,
+            prefixes: HashMap::new(),
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+        }
+    }
+
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser but also the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -337,8 +361,15 @@ impl N3Parser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceN3Parser<'_> {
         SliceN3Parser {
-            inner: N3Recognizer::new_parser(slice.as_ref(), true, false, self.base, self.prefixes)
-                .into_iter(),
+            inner: N3Recognizer::new_parser(
+                slice.as_ref(),
+                true,
+                false,
+                self.base,
+                self.prefixes,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -389,6 +420,7 @@ impl N3Parser {
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             ),
         }
     }
@@ -1381,6 +1413,7 @@ impl N3Recognizer {
         unchecked: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
+        max_buffer_size: usize,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
@@ -1388,7 +1421,7 @@ impl N3Recognizer {
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
-                MAX_BUFFER_SIZE,
+                max_buffer_size,
                 Some(b"#"),
             ),
             Self {
