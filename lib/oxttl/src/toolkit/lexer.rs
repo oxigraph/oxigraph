@@ -133,6 +133,11 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         let upper_bound = self.resized_buffer_len();
         // Fill the buffer until the upper bound with 0s
         self.data.resize(upper_bound, 0);
+
+        // We keep extending to have as much space as available without reallocation
+        if self.data.len() < self.data.capacity() {
+            self.data.resize(upper_bound, 0);
+        }
         // Read data from the reader into the buffer from the
         // lower bound until the upper bound
         let bytes_read = reader.read(&mut self.data[lower_bound..])?;
@@ -164,6 +169,11 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         let upper_bound = self.resized_buffer_len();
         // Fill the buffer until the upper bound with 0s
         self.data.resize(upper_bound, 0);
+
+        // We keep extending to have as much space as available without reallocation
+        if self.data.len() < self.data.capacity() {
+            self.data.resize(upper_bound, 0);
+        }
         // Read data from the reader into the buffer from the
         // lower bound until the upper bound
         let bytes_read = reader.read(&mut self.data[lower_bound..]).await?;
@@ -187,9 +197,8 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
             // exceed the maximum buffer size or allocate under the minimum buffer size.
             min(
                 self.max_buffer_size,
-
-                // We take the max here to ensure that 
-                // the buffer always has at least the size of the 
+                // We take the max here to ensure that
+                // the buffer always has at least the size of the
                 // data plus the minimum buffer size
                 max(
                     self.data.len() + self.min_buffer_size,
