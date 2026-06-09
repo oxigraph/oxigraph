@@ -1,7 +1,6 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::get_turtle_slice_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
@@ -10,6 +9,7 @@ use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, Tu
 #[cfg(feature = "async-tokio")]
 use crate::trig::TokioAsyncWriterTriGSerializer;
 use crate::trig::{LowLevelTriGSerializer, TriGSerializer, WriterTriGSerializer};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{OxString, Triple};
 use std::collections::HashMap;
@@ -44,19 +44,42 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// assert_eq!(2, count);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[must_use]
 pub struct TurtleParser {
     lenient: bool,
     base: Option<Iri<OxString>>,
     prefixes: HashMap<OxString, Iri<OxString>>,
+    max_buffer_size: usize,
+}
+
+impl Default for TurtleParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TurtleParser {
     /// Builds a new [`TurtleParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            lenient: false,
+            base: None,
+            prefixes: HashMap::new(),
+        }
+    }
+
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser and the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -196,6 +219,7 @@ impl TurtleParser {
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             )
             .into_iter(),
         }
@@ -311,6 +335,7 @@ impl TurtleParser {
                 self.lenient,
                 self.base,
                 self.prefixes,
+                self.max_buffer_size,
             ),
         }
     }

@@ -1,10 +1,10 @@
 //! Shared parser implementation for Turtle and TriG.
 
+use crate::MIN_BUFFER_SIZE;
 use crate::lexer::{
     N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
 };
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
-use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -1256,6 +1256,7 @@ impl TriGRecognizer {
         lenient: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
+        max_buffer_size: usize,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
@@ -1263,7 +1264,7 @@ impl TriGRecognizer {
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
-                MAX_BUFFER_SIZE,
+                max_buffer_size,
                 Some(b"#"),
             ),
             Self {

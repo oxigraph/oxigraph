@@ -1,12 +1,12 @@
 //! A [N-Triples](https://www.w3.org/TR/n-triples/) streaming parser implemented by [`NTriplesParser`]
 //! and a serializer implemented by [`NTriplesSerializer`].
 
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxrdf::Triple;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
@@ -37,17 +37,38 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[must_use]
 pub struct NTriplesParser {
     lenient: bool,
+    max_buffer_size: usize,
+}
+
+impl Default for NTriplesParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NTriplesParser {
     /// Builds a new [`NTriplesParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            lenient: false,
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+        }
+    }
+
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser and the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -152,8 +173,14 @@ impl NTriplesParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNTriplesParser<'_> {
         SliceNTriplesParser {
-            inner: NQuadsRecognizer::new_parser(slice.as_ref(), true, false, self.lenient)
-                .into_iter(),
+            inner: NQuadsRecognizer::new_parser(
+                slice.as_ref(),
+                true,
+                false,
+                self.lenient,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -299,7 +326,13 @@ impl NTriplesParser {
     /// ```
     pub fn low_level(self) -> LowLevelNTriplesParser {
         LowLevelNTriplesParser {
-            parser: NQuadsRecognizer::new_parser(Vec::new(), false, false, self.lenient),
+            parser: NQuadsRecognizer::new_parser(
+                Vec::new(),
+                false,
+                false,
+                self.lenient,
+                self.max_buffer_size,
+            ),
         }
     }
 }

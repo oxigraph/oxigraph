@@ -1,12 +1,12 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`]
 //! and a serializer implemented by [`NQuadsSerializer`].
 
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxrdf::{Quad, Triple};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
@@ -37,17 +37,38 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default, Clone)]
+#[derive(Clone)]
 #[must_use]
 pub struct NQuadsParser {
     lenient: bool,
+    max_buffer_size: usize,
+}
+
+impl Default for NQuadsParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NQuadsParser {
     /// Builds a new [`NQuadsParser`].
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            max_buffer_size: DEFAULT_MAX_BUFFER_SIZE,
+            lenient: false,
+        }
+    }
+
+    /// Define an upper bound for the internal buffer of the parser in bytes
+    ///
+    /// This limits the memory consumption of the parser and the maximum size of parsed IRIs and literals.
+    ///
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
+    #[inline]
+    pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
+        self.max_buffer_size = max_buffer_size;
+        self
     }
 
     /// Assumes the file is valid to make parsing faster.
@@ -152,8 +173,14 @@ impl NQuadsParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
-            inner: NQuadsRecognizer::new_parser(slice.as_ref(), true, true, self.lenient)
-                .into_iter(),
+            inner: NQuadsRecognizer::new_parser(
+                slice.as_ref(),
+                true,
+                true,
+                self.lenient,
+                self.max_buffer_size,
+            )
+            .into_iter(),
         }
     }
 
@@ -299,7 +326,13 @@ impl NQuadsParser {
     /// ```
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
-            parser: NQuadsRecognizer::new_parser(Vec::new(), false, true, self.lenient),
+            parser: NQuadsRecognizer::new_parser(
+                Vec::new(),
+                false,
+                true,
+                self.lenient,
+                self.max_buffer_size,
+            ),
         }
     }
 }
@@ -755,5 +788,43 @@ impl LowLevelNQuadsSerializer {
     #[expect(clippy::unused_self)]
     pub fn serialize_triple(&mut self, triple: &Triple, mut writer: impl Write) -> io::Result<()> {
         writeln!(writer, "{triple} .")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn test_parse_nquads_above_max_default_size() {
+        // Ensure that the parser can be configured to parse files above the default max buffer size
+        // and that it does not return an error when parsing such files
+        let unbound_parser = NQuadsParser::default().with_max_buffer_size(usize::MAX);
+        let bounded_parser = NQuadsParser::default();
+        assert_eq!(bounded_parser.max_buffer_size, DEFAULT_MAX_BUFFER_SIZE);
+
+        // Create a literal > 16 MiB (16 MiB + 1 byte)
+        let large_literal = "x".repeat(16 * 1024 * 1024 + 1);
+
+        let file =
+            format!(r#"<http://example.com/foo> <http://schema.org/name> "{large_literal}" ."#);
+
+        for quad in bounded_parser.for_reader(file.as_bytes()) {
+            let err = quad.unwrap_err();
+            assert!(
+                matches!(&err, TurtleParseError::Io(e)
+                    if e.kind() == ErrorKind::OutOfMemory
+                ),
+                "expected out of memory error, got {err:?}"
+            );
+        }
+
+        for quad in unbound_parser.for_reader(file.as_bytes()) {
+            assert!(
+                quad.is_ok(),
+                "Expected no parsing issue when parsing a large literal with an unbound buffer but got {quad:?}"
+            );
+        }
     }
 }

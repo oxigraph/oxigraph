@@ -126,6 +126,12 @@ impl<RR: RuleRecognizer> Parser<Vec<u8>, RR> {
         self.lexer.extend_from_slice(other)
     }
 
+    fn finish(&mut self) {
+        self.state = None;
+        self.results.clear();
+        self.errors.clear();
+    }
+
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderIterator<R, RR> {
         ReaderIterator {
             reader,
@@ -169,6 +175,7 @@ impl<R: Read, RR: RuleRecognizer> Iterator for ReaderIterator<R, RR> {
                 return Some(result.map_err(TurtleParseError::Syntax));
             }
             if let Err(e) = self.parser.lexer.extend_from_reader(&mut self.reader) {
+                self.parser.finish();
                 return Some(Err(e.into()));
             }
         }
@@ -195,6 +202,7 @@ impl<R: AsyncRead + Unpin, RR: RuleRecognizer> TokioAsyncReaderIterator<R, RR> {
                 .extend_from_tokio_async_read(&mut self.reader)
                 .await
             {
+                self.parser.finish();
                 return Some(Err(e.into()));
             }
         }
