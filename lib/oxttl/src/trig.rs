@@ -76,8 +76,7 @@ impl TriGParser {
     ///
     /// This limits the memory consumption of the parser and the maximum size of parsed IRIs and literals.
     ///
-    /// The default is set to [`DEFAULT_MAX_BUFFER_SIZE`] bytes, use this function to change it
-    /// (e.g. to [`usize::MAX`] to not set an upper bound).
+    /// The default is set conservatively, use this function to change it (e.g. to [`usize::MAX`] to not set an upper bound).
     #[inline]
     pub fn with_max_buffer_size(mut self, max_buffer_size: usize) -> Self {
         self.max_buffer_size = max_buffer_size;
