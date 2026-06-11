@@ -2209,7 +2209,10 @@ mod tests {
     #[test]
     fn test_send_sync() {
         fn is_send_sync<T: Send + Sync>() {}
+
         is_send_sync::<Store>();
+        is_send_sync::<Transaction<'_>>();
+        is_send_sync::<BulkLoader<'_>>();
     }
 
     #[test]
