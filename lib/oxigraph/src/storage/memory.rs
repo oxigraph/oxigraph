@@ -7,13 +7,14 @@ use crate::storage::numeric_encoder::{
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
+use parking_lot::{Mutex, MutexGuard};
 use rustc_hash::FxHasher;
 use std::borrow::Borrow;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::{take, transmute};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
+use std::sync::{Arc, RwLock, Weak};
 
 /// In-memory storage working with MVCC
 ///
@@ -26,6 +27,12 @@ pub struct MemoryStorage {
     version_counter: Arc<AtomicUsize>,
     transaction_counter: Arc<Mutex<usize>>,
 }
+
+// Static assertion that `MemoryStorage` is `Send`
+const _: () = {
+    const fn assert_send<T: Send>() {}
+    let _ = assert_send::<MemoryStorage>;
+};
 
 struct Content {
     quad_set: DashSet<Arc<QuadListNode>, BuildHasherDefault<FxHasher>>,
@@ -68,7 +75,7 @@ impl MemoryStorage {
     }
 
     pub fn start_transaction(&self) -> MemoryStorageTransaction<'_> {
-        let mut transaction_mutex = self.transaction_counter.lock().unwrap();
+        let mut transaction_mutex = self.transaction_counter.lock();
         *transaction_mutex += 1;
         let transaction_id = *transaction_mutex;
         let snapshot_id = self.version_counter.load(Ordering::Acquire);
@@ -400,7 +407,7 @@ impl<'a> MemoryStorageReader<'a> {
     }
 
     fn is_node_in_range(&self, node: &QuadListNode) -> bool {
-        let range = node.range.lock().unwrap();
+        let range = node.range.lock();
         self.is_in_range(&range)
     }
 }
@@ -439,7 +446,7 @@ impl MemoryStorageTransaction<'_> {
             .get(&encoded)
             .map(|node| Arc::clone(&node))
         {
-            let added = node.range.lock().unwrap().add(self.transaction_id);
+            let added = node.range.lock().add(self.transaction_id);
             if added {
                 self.log.push(LogEntry::QuadNode(node));
                 if !quad.graph_name.is_default_graph()
@@ -597,7 +604,7 @@ impl MemoryStorageTransaction<'_> {
         else {
             return;
         };
-        let removed = node.range.lock().unwrap().remove(self.transaction_id);
+        let removed = node.range.lock().remove(self.transaction_id);
         if removed {
             self.log.push(LogEntry::QuadNode(node));
         }
@@ -614,7 +621,7 @@ impl MemoryStorageTransaction<'_> {
             .last_quad_by_graph_name
             .view(graph_name, |_, (node, _)| Weak::clone(node));
         while let Some(current) = next.take().and_then(|c| c.upgrade()) {
-            if current.range.lock().unwrap().remove(self.transaction_id) {
+            if current.range.lock().remove(self.transaction_id) {
                 self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
             }
             next.clone_from(&current.previous_graph_name);
@@ -630,7 +637,7 @@ impl MemoryStorageTransaction<'_> {
 
     pub fn clear_all_graphs(&mut self) {
         self.storage.content.quad_set.iter().for_each(|node| {
-            if node.range.lock().unwrap().remove(self.transaction_id) {
+            if node.range.lock().remove(self.transaction_id) {
                 self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
             }
         });
@@ -682,7 +689,6 @@ impl MemoryStorageTransaction<'_> {
                 LogEntry::QuadNode(node) => {
                     node.range
                         .lock()
-                        .unwrap()
                         .upgrade_transaction(self.transaction_id, new_version_id);
                 }
                 LogEntry::Graph(graph_name) => {
@@ -708,10 +714,7 @@ impl Drop for MemoryStorageTransaction<'_> {
             for operation in take(&mut self.log) {
                 match operation {
                     LogEntry::QuadNode(node) => {
-                        node.range
-                            .lock()
-                            .unwrap()
-                            .rollback_transaction(self.transaction_id);
+                        node.range.lock().rollback_transaction(self.transaction_id);
                     }
                     LogEntry::Graph(graph_name) => {
                         if let Some(mut entry) = self.storage.content.graphs.get_mut(&graph_name) {
