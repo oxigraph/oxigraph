@@ -13,7 +13,7 @@ use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::{take, transmute};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
+use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 
 /// In-memory storage working with MVCC
 ///
@@ -24,7 +24,8 @@ pub struct MemoryStorage {
     content: Arc<Content>,
     id2str: Arc<DashMap<StrHash, OxString, BuildHasherDefault<StrHashHasher>>>,
     version_counter: Arc<AtomicUsize>,
-    transaction_counter: Arc<Mutex<usize>>,
+    transaction_counter: Arc<AtomicUsize>,
+    transaction_lock: Arc<Lock>,
 }
 
 struct Content {
@@ -55,7 +56,8 @@ impl MemoryStorage {
             }),
             id2str: Arc::new(DashMap::default()),
             version_counter: Arc::new(AtomicUsize::new(0)),
-            transaction_counter: Arc::new(Mutex::new(usize::MAX >> 1)),
+            transaction_counter: Arc::new(AtomicUsize::new(usize::MAX >> 1)),
+            transaction_lock: Arc::new(Lock::new()),
         }
     }
 
@@ -68,16 +70,16 @@ impl MemoryStorage {
     }
 
     pub fn start_transaction(&self) -> MemoryStorageTransaction<'_> {
-        let mut transaction_mutex = self.transaction_counter.lock().unwrap();
-        *transaction_mutex += 1;
-        let transaction_id = *transaction_mutex;
-        let snapshot_id = self.version_counter.load(Ordering::Acquire);
+        // We ensure there is only one transaction running
+        let transaction_guard = self.transaction_lock.lock();
+        let transaction_id = self.transaction_counter.fetch_add(1, Ordering::Acquire);
+        let snapshot_id = self.version_counter.load(Ordering::Relaxed);
         MemoryStorageTransaction {
             storage: self,
             log: Vec::new(),
             transaction_id,
             snapshot_id,
-            _transaction_mutex: transaction_mutex,
+            _transaction_guard: transaction_guard,
             committed: false,
         }
     }
@@ -417,8 +419,8 @@ pub struct MemoryStorageTransaction<'a> {
     log: Vec<LogEntry>,
     transaction_id: usize,
     snapshot_id: usize,
-    _transaction_mutex: MutexGuard<'a, usize>,
     committed: bool,
+    _transaction_guard: LockGuard<'a>,
 }
 
 impl MemoryStorageTransaction<'_> {
@@ -1019,6 +1021,43 @@ fn push_boxed_slice<T: Copy>(slice: &[T], element: T) -> Box<[T]> {
 
 fn pop_boxed_slice<T: Copy>(slice: &[T]) -> Box<[T]> {
     slice[..slice.len() - 1].into()
+}
+
+struct Lock {
+    mutex: Mutex<bool>,
+    condvar: Condvar,
+}
+
+impl Lock {
+    fn new() -> Self {
+        Self {
+            mutex: Mutex::new(false),
+            condvar: Condvar::new(),
+        }
+    }
+
+    fn lock(&self) -> LockGuard<'_> {
+        *self
+            .condvar
+            .wait_while(self.mutex.lock().unwrap(), |v| *v)
+            .unwrap() = true;
+        LockGuard {
+            mutex: &self.mutex,
+            condvar: &self.condvar,
+        }
+    }
+}
+
+struct LockGuard<'a> {
+    mutex: &'a Mutex<bool>,
+    condvar: &'a Condvar,
+}
+
+impl Drop for LockGuard<'_> {
+    fn drop(&mut self) {
+        *self.mutex.lock().unwrap() = false;
+        self.condvar.notify_one();
+    }
 }
 
 #[cfg(test)]
