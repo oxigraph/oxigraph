@@ -35,14 +35,14 @@ impl Optimizer {
                 subject,
                 path,
                 object,
-                graph_name,
             } => GraphPattern::Path {
                 subject,
                 path,
                 object,
-                graph_name,
             },
-            GraphPattern::Graph { graph_name } => GraphPattern::Graph { graph_name },
+            GraphPattern::Graph { graph_name, inner } => {
+                GraphPattern::graph(Self::normalize_pattern(*inner, input_types), graph_name)
+            }
             GraphPattern::Join {
                 left,
                 right,
@@ -926,12 +926,12 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             path,
             is_term_pattern_bound(object, input_types),
         ),
-        GraphPattern::Graph { graph_name } => {
-            if is_named_node_pattern_bound(graph_name, input_types) {
-                100
-            } else {
+        GraphPattern::Graph { graph_name, inner } => {
+            (if is_named_node_pattern_bound(graph_name, input_types) {
                 1
-            }
+            } else {
+                100
+            }) * estimate_graph_pattern_size(inner, input_types)
         }
         GraphPattern::Join {
             left,
