@@ -3,7 +3,7 @@
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyUnicodeDecodeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyString, PyTuple};
 use std::fmt;
@@ -1352,9 +1352,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for OxStringInput {
     #[inline]
     fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         // TODO: Use to_str when targeting Python 3.10+
-        Ok(Self(OxString::new_owned(str::from_utf8(
-            obj.cast::<PyString>()?.encode_utf8()?.as_bytes(),
-        )?)))
+        let encoded = obj.cast::<PyString>()?.encode_utf8()?;
+        let encoded = encoded.as_bytes();
+        let decoded = str::from_utf8(encoded)
+            .map_err(|e| PyUnicodeDecodeError::new_err_from_utf8(obj.py(), encoded, e))?;
+        Ok(Self(OxString::new_owned(decoded)))
     }
 }
 
