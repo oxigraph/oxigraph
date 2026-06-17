@@ -1,3 +1,9 @@
+# [0.5.9] - 2026-06-17
+
+### Changed
+- `Store`: make `Transaction` and `BulkLoader` `Send` and `Sync`.
+
+
 # [0.5.8] - 2026-04-28
 
 ### Added
