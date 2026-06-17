@@ -312,6 +312,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.resolver().bindings(),
+            custom_entities: &self.parser.custom_entities,
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -451,6 +452,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.resolver().bindings(),
+            custom_entities: &self.parser.custom_entities,
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -588,6 +590,7 @@ impl SliceRdfXmlParser<'_> {
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.resolver().bindings(),
+            custom_entities: &self.parser.custom_entities,
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -632,6 +635,7 @@ impl SliceRdfXmlParser<'_> {
 /// See [`ReaderRdfXmlParser::prefixes`].
 pub struct RdfXmlPrefixesIter<'a> {
     inner: NamespaceBindingsIter<'a>,
+    custom_entities: &'a EntityRegistry,
     decoder: Decoder,
     lenient: bool,
 }
@@ -650,7 +654,9 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                         let Ok(Cow::Borrowed(name)) = self.decoder.decode(name) else {
                             continue;
                         };
-                        let Ok(Cow::Borrowed(name)) = unescape_with(name, |_| None) else {
+                        let Ok(Cow::Borrowed(name)) =
+                            unescape_with(name, |e| self.custom_entities.resolve(e))
+                        else {
                             continue;
                         };
                         if !self.lenient && !is_nc_name(name) {
@@ -663,7 +669,9 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                     let Ok(Cow::Borrowed(value)) = self.decoder.decode(value.0) else {
                         continue;
                     };
-                    let Ok(Cow::Borrowed(value)) = unescape_with(value, |_| None) else {
+                    let Ok(Cow::Borrowed(value)) =
+                        unescape_with(value, |e| self.custom_entities.resolve(e))
+                    else {
                         continue;
                     };
                     if !self.lenient && Iri::parse(value).is_err() {
@@ -711,13 +719,7 @@ const RESERVED_RDF_ELEMENTS: [&str; 11] = [
     RDF_RESOURCE,
 ];
 
-const RESERVED_RDF_ATTRIBUTES: [&str; 5] = [
-    RDF_ABOUT_EACH,
-    RDF_ABOUT_EACH_PREFIX,
-    RDF_LI,
-    RDF_RDF,
-    RDF_RESOURCE,
-];
+const RESERVED_RDF_ATTRIBUTES: [&str; 4] = [RDF_ABOUT_EACH, RDF_ABOUT_EACH_PREFIX, RDF_LI, RDF_RDF];
 
 #[derive(Clone, Debug)]
 enum NodeOrText {
