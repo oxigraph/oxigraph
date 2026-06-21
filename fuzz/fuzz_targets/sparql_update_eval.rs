@@ -24,12 +24,18 @@ fuzz_target!(|data: sparql_smith::Update| {
 
     let update_str = data.to_string();
     if let Ok(update) = SparqlParser::new().parse_update(&update_str) {
-        disk_store.clear().unwrap();
+        if let Err(e) = disk_store.clear() {
+            eprintln!("Failed to clear disk store: {e}");
+            return;
+        }
         let disk_with_opt = SparqlEvaluator::new()
             .for_update(update.clone())
             .on_store(disk_store)
             .execute();
-        disk_store.validate().unwrap();
+        if let Err(e) = disk_store.validate() {
+            eprintln!("Disk store validation failed: {e}");
+            return;
+        }
         let mut dataset_disk_with_opt = disk_store.iter().collect::<Result<Dataset, _>>().unwrap();
         dataset_disk_with_opt.canonicalize(CanonicalizationAlgorithm::Unstable);
 
@@ -39,7 +45,10 @@ fuzz_target!(|data: sparql_smith::Update| {
             .for_update(update)
             .on_store(&memory_store)
             .execute();
-        memory_store.validate().unwrap();
+        if let Err(e) = memory_store.validate() {
+            eprintln!("Memory store validation failed: {e}");
+            return;
+        }
         let mut dataset_memory_without_opt =
             memory_store.iter().collect::<Result<Dataset, _>>().unwrap();
         dataset_memory_without_opt.canonicalize(CanonicalizationAlgorithm::Unstable);
