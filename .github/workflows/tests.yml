@@ -563,3 +563,43 @@ jobs:
         with:
           persist-credentials: false
       - uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+
+  dotnet-tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-rust
+
+      - uses: actions/setup-dotnet@67eea4964bcdcf3b6a0fbb9b6d1a0dfe09ace6b8 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Rust cdylib (with RocksDB on Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cargo build --release -p oxigraph-dotnet --features oxigraph/rocksdb
+
+      - name: Build Rust cdylib (memory-only on Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --release -p oxigraph-dotnet
+
+      - name: Copy native library (Linux)
+        if: runner.os == 'Linux'
+        run: cp target/release/liboxigraph_dotnet.so dotnet/tests/Oxigraph.Tests/bin/Debug/net10.0/
+
+      - name: Copy native library (macOS)
+        if: runner.os == 'macOS'
+        run: cp target/release/liboxigraph_dotnet.dylib dotnet/tests/Oxigraph.Tests/bin/Debug/net10.0/
+
+      - name: Copy native library (Windows)
+        if: runner.os == 'Windows'
+        run: copy target\release\oxigraph_dotnet.dll dotnet\tests\Oxigraph.Tests\bin\Debug\net10.0\
+
+      - name: Build and test
+        run: dotnet test dotnet/tests/Oxigraph.Tests/ --verbosity normal
