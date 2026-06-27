@@ -3,7 +3,7 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
-use quick_xml::escape::{EscapeError, escape, resolve_xml_entity};
+use quick_xml::escape::{EscapeError, resolve_xml_entity};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;
 use quick_xml::{Decoder, Error, Reader, Writer, XmlVersion};
@@ -561,7 +561,7 @@ impl XmlInnerQueryResultsParser {
                                 term: None,
                                 lang: None,
                                 #[cfg(feature = "sparql-12")]
-                                direction:None,
+                                direction: None,
                                 datatype: None,
                                 subject_stack: Vec::new(),
                                 predicate_stack: Vec::new(),
@@ -1026,39 +1026,39 @@ fn build_literal(
     }
 }
 
-/// Escapes whitespaces at the beginning and the end to make sure they are not removed by parsers trimming text events.
+/// Escapes characters to avoid parsing issues (<, >, &...) or normalization (\r, whitespace at the beginning or end...)
 fn escape_including_bound_whitespaces(value: &str) -> Cow<'_, str> {
-    let trimmed = value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '));
-    let trimmed_escaped = escape(trimmed);
-    if trimmed == value {
-        return trimmed_escaped;
-    }
-    let mut output =
-        String::with_capacity(trimmed_escaped.len() + (value.len() - trimmed.len()) * 5);
-    let mut prefix_len = 0;
-    for c in value.chars() {
+    let mut escaped = None;
+    let mut previous_index = 0;
+    let mut push_escaped = |escape: &'static str, c: char, i: usize| {
+        let buf = escaped.get_or_insert_with(|| String::with_capacity(value.len()));
+        buf.push_str(&value[previous_index..i]);
+        buf.push_str(escape);
+        previous_index = i + c.len_utf8();
+    };
+
+    for (i, c) in value.char_indices() {
         match c {
-            '\t' => output.push_str("&#9;"),
-            '\n' => output.push_str("&#10;"),
-            '\r' => output.push_str("&#13;"),
-            ' ' => output.push_str("&#32;"),
-            _ => break,
-        }
-        prefix_len += 1;
-    }
-    output.push_str(&trimmed_escaped);
-    for c in value[prefix_len + trimmed.len()..].chars() {
-        match c {
-            '\t' => output.push_str("&#9;"),
-            '\n' => output.push_str("&#10;"),
-            '\r' => output.push_str("&#13;"),
-            ' ' => output.push_str("&#32;"),
-            _ => {
-                unreachable!("Unexpected {c} at the end of the string {value:?}")
-            }
+            '<' => push_escaped("&lt;", c, i),
+            '>' => push_escaped("&gt;", c, i),
+            '\'' => push_escaped("&apos;", c, i),
+            '&' => push_escaped("&amp;", c, i),
+            '"' => push_escaped("&quot;", c, i),
+            '\r' => push_escaped("&#13;", c, i),
+            '\u{85}' => push_escaped("&#133;", c, i),
+            '\u{2028}' => push_escaped("&#8232;", c, i),
+            '\t' if i == 0 || i == value.len() - 1 => push_escaped("&#9;", c, i),
+            '\n' if i == 0 || i == value.len() - 1 => push_escaped("&#10;", c, i),
+            ' ' if i == 0 || i == value.len() - 1 => push_escaped("&#32;", c, i),
+            _ => (),
         }
     }
-    output.into()
+    if let Some(mut escaped) = escaped {
+        escaped.push_str(&value[previous_index..]);
+        escaped.into()
+    } else {
+        value.into()
+    }
 }
 
 fn decode_xml_entity(
