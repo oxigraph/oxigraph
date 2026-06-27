@@ -24,7 +24,8 @@
         <#escaped_trailing_dot_trig>
         <#string_line_jump_ttl>
         <#xml_multiple_objects>
-        <#slightly_invalid_escape_sequence>
+        <#slightly_invalid_escape_sequence_nt>
+        <#slightly_invalid_escape_sequence_ttl>
         <#decimal_dot_vs_triple_dot>
         <#pname_trailing_dot_ttl>
         <#bnode_trailing_dot_nt>
@@ -133,10 +134,15 @@
 	mf:name "both a string and a node as values of the same predicate" ;
 	mf:action <xml_multiple_objects.rdf> .
 
-<#slightly_invalid_escape_sequence>
+<#slightly_invalid_escape_sequence_nt>
+	rdf:type rdft:TestNTriplesNegativeSyntax ;
+	mf:name "+ sign at the start of escape sequences" ;
+	mf:action <slightly_invalid_escape_sequence.nt> .
+
+<#slightly_invalid_escape_sequence_ttl>
 	rdf:type rdft:TestTurtleNegativeSyntax ;
 	mf:name "+ sign at the start of escape sequences" ;
-	mf:action <slightly_invalid_escape_sequence.ttl> .
+	mf:action <slightly_invalid_escape_sequence.nt> .
 
 <#decimal_dot_vs_triple_dot>
 	rdf:type rdft:TestTurtleEval ;
