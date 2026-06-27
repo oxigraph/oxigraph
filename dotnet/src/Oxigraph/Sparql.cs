@@ -51,6 +51,29 @@ public sealed class QueryBoolean : QueryResults
     internal QueryBoolean(bool value) => Value = value;
     public override string ToString() => Value.ToString();
 
+    /// <summary>Serialize the boolean result to a string (XML/JSON/CSV/TSV).</summary>
+    public string Serialize(QueryResultsFormat format)
+    {
+        var fmtStr = format switch
+        {
+            QueryResultsFormat.Json => "json",
+            QueryResultsFormat.Xml => "xml",
+            QueryResultsFormat.Csv => "csv",
+            QueryResultsFormat.Tsv => "tsv",
+            _ => "json",
+        };
+        return FFIHelper.Call<string>(() =>
+            OxigraphNative.query_boolean_serialize(fmtStr, Value));
+    }
+
+    /// <summary>Serialize the boolean result to a stream (XML/JSON/CSV/TSV).</summary>
+    public void SerializeToStream(Stream stream, QueryResultsFormat format)
+    {
+        var result = Serialize(format);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(result);
+        stream.Write(bytes, 0, bytes.Length);
+    }
+
     /// <summary>Serialize the boolean result to a file (XML/JSON/CSV/TSV).</summary>
     public void SerializeToFile(string filePath, QueryResultsFormat format)
     {
@@ -83,6 +106,38 @@ public sealed class QuerySolutions : QueryResults, IEnumerable<QuerySolution>
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     public int Count => _rows.Count;
     public QuerySolution this[int index] => _rows[index];
+
+    /// <summary>Serialize SELECT results to a string (XML/JSON/CSV/TSV).</summary>
+    public string Serialize(QueryResultsFormat format)
+    {
+        var fmtStr = format switch
+        {
+            QueryResultsFormat.Json => "json",
+            QueryResultsFormat.Xml => "xml",
+            QueryResultsFormat.Csv => "csv",
+            QueryResultsFormat.Tsv => "tsv",
+            _ => "json",
+        };
+        var variablesJson = JsonSerializer.Serialize(Variables.Select(v => v.Value));
+        var rowsJson = JsonSerializer.Serialize(_rows.Select(r =>
+        {
+            var dict = new Dictionary<string, ITerm?>();
+            foreach (var v in r.Variables)
+                dict[v] = r[v];
+            return dict;
+        }), new JsonSerializerOptions { Converters = { new TermConverter() } });
+
+        return FFIHelper.Call<string>(() =>
+            OxigraphNative.query_solutions_serialize(fmtStr, variablesJson, rowsJson));
+    }
+
+    /// <summary>Serialize SELECT results to a stream (XML/JSON/CSV/TSV).</summary>
+    public void SerializeToStream(Stream stream, QueryResultsFormat format)
+    {
+        var result = Serialize(format);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(result);
+        stream.Write(bytes, 0, bytes.Length);
+    }
 
     /// <summary>Serialize SELECT results to a file (XML/JSON/CSV/TSV).</summary>
     public void SerializeToFile(string filePath, QueryResultsFormat format)
@@ -156,6 +211,22 @@ public sealed class QueryTriples : QueryResults, IEnumerable<Triple>
     public IEnumerator<Triple> GetEnumerator() => _triples.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     public int Count => _triples.Count;
+
+    /// <summary>Serialize CONSTRUCT/DESCRIBE results to a string (any RDF format).</summary>
+    public string Serialize(RdfFormat format)
+    {
+        var triplesJson = JsonSerializer.Serialize(_triples);
+        return FFIHelper.Call<string>(() =>
+            OxigraphNative.query_triples_serialize(IO.FormatToString(format), triplesJson));
+    }
+
+    /// <summary>Serialize CONSTRUCT/DESCRIBE results to a stream (any RDF format).</summary>
+    public void SerializeToStream(Stream stream, RdfFormat format)
+    {
+        var result = Serialize(format);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(result);
+        stream.Write(bytes, 0, bytes.Length);
+    }
 
     /// <summary>Serialize CONSTRUCT/DESCRIBE results to a file in any RDF format.</summary>
     public void SerializeToFile(string filePath, RdfFormat format)

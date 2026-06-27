@@ -170,6 +170,47 @@ public sealed class ParseIterator : IEnumerable<Quad>, IDisposable
         _handle = new QuadIterSafeHandle((IntPtr)handleVal);
     }
 
+    /// <summary>
+    /// The list of IRI prefixes considered at the current step of parsing.
+    /// Returns a prefix name → prefix value dictionary.
+    /// It is empty at the beginning of parsing and gets updated as prefixes are encountered.
+    /// Returns an empty dictionary if the format does not support prefixes.
+    /// </summary>
+    public Dictionary<string, string> Prefixes
+    {
+        get
+        {
+            var ptr = OxigraphNative.parse_iter_prefixes(_handle.DangerousGetHandle());
+            var json = Marshal.PtrToStringUTF8(ptr) ?? "{}";
+            OxigraphNative.free_string(ptr);
+            FFIHelper.ThrowIfError(json);
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(
+                doc.RootElement.GetProperty("ok").GetRawText()) ?? [];
+        }
+    }
+
+    /// <summary>
+    /// The base IRI considered at the current step of parsing.
+    /// Returns null if no base IRI is set or the format does not support base IRIs.
+    /// Gets updated as @base directives are encountered during iteration.
+    /// </summary>
+    public string? BaseIri
+    {
+        get
+        {
+            var ptr = OxigraphNative.parse_iter_base_iri(_handle.DangerousGetHandle());
+            var json = Marshal.PtrToStringUTF8(ptr) ?? "{}";
+            OxigraphNative.free_string(ptr);
+            FFIHelper.ThrowIfError(json);
+            using var doc = JsonDocument.Parse(json);
+            var okVal = doc.RootElement.GetProperty("ok");
+            if (okVal.ValueKind == JsonValueKind.Null)
+                return null;
+            return okVal.GetString();
+        }
+    }
+
     public IEnumerator<Quad> GetEnumerator()
     {
         while (!_done)

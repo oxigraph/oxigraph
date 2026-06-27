@@ -1,14 +1,14 @@
 use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
 use crate::stream_ffi::{CallbackReader, CallbackWriter, ReadFn, WriteFn};
-use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer, ReaderQuadParser};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::os::raw::{c_char, c_void};
 use std::sync::Mutex;
@@ -1796,8 +1796,8 @@ pub extern "C" fn oxigraph_serialize_to_callback(
 
 // ─── Iterator FFI ──────────────────────────────────
 
-/// Opaque handle to a lazy quad iterator (from parse).
-pub type QuadIterHandle = *mut UnsafeCell<Box<dyn Iterator<Item = Result<oxigraph::model::Quad, oxigraph::io::RdfParseError>> + 'static>>;
+/// Opaque handle to a lazy RDF parser (ReaderQuadParser).
+pub type QuadIterHandle = *mut UnsafeCell<ReaderQuadParser<File>>;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn oxigraph_parse_iter_from_file(
@@ -1822,9 +1822,8 @@ pub extern "C" fn oxigraph_parse_iter_from_file(
         }),
     };
 
-    let iter: Box<dyn Iterator<Item = Result<oxigraph::model::Quad, oxigraph::io::RdfParseError>> + 'static> =
-        Box::new(parser.for_reader(file));
-    let boxed = Box::new(UnsafeCell::new(iter));
+    let reader = parser.for_reader(file);
+    let boxed = Box::new(UnsafeCell::new(reader));
     let ptr = Box::into_raw(boxed);
     let handle_value = ptr as u64;
     match serde_json::to_string(&handle_value) {
@@ -1844,12 +1843,33 @@ pub extern "C" fn oxigraph_parse_iter_next(handle: QuadIterHandle) -> *mut c_cha
     if handle.is_null() {
         return error_json(ErrorKind::InvalidArgument { message: "Iterator handle is null".into() });
     }
-    let iter = unsafe { &mut *(*handle).get() };
-    match iter.next() {
+    let parser = unsafe { &mut *(*handle).get() };
+    match parser.next() {
         Some(Ok(quad)) => ok_json(&quad),
         Some(Err(e)) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
         None => ok_json(&serde_json::Value::Null), // end of iteration
     }
+}
+
+/// Get the current prefixes map from the parser (valid for Turtle/TriG/N3/RDF-XML formats).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_iter_prefixes(handle: QuadIterHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Iterator handle is null".into() });
+    }
+    let parser = unsafe { &*(*handle).get() };
+    let prefixes: BTreeMap<&str, &str> = parser.prefixes().collect();
+    ok_json(&prefixes)
+}
+
+/// Get the current base IRI from the parser (updated as @base directives are encountered).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_iter_base_iri(handle: QuadIterHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Iterator handle is null".into() });
+    }
+    let parser = unsafe { &*(*handle).get() };
+    ok_json(&parser.base_iri().map(|s| s.to_string()))
 }
 
 #[unsafe(no_mangle)]
@@ -2003,6 +2023,130 @@ pub extern "C" fn oxigraph_query_triples_serialize_to_file(
     }
     match writer.finish() {
         Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+// ─── Query Results Serialization to Buffer ──────────
+
+/// Serialize SELECT query solutions to a buffer, returning the serialized content.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_solutions_serialize(
+    format: *const c_char,
+    variables_json: *const c_char,
+    solutions_json: *const c_char,
+) -> *mut c_char {
+    let format_str = unsafe { c_str_to_str(format) };
+    let vars_str = unsafe { c_str_to_str(variables_json) };
+    let sols_str = unsafe { c_str_to_str(solutions_json) };
+
+    let qformat = match format_str.to_lowercase().as_str() {
+        "xml" => QueryResultsFormat::Xml,
+        "json" => QueryResultsFormat::Json,
+        "csv" => QueryResultsFormat::Csv,
+        "tsv" => QueryResultsFormat::Tsv,
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown format: {format_str}") }),
+    };
+
+    let variables: Vec<String> = match serde_json::from_str(vars_str) {
+        Ok(v) => v,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid variables JSON: {e}") }),
+    };
+    let solutions: Vec<Value> = match serde_json::from_str(sols_str) {
+        Ok(s) => s,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid solutions JSON: {e}") }),
+    };
+
+    use oxigraph::sparql::results::QueryResultsSerializer;
+    let vars: Vec<oxigraph::sparql::Variable> = variables
+        .iter()
+        .map(|v| {
+            let s: String = v.clone();
+            oxigraph::sparql::Variable::new(s)
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_default();
+    let mut buf = Vec::new();
+    let mut serializer = match QueryResultsSerializer::from_format(qformat)
+        .serialize_solutions_to_writer(&mut buf, vars) {
+            Ok(s) => s,
+            Err(e) => return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+        };
+    for row in &solutions {
+        let mut pairs: Vec<(oxigraph::sparql::Variable, oxigraph::model::Term)> = Vec::new();
+        if let Some(obj) = row.as_object() {
+            for (k, v) in obj {
+                let key_owned: String = k.clone();
+                if let (Ok(var), Ok(term)) = (
+                    oxigraph::sparql::Variable::new(key_owned),
+                    serde_json::from_value::<oxigraph::model::Term>(v.clone()),
+                ) {
+                    pairs.push((var, term));
+                }
+            }
+        }
+        if let Err(e) = serializer.serialize(pairs.iter().map(|(v, t)| (v, t))) {
+            return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None });
+        }
+    }
+    match serializer.finish() {
+        Ok(_) => ok_json(&String::from_utf8_lossy(&buf).to_string()),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+/// Serialize an ASK boolean result to a buffer, returning the serialized content.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_boolean_serialize(
+    format: *const c_char,
+    value: bool,
+) -> *mut c_char {
+    let format_str = unsafe { c_str_to_str(format) };
+
+    let qformat = match format_str.to_lowercase().as_str() {
+        "xml" => QueryResultsFormat::Xml,
+        "json" => QueryResultsFormat::Json,
+        "csv" => QueryResultsFormat::Csv,
+        "tsv" => QueryResultsFormat::Tsv,
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown format: {format_str}") }),
+    };
+
+    use oxigraph::sparql::results::QueryResultsSerializer;
+    let mut buf = Vec::new();
+    match QueryResultsSerializer::from_format(qformat).serialize_boolean_to_writer(&mut buf, value) {
+        Ok(_) => ok_json(&String::from_utf8_lossy(&buf).to_string()),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+/// Serialize CONSTRUCT/DESCRIBE triples to a buffer as RDF, returning the serialized content.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_triples_serialize(
+    rdf_format: *const c_char,
+    triples_json: *const c_char,
+) -> *mut c_char {
+    let fmt_str = unsafe { c_str_to_str(rdf_format) };
+    let triples_str = unsafe { c_str_to_str(triples_json) };
+
+    let triples: Vec<oxigraph::model::Triple> = match serde_json::from_str(triples_str) {
+        Ok(t) => t,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid triples JSON: {e}") }),
+    };
+
+    let serializer = match build_serializer(fmt_str, None) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    let mut buf = Vec::new();
+    let mut writer = serializer.for_writer(&mut buf);
+    for triple in &triples {
+        if let Err(e) = writer.serialize_triple(triple) {
+            return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None });
+        }
+    }
+    match writer.finish() {
+        Ok(_) => ok_json(&String::from_utf8_lossy(&buf).to_string()),
         Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
     }
 }

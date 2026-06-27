@@ -320,4 +320,113 @@ public class SparqlTests
             CustomFunctions.Unregister("http://example.com/upper");
         }
     }
+
+    // ─── Query Results Serialize to Buffer/Stream ──────
+
+    [Fact]
+    public void QueryBoolean_Serialize_ToBuffer()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var result = store.Query("ASK { ?s ?p ?o }");
+        var boolean = Assert.IsType<QueryBoolean>(result);
+        Assert.True(boolean.Value);
+
+        var json = boolean.Serialize(QueryResultsFormat.Json);
+        Assert.Contains("true", json);
+
+        // Parse back
+        var parsed = IO.ParseQueryResults(json, QueryResultsFormat.Json);
+        var parsedBool = Assert.IsType<QueryBoolean>(parsed);
+        Assert.True(parsedBool.Value);
+    }
+
+    [Fact]
+    public void QueryBoolean_SerializeToStream()
+    {
+        using var store = new Store();
+        var result = store.Query("ASK { FILTER(false) }");
+        var boolean = Assert.IsType<QueryBoolean>(result);
+        Assert.False(boolean.Value);
+
+        using var stream = new MemoryStream();
+        boolean.SerializeToStream(stream, QueryResultsFormat.Json);
+
+        stream.Position = 0;
+        var reader = new StreamReader(stream);
+        var content = reader.ReadToEnd();
+        Assert.Contains("false", content);
+    }
+
+    [Fact]
+    public void QuerySolutions_Serialize_ToBuffer_Roundtrip()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
+        var solutions = Assert.IsType<QuerySolutions>(result);
+
+        var json = solutions.Serialize(QueryResultsFormat.Json);
+        Assert.Contains("http://example.com/s", json);
+
+        // Parse back
+        var parsed = IO.ParseQueryResults(json, QueryResultsFormat.Json);
+        var parsedSols = Assert.IsType<QuerySolutions>(parsed);
+        Assert.Single(parsedSols);
+        Assert.Equal("http://example.com/s", ((NamedNode)parsedSols.First()["s"]!).Value);
+    }
+
+    [Fact]
+    public void QuerySolutions_SerializeToStream_Roundtrip()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
+        var solutions = Assert.IsType<QuerySolutions>(result);
+
+        using var stream = new MemoryStream();
+        solutions.SerializeToStream(stream, QueryResultsFormat.Json);
+
+        stream.Position = 0;
+        var reader = new StreamReader(stream);
+        var content = reader.ReadToEnd();
+        Assert.Contains("http://example.com/s", content);
+    }
+
+    [Fact]
+    public void QueryTriples_Serialize_ToBuffer_Roundtrip()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+        var triples = Assert.IsType<QueryTriples>(result);
+
+        var ntriples = triples.Serialize(RdfFormat.NTriples);
+        Assert.Contains("http://example.com/s", ntriples);
+
+        // Parse back
+        var parsed = IO.Parse(ntriples, RdfFormat.NTriples);
+        Assert.Single(parsed);
+    }
+
+    [Fact]
+    public void QueryTriples_SerializeToStream()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+        var triples = Assert.IsType<QueryTriples>(result);
+
+        using var stream = new MemoryStream();
+        triples.SerializeToStream(stream, RdfFormat.NTriples);
+
+        stream.Position = 0;
+        var content = new StreamReader(stream).ReadToEnd();
+        Assert.Contains("http://example.com/s", content);
+    }
 }

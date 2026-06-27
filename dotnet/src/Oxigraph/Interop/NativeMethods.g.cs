@@ -145,6 +145,12 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_next")]
     internal static partial IntPtr parse_iter_next(IntPtr handle);
 
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_prefixes")]
+    internal static partial IntPtr parse_iter_prefixes(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_base_iri")]
+    internal static partial IntPtr parse_iter_base_iri(IntPtr handle);
+
     [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_destroy")]
     internal static partial void parse_iter_destroy(IntPtr handle);
 
@@ -157,6 +163,16 @@ internal static partial class OxigraphNative
 
     [LibraryImport(LibName, EntryPoint = "oxigraph_query_triples_serialize_to_file", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr query_triples_serialize_to_file(string path, string rdfFormat, string triplesJson);
+
+    // Query results serialization to buffer
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_solutions_serialize", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_solutions_serialize(string format, string variablesJson, string solutionsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_boolean_serialize", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_boolean_serialize(string format, [MarshalAs(UnmanagedType.I1)] bool value);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_triples_serialize", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_triples_serialize(string rdfFormat, string triplesJson);
 
     // Canonicalization
     [LibraryImport(LibName, EntryPoint = "oxigraph_canonicalize", StringMarshalling = StringMarshalling.Utf8)]

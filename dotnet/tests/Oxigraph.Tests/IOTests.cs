@@ -280,4 +280,97 @@ public class IOTests
             parseOptions: new ParseOptions { Lenient = true });
         Assert.Single(quads);
     }
+
+    // ─── Literal factory methods ──────────────────────
+
+    [Fact]
+    public void Literal_Factories_IntDoubleBool()
+    {
+        var intLit = Literal.FromInt(42);
+        Assert.Equal("42", intLit.Value);
+        Assert.Equal(Literal.XsdInteger, intLit.Datatype);
+
+        var doubleLit = Literal.FromDouble(3.14);
+        Assert.Equal("3.14", doubleLit.Value);
+        Assert.Equal(Literal.XsdDouble, doubleLit.Datatype);
+
+        var boolLit = Literal.FromBool(true);
+        Assert.Equal("true", boolLit.Value);
+        Assert.Equal(Literal.XsdBoolean, boolLit.Datatype);
+
+        var falseLit = Literal.FromBool(false);
+        Assert.Equal("false", falseLit.Value);
+        Assert.Equal(Literal.XsdBoolean, falseLit.Datatype);
+    }
+
+    [Fact]
+    public void Literal_ImplicitConversions()
+    {
+        Literal intLit = 42;
+        Assert.Equal("42", intLit.Value);
+        Assert.Equal(Literal.XsdInteger, intLit.Datatype);
+
+        Literal doubleLit = 3.14;
+        Assert.Equal("3.14", doubleLit.Value);
+        Assert.Equal(Literal.XsdDouble, doubleLit.Datatype);
+
+        Literal boolLit = true;
+        Assert.Equal("true", boolLit.Value);
+        Assert.Equal(Literal.XsdBoolean, boolLit.Datatype);
+    }
+
+    [Fact]
+    public void Literal_XsdConstants()
+    {
+        Assert.Equal("http://www.w3.org/2001/XMLSchema#string", Literal.XsdString.Value);
+        Assert.Equal("http://www.w3.org/2001/XMLSchema#integer", Literal.XsdInteger.Value);
+        Assert.Equal("http://www.w3.org/2001/XMLSchema#double", Literal.XsdDouble.Value);
+        Assert.Equal("http://www.w3.org/2001/XMLSchema#boolean", Literal.XsdBoolean.Value);
+    }
+
+    // ─── ParseIterator metadata ────────────────────────
+
+    [Fact]
+    public void ParseIterator_PrefixesAndBaseIri()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var data = "@base <http://example.com/> .\n@prefix ex: <http://example.org/> .\nex:s ex:p \"hello\" .\n";
+            File.WriteAllText(tempFile, data);
+
+            using var iter = IO.ParseIterator(tempFile, RdfFormat.Turtle);
+            // Before reading any quads, prefixes and base_iri are empty/null
+            Assert.Empty(iter.Prefixes);
+            Assert.Null(iter.BaseIri);
+
+            // Read the first quad — after reading, prefixes and base_iri should be populated
+            var quads = new List<Quad>();
+            foreach (var q in iter)
+                quads.Add(q);
+
+            // After full iteration, prefixes should be available
+            var prefixes = iter.Prefixes;
+            Assert.Contains("ex", prefixes.Keys);
+            Assert.Equal("http://example.org/", prefixes["ex"]);
+            Assert.Equal("http://example.com/", iter.BaseIri);
+
+            Assert.Single(quads);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public void ParseIterator_NoPrefixes_NTriples()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "<http://example.com/s> <http://example.com/p> \"hello\" .");
+            using var iter = IO.ParseIterator(tempFile, RdfFormat.NTriples);
+            Assert.Empty(iter.Prefixes);
+            Assert.Null(iter.BaseIri);
+        }
+        finally { File.Delete(tempFile); }
+    }
 }
