@@ -52,7 +52,7 @@ dev = [
   "ty~=0.0.17",
   "sphinx>=7.0,<10.0",
   "sphinx-lint~=1.0",
-  "regex<2026.2.0",            # TODO: fixes an installation bug with pypy
+  "regex<2026.6.0",            # TODO: fixes an installation bug with pypy
 ]
 
 [tool.ruff]
