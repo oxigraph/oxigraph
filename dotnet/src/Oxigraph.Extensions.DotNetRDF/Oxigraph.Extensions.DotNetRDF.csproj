@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oxigraph\Oxigraph.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dotNetRdf" Version="3.3.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RootNamespace>Oxigraph.Extensions.DotNetRDF</RootNamespace>
+    <AssemblyName>Oxigraph.Extensions.DotNetRDF</AssemblyName>
+    <PackageId>Oxigraph.Extensions.DotNetRDF</PackageId>
+    <Description>dotNetRDF interoperability adapters for Oxigraph</Description>
+  </PropertyGroup>
+
+</Project>
