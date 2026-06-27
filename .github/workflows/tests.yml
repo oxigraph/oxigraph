@@ -355,7 +355,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: "3.14"
       - run: uv run --locked -m unittest
@@ -388,7 +388,7 @@ jobs:
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: "3.8"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
