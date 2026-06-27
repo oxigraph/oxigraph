@@ -1,5 +1,6 @@
 use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
+use oxigraph::model::{GraphName, NamedOrBlankNode};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
@@ -367,6 +368,195 @@ fn query_results_to_response(results: QueryResults) -> *mut c_char {
             });
             ok_json(&response)
         }
+    }
+}
+
+/// Clear all quads from the store.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_clear(handle: StoreHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    match store.clear() {
+        Ok(_) => ok_json(&"cleared"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Insert multiple quads atomically.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_extend(
+    handle: StoreHandle,
+    quads_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(quads_json) };
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(json_str) {
+        Ok(q) => q,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid quads JSON: {e}"),
+            });
+        }
+    };
+    match store.extend(quads) {
+        Ok(_) => ok_json(&"extended"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// List all named graphs.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_named_graphs(handle: StoreHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let graphs: Vec<NamedOrBlankNode> = store
+        .named_graphs()
+        .filter_map(|r| r.ok())
+        .collect();
+    ok_json(&graphs)
+}
+
+/// Check if a named graph exists.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_contains_named_graph(
+    handle: StoreHandle,
+    graph_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(graph_json) };
+    let graph: GraphName = match serde_json::from_str(json_str) {
+        Ok(g) => g,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid graph JSON: {e}"),
+            });
+        }
+    };
+    let result = match &graph {
+        GraphName::NamedNode(n) => {
+            let nb: NamedOrBlankNode = n.clone().into();
+            store.contains_named_graph(&nb)
+        }
+        GraphName::BlankNode(b) => {
+            let nb: NamedOrBlankNode = b.clone().into();
+            store.contains_named_graph(&nb)
+        }
+        GraphName::DefaultGraph => return ok_json(&true), // default graph always exists
+    };
+    match result {
+        Ok(contains) => bool_to_response(contains),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Add a named graph (empty).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_insert_named_graph(
+    handle: StoreHandle,
+    graph_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(graph_json) };
+    let graph: NamedOrBlankNode = match serde_json::from_str(json_str) {
+        Ok(g) => g,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid graph JSON: {e}"),
+            });
+        }
+    };
+    match store.insert_named_graph(graph.clone()) {
+        Ok(_) => ok_json(&"graph added"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Clear a specific named graph.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_clear_graph(
+    handle: StoreHandle,
+    graph_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(graph_json) };
+    let graph: GraphName = match serde_json::from_str(json_str) {
+        Ok(g) => g,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid graph JSON: {e}"),
+            });
+        }
+    };
+    match store.clear_graph(&graph) {
+        Ok(_) => ok_json(&"graph cleared"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Remove a named graph entirely.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_remove_named_graph(
+    handle: StoreHandle,
+    graph_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(graph_json) };
+    let graph: NamedOrBlankNode = match serde_json::from_str(json_str) {
+        Ok(g) => g,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid graph JSON: {e}"),
+            });
+        }
+    };
+    match store.remove_named_graph(&graph) {
+        Ok(_) => ok_json(&"graph removed"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
     }
 }
 

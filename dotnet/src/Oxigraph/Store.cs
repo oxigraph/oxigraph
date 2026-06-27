@@ -111,6 +111,83 @@ public sealed class Store : IDisposable
             OxigraphNative.store_update(_handle.DangerousGetHandle(), updateJson));
     }
 
+    /// <summary>Clear all quads from the store.</summary>
+    public void Clear()
+    {
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_clear(_handle.DangerousGetHandle()));
+    }
+
+    /// <summary>Insert multiple quads atomically.</summary>
+    public void Extend(IEnumerable<Quad> quads)
+    {
+        var json = JsonSerializer.Serialize(quads.ToList());
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_extend(_handle.DangerousGetHandle(), json));
+    }
+
+    // ─── Named graph operations ───
+
+    /// <summary>List all named graphs in the store.</summary>
+    public IReadOnlyList<INamedOrBlankNode> NamedGraphs
+    {
+        get
+        {
+            var graphs = FFIHelper.Call<List<JsonElement>>(() =>
+                OxigraphNative.store_named_graphs(_handle.DangerousGetHandle()));
+            return graphs?.Select(e =>
+            {
+                var json = e.GetRawText();
+                return JsonSerializer.Deserialize<INamedOrBlankNode>(json, new JsonSerializerOptions
+                    { Converters = { new NamedOrBlankNodeConverter() } })!;
+            }).ToList() ?? [];
+        }
+    }
+
+    /// <summary>Check if a named graph exists.</summary>
+    public bool ContainsNamedGraph(IGraphName graph)
+    {
+        var json = JsonSerializer.Serialize(graph, new JsonSerializerOptions
+        {
+            Converters = { new GraphNameConverter() }
+        });
+        return FFIHelper.CallValue<bool>(() =>
+            OxigraphNative.store_contains_named_graph(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Create an empty named graph.</summary>
+    public void AddGraph(INamedOrBlankNode graphName)
+    {
+        var json = JsonSerializer.Serialize(graphName, new JsonSerializerOptions
+        {
+            Converters = { new NamedOrBlankNodeConverter() }
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_insert_named_graph(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Clear all quads from a specific graph.</summary>
+    public void ClearGraph(IGraphName graph)
+    {
+        var json = JsonSerializer.Serialize(graph, new JsonSerializerOptions
+        {
+            Converters = { new GraphNameConverter() }
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_clear_graph(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Remove a named graph entirely.</summary>
+    public void RemoveGraph(INamedOrBlankNode graphName)
+    {
+        var json = JsonSerializer.Serialize(graphName, new JsonSerializerOptions
+        {
+            Converters = { new NamedOrBlankNodeConverter() }
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_remove_named_graph(_handle.DangerousGetHandle(), json));
+    }
+
     public void Dispose()
     {
         _handle.Dispose();
