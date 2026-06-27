@@ -49,7 +49,7 @@ Oxigraph 目前提供两套语言绑定：
 | **FFI 框架** | `wasm-bindgen` 0.2.x | `pyo3` 0.29 | `extern "C"` + csbindgen |
 | **编译目标** | wasm32-unknown-unknown | 原生 cdylib | 原生 cdylib |
 | **数据模型** | 委托给 `@rdfjs/data-model` JS 库 | Rust 自实现 `#[pyclass]` 类型 | Rust FFI 结构体 + C# records |
-| **持久化** | ❌ 无 RocksDB（WASM 限制） | ✅ 完整 RocksDB 支持 | ⚠️ 内存模式（RocksDB 需 LLVM，CI 环境就绪） |
+| **持久化** | ❌ 无 RocksDB（WASM 限制） | ✅ 完整 RocksDB 支持 | ✅ 完整 RocksDB 支持（需 LIBCLANG_PATH） |
 | **异步支持** | ✅ AsyncIterator | ❌ 不适用（GIL 限制） | ❌ 纯同步 API（用户自行 Task.Run） |
 | **API 完整度** | 较精简（Store + parse） | **最完整**（参考模板） | 对标 Python 绑定 |
 | **测试框架** | Vitest (TypeScript) | Python unittest | xUnit / NUnit |
@@ -1006,18 +1006,18 @@ dotnet-tests:
 | Bulk Operations | ✅ 完成 | Extend（事务批量插入），BulkLoad 委托至 Load |
 | RDF I/O | ✅ 完成 | Parse/Serialize（7 种格式），Store.Load/Store.Dump |
 | dotNetRDF 扩展 | ✅ 完成 | INode↔ITerm 转换 + LoadFromGraph（最小可用） |
-| 文件持久化 | ⚠️ 内存模式 | RocksDB 需要 LLVM，在 GitHub Actions CI 环境中就绪 |
+| 文件持久化 | ✅ 完成 | Store(path) + RocksDB（需 LIBCLANG_PATH 或 CI 环境） |
 | QueryOptions.Prefixes | ✅ 完成 | 查询/更新均支持前缀映射 |
 | QueryOptions.DefaultGraphs | ✅ 完成 | 数据集默认图配置 |
 | Match SPOG 过滤 | ✅ 完成 | Rust FFI 完整实现了 quads_for_pattern |
 | IO.Serialize | ✅ 完成 | 独立 FFI（不再使用临时 Store） |
 | BaseDirection | ✅ 完成 | RDF 1.2 LTR/RTL |
-| BulkLoad | ⚠️ 委托至 Load | 内存模式下无性能差异 |
+| BulkLoad | ✅ 完成 | 委托至 Load（RocksDB 模式下为 bulk loader） |
+| Flush/Optimize/Backup | ✅ 完成 | 文件持久化管理 |
+| Store(path) | ✅ 完成 | 文件持久化 |
+| Store.OpenReadOnly | ✅ 完成 | 只读模式 |
 | Dataset 类 | ❌ 未实现 | 对标 Python 的 Dataset（无 SPARQL 的内存集合） |
 | parse_query_results | ❌ 未实现 | SPARQL 结果解析 |
-| Flush/Optimize/Backup | ❌ 未实现 | 需要文件持久化 |
-| Store(path) | ❌ 未实现 | 需要 RocksDB |
-| Store.OpenReadOnly | ❌ 未实现 | 需要 RocksDB |
 | Custom SPARQL functions | ❌ 未实现 | 对标 Python 的回调函数支持 |
 
-**实现进度**: 24 项特性中 20 项已交付或部分交付，4 项待完成（均依赖 RocksDB 文件持久化）。
+**实现进度**: 24 项特性中 22 项已交付（含 RocksDB 文件持久化），2 项待完成。
