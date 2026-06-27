@@ -41,6 +41,7 @@
     :ask_join_error_right
     :duplicated_values_var
     :order_by_rand
+    :port_local_name
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -202,3 +203,7 @@
     mf:name "ORDER BY RAND() do not panic" ;
     mf:action [ qt:query <order_by_rand.rq> ] ;
     mf:result  <order_by_rand.srx> .
+
+:port_local_name rdf:type mf:NegativeSyntaxTest ;
+    mf:name "the local name is a port number, it must be validated a such" ;
+    mf:action <port_local_name.rq> .

@@ -38,7 +38,7 @@ pub use update::Update;
 #[derive(Clone, Default)]
 pub struct SparqlParser {
     base_iri: Option<Iri<OxString>>,
-    prefixes: HashMap<OxString, OxString>,
+    prefixes: HashMap<OxString, Iri<OxString>>,
     custom_aggregate_functions: HashSet<NamedNode>,
 }
 
@@ -85,7 +85,7 @@ impl SparqlParser {
     ) -> Result<Self, IriParseError> {
         self.prefixes.insert(
             OxString::new_owned(prefix_name),
-            Iri::parse(OxString::new_owned(prefix_iri))?.into_inner(),
+            Iri::parse(OxString::new_owned(prefix_iri))?,
         );
         Ok(self)
     }
