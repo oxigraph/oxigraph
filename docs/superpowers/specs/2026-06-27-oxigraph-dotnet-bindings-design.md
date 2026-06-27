@@ -74,7 +74,7 @@
 │  sparql_ffi.rs / error.rs                                    │
 │  - extern "C" fn 接受/返回 *const c_char / *mut c_char (JSON) │
 │  - 统一返回: {"ok": result} 或 {"error": {"kind":..., ...}}   │
-│  - 内存: StoreHandle, CursorHandle (Box::leak, C# SafeHandle) │
+│  - 内存: StoreHandle, CursorHandle (Box::into_raw, C# SafeHandle) │
 │  - 数据: JSON 按值复制，无需手动管理                            │
 └──────────────────────────┬───────────────────────────────────┘
                            │
@@ -96,10 +96,15 @@
 输入:  必需的 *const c_char (JSON 参数, 可为 null)
        必需的 StoreHandle / CursorHandle (操作对象)
 输出:  *mut c_char (JSON 字符串, 调用者通过 oxigraph_free_string 释放)
+       例外: store_destroy, cursor_destroy, free_string 等析构函数返回 void
 
 返回值始终为 JSON:
   成功 → {"ok": <result>}
   失败 → {"error": {"kind": "<error_type>", "message": "<description>", ...}}
+
+Stream 数据: Load(Stream)/Dump(Stream) 在 C# 侧将 Stream 读为 byte[]，
+  通过 oxigraph_store_load_bytes(handle, data_ptr, data_len, options_json) 传递。
+  不经过 JSON 字符串编码，避免 base64 膨胀。
 
 C# 侧统一入口 (FFIHelper.cs):
   T Call<T>(Func<IntPtr> ffiCall) → 反序列化 "ok" 字段
@@ -148,10 +153,13 @@ extern "C" fn oxigraph_cursor_destroy(cursor: CursorHandle);
 extern "C" fn oxigraph_parse(input_json: *const c_char) -> *mut c_char;
 extern "C" fn oxigraph_serialize(quads_json: *const c_char, options_json: *const c_char) -> *mut c_char;
 extern "C" fn oxigraph_store_load(handle: StoreHandle, load_json: *const c_char) -> *mut c_char;
+extern "C" fn oxigraph_store_load_bytes(handle: StoreHandle, data: *const u8, data_len: usize, options_json: *const c_char) -> *mut c_char;
 extern "C" fn oxigraph_store_dump(handle: StoreHandle, dump_json: *const c_char) -> *mut c_char;
+extern "C" fn oxigraph_store_dump_bytes(handle: StoreHandle, dump_json: *const c_char) -> *mut c_char;  // 返回 {"ok": {"data_base64":"..."}} 或直接返回二进制
 
 // 内存管理
 extern "C" fn oxigraph_free_string(ptr: *mut c_char);
+extern "C" fn oxigraph_free_byte_array(ptr: *mut u8, len: usize);
 ```
 
 ### 4.4 SPARQL 游标协议
@@ -293,6 +301,10 @@ public sealed record LoadOptions(
     string? BaseIri = null,
     GraphName? ToGraph = null,
     bool Lenient = false);
+
+public sealed record UpdateOptions(
+    string? BaseIri = null,
+    Dictionary<string, string>? Prefixes = null);
 
 public sealed record DumpOptions(
     GraphName? FromGraph = null,

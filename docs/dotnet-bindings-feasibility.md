@@ -1,6 +1,6 @@
 # Oxigraph .NET 绑定可行性分析与设计方案
 
-> 状态: **草稿（待评审）**
+> 状态: **已评审**
 > 日期: 2026-06-27
 > 分支: `dotnet`
 
@@ -50,7 +50,7 @@ Oxigraph 目前提供两套语言绑定：
 | **编译目标** | wasm32-unknown-unknown | 原生 cdylib | 原生 cdylib |
 | **数据模型** | 委托给 `@rdfjs/data-model` JS 库 | Rust 自实现 `#[pyclass]` 类型 | Rust FFI 结构体 + C# records |
 | **持久化** | ❌ 无 RocksDB（WASM 限制） | ✅ 完整 RocksDB 支持 | ✅ 完整 RocksDB 支持 |
-| **异步支持** | ✅ AsyncIterator | ❌ 不适用（GIL 限制） | ✅ `IAsyncEnumerable<T>` |
+| **异步支持** | ✅ AsyncIterator | ❌ 不适用（GIL 限制） | ❌ 纯同步 API（用户自行 Task.Run） |
 | **API 完整度** | 较精简（Store + parse） | **最完整**（参考模板） | 对标 Python 绑定 |
 | **测试框架** | Vitest (TypeScript) | Python unittest | xUnit / NUnit |
 | **包发布** | npm (`oxigraph`) | PyPI (`pyoxigraph`) | NuGet (`Oxigraph`) |
