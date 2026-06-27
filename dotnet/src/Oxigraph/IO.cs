@@ -23,19 +23,14 @@ public static class IO
     public static string Serialize(IEnumerable<Quad> quads, RdfFormat format, DumpOptions? options = null)
     {
         options ??= new DumpOptions();
-        var opts = new Dictionary<string, object?>
+        var opts = JsonSerializer.Serialize(new
         {
-            ["format"] = FormatToString(format),
-            ["base_iri"] = options.BaseIri,
-        };
-        if (options.FromGraph != null)
-            opts["from_graph"] = options.FromGraph;
-
-        // The parse/serialize standalone functions use different FFI.
-        // For simplicity, create a temporary store.
-        using var store = new Store();
-        store.Extend(quads);
-        return store.Dump(format, options);
+            quads = quads.ToList(),
+            format = FormatToString(format),
+            base_iri = options.BaseIri,
+        });
+        return FFIHelper.Call<string>(() =>
+            OxigraphNative.serialize(opts));
     }
 
     internal static string FormatToString(RdfFormat format) => format switch

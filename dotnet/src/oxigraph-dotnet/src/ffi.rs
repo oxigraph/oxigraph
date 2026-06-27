@@ -1,7 +1,7 @@
 use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
-use oxigraph::model::{GraphName, NamedOrBlankNode};
+use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
@@ -187,13 +187,25 @@ pub extern "C" fn oxigraph_store_query(
     }
 
     let mut evaluator = SparqlEvaluator::default();
-    if let Some(base_iri) = opts["base_iri"].as_str() {
+    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
         evaluator = match evaluator.with_base_iri(base_iri) {
             Ok(e) => e,
             Err(e) => return error_json(ErrorKind::InvalidArgument {
                 message: format!("Invalid base IRI: {e}"),
             }),
         };
+    }
+    if let Some(prefixes) = opts["prefixes"].as_object() {
+        for (prefix, iri) in prefixes {
+            if let Some(iri_str) = iri.as_str() {
+                evaluator = match evaluator.with_prefix(prefix, iri_str) {
+                    Ok(e) => e,
+                    Err(e) => return error_json(ErrorKind::InvalidArgument {
+                        message: format!("Invalid prefix {prefix}: {e}"),
+                    }),
+                };
+            }
+        }
     }
     if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
         let mut prepared = match evaluator.parse_query(query) {
@@ -265,13 +277,25 @@ pub extern "C" fn oxigraph_store_update(
     }
 
     let mut evaluator = SparqlEvaluator::default();
-    if let Some(base_iri) = opts["base_iri"].as_str() {
+    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
         evaluator = match evaluator.with_base_iri(base_iri) {
             Ok(e) => e,
             Err(e) => return error_json(ErrorKind::InvalidArgument {
                 message: format!("Invalid base IRI: {e}"),
             }),
         };
+    }
+    if let Some(prefixes) = opts["prefixes"].as_object() {
+        for (prefix, iri) in prefixes {
+            if let Some(iri_str) = iri.as_str() {
+                evaluator = match evaluator.with_prefix(prefix, iri_str) {
+                    Ok(e) => e,
+                    Err(e) => return error_json(ErrorKind::InvalidArgument {
+                        message: format!("Invalid prefix {prefix}: {e}"),
+                    }),
+                };
+            }
+        }
     }
 
     match evaluator.parse_update(update) {
@@ -311,15 +335,40 @@ pub extern "C" fn oxigraph_store_match(
         }
     };
 
-    let _pattern = pattern; // TODO: parse pattern fields for SPOG filtering
-    // For now, if no filters specified, return all quads (simplified PoC)
-    let quads: Result<Vec<_>, _> = store.iter().collect();
+    // Parse optional S/P/O/G filters from pattern JSON
+    let subject = parse_named_or_blank(&pattern, "subject");
+    let predicate = parse_named(&pattern, "predicate");
+    let object = parse_term(&pattern, "object");
+
+    let graph: Option<GraphName> = pattern
+        .get("graph")
+        .and_then(|g| serde_json::from_value(g.clone()).ok());
+
+    let results = store.quads_for_pattern(
+        subject.as_ref(),
+        predicate.as_ref(),
+        object.as_ref(),
+        graph.as_ref(),
+    );
+    let quads: Result<Vec<_>, _> = results.collect();
     match quads {
         Ok(quads) => ok_json(&quads),
         Err(e) => error_json(ErrorKind::Store {
             message: e.to_string(),
         }),
     }
+}
+
+fn parse_named_or_blank(pattern: &Value, key: &str) -> Option<NamedOrBlankNode> {
+    pattern.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
+}
+
+fn parse_named(pattern: &Value, key: &str) -> Option<NamedNode> {
+    pattern.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
+}
+
+fn parse_term(pattern: &Value, key: &str) -> Option<Term> {
+    pattern.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
 }
 
 fn query_results_to_response(results: QueryResults) -> *mut c_char {
@@ -559,6 +608,67 @@ pub extern "C" fn oxigraph_store_remove_named_graph(
             message: e.to_string(),
         }),
     }
+}
+
+/// Serialize quads to RDF text (standalone, no store needed).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_serialize(input_json: *const c_char) -> *mut c_char {
+    let json_str = unsafe { c_str_to_str(input_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid serialize options JSON: {e}"),
+            });
+        }
+    };
+
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_value(
+        opts["quads"].clone(),
+    ) {
+        Ok(q) => q,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid quads JSON: {e}"),
+            });
+        }
+    };
+
+    let format_str = opts["format"].as_str().unwrap_or("nquads");
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            });
+        }
+    };
+
+    let mut serializer = RdfSerializer::from_format(format);
+    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
+        serializer = match serializer.with_base_iri(base_iri) {
+            Ok(s) => s,
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                });
+            }
+        };
+    }
+
+    let mut buf = Vec::new();
+    let mut writer = serializer.for_writer(&mut buf);
+    for quad in &quads {
+        if let Err(e) = writer.serialize_quad(quad) {
+            return error_json(ErrorKind::Parse {
+                message: e.to_string(),
+                file: None,
+                line: None,
+            });
+        }
+    }
+    let output = String::from_utf8_lossy(&buf).to_string();
+    ok_json(&output)
 }
 
 /// Parse RDF text into quads.

@@ -76,8 +76,15 @@ public sealed class Store : IDisposable
         ITerm? @object = null,
         IGraphName? graph = null)
     {
-        // For PoC, delegate to Rust which returns all quads
-        var patternJson = "{}";
+        var pattern = new Dictionary<string, object?>();
+        if (subject != null) pattern["subject"] = subject;
+        if (predicate != null) pattern["predicate"] = predicate;
+        if (@object != null) pattern["object"] = @object;
+        if (graph != null) pattern["graph"] = graph;
+        var patternJson = JsonSerializer.Serialize(pattern, new JsonSerializerOptions
+        {
+            Converters = { new NamedOrBlankNodeConverter(), new NamedNodeConverter(), new TermConverter(), new GraphNameConverter() }
+        });
         var quads = FFIHelper.Call<List<Quad>>(() =>
             OxigraphNative.store_match(_handle.DangerousGetHandle(), patternJson));
         return quads ?? [];
@@ -91,7 +98,10 @@ public sealed class Store : IDisposable
         {
             query = sparql,
             base_iri = options.BaseIri,
+            prefixes = options.Prefixes,
             use_default_graph_as_union = options.UseDefaultGraphAsUnion,
+            default_graph = options.DefaultGraphs,
+            named_graphs = options.NamedGraphs,
         });
         var element = FFIHelper.CallValue<JsonElement>(() =>
             OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
@@ -106,6 +116,7 @@ public sealed class Store : IDisposable
         {
             update = sparql,
             base_iri = options.BaseIri,
+            prefixes = options.Prefixes,
         });
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_update(_handle.DangerousGetHandle(), updateJson));
@@ -201,6 +212,14 @@ public sealed class Store : IDisposable
         });
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_load(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Bulk-load RDF data optimized for large files.</summary>
+    public void BulkLoad(string data, RdfFormat format, LoadOptions? options = null)
+    {
+        // In the current memory-only implementation, BulkLoad delegates to Load.
+        // With RocksDB, this would use the bulk loader for better performance.
+        Load(data, format, options);
     }
 
     /// <summary>Dump store contents as RDF text.</summary>

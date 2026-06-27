@@ -120,8 +120,12 @@ public sealed class QueryTriples : QueryResults, IEnumerable<Triple>
 /// <summary>Options for SPARQL queries.</summary>
 public sealed record QueryOptions(
     string? BaseIri = null,
-    bool UseDefaultGraphAsUnion = false);
+    Dictionary<string, string>? Prefixes = null,
+    bool UseDefaultGraphAsUnion = false,
+    IReadOnlyList<IGraphName>? DefaultGraphs = null,
+    IReadOnlyList<IGraphName>? NamedGraphs = null);
 
 /// <summary>Options for SPARQL updates.</summary>
 public sealed record UpdateOptions(
-    string? BaseIri = null);
+    string? BaseIri = null,
+    Dictionary<string, string>? Prefixes = null);
