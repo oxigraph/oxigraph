@@ -26,6 +26,17 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_count")]
     internal static partial IntPtr store_count(IntPtr handle);
 
+    // SPARQL
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_query", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_query(IntPtr handle, string queryJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_update", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_update(IntPtr handle, string updateJson);
+
+    // Pattern matching
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_match", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_match(IntPtr handle, string patternJson);
+
     // Memory
     [LibraryImport(LibName, EntryPoint = "oxigraph_free_string", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial void free_string(IntPtr ptr);

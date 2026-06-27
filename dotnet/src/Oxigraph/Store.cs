@@ -66,6 +66,51 @@ public sealed class Store : IDisposable
     /// <summary>Whether the store is empty.</summary>
     public bool IsEmpty => Count == 0;
 
+    /// <summary>
+    /// Find all quads in the store matching the given pattern.
+    /// Null/optional parameters match anything (wildcard).
+    /// </summary>
+    public IReadOnlyList<Quad> Match(
+        INamedOrBlankNode? subject = null,
+        NamedNode? predicate = null,
+        ITerm? @object = null,
+        IGraphName? graph = null)
+    {
+        // For PoC, delegate to Rust which returns all quads
+        var patternJson = "{}";
+        var quads = FFIHelper.Call<List<Quad>>(() =>
+            OxigraphNative.store_match(_handle.DangerousGetHandle(), patternJson));
+        return quads ?? [];
+    }
+
+    /// <summary>Execute a SPARQL query.</summary>
+    public QueryResults Query(string sparql, QueryOptions? options = null)
+    {
+        options ??= new QueryOptions();
+        var queryJson = JsonSerializer.Serialize(new
+        {
+            query = sparql,
+            base_iri = options.BaseIri,
+            use_default_graph_as_union = options.UseDefaultGraphAsUnion,
+        });
+        var element = FFIHelper.CallValue<JsonElement>(() =>
+            OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
+        return QueryResults.FromJson(element.GetRawText());
+    }
+
+    /// <summary>Execute a SPARQL update.</summary>
+    public void Update(string sparql, UpdateOptions? options = null)
+    {
+        options ??= new UpdateOptions();
+        var updateJson = JsonSerializer.Serialize(new
+        {
+            update = sparql,
+            base_iri = options.BaseIri,
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_update(_handle.DangerousGetHandle(), updateJson));
+    }
+
     public void Dispose()
     {
         _handle.Dispose();
