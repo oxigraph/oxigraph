@@ -1016,8 +1016,8 @@ dotnet-tests:
 | Flush/Optimize/Backup | ✅ 完成 | 文件持久化管理 |
 | Store(path) | ✅ 完成 | 文件持久化 |
 | Store.OpenReadOnly | ✅ 完成 | 只读模式 |
-| Dataset 类 | ❌ 未实现 | 对标 Python 的 Dataset（无 SPARQL 的内存集合） |
-| parse_query_results | ❌ 未实现 | SPARQL 结果解析 |
+| Dataset 类 | ✅ 完成 | 对标 Python Dataset，支持 CRUD + 模式匹配 + I/O |
+| parse_query_results | ✅ 完成 | 解析 XML/JSON/CSV/TSV 四种 SPARQL 结果格式 |
 | Custom SPARQL functions | ❌ 未实现 | 对标 Python 的回调函数支持 |
 
-**实现进度**: 24 项特性中 22 项已交付（含 RocksDB 文件持久化），2 项待完成。
+**实现进度**: 25 项特性中 24 项已交付（含 RocksDB 文件持久化），1 项待完成（Custom SPARQL functions）。
