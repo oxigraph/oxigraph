@@ -2,6 +2,7 @@ use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
+use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
@@ -891,6 +892,54 @@ pub extern "C" fn oxigraph_store_dump(
             file: None,
             line: None,
         }),
+    }
+}
+
+/// Parse SPARQL query results from XML/JSON/CSV/TSV.
+/// `input_json`: {"data":"...","format":"xml"|"json"|"csv"|"tsv"}
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_query_results(input_json: *const c_char) -> *mut c_char {
+    let json_str = unsafe { c_str_to_str(input_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid JSON: {e}") }),
+    };
+    let data = opts["data"].as_str().unwrap_or("");
+    let format_str = opts["format"].as_str().unwrap_or("xml");
+    let format = match format_str.to_lowercase().as_str() {
+        "xml" => QueryResultsFormat::Xml,
+        "json" => QueryResultsFormat::Json,
+        "csv" => QueryResultsFormat::Csv,
+        "tsv" => QueryResultsFormat::Tsv,
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown format: {format_str}") }),
+    };
+
+    let parser = QueryResultsParser::from_format(format);
+    match parser.for_slice(data.as_bytes()) {
+        Ok(output) => match output {
+            SliceQueryResultsParserOutput::Solutions(solutions) => {
+                let variables: Vec<String> = solutions.variables().iter().map(|v| v.as_str().to_string()).collect();
+                let mut rows = Vec::new();
+                for sol in solutions {
+                    if let Ok(s) = sol {
+                        let mut row = Map::new();
+                        for var in &variables {
+                            if let Some(term) = s.get(var.as_str()) {
+                                row.insert(var.clone(), serde_json::to_value(term).unwrap_or_default());
+                            }
+                        }
+                        rows.push(Value::Object(row));
+                    }
+                }
+                let response = json!({"type": "solutions", "variables": variables, "rows": rows});
+                ok_json(&response)
+            }
+            SliceQueryResultsParserOutput::Boolean(b) => {
+                let response = json!({"type": "boolean", "value": b});
+                ok_json(&response)
+            }
+        },
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
     }
 }
 

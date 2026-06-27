@@ -195,6 +195,40 @@ public class StoreTests
         }
     }
 
+    [Fact]
+    public void Dataset_Crud()
+    {
+        using var ds = new Dataset();
+        var q = Q("http://example.com/s", "http://example.com/p", "test");
+        ds.Add(q);
+        Assert.True(ds.Contains(q));
+        Assert.Equal(1, ds.Count);
+
+        ds.Remove(q);
+        Assert.False(ds.Contains(q));
+        Assert.Equal(0, ds.Count);
+    }
+
+    [Fact]
+    public void Dataset_Init_From_Quads()
+    {
+        var quads = new[] {
+            Q("http://example.com/s1", "http://example.com/p", "a"),
+            Q("http://example.com/s2", "http://example.com/p", "b")
+        };
+        using var ds = new Dataset(quads);
+        Assert.Equal(2, ds.Count);
+    }
+
+    [Fact]
+    public void Dataset_ToString()
+    {
+        using var ds = new Dataset();
+        ds.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+        var s = ds.ToString();
+        Assert.Contains("http://example.com/s", s);
+    }
+
     private static Quad Q(string s, string p, string o) =>
         new(new NamedNode(s), new NamedNode(p), new Literal(o), new DefaultGraph());
 }

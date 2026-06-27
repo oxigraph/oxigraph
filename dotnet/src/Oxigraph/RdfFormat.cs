@@ -17,6 +17,15 @@ public sealed record LoadOptions(
     string? BaseIri = null,
     IGraphName? ToGraph = null);
 
+/// <summary>SPARQL query results serialization formats.</summary>
+public enum QueryResultsFormat
+{
+    Xml,
+    Json,
+    Csv,
+    Tsv,
+}
+
 /// <summary>Options for dumping/serializing RDF data.</summary>
 public sealed record DumpOptions(
     IGraphName? FromGraph = null,

@@ -33,6 +33,26 @@ public static class IO
             OxigraphNative.serialize(opts));
     }
 
+    /// <summary>Parse SPARQL query results from XML, JSON, CSV, or TSV.</summary>
+    public static QueryResults ParseQueryResults(string data, QueryResultsFormat format)
+    {
+        var opts = JsonSerializer.Serialize(new
+        {
+            data,
+            format = format switch
+            {
+                QueryResultsFormat.Xml => "xml",
+                QueryResultsFormat.Json => "json",
+                QueryResultsFormat.Csv => "csv",
+                QueryResultsFormat.Tsv => "tsv",
+                _ => "xml",
+            },
+        });
+        var element = FFIHelper.CallValue<JsonElement>(() =>
+            OxigraphNative.parse_query_results(opts));
+        return QueryResults.FromJson(element.GetRawText());
+    }
+
     internal static string FormatToString(RdfFormat format) => format switch
     {
         RdfFormat.N3 => "n3",

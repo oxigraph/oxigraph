@@ -83,6 +83,9 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_serialize", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr serialize(string inputJson);
 
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_query_results", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr parse_query_results(string inputJson);
+
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_load", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_load(IntPtr handle, string loadJson);
 
