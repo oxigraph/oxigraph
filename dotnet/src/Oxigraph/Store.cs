@@ -188,6 +188,39 @@ public sealed class Store : IDisposable
             OxigraphNative.store_remove_named_graph(_handle.DangerousGetHandle(), json));
     }
 
+    /// <summary>Load RDF text into the store.</summary>
+    public void Load(string data, RdfFormat format, LoadOptions? options = null)
+    {
+        options ??= new LoadOptions();
+        var json = JsonSerializer.Serialize(new
+        {
+            data,
+            format = IO.FormatToString(format),
+            base_iri = options.BaseIri,
+            to_graph = options.ToGraph,
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_load(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Dump store contents as RDF text.</summary>
+    public string Dump(RdfFormat format, DumpOptions? options = null)
+    {
+        options ??= new DumpOptions();
+        var converterOptions = new JsonSerializerOptions
+        {
+            Converters = { new GraphNameConverter() }
+        };
+        var json = JsonSerializer.Serialize(new
+        {
+            format = IO.FormatToString(format),
+            base_iri = options.BaseIri,
+            from_graph = options.FromGraph,
+        }, converterOptions);
+        return FFIHelper.Call<string>(() =>
+            OxigraphNative.store_dump(_handle.DangerousGetHandle(), json));
+    }
+
     public void Dispose()
     {
         _handle.Dispose();

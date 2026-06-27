@@ -60,6 +60,16 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_extend", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_extend(IntPtr handle, string quadsJson);
 
+    // I/O
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr parse(string inputJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_load", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_load(IntPtr handle, string loadJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_dump", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_dump(IntPtr handle, string dumpJson);
+
     // Memory
     [LibraryImport(LibName, EntryPoint = "oxigraph_free_string", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial void free_string(IntPtr ptr);

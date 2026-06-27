@@ -1,5 +1,6 @@
 use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, NamedOrBlankNode};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
@@ -557,6 +558,192 @@ pub extern "C" fn oxigraph_store_remove_named_graph(
         Err(e) => error_json(ErrorKind::Store {
             message: e.to_string(),
         }),
+    }
+}
+
+/// Parse RDF text into quads.
+/// `input_json`: {"data":"<turtle data>","format":"turtle","base_iri":null}
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse(input_json: *const c_char) -> *mut c_char {
+    let json_str = unsafe { c_str_to_str(input_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid parse options JSON: {e}"),
+            });
+        }
+    };
+
+    let data = opts["data"].as_str().unwrap_or("");
+    let format_str = opts["format"].as_str().unwrap_or("turtle");
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            });
+        }
+    };
+
+    let mut parser = RdfParser::from_format(format);
+    if let Some(base_iri) = opts["base_iri"].as_str() {
+        parser = match parser.with_base_iri(base_iri) {
+            Ok(p) => p,
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                });
+            }
+        };
+    }
+
+    let quads: Vec<oxigraph::model::Quad> = parser
+        .for_slice(data.as_bytes())
+        .filter_map(|q| q.ok())
+        .collect();
+    ok_json(&quads)
+}
+
+/// Load RDF text into the store.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_load(
+    handle: StoreHandle,
+    load_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(load_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid load options JSON: {e}"),
+            });
+        }
+    };
+
+    let data = opts["data"].as_str().unwrap_or("");
+    let format_str = opts["format"].as_str().unwrap_or("turtle");
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            });
+        }
+    };
+
+    let mut parser = RdfParser::from_format(format);
+    if let Some(base_iri) = opts["base_iri"].as_str() {
+        parser = match parser.with_base_iri(base_iri) {
+            Ok(p) => p,
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                });
+            }
+        };
+    }
+    if let Some(to_graph_json) = opts.get("to_graph") {
+        if let Ok(graph) = serde_json::from_value::<GraphName>(to_graph_json.clone()) {
+            parser = parser.with_default_graph(graph);
+        }
+    }
+
+    match store.load_from_slice(parser, data.as_bytes()) {
+        Ok(_) => ok_json(&"loaded"),
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: None,
+            line: None,
+        }),
+    }
+}
+
+/// Dump store contents as RDF text.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_dump(
+    handle: StoreHandle,
+    dump_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(dump_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid dump options JSON: {e}"),
+            });
+        }
+    };
+
+    let format_str = opts["format"].as_str().unwrap_or("nquads");
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            });
+        }
+    };
+
+    let mut serializer = RdfSerializer::from_format(format);
+    if let Some(base_iri) = opts["base_iri"].as_str() {
+        serializer = match serializer.with_base_iri(base_iri) {
+            Ok(s) => s,
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                });
+            }
+        };
+    }
+
+    let mut buf = Vec::new();
+    match if let Some(from_graph_json) = opts.get("from_graph") {
+        if let Ok(graph) = serde_json::from_value::<GraphName>(from_graph_json.clone()) {
+            store.dump_graph_to_writer(&graph, serializer, &mut buf)
+        } else {
+            store.dump_to_writer(serializer, &mut buf)
+        }
+    } else {
+        store.dump_to_writer(serializer, &mut buf)
+    } {
+        Ok(_) => {
+            let output = String::from_utf8_lossy(&buf).to_string();
+            ok_json(&output)
+        }
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: None,
+            line: None,
+        }),
+    }
+}
+
+/// Map C# format string to RdfFormat.
+fn parse_format(s: &str) -> Option<RdfFormat> {
+    match s.to_lowercase().as_str() {
+        "n3" => Some(RdfFormat::N3),
+        "nquads" | "n-quads" => Some(RdfFormat::NQuads),
+        "ntriples" | "n-triples" => Some(RdfFormat::NTriples),
+        "rdfxml" | "rdf-xml" | "rdf/xml" => Some(RdfFormat::RdfXml),
+        "trig" => Some(RdfFormat::TriG),
+        "turtle" => Some(RdfFormat::Turtle),
+        "jsonld" | "json-ld" => Some(RdfFormat::JsonLd {
+            profile: oxigraph::io::JsonLdProfileSet::empty(),
+        }),
+        _ => None,
     }
 }
 
