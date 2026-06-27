@@ -6,9 +6,15 @@ internal static partial class OxigraphNative
 {
     private const string LibName = "oxigraph_dotnet";
 
-    // Store lifecycle — EntryPoint matches Rust exported symbol names
+    // Store lifecycle
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_new", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_new();
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_open", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_open(string path);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_open_read_only", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_open_read_only(string path);
 
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_destroy")]
     internal static partial void store_destroy(IntPtr handle);
@@ -52,6 +58,16 @@ internal static partial class OxigraphNative
 
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_remove_named_graph", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_remove_named_graph(IntPtr handle, string graphJson);
+
+    // Management
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_flush")]
+    internal static partial IntPtr store_flush(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_optimize")]
+    internal static partial IntPtr store_optimize(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_backup", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_backup(IntPtr handle, string targetPath);
 
     // Bulk & management
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_clear")]

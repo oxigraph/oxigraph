@@ -11,10 +11,15 @@ public sealed class Store : IDisposable
 {
     private readonly StoreSafeHandle _handle;
 
-    /// <summary>Create an in-memory store.</summary>
-    public Store()
+    /// <summary>Create an in-memory store, or open/create a file-backed store at the given path.</summary>
+    public Store(string? path = null)
     {
-        var jsonPtr = OxigraphNative.store_new();
+        IntPtr jsonPtr;
+        if (path != null)
+            jsonPtr = OxigraphNative.store_open(path);
+        else
+            jsonPtr = OxigraphNative.store_new();
+
         var response = ReadAndFree(jsonPtr);
         FFIHelper.ThrowIfError(response);
 
@@ -25,6 +30,23 @@ public sealed class Store : IDisposable
             .GetUInt64();
 
         _handle = new StoreSafeHandle((IntPtr)handleVal);
+    }
+
+    /// <summary>Open an existing store in read-only mode.</summary>
+    public static Store OpenReadOnly(string path)
+    {
+        var jsonPtr = OxigraphNative.store_open_read_only(path);
+        var response = ReadAndFree(jsonPtr);
+        FFIHelper.ThrowIfError(response);
+
+        using var doc = JsonDocument.Parse(response);
+        var handleVal = doc.RootElement.GetProperty("ok").GetProperty("handle").GetUInt64();
+
+        var store = new Store(); // dummy, we'll replace _handle
+        store._handle.Dispose();
+        typeof(Store).GetField("_handle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(store, new StoreSafeHandle((IntPtr)handleVal));
+        return store;
     }
 
     /// <summary>Insert a quad into the store.</summary>
@@ -238,6 +260,27 @@ public sealed class Store : IDisposable
         }, converterOptions);
         return FFIHelper.Call<string>(() =>
             OxigraphNative.store_dump(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Flush pending writes to disk.</summary>
+    public void Flush()
+    {
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_flush(_handle.DangerousGetHandle()));
+    }
+
+    /// <summary>Optimize database storage.</summary>
+    public void Optimize()
+    {
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_optimize(_handle.DangerousGetHandle()));
+    }
+
+    /// <summary>Create a backup at the target directory.</summary>
+    public void Backup(string targetDirectory)
+    {
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_backup(_handle.DangerousGetHandle(), targetDirectory));
     }
 
     public void Dispose()

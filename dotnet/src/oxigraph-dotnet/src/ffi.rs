@@ -11,33 +11,86 @@ use std::os::raw::c_char;
 /// Opaque handle to a Store. Passed from Rust to C# and back.
 pub type StoreHandle = *mut UnsafeCell<Store>;
 
+/// Open a file-backed Store on disk.
+/// path is the directory path for RocksDB storage.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_open(path: *const c_char) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    if path_str.is_empty() {
+        return error_json(ErrorKind::InvalidArgument { message: "Path is empty".into() });
+    }
+    match Store::open(path_str) {
+        Ok(s) => store_to_handle(s),
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Open a file-backed Store in read-only mode.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_open_read_only(path: *const c_char) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    if path_str.is_empty() {
+        return error_json(ErrorKind::InvalidArgument { message: "Path is empty".into() });
+    }
+    match Store::open_read_only(path_str) {
+        Ok(s) => store_to_handle(s),
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Flush pending writes to disk.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_flush(handle: StoreHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    match store.flush() { Ok(_) => ok_json(&"flushed"), Err(e) => error_json(ErrorKind::Store { message: e.to_string() }) }
+}
+
+/// Optimize database.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_optimize(handle: StoreHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    match store.optimize() { Ok(_) => ok_json(&"optimized"), Err(e) => error_json(ErrorKind::Store { message: e.to_string() }) }
+}
+
+/// Backup store to target directory.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_backup(handle: StoreHandle, target: *const c_char) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let path = std::path::Path::new(unsafe { c_str_to_str(target) });
+    match store.backup(path) { Ok(_) => ok_json(&"backed up"), Err(e) => error_json(ErrorKind::Store { message: e.to_string() }) }
+}
+
+fn store_to_handle(store: Store) -> *mut c_char {
+    let boxed = Box::new(UnsafeCell::new(store));
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => {
+            unsafe { drop(Box::from_raw(ptr)); }
+            error_json(ErrorKind::Store { message: e.to_string() })
+        }
+    }
+}
+
 /// Create a new in-memory Store.
-/// Returns JSON: {"ok": "ok"}
 #[unsafe(no_mangle)]
 pub extern "C" fn oxigraph_store_new() -> *mut c_char {
     match Store::new() {
-        Ok(_store) => {
-            // Store is allocated on the heap; C# receives a pointer to it.
-            let boxed = Box::new(UnsafeCell::new(_store));
-            let ptr = Box::into_raw(boxed);
-            let handle_value = ptr as u64;
-            match serde_json::to_string(&handle_value) {
-                Ok(json) => {
-                    let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
-                    std::ffi::CString::new(full).unwrap().into_raw()
-                }
-                Err(e) => {
-                    // Clean up the store we allocated
-                    unsafe { drop(Box::from_raw(ptr)); }
-                    error_json(ErrorKind::Store {
-                        message: e.to_string(),
-                    })
-                }
-            }
-        }
-        Err(e) => error_json(ErrorKind::Store {
-            message: e.to_string(),
-        }),
+        Ok(s) => store_to_handle(s),
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
     }
 }
 

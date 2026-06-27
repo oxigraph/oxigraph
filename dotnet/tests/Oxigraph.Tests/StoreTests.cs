@@ -140,6 +140,61 @@ public class StoreTests
         Assert.Equal(2, results.Count);
     }
 
+    [Fact]
+    public void FilePersistence_Roundtrip()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "oxigraph-test-" + Guid.NewGuid());
+        try
+        {
+            // Create and populate
+            using (var store = new Store(tempDir))
+            {
+                store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+                Assert.Equal(1UL, store.Count);
+            }
+
+            // Reopen and verify data persisted
+            using (var store = new Store(tempDir))
+            {
+                Assert.Equal(1UL, store.Count);
+                Assert.True(store.Contains(
+                    Q("http://example.com/s", "http://example.com/p", "test")));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Flush_And_Backup()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "oxigraph-test-" + Guid.NewGuid());
+        var backupDir = Path.Combine(Path.GetTempPath(), "oxigraph-backup-" + Guid.NewGuid());
+        try
+        {
+            using (var store = new Store(tempDir))
+            {
+                store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+                store.Flush();
+                store.Backup(backupDir);
+            }
+
+            // Verify backup
+            using (var store = new Store(backupDir))
+            {
+                Assert.Equal(1UL, store.Count);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
+        }
+    }
+
     private static Quad Q(string s, string p, string o) =>
         new(new NamedNode(s), new NamedNode(p), new Literal(o), new DefaultGraph());
 }
