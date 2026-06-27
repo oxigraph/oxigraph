@@ -1018,6 +1018,6 @@ dotnet-tests:
 | Store.OpenReadOnly | ✅ 完成 | 只读模式 |
 | Dataset 类 | ✅ 完成 | 对标 Python Dataset，支持 CRUD + 模式匹配 + I/O |
 | parse_query_results | ✅ 完成 | 解析 XML/JSON/CSV/TSV 四种 SPARQL 结果格式 |
-| Custom SPARQL functions | ❌ 未实现 | 对标 Python 的回调函数支持 |
+| Custom SPARQL functions | ✅ 完成 | Rust→C# 回调桥接（UnmanagedFunctionPointer + GCHandle） |
 
-**实现进度**: 25 项特性中 24 项已交付（含 RocksDB 文件持久化），1 项待完成（Custom SPARQL functions）。
+**实现进度**: 25 项特性全部交付，对标 Python 绑定完整度 100%。
