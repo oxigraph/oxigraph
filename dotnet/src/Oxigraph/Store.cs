@@ -101,15 +101,34 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
         ITerm? @object = null,
         IGraphName? graph = null)
     {
-        var pattern = new Dictionary<string, object?>();
-        if (subject != null) pattern["subject"] = subject;
-        if (predicate != null) pattern["predicate"] = predicate;
-        if (@object != null) pattern["object"] = @object;
-        if (graph != null) pattern["graph"] = graph;
-        var patternJson = JsonSerializer.Serialize(pattern, new JsonSerializerOptions
+        // Build pattern JSON manually with per-value converters, because
+        // Dictionary<string,object?> doesn't invoke custom converters (the
+        // compile-time value type is 'object', not the specific interface).
+        var opts = new JsonSerializerOptions
         {
             Converters = { new NamedOrBlankNodeConverter(), new NamedNodeConverter(), new TermConverter(), new GraphNameConverter() }
-        });
+        };
+        var sb = new System.Text.StringBuilder();
+        sb.Append('{');
+        var first = true;
+        void AddJson(string key, string jsonValue)
+        {
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append('"'); sb.Append(key); sb.Append("\":");
+            sb.Append(jsonValue);
+        }
+        if (subject != null)
+            AddJson("subject", JsonSerializer.Serialize(subject, opts));
+        if (predicate != null)
+            AddJson("predicate", JsonSerializer.Serialize(predicate, opts));
+        if (@object != null)
+            AddJson("object", JsonSerializer.Serialize(@object, opts));
+        if (graph != null)
+            AddJson("graph", JsonSerializer.Serialize(graph, opts));
+        sb.Append('}');
+        var patternJson = sb.ToString();
+
         var quads = FFIHelper.Call<List<Quad>>(() =>
             OxigraphNative.store_match(_handle.DangerousGetHandle(), patternJson));
         return quads ?? [];
@@ -168,7 +187,15 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
                 named_graphs = options.NamedGraphs,
                 substitutions = options.Substitutions,
             },
-            new JsonSerializerOptions { Converters = { new TermConverter() } });
+            new JsonSerializerOptions
+            {
+                Converters = {
+                    new TermConverter(),
+                    new NamedOrBlankNodeConverter(),
+                    new NamedNodeConverter(),
+                    new GraphNameConverter()
+                }
+            });
 
             // Use the lazy streaming query path (gap 3 fix)
             var jsonPtr = OxigraphNative.store_query_iter(
@@ -385,15 +412,29 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
     public void Load(string data, RdfFormat format, LoadOptions? options = null)
     {
         options ??= new LoadOptions();
-        var json = JsonSerializer.Serialize(new
+        using var stream = new System.IO.MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
         {
-            data,
-            format = IO.FormatToString(format),
-            base_iri = options.BaseIri,
-            to_graph = options.ToGraph,
-            lenient = options.Lenient,
-            rename_blank_nodes = options.RenameBlankNodes,
-        });
+            writer.WriteStartObject();
+            writer.WriteString("data", data);
+            writer.WriteString("format", IO.FormatToString(format));
+            if (options.BaseIri != null)
+                writer.WriteString("base_iri", options.BaseIri);
+            if (options.ToGraph is not null)
+            {
+                writer.WritePropertyName("to_graph");
+                var opts = new JsonSerializerOptions { Converters = { new GraphNameConverter() } };
+                JsonSerializer.Serialize(writer, options.ToGraph, opts);
+            }
+            else
+            {
+                writer.WriteNull("to_graph");
+            }
+            writer.WriteBoolean("lenient", options.Lenient);
+            writer.WriteBoolean("rename_blank_nodes", options.RenameBlankNodes);
+            writer.WriteEndObject();
+        }
+        var json = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_load(_handle.DangerousGetHandle(), json));
     }

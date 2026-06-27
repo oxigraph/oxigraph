@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Oxigraph\Oxigraph.csproj" />
+    <ProjectReference Include="..\..\src\Oxigraph.Extensions.DotNetRDF\Oxigraph.Extensions.DotNetRDF.csproj" />
   </ItemGroup>
 
 </Project>

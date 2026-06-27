@@ -429,4 +429,426 @@ public class SparqlTests
         var content = new StreamReader(stream).ReadToEnd();
         Assert.Contains("http://example.com/s", content);
     }
-}
+
+    // ─── RDF-star ─────────────────────────────────────
+
+    [Fact]
+    public void RdfStar_Insert_And_Query()
+    {
+        using var store = new Store();
+        store.Update("PREFIX : <http://www.example.org/> " +
+            "INSERT DATA { :alice :claims << :bob :age 23 >> }");
+        var results = store.Query(
+            "PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        Assert.Single(sols);
+    }
+
+    // ─── Query: use_default_graph_as_union ─────────────
+
+    [Fact]
+    public void Select_Union_Default_Graph()
+    {
+        using var store = new Store();
+        var g = new NamedNode("http://example.com/g");
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), g));
+        // Without union, query on default graph yields nothing
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        Assert.Empty(sols);
+        // With union, it searches all graphs
+        var results2 = store.Query("SELECT ?s WHERE { ?s ?p ?o }",
+            new QueryOptions { UseDefaultGraphAsUnion = true });
+        var sols2 = Assert.IsAssignableFrom<QuerySolutions>(results2);
+        Assert.Single(sols2);
+    }
+
+    // ─── Query: default_graph / named_graph restriction ──
+
+    [Fact]
+    public void Select_With_DefaultGraph_Restriction()
+    {
+        using var store = new Store();
+        var g = new NamedNode("http://example.com/g");
+        store.Add(new Quad(new NamedNode("http://example.com/s1"),
+            new NamedNode("http://example.com/p"), new Literal("a"), new DefaultGraph()));
+        store.Add(new Quad(new NamedNode("http://example.com/s2"),
+            new NamedNode("http://example.com/p"), new Literal("b"), g));
+        // Restrict to named graph g only
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }",
+            new QueryOptions { DefaultGraphs = [g] });
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        var list = sols.ToList();
+        Assert.Single(list);
+        Assert.NotNull(list[0]["s"]);
+    }
+
+    [Fact]
+    public void Select_With_NamedGraph_Restriction()
+    {
+        using var store = new Store();
+        var g = new NamedNode("http://example.com/g");
+        store.Add(new Quad(new NamedNode("http://example.com/s1"),
+            new NamedNode("http://example.com/p"), new Literal("a"), g));
+        store.Add(new Quad(new NamedNode("http://example.com/s2"),
+            new NamedNode("http://example.com/p"), new Literal("b"),
+            new NamedNode("http://example.com/g2")));
+        // Only g is available in GRAPH clause
+        var results = store.Query("SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }",
+            new QueryOptions { NamedGraphs = [g] });
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        var list = sols.ToList();
+        Assert.Single(list);
+    }
+
+    // ─── Query: base_iri and prefixes ─────────────────
+
+    [Fact]
+    public void Ask_With_BaseIri_And_Prefixes()
+    {
+        using var store = new Store();
+        store.Add(new Quad(
+            new NamedNode("http://foo"),
+            new NamedNode("http://bar"),
+            new NamedNode("http://baz"),
+            new DefaultGraph()));
+        var results = store.Query("ASK { <> bar: baz: }",
+            new QueryOptions
+            {
+                BaseIri = "http://foo",
+                Prefixes = new Dictionary<string, string>
+                {
+                    ["bar"] = "http://bar",
+                    ["baz"] = "http://baz",
+                }
+            });
+        var b = Assert.IsAssignableFrom<QueryBoolean>(results);
+        Assert.True(b.Value);
+    }
+
+    // ─── QueryResults CSV/Turtle serialization ─────────
+
+    [Fact]
+    public void QuerySolutions_Serialize_CSV()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        var csv = sols.Serialize(QueryResultsFormat.Csv);
+        Assert.Contains("s", csv);
+        Assert.Contains("http://example.com/s", csv);
+    }
+
+    [Fact]
+    public void QueryBoolean_Serialize_CSV()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("ASK { ?s ?p ?o }");
+        var b = Assert.IsAssignableFrom<QueryBoolean>(results);
+        var csv = b.Serialize(QueryResultsFormat.Csv);
+        Assert.Equal("true", csv);
+    }
+
+    [Fact]
+    public void QueryTriples_Serialize_Turtle()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+        var triples = Assert.IsAssignableFrom<QueryTriples>(results);
+        var turtle = triples.Serialize(RdfFormat.Turtle);
+        Assert.Contains("http://example.com/s", turtle);
+    }
+
+    // ─── Update: DELETE DATA / LOAD ─────────────────────
+
+    [Fact]
+    public void Delete_Data_Update()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        store.Update("DELETE DATA { <http://example.com/s> <http://example.com/p> \"test\" }");
+        Assert.Equal(0UL, store.Count);
+    }
+
+    // ─── QueryResults lazy iteration ──────────────────
+
+    [Fact]
+    public void QueryResults_LazyIteration()
+    {
+        using var store = new Store();
+        for (int i = 0; i < 50; i++)
+            store.Add(new Quad(new NamedNode($"http://example.com/s{i}"),
+                new NamedNode("http://example.com/p"), new Literal($"value{i}"), new DefaultGraph()));
+
+        var results = store.Query("SELECT ?s ?o WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        int count = 0;
+        foreach (var sol in sols)
+        {
+            count++;
+            Assert.NotNull(sol["s"]);
+            Assert.NotNull(sol["o"]);
+        }
+        Assert.Equal(50, count);
+    }
+
+    // ─── DESCRIBE Query ──────────────────────────────────
+
+    [Fact]
+    public void Describe_Query()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("DESCRIBE <http://example.com/s>");
+        var triples = Assert.IsAssignableFrom<QueryTriples>(results);
+        Assert.Single(triples);
+    }
+
+    // ─── Update with base_iri and prefixes ──────────────
+
+    [Fact]
+    public void Update_WithBaseIri_And_Prefixes()
+    {
+        using var store = new Store();
+        store.Update("INSERT DATA { <> bar: \"test\" }",
+            new UpdateOptions
+            {
+                BaseIri = "http://example.com/s",
+                Prefixes = new Dictionary<string, string> { ["bar"] = "http://example.com/p" }
+            });
+        Assert.Equal(1UL, store.Count);
+    }
+
+    // ─── Exception types ────────────────────────────────
+
+    [Fact]
+    public void Sparql_Error_OnBadQuery()
+    {
+        using var store = new Store();
+        // FFI layer wraps all errors as ArgumentException
+        Assert.Throws<ArgumentException>(() => store.Query("THIS IS NOT SPARQL"));
+    }
+
+    [Fact]
+    public void Sparql_Error_OnBadUpdate()
+    {
+        using var store = new Store();
+        Assert.Throws<ArgumentException>(() => store.Update("NOT AN UPDATE"));
+    }
+
+    // ─── QuerySolutions XML serialization ────────────────
+
+    [Fact]
+    public void QuerySolutions_Serialize_Xml()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        var xml = sols.Serialize(QueryResultsFormat.Xml);
+        Assert.Contains("http://example.com/s", xml);
+
+        // Parse back
+        var parsed = IO.ParseQueryResults(xml, QueryResultsFormat.Xml);
+        var parsedSols = Assert.IsAssignableFrom<QuerySolutions>(parsed);
+        Assert.Single(parsedSols);
+    }
+
+    // ─── QuerySolutions TSV serialization ────────────────
+
+    [Fact]
+    public void QuerySolutions_Serialize_Tsv()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        var tsv = sols.Serialize(QueryResultsFormat.Tsv);
+        Assert.Contains("http://example.com/s", tsv);
+
+        // Parse back
+        var parsed = IO.ParseQueryResults(tsv, QueryResultsFormat.Tsv);
+        var parsedSols = Assert.IsAssignableFrom<QuerySolutions>(parsed);
+        Assert.Single(parsedSols);
+    }
+
+    // ─── QuerySolutions serialize to file TSV ───────────
+
+    [Fact]
+    public void QuerySolutions_SerializeToFile_Tsv()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+            var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+            sols.SerializeToFile(tempFile, QueryResultsFormat.Tsv);
+
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+
+            var parsed = IO.ParseQueryResults(content, QueryResultsFormat.Tsv);
+            var parsedSols = Assert.IsAssignableFrom<QuerySolutions>(parsed);
+            Assert.Single(parsedSols);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    // ─── QueryBoolean serialize to file XML ───────────────
+
+    [Fact]
+    public void QueryBoolean_SerializeToFile_Xml()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var result = store.Query("ASK { ?s ?p ?o }");
+            var boolean = Assert.IsAssignableFrom<QueryBoolean>(result);
+            boolean.SerializeToFile(tempFile, QueryResultsFormat.Xml);
+
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("true", content);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    // ─── QueryTriples serialize to file RDF/XML ───────────
+
+    [Fact]
+    public void QueryTriples_SerializeToFile_RdfXml()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+            var triples = Assert.IsAssignableFrom<QueryTriples>(result);
+            triples.SerializeToFile(tempFile, RdfFormat.RdfXml);
+
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    // ─── Custom aggregate with GROUP BY ───────────────────
+
+    [Fact]
+    public void Custom_Aggregate_WithGroupBy()
+    {
+        var factory = () => new CountAggregate();
+        CustomFunctions.RegisterAggregate("http://example.com/myCount2",
+            factory);
+
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s1"),
+                new NamedNode("http://example.com/p"), new Literal("a"), new DefaultGraph()));
+            store.Add(new Quad(new NamedNode("http://example.com/s1"),
+                new NamedNode("http://example.com/q"), new Literal("b"), new DefaultGraph()));
+            store.Add(new Quad(new NamedNode("http://example.com/s2"),
+                new NamedNode("http://example.com/p"), new Literal("c"), new DefaultGraph()));
+
+            var results = store.Query(@"
+                PREFIX my: <http://example.com/>
+                SELECT ?s (my:myCount2(?p) AS ?cnt) WHERE { ?s ?p ?o }
+                GROUP BY ?s");
+            var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+            var list = sols.ToList();
+            Assert.Equal(2, list.Count);
+        }
+        finally
+        {
+            CustomFunctions.UnregisterAggregate("http://example.com/myCount2");
+        }
+    }
+
+    // ─── QueryOptions: CustomAggregateFunctions ───────────
+
+    [Fact]
+    public void QueryOptions_CustomAggregateFunctions()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s1"),
+            new NamedNode("http://example.com/p"), new Literal("a"), new DefaultGraph()));
+        store.Add(new Quad(new NamedNode("http://example.com/s2"),
+            new NamedNode("http://example.com/p"), new Literal("b"), new DefaultGraph()));
+
+        var results = store.Query(@"
+            PREFIX my: <http://example.com/>
+            SELECT (my:total(?o) AS ?cnt) WHERE { ?s ?p ?o }",
+            new QueryOptions
+            {
+                CustomAggregateFunctions = new()
+                {
+                    ["http://example.com/total"] = () => new CountAggregate()
+                }
+            });
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        Assert.Single(sols);
+        Assert.Equal("2", ((Literal)sols.First()["cnt"]!).Value);
+    }
+
+    // ─── UpdateOptions with CustomAggregateFunctions ───────
+
+    [Fact]
+    public void UpdateOptions_CustomAggregateFunctions()
+    {
+        using var store = new Store();
+        store.Update("INSERT DATA { <http://example.com/s> <http://example.com/p> \"test\" }",
+            new UpdateOptions
+            {
+                CustomAggregateFunctions = new()
+                {
+                    ["http://example.com/dummy"] = () => new CountAggregate()
+                }
+            });
+        Assert.Equal(1UL, store.Count);
+    }
+
+    // ─── QueryResults Dispose ──────────────────────────
+
+    [Fact]
+    public void QueryResults_Dispose()
+    {
+        using var store = new Store();
+        store.Add(new Quad(new NamedNode("http://example.com/s"),
+            new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        results.Dispose();
+        // Should not throw
+    }
+
+    // ─── Select with empty result ──────────────────────
+
+    [Fact]
+    public void Select_EmptyResult()
+    {
+        using var store = new Store();
+        var results = store.Query("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        Assert.Empty(sols);
+        Assert.Equal(0, sols.Count);
+    }
+
+    }

@@ -10,7 +10,7 @@ public static class Extensions
     {
         IUriNode u => new NamedNode(u.Uri.AbsoluteUri),
         IBlankNode b => new BlankNode(b.InternalID),
-        ILiteralNode l => l.Language != null
+        ILiteralNode l => !string.IsNullOrEmpty(l.Language)
             ? new Literal(l.Value, l.Language)
             : l.DataType != null
                 ? new Literal(l.Value, Datatype: new NamedNode(l.DataType.AbsoluteUri))
