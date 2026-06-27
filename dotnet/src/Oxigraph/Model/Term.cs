@@ -29,6 +29,7 @@ public class TermConverter : JsonConverter<ITerm>
         {
             "uri" => new NamedNode(value),
             "bnode" => new BlankNode(value),
+            "triple" => JsonSerializer.Deserialize<Triple>(root.GetRawText(), options)!,
             "literal" => new Literal(
                 value,
                 root.TryGetProperty("language", out var lang) && lang.ValueKind != JsonValueKind.Null ? lang.GetString() : null,
@@ -41,18 +42,34 @@ public class TermConverter : JsonConverter<ITerm>
 
     public override void Write(Utf8JsonWriter writer, ITerm value, JsonSerializerOptions options)
     {
-        writer.WriteStartObject();
         switch (value)
         {
             case NamedNode nn:
+                writer.WriteStartObject();
                 writer.WriteString("type", "uri");
                 writer.WriteString("value", nn.Value);
+                writer.WriteEndObject();
                 break;
             case BlankNode bn:
+                writer.WriteStartObject();
                 writer.WriteString("type", "bnode");
                 writer.WriteString("value", bn.Value);
+                writer.WriteEndObject();
+                break;
+            case Triple triple:
+                // RDF-star: serialize as {"type":"triple","subject":{...},"predicate":{...},"object":{...}}
+                writer.WriteStartObject();
+                writer.WriteString("type", "triple");
+                writer.WritePropertyName("subject");
+                JsonSerializer.Serialize(writer, triple.Subject, options);
+                writer.WritePropertyName("predicate");
+                JsonSerializer.Serialize(writer, triple.Predicate, options);
+                writer.WritePropertyName("object");
+                JsonSerializer.Serialize(writer, triple.Object, options);
+                writer.WriteEndObject();
                 break;
             case Literal lit:
+                writer.WriteStartObject();
                 writer.WriteString("type", "literal");
                 writer.WriteString("value", lit.Value);
                 if (lit.Language != null)
@@ -64,11 +81,11 @@ public class TermConverter : JsonConverter<ITerm>
                     writer.WritePropertyName("datatype");
                     JsonSerializer.Serialize(writer, lit.Datatype, options);
                 }
+                writer.WriteEndObject();
                 break;
             default:
                 throw new JsonException($"Unknown term type: {value.GetType()}");
         }
-        writer.WriteEndObject();
     }
 }
 
@@ -79,19 +96,36 @@ public class NamedOrBlankNodeConverter : JsonConverter<INamedOrBlankNode>
         using var doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
         var kind = root.GetProperty("type").GetString();
-        var value = root.GetProperty("value").GetString() ?? "";
         return kind switch
         {
-            "uri" => new NamedNode(value),
-            "bnode" => new BlankNode(value),
+            "uri" => new NamedNode(root.GetProperty("value").GetString()!),
+            "bnode" => new BlankNode(root.GetProperty("value").GetString()!),
+            "triple" => JsonSerializer.Deserialize<Triple>(root.GetRawText(), options)!,
             _ => throw new JsonException($"Unknown subject type: {kind}")
         };
     }
 
     public override void Write(Utf8JsonWriter writer, INamedOrBlankNode value, JsonSerializerOptions options)
     {
-        var converter = new TermConverter();
-        converter.Write(writer, value, options);
+        switch (value)
+        {
+            case Triple triple:
+                // RDF-star: serialize triple as subject
+                writer.WriteStartObject();
+                writer.WriteString("type", "triple");
+                writer.WritePropertyName("subject");
+                JsonSerializer.Serialize(writer, triple.Subject, options);
+                writer.WritePropertyName("predicate");
+                JsonSerializer.Serialize(writer, triple.Predicate, options);
+                writer.WritePropertyName("object");
+                JsonSerializer.Serialize(writer, triple.Object, options);
+                writer.WriteEndObject();
+                break;
+            default:
+                var converter = new TermConverter();
+                converter.Write(writer, value, options);
+                break;
+        }
     }
 }
 

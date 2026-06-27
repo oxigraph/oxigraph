@@ -212,4 +212,41 @@ internal static partial class OxigraphNative
     // Memory
     [LibraryImport(LibName, EntryPoint = "oxigraph_free_string", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial void free_string(IntPtr ptr);
+
+    // ─── Lazy query results iterator ──────────────────
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_query_iter", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_query_iter(IntPtr handle, string queryJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_get_type")]
+    internal static partial IntPtr query_iter_get_type(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_boolean_value")]
+    internal static partial IntPtr query_iter_boolean_value(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_variables")]
+    internal static partial IntPtr query_iter_variables(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_next_solution")]
+    internal static partial IntPtr query_iter_next_solution(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_next_triple")]
+    internal static partial IntPtr query_iter_next_triple(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_iter_destroy")]
+    internal static partial void query_iter_destroy(IntPtr handle);
+
+    // ─── Chunked bulk extend ──────────────────────────
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_extend_begin")]
+    internal static partial IntPtr store_bulk_extend_begin(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_extend_add_chunk", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_bulk_extend_add_chunk(IntPtr bulkHandle, string quadsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_extend_commit")]
+    internal static partial IntPtr store_bulk_extend_commit(IntPtr bulkHandle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_extend_cancel")]
+    internal static partial void store_bulk_extend_cancel(IntPtr bulkHandle);
 }

@@ -21,7 +21,7 @@ public class SparqlTests
 
         var results = store.Query("SELECT ?s ?o WHERE { ?s ?p ?o }");
 
-        var solutions = Assert.IsType<QuerySolutions>(results);
+        var solutions = Assert.IsAssignableFrom<QuerySolutions>(results);
         Assert.Equal(2, solutions.Count);
         Assert.Contains(solutions.Variables, v => v.Value == "s");
         Assert.Contains(solutions.Variables, v => v.Value == "o");
@@ -49,7 +49,7 @@ public class SparqlTests
         store.Add(q);
 
         var results = store.Query("ASK { ?s ?p ?o }");
-        var boolean = Assert.IsType<QueryBoolean>(results);
+        var boolean = Assert.IsAssignableFrom<QueryBoolean>(results);
         Assert.True(boolean.Value);
     }
 
@@ -67,7 +67,7 @@ public class SparqlTests
         var results = store.Query(
             "CONSTRUCT { ?s <http://example.com/new> ?o } WHERE { ?s ?p ?o }");
 
-        var triples = Assert.IsType<QueryTriples>(results);
+        var triples = Assert.IsAssignableFrom<QueryTriples>(results);
         Assert.Single(triples);
         Assert.Equal("http://example.com/new", triples.First().Predicate.Value);
     }
@@ -119,7 +119,7 @@ public class SparqlTests
                     ?s ?p ?o .
                     BIND(my:suffix(?o) AS ?result)
                 }");
-            var solutions = Assert.IsType<QuerySolutions>(results);
+            var solutions = Assert.IsAssignableFrom<QuerySolutions>(results);
             Assert.Single(solutions);
             var val = solutions.First()["result"];
             Assert.Equal("hello_suffix", ((Literal)val!).Value);
@@ -142,7 +142,7 @@ public class SparqlTests
             store.Add(new Quad(new NamedNode("http://example.com/s"),
                 new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
             var result = store.Query("ASK { ?s ?p ?o }");
-            var boolean = Assert.IsType<QueryBoolean>(result);
+            var boolean = Assert.IsAssignableFrom<QueryBoolean>(result);
             Assert.True(boolean.Value);
 
             boolean.SerializeToFile(tempFile, QueryResultsFormat.Json);
@@ -151,7 +151,7 @@ public class SparqlTests
 
             // Parse back
             var parsed = IO.ParseQueryResults(content, QueryResultsFormat.Json);
-            var parsedBool = Assert.IsType<QueryBoolean>(parsed);
+            var parsedBool = Assert.IsAssignableFrom<QueryBoolean>(parsed);
             Assert.True(parsedBool.Value);
         }
         finally { File.Delete(tempFile); }
@@ -167,7 +167,7 @@ public class SparqlTests
             store.Add(new Quad(new NamedNode("http://example.com/s"),
                 new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
             var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
-            var solutions = Assert.IsType<QuerySolutions>(result);
+            var solutions = Assert.IsAssignableFrom<QuerySolutions>(result);
 
             solutions.SerializeToFile(tempFile, QueryResultsFormat.Json);
             var content = File.ReadAllText(tempFile);
@@ -175,7 +175,7 @@ public class SparqlTests
 
             // Parse back
             var parsed = IO.ParseQueryResults(content, QueryResultsFormat.Json);
-            var parsedSols = Assert.IsType<QuerySolutions>(parsed);
+            var parsedSols = Assert.IsAssignableFrom<QuerySolutions>(parsed);
             Assert.Single(parsedSols);
         }
         finally { File.Delete(tempFile); }
@@ -191,7 +191,7 @@ public class SparqlTests
             store.Add(new Quad(new NamedNode("http://example.com/s"),
                 new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
             var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
-            var triples = Assert.IsType<QueryTriples>(result);
+            var triples = Assert.IsAssignableFrom<QueryTriples>(result);
 
             triples.SerializeToFile(tempFile, RdfFormat.NTriples);
             var content = File.ReadAllText(tempFile);
@@ -232,7 +232,7 @@ public class SparqlTests
                 }
             });
 
-        var solutions = Assert.IsType<QuerySolutions>(results);
+        var solutions = Assert.IsAssignableFrom<QuerySolutions>(results);
         Assert.Single(solutions);
         Assert.Equal("a", ((Literal)solutions.First()["o"]!).Value);
     }
@@ -261,7 +261,7 @@ public class SparqlTests
                 PREFIX my: <http://example.com/>
                 SELECT (my:myCount(?o) AS ?cnt) WHERE { ?s ?p ?o }");
 
-            var sols = Assert.IsType<QuerySolutions>(results);
+            var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
             Assert.Single(sols);
             var cnt = ((Literal)sols.First()["cnt"]!).Value;
             Assert.Equal("3", cnt);
@@ -311,7 +311,7 @@ public class SparqlTests
             // Verify the transformed value exists
             var results = store.Query(
                 "SELECT ?v WHERE { ?s <http://example.com/new> ?v }");
-            var sols = Assert.IsType<QuerySolutions>(results);
+            var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
             Assert.Single(sols);
             Assert.Equal("HELLO", ((Literal)sols.First()["v"]!).Value);
         }
@@ -330,7 +330,7 @@ public class SparqlTests
         store.Add(new Quad(new NamedNode("http://example.com/s"),
             new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
         var result = store.Query("ASK { ?s ?p ?o }");
-        var boolean = Assert.IsType<QueryBoolean>(result);
+        var boolean = Assert.IsAssignableFrom<QueryBoolean>(result);
         Assert.True(boolean.Value);
 
         var json = boolean.Serialize(QueryResultsFormat.Json);
@@ -338,7 +338,7 @@ public class SparqlTests
 
         // Parse back
         var parsed = IO.ParseQueryResults(json, QueryResultsFormat.Json);
-        var parsedBool = Assert.IsType<QueryBoolean>(parsed);
+        var parsedBool = Assert.IsAssignableFrom<QueryBoolean>(parsed);
         Assert.True(parsedBool.Value);
     }
 
@@ -347,7 +347,7 @@ public class SparqlTests
     {
         using var store = new Store();
         var result = store.Query("ASK { FILTER(false) }");
-        var boolean = Assert.IsType<QueryBoolean>(result);
+        var boolean = Assert.IsAssignableFrom<QueryBoolean>(result);
         Assert.False(boolean.Value);
 
         using var stream = new MemoryStream();
@@ -366,14 +366,14 @@ public class SparqlTests
         store.Add(new Quad(new NamedNode("http://example.com/s"),
             new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
         var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
-        var solutions = Assert.IsType<QuerySolutions>(result);
+        var solutions = Assert.IsAssignableFrom<QuerySolutions>(result);
 
         var json = solutions.Serialize(QueryResultsFormat.Json);
         Assert.Contains("http://example.com/s", json);
 
         // Parse back
         var parsed = IO.ParseQueryResults(json, QueryResultsFormat.Json);
-        var parsedSols = Assert.IsType<QuerySolutions>(parsed);
+        var parsedSols = Assert.IsAssignableFrom<QuerySolutions>(parsed);
         Assert.Single(parsedSols);
         Assert.Equal("http://example.com/s", ((NamedNode)parsedSols.First()["s"]!).Value);
     }
@@ -385,7 +385,7 @@ public class SparqlTests
         store.Add(new Quad(new NamedNode("http://example.com/s"),
             new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
         var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
-        var solutions = Assert.IsType<QuerySolutions>(result);
+        var solutions = Assert.IsAssignableFrom<QuerySolutions>(result);
 
         using var stream = new MemoryStream();
         solutions.SerializeToStream(stream, QueryResultsFormat.Json);
@@ -403,7 +403,7 @@ public class SparqlTests
         store.Add(new Quad(new NamedNode("http://example.com/s"),
             new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
         var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
-        var triples = Assert.IsType<QueryTriples>(result);
+        var triples = Assert.IsAssignableFrom<QueryTriples>(result);
 
         var ntriples = triples.Serialize(RdfFormat.NTriples);
         Assert.Contains("http://example.com/s", ntriples);
@@ -420,7 +420,7 @@ public class SparqlTests
         store.Add(new Quad(new NamedNode("http://example.com/s"),
             new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
         var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
-        var triples = Assert.IsType<QueryTriples>(result);
+        var triples = Assert.IsAssignableFrom<QueryTriples>(result);
 
         using var stream = new MemoryStream();
         triples.SerializeToStream(stream, RdfFormat.NTriples);

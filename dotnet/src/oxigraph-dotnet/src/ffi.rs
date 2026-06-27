@@ -361,153 +361,10 @@ pub extern "C" fn oxigraph_store_query(
         });
     }
 
-    let mut evaluator = SparqlEvaluator::default();
-    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
-        evaluator = match evaluator.with_base_iri(base_iri) {
-            Ok(e) => e,
-            Err(e) => return error_json(ErrorKind::InvalidArgument {
-                message: format!("Invalid base IRI: {e}"),
-            }),
-        };
-    }
-    if let Some(prefixes) = opts["prefixes"].as_object() {
-        for (prefix, iri) in prefixes {
-            if let Some(iri_str) = iri.as_str() {
-                evaluator = match evaluator.with_prefix(prefix, iri_str) {
-                    Ok(e) => e,
-                    Err(e) => return error_json(ErrorKind::InvalidArgument {
-                        message: format!("Invalid prefix {prefix}: {e}"),
-                    }),
-                };
-            }
-        }
-    }
-    // Inject registered custom functions (snapshot to avoid lock lifetime issues)
-    let custom_fns: Vec<(String, CustomFnCallback)> = {
-        CUSTOM_FUNCTIONS
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect()
+    let evaluator = match build_evaluator(&opts) {
+        Ok(e) => e,
+        Err(e) => return e,
     };
-    for (name, callback) in custom_fns {
-        let name_for_closure = name.clone();
-        let func_name = NamedNode::new(name).unwrap();
-        evaluator = evaluator.with_custom_function(
-            func_name,
-            move |args: &[Term]| -> Option<Term> {
-                // Build JSON array: [function_name, term1, term2, ...]
-                let mut arr: Vec<Value> = vec![Value::String(name_for_closure.clone())];
-                arr.extend(args.iter().map(|t| serde_json::to_value(t).unwrap_or_default()));
-                let args_json = serde_json::to_string(&arr).unwrap_or_default();
-                let args_c = std::ffi::CString::new(args_json).unwrap();
-                let result_ptr = unsafe { callback(args_c.as_ptr()) };
-                if result_ptr.is_null() {
-                    return None;
-                }
-                let result_json = unsafe { crate::model_ffi::c_str_to_str(result_ptr) };
-                let term: Option<Term> = serde_json::from_str(result_json).unwrap_or(None);
-                crate::error::oxigraph_free_string(result_ptr);
-                term
-            },
-        );
-    }
-
-    // Inject registered aggregate functions (snapshot to avoid lock lifetime issues)
-    let agg_fns: Vec<(String, AggregateCallbacks)> = {
-        AGGREGATE_FUNCTIONS
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
-    };
-    for (name, callbacks) in agg_fns {
-        let func_name = NamedNode::new(name).unwrap();
-        let new_fn = callbacks.new_fn;
-        let acc_fn = callbacks.acc_fn;
-        let finish_fn = callbacks.finish_fn;
-        let free_fn = callbacks.free_fn;
-        evaluator = evaluator.with_custom_aggregate_function(
-            func_name,
-            move || {
-                Box::new(CallbackAggregateAccumulator {
-                    ctx: unsafe { new_fn() },
-                    acc_fn,
-                    finish_fn,
-                    free_fn,
-                })
-            },
-        );
-    }
-
-    // Helper to apply variable substitutions to a prepared query
-    fn apply_substitutions(
-        mut prepared: oxigraph::sparql::PreparedSparqlQuery,
-        substitutions: &Value,
-    ) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
-        if let Some(subs) = substitutions.as_object() {
-            for (var_name, term_json) in subs {
-                let var_name_owned: String = var_name.clone();
-                let var = match oxigraph::sparql::Variable::new(var_name_owned) {
-                    Ok(v) => v,
-                    Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
-                        message: format!("Invalid variable name '{var_name}': {e}"),
-                    })),
-                };
-                let term: Term = match serde_json::from_value(term_json.clone()) {
-                    Ok(t) => t,
-                    Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
-                        message: format!("Invalid term for '{var_name}': {e}"),
-                    })),
-                };
-                prepared = prepared.substitute_variable(var, term);
-            }
-        }
-        Ok(prepared)
-    }
-
-    // Helper to apply dataset restrictions (default_graph, named_graphs, union)
-    fn configure_dataset(
-        mut prepared: oxigraph::sparql::PreparedSparqlQuery,
-        opts: &Value,
-    ) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
-        // Apply default_graph_as_union
-        if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
-            prepared.dataset_mut().set_default_graph_as_union();
-        }
-
-        // Apply default_graph restriction
-        if let Some(default_graphs) = opts.get("default_graph") {
-            if let Some(arr) = default_graphs.as_array() {
-                let graphs: Vec<GraphName> = arr
-                    .iter()
-                    .filter_map(|v| serde_json::from_value::<GraphName>(v.clone()).ok())
-                    .collect();
-                if !graphs.is_empty() {
-                    prepared.dataset_mut().set_default_graph(graphs);
-                }
-            } else if let Ok(graph) = serde_json::from_value::<GraphName>(default_graphs.clone()) {
-                prepared.dataset_mut().set_default_graph(vec![graph]);
-            }
-        }
-
-        // Apply named_graphs restriction
-        if let Some(named_graphs) = opts.get("named_graphs") {
-            if let Some(arr) = named_graphs.as_array() {
-                let graphs: Vec<NamedOrBlankNode> = arr
-                    .iter()
-                    .filter_map(|v| serde_json::from_value::<NamedOrBlankNode>(v.clone()).ok())
-                    .collect();
-                if !graphs.is_empty() {
-                    prepared.dataset_mut().set_available_named_graphs(graphs);
-                }
-            }
-        }
-
-        Ok(prepared)
-    }
 
     let mut prepared = match evaluator.parse_query(query) {
         Ok(p) => p,
@@ -565,72 +422,10 @@ pub extern "C" fn oxigraph_store_update(
         });
     }
 
-    let mut evaluator = SparqlEvaluator::default();
-    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
-        evaluator = match evaluator.with_base_iri(base_iri) {
-            Ok(e) => e,
-            Err(e) => return error_json(ErrorKind::InvalidArgument {
-                message: format!("Invalid base IRI: {e}"),
-            }),
-        };
-    }
-    if let Some(prefixes) = opts["prefixes"].as_object() {
-        for (prefix, iri) in prefixes {
-            if let Some(iri_str) = iri.as_str() {
-                evaluator = match evaluator.with_prefix(prefix, iri_str) {
-                    Ok(e) => e,
-                    Err(e) => return error_json(ErrorKind::InvalidArgument {
-                        message: format!("Invalid prefix {prefix}: {e}"),
-                    }),
-                };
-            }
-        }
-    }
-
-    // Inject custom functions (same as query path)
-    let custom_fns: Vec<(String, CustomFnCallback)> = {
-        CUSTOM_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), *v)).collect()
+    let evaluator = match build_evaluator(&opts) {
+        Ok(e) => e,
+        Err(e) => return e,
     };
-    for (name, callback) in custom_fns {
-        let name_for_closure = name.clone();
-        evaluator = evaluator.with_custom_function(
-            NamedNode::new(name).unwrap(),
-            move |args: &[Term]| -> Option<Term> {
-                let mut arr: Vec<Value> = vec![Value::String(name_for_closure.clone())];
-                arr.extend(args.iter().map(|t| serde_json::to_value(t).unwrap_or_default()));
-                let args_json = serde_json::to_string(&arr).unwrap_or_default();
-                let args_c = std::ffi::CString::new(args_json).unwrap();
-                let result_ptr = unsafe { callback(args_c.as_ptr()) };
-                if result_ptr.is_null() { return None; }
-                let result_json = unsafe { crate::model_ffi::c_str_to_str(result_ptr) };
-                let term: Option<Term> = serde_json::from_str(result_json).unwrap_or(None);
-                crate::error::oxigraph_free_string(result_ptr);
-                term
-            },
-        );
-    }
-
-    // Inject custom aggregate functions (same as query path)
-    let agg_fns: Vec<(String, AggregateCallbacks)> = {
-        AGGREGATE_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-    };
-    for (name, callbacks) in agg_fns {
-        let new_fn = callbacks.new_fn;
-        let acc_fn = callbacks.acc_fn;
-        let finish_fn = callbacks.finish_fn;
-        let free_fn = callbacks.free_fn;
-        evaluator = evaluator.with_custom_aggregate_function(
-            NamedNode::new(name).unwrap(),
-            move || {
-                Box::new(CallbackAggregateAccumulator {
-                    ctx: unsafe { new_fn() },
-                    acc_fn,
-                    finish_fn,
-                    free_fn,
-                })
-            },
-        );
-    }
 
     match evaluator.parse_update(update) {
         Ok(update) => match update.on_store(store).execute() {
@@ -2494,6 +2289,409 @@ pub extern "C" fn oxigraph_store_destroy(handle: StoreHandle) {
         // Drop the Store, then the UnsafeCell, then the Box allocation.
         drop(Box::from_raw(handle));
     }
+}
+
+// ─── Lazy Query Results Iterator FFI ─────────────────
+
+use oxigraph::sparql::{QuerySolutionIter, QueryTripleIter, Variable};
+
+/// Opaque handle to lazily-iterated query results.
+/// Avoids materializing the entire result set into a JSON array.
+pub(crate) type QueryResultsHandle = *mut QueryResultsWrapper;
+
+pub(crate) enum QueryResultsWrapper {
+    Solutions {
+        iter: UnsafeCell<QuerySolutionIter<'static>>,
+        variables: Vec<Variable>,
+    },
+    Triples(UnsafeCell<QueryTripleIter<'static>>),
+    Boolean(bool),
+}
+
+/// Execute a SPARQL query and return an opaque iterator handle.
+/// This is the streaming alternative to oxigraph_store_query — results are
+/// retrieved one at a time via oxigraph_query_iter_next_*.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_query_iter(
+    handle: StoreHandle,
+    query_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(query_json) };
+    let opts: Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid query JSON: {e}"),
+            });
+        }
+    };
+
+    let query = opts["query"].as_str().unwrap_or("");
+    if query.is_empty() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query string is empty".into() });
+    }
+
+    let evaluator = match build_evaluator(&opts) {
+        Ok(e) => e,
+        Err(e) => return e,
+    };
+
+    let mut prepared = match evaluator.parse_query(query) {
+        Ok(p) => p,
+        Err(e) => return error_json(ErrorKind::InvalidArgument {
+            message: format!("SPARQL syntax error: {e}"),
+        }),
+    };
+    prepared = match apply_substitutions(prepared, &opts["substitutions"]) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    prepared = match configure_dataset(prepared, &opts) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let results = match prepared.on_store(store).execute() {
+        Ok(r) => r,
+        Err(e) => return error_json(ErrorKind::InvalidArgument {
+            message: format!("SPARQL evaluation error: {e}"),
+        }),
+    };
+
+    let wrapper = match results {
+        QueryResults::Solutions(solutions) => {
+            let variables = solutions.variables().to_vec();
+            QueryResultsWrapper::Solutions {
+                iter: UnsafeCell::new(solutions),
+                variables,
+            }
+        }
+        QueryResults::Graph(triples) => {
+            QueryResultsWrapper::Triples(UnsafeCell::new(triples))
+        }
+        QueryResults::Boolean(value) => QueryResultsWrapper::Boolean(value),
+    };
+
+    let boxed = Box::new(wrapper);
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Get the type of query results: "solutions", "triples", or "boolean".
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_get_type(handle: QueryResultsHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query results handle is null".into() });
+    }
+    let wrapper = unsafe { &*handle };
+    match wrapper {
+        QueryResultsWrapper::Solutions { .. } => ok_json(&"solutions"),
+        QueryResultsWrapper::Triples(_) => ok_json(&"triples"),
+        QueryResultsWrapper::Boolean(_) => ok_json(&"boolean"),
+    }
+}
+
+/// Get the boolean value from an ASK query result. Only valid after verifying type="boolean".
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_boolean_value(handle: QueryResultsHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query results handle is null".into() });
+    }
+    let wrapper = unsafe { &*handle };
+    match wrapper {
+        QueryResultsWrapper::Boolean(value) => bool_to_response(*value),
+        _ => error_json(ErrorKind::InvalidArgument {
+            message: "Not a boolean query result".into(),
+        }),
+    }
+}
+
+/// Get the ordered list of variables from a SELECT query. Only valid for solutions.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_variables(handle: QueryResultsHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query results handle is null".into() });
+    }
+    let wrapper = unsafe { &*handle };
+    match wrapper {
+        QueryResultsWrapper::Solutions { variables, .. } => {
+            let names: Vec<&str> = variables.iter().map(|v| v.as_str()).collect();
+            ok_json(&names)
+        }
+        _ => error_json(ErrorKind::InvalidArgument { message: "Not a solutions query result".into() }),
+    }
+}
+
+/// Get the next solution row, or null when exhausted. Returns JSON object {var: term, ...}.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_next_solution(handle: QueryResultsHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query results handle is null".into() });
+    }
+    let wrapper = unsafe { &mut *handle };
+    match wrapper {
+        QueryResultsWrapper::Solutions { iter, variables } => {
+            let iter = unsafe { &mut *iter.get() };
+            match iter.next() {
+                Some(Ok(solution)) => {
+                    let mut row = Map::new();
+                    for var in variables {
+                        if let Some(term) = solution.get(var.as_str()) {
+                            row.insert(var.as_str().to_string(), serde_json::to_value(term).unwrap_or_default());
+                        }
+                    }
+                    ok_json(&row)
+                }
+                Some(Err(e)) => error_json(ErrorKind::InvalidArgument {
+                    message: format!("SPARQL evaluation error: {e}"),
+                }),
+                None => ok_json(&serde_json::Value::Null), // end of iteration
+            }
+        }
+        _ => error_json(ErrorKind::InvalidArgument { message: "Not a solutions query result".into() }),
+    }
+}
+
+/// Get the next triple, or null when exhausted.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_next_triple(handle: QueryResultsHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Query results handle is null".into() });
+    }
+    let wrapper = unsafe { &mut *handle };
+    match wrapper {
+        QueryResultsWrapper::Triples(triples) => {
+            let triples = unsafe { &mut *triples.get() };
+            match triples.next() {
+                Some(Ok(triple)) => ok_json(&triple),
+                Some(Err(e)) => error_json(ErrorKind::InvalidArgument {
+                    message: format!("SPARQL evaluation error: {e}"),
+                }),
+                None => ok_json(&serde_json::Value::Null),
+            }
+        }
+        _ => error_json(ErrorKind::InvalidArgument { message: "Not a triples query result".into() }),
+    }
+}
+
+/// Destroy a query results iterator and free memory.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_iter_destroy(handle: QueryResultsHandle) {
+    if handle.is_null() { return; }
+    unsafe { drop(Box::from_raw(handle)); }
+}
+
+/// Shared evaluator builder for both full-materialize and streaming query paths.
+fn build_evaluator(opts: &Value) -> Result<SparqlEvaluator, *mut c_char> {
+    let mut evaluator = SparqlEvaluator::default();
+
+    if let Some(base_iri) = opts["base_iri"].as_str().filter(|s| !s.is_empty()) {
+        evaluator = evaluator.with_base_iri(base_iri).map_err(|e| {
+            error_json(ErrorKind::InvalidArgument { message: format!("Invalid base IRI: {e}") })
+        })?;
+    }
+    if let Some(prefixes) = opts["prefixes"].as_object() {
+        for (prefix, iri) in prefixes {
+            if let Some(iri_str) = iri.as_str() {
+                evaluator = evaluator.with_prefix(prefix, iri_str).map_err(|e| {
+                    error_json(ErrorKind::InvalidArgument {
+                        message: format!("Invalid prefix {prefix}: {e}"),
+                    })
+                })?;
+            }
+        }
+    }
+
+    // Inject registered custom functions
+    let custom_fns: Vec<(String, CustomFnCallback)> = {
+        CUSTOM_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), *v)).collect()
+    };
+    for (name, callback) in custom_fns {
+        let name_for_closure = name.clone();
+        evaluator = evaluator.with_custom_function(
+            NamedNode::new(name).unwrap(),
+            move |args: &[Term]| -> Option<Term> {
+                let mut arr: Vec<Value> = vec![Value::String(name_for_closure.clone())];
+                arr.extend(args.iter().map(|t| serde_json::to_value(t).unwrap_or_default()));
+                let args_json = serde_json::to_string(&arr).unwrap_or_default();
+                let args_c = std::ffi::CString::new(args_json).unwrap();
+                let result_ptr = unsafe { callback(args_c.as_ptr()) };
+                if result_ptr.is_null() { return None; }
+                let result_json = unsafe { crate::model_ffi::c_str_to_str(result_ptr) };
+                let term: Option<Term> = serde_json::from_str(result_json).unwrap_or(None);
+                crate::error::oxigraph_free_string(result_ptr);
+                term
+            },
+        );
+    }
+
+    // Inject registered aggregate functions
+    let agg_fns: Vec<(String, AggregateCallbacks)> = {
+        AGGREGATE_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    };
+    for (name, callbacks) in agg_fns {
+        let new_fn = callbacks.new_fn;
+        let acc_fn = callbacks.acc_fn;
+        let finish_fn = callbacks.finish_fn;
+        let free_fn = callbacks.free_fn;
+        evaluator = evaluator.with_custom_aggregate_function(
+            NamedNode::new(name).unwrap(),
+            move || {
+                Box::new(CallbackAggregateAccumulator {
+                    ctx: unsafe { new_fn() },
+                    acc_fn,
+                    finish_fn,
+                    free_fn,
+                })
+            },
+        );
+    }
+
+    Ok(evaluator)
+}
+
+/// Apply variable substitutions to a prepared SPARQL query.
+fn apply_substitutions(
+    mut prepared: oxigraph::sparql::PreparedSparqlQuery,
+    substitutions: &Value,
+) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
+    if let Some(subs) = substitutions.as_object() {
+        for (var_name, term_json) in subs {
+            let var_name_owned: String = var_name.clone();
+            let var = match oxigraph::sparql::Variable::new(var_name_owned) {
+                Ok(v) => v,
+                Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid variable name '{var_name}': {e}"),
+                })),
+            };
+            let term: Term = match serde_json::from_value(term_json.clone()) {
+                Ok(t) => t,
+                Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid term for '{var_name}': {e}"),
+                })),
+            };
+            prepared = prepared.substitute_variable(var, term);
+        }
+    }
+    Ok(prepared)
+}
+
+/// Apply dataset restrictions (default_graph, named_graphs, union) to a prepared query.
+fn configure_dataset(
+    mut prepared: oxigraph::sparql::PreparedSparqlQuery,
+    opts: &Value,
+) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
+    if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
+        prepared.dataset_mut().set_default_graph_as_union();
+    }
+    if let Some(default_graphs) = opts.get("default_graph") {
+        if let Some(arr) = default_graphs.as_array() {
+            let graphs: Vec<GraphName> = arr
+                .iter()
+                .filter_map(|v| serde_json::from_value::<GraphName>(v.clone()).ok())
+                .collect();
+            if !graphs.is_empty() {
+                prepared.dataset_mut().set_default_graph(graphs);
+            }
+        } else if let Ok(graph) = serde_json::from_value::<GraphName>(default_graphs.clone()) {
+            prepared.dataset_mut().set_default_graph(vec![graph]);
+        }
+    }
+    if let Some(named_graphs) = opts.get("named_graphs") {
+        if let Some(arr) = named_graphs.as_array() {
+            let graphs: Vec<NamedOrBlankNode> = arr
+                .iter()
+                .filter_map(|v| serde_json::from_value::<NamedOrBlankNode>(v.clone()).ok())
+                .collect();
+            if !graphs.is_empty() {
+                prepared.dataset_mut().set_available_named_graphs(graphs);
+            }
+        }
+    }
+    Ok(prepared)
+}
+
+// ─── Chunked Bulk Extend FFI (streaming, avoids materializing all quads) ───
+
+/// Opaque handle to a BulkLoader for chunked bulk insertion.
+pub type BulkLoaderHandle = *mut UnsafeCell<oxigraph::store::BulkLoader<'static>>;
+
+/// Begin a chunked bulk-extend transaction. Returns a BulkLoader handle.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_extend_begin(store_handle: StoreHandle) -> *mut c_char {
+    if store_handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    let store = unsafe { &*store_handle };
+    // SAFETY: BulkLoader created from &Store, handle outlives the loader.
+    // We store the loader behind a raw pointer; caller must commit before dropping store.
+    let loader = unsafe { &*store.get() }.bulk_loader();
+    let boxed = Box::new(UnsafeCell::new(loader));
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Add a chunk (batch) of quads to an in-progress bulk-extend. `quads_json` is a JSON array of Quads.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_extend_add_chunk(
+    bulk_handle: BulkLoaderHandle,
+    quads_json: *const c_char,
+) -> *mut c_char {
+    if bulk_handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Bulk loader handle is null".into() });
+    }
+    let loader = unsafe { &mut *(*bulk_handle).get() };
+    let json_str = unsafe { c_str_to_str(quads_json) };
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(json_str) {
+        Ok(q) => q,
+        Err(e) => return error_json(ErrorKind::InvalidArgument {
+            message: format!("Invalid quads JSON: {e}"),
+        }),
+    };
+    match loader.load_ok_quads::<oxigraph::store::StorageError, oxigraph::store::StorageError>(
+        quads.into_iter().map(Ok),
+    ) {
+        Ok(_) => ok_json(&"chunk added"),
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Commit a chunked bulk-extend and free the loader.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_extend_commit(bulk_handle: BulkLoaderHandle) -> *mut c_char {
+    if bulk_handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Bulk loader handle is null".into() });
+    }
+    let loader = unsafe { Box::from_raw(bulk_handle) };
+    match loader.into_inner().commit() {
+        Ok(_) => ok_json(&"bulk extended"),
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Cancel a chunked bulk-extend without committing.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_extend_cancel(bulk_handle: BulkLoaderHandle) {
+    if bulk_handle.is_null() { return; }
+    unsafe { drop(Box::from_raw(bulk_handle)); }
 }
 
 #[cfg(test)]

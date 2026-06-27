@@ -115,12 +115,16 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
         return quads ?? [];
     }
 
-    /// <summary>Execute a SPARQL query. Supports custom functions via <see cref="CustomFunctions"/>.</summary>
+    /// <summary>
+    /// Execute a SPARQL query. Results are lazily streamed from the store — safe for large result sets.
+    /// Supports custom functions via <see cref="CustomFunctions"/>.
+    /// Custom functions are automatically cleaned up when the returned <see cref="QueryResults"/> is disposed.
+    /// </summary>
     public QueryResults Query(string sparql, QueryOptions? options = null)
     {
         options ??= new QueryOptions();
 
-        // Register custom functions before query
+        // Register custom functions before query (they stay alive until results are disposed)
         if (options.CustomFunctions != null)
         {
             foreach (var (name, func) in options.CustomFunctions)
@@ -131,6 +135,26 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
             foreach (var (name, factory) in options.CustomAggregateFunctions)
                 CustomFunctions.RegisterAggregate(name, factory);
         }
+
+        // Build cleanup action for deferred custom function cleanup
+        var hasCustomFns = options.CustomFunctions != null;
+        var hasCustomAgg = options.CustomAggregateFunctions != null;
+        var customFnNames = options.CustomFunctions?.Keys.ToList();
+        var customAggNames = options.CustomAggregateFunctions?.Keys.ToList();
+
+        Action cleanup = () =>
+        {
+            if (hasCustomFns && customFnNames != null)
+            {
+                foreach (var name in customFnNames)
+                    CustomFunctions.Unregister(name);
+            }
+            if (hasCustomAgg && customAggNames != null)
+            {
+                foreach (var name in customAggNames)
+                    CustomFunctions.UnregisterAggregate(name);
+            }
+        };
 
         try
         {
@@ -145,23 +169,27 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
                 substitutions = options.Substitutions,
             },
             new JsonSerializerOptions { Converters = { new TermConverter() } });
-            var element = FFIHelper.CallValue<JsonElement>(() =>
-                OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
-            return QueryResults.FromJson(element.GetRawText());
+
+            // Use the lazy streaming query path (gap 3 fix)
+            var jsonPtr = OxigraphNative.store_query_iter(
+                _handle.DangerousGetHandle(), queryJson);
+            var response = ReadAndFree(jsonPtr);
+            FFIHelper.ThrowIfError(response);
+
+            using var doc = JsonDocument.Parse(response);
+            var handleVal = doc.RootElement
+                .GetProperty("ok")
+                .GetProperty("handle")
+                .GetUInt64();
+
+            var handle = new QueryResultsSafeHandle((IntPtr)handleVal);
+            return QueryResults.FromHandle(this, handle, cleanup);
         }
-        finally
+        catch
         {
-            // Clean up registered functions
-            if (options.CustomFunctions != null)
-            {
-                foreach (var name in options.CustomFunctions.Keys)
-                    CustomFunctions.Unregister(name);
-            }
-            if (options.CustomAggregateFunctions != null)
-            {
-                foreach (var name in options.CustomAggregateFunctions.Keys)
-                    CustomFunctions.UnregisterAggregate(name);
-            }
+            // Clean up immediately on setup error
+            cleanup();
+            throw;
         }
     }
 
@@ -225,14 +253,66 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
 
     /// <summary>
     /// Insert a large set of quads without keeping them all in memory.
-    /// Uses RocksDB's bulk loading path — writes new SST files instead of
-    /// doing an in-memory extend. Much more efficient for huge data loads.
+    /// Uses RocksDB's bulk loading in chunks — streams quads through FFI
+    /// in batches of 10,000 to avoid materializing the entire set.
+    /// Much more efficient than <see cref="Extend"/> for huge data loads.
     /// </summary>
     public void BulkExtend(IEnumerable<Quad> quads)
     {
-        var json = JsonSerializer.Serialize(quads.ToList());
-        FFIHelper.CallVoid(() =>
-            OxigraphNative.store_bulk_extend(_handle.DangerousGetHandle(), json));
+        const int chunkSize = 10_000;
+        var chunk = new List<Quad>(chunkSize);
+
+        // Begin bulk loader
+        var jsonPtr = OxigraphNative.store_bulk_extend_begin(_handle.DangerousGetHandle());
+        var response = ReadAndFree(jsonPtr);
+        FFIHelper.ThrowIfError(response);
+
+        using var doc = JsonDocument.Parse(response);
+        var handleVal = doc.RootElement
+            .GetProperty("ok")
+            .GetProperty("handle")
+            .GetUInt64();
+
+        using var bulkHandle = new BulkLoaderSafeHandle((IntPtr)handleVal);
+
+        try
+        {
+            foreach (var quad in quads)
+            {
+                chunk.Add(quad);
+                if (chunk.Count >= chunkSize)
+                {
+                    var batchJson = JsonSerializer.Serialize(chunk);
+                    FFIHelper.CallVoid(() =>
+                        OxigraphNative.store_bulk_extend_add_chunk(
+                            bulkHandle.DangerousGetHandle(), batchJson));
+                    chunk.Clear();
+                }
+            }
+
+            // Flush remaining
+            if (chunk.Count > 0)
+            {
+                var batchJson = JsonSerializer.Serialize(chunk);
+                FFIHelper.CallVoid(() =>
+                    OxigraphNative.store_bulk_extend_add_chunk(
+                        bulkHandle.DangerousGetHandle(), batchJson));
+            }
+
+            // Commit
+            var commitPtr = OxigraphNative.store_bulk_extend_commit(
+                bulkHandle.DangerousGetHandle());
+            var commitJson = ReadAndFree(commitPtr);
+            FFIHelper.ThrowIfError(commitJson);
+
+            // Prevent the SafeHandle from calling cancel — already committed
+            bulkHandle.SetHandleAsInvalid();
+        }
+        catch
+        {
+            // bulkHandle's ReleaseHandle will call cancel automatically
+            throw;
+        }
     }
 
     /// <summary>N-Quads serialization of the store contents.</summary>

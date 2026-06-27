@@ -64,13 +64,17 @@ public sealed class Dataset : IEnumerable<Quad>, IDisposable
             OxigraphNative.dataset_insert(_handle.DangerousGetHandle(), json));
     }
 
-    /// <summary>Remove a quad from the dataset. Throws if not found.</summary>
+    /// <summary>Remove a quad from the dataset. Throws <see cref="KeyNotFoundException"/> if not found.</summary>
     public void Remove(Quad quad)
     {
         var json = JsonSerializer.Serialize(quad);
-        var result = FFIHelper.Call<string>(() =>
-            OxigraphNative.dataset_remove(_handle.DangerousGetHandle(), json));
-        // The Rust function returns an error JSON if not found
+        var resultJsonPtr = OxigraphNative.dataset_remove(_handle.DangerousGetHandle(), json);
+        var resultJson = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(resultJsonPtr) ?? "{}";
+        OxigraphNative.free_string(resultJsonPtr);
+        // The Rust FFI returns {"error":...} if the quad was not found, {"ok":"removed"} on success
+        using var doc = JsonDocument.Parse(resultJson);
+        if (doc.RootElement.TryGetProperty("error", out _))
+            throw new KeyNotFoundException($"Quad not found in the Dataset: {quad}");
     }
 
     /// <summary>Remove a quad if present, silently no-op if not.</summary>

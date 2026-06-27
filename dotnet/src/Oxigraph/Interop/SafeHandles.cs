@@ -58,3 +58,38 @@ internal sealed class QuadIterSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
         return true;
     }
 }
+
+/// <summary>SafeHandle for lazy query results iterators (streaming SPARQL results).</summary>
+internal sealed class QueryResultsSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public QueryResultsSafeHandle() : base(true) { }
+
+    public QueryResultsSafeHandle(IntPtr handle) : base(true)
+    {
+        SetHandle(handle);
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        OxigraphNative.query_iter_destroy(handle);
+        return true;
+    }
+}
+
+/// <summary>SafeHandle for chunked bulk loader. Cancels if not yet committed.</summary>
+internal sealed class BulkLoaderSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public BulkLoaderSafeHandle() : base(true) { }
+
+    public BulkLoaderSafeHandle(IntPtr handle) : base(true)
+    {
+        SetHandle(handle);
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        // If the handle wasn't explicitly committed, cancel it
+        OxigraphNative.store_bulk_extend_cancel(handle);
+        return true;
+    }
+}
