@@ -76,6 +76,9 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_extend", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_extend(IntPtr handle, string quadsJson);
 
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_extend", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_bulk_extend(IntPtr handle, string quadsJson);
+
     // I/O
     [LibraryImport(LibName, EntryPoint = "oxigraph_parse", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr parse(string inputJson);
@@ -98,6 +101,97 @@ internal static partial class OxigraphNative
 
     [LibraryImport(LibName, EntryPoint = "oxigraph_unregister_custom_function", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr unregister_custom_function(string name);
+
+    // Custom aggregate functions
+    [LibraryImport(LibName, EntryPoint = "oxigraph_register_aggregate_function", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr register_aggregate_function(string name, IntPtr newFn, IntPtr accFn, IntPtr finishFn, IntPtr freeFn);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_unregister_aggregate_function", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr unregister_aggregate_function(string name);
+
+    // File-based I/O
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_load_from_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_load_from_file(IntPtr handle, string path, string format, string? baseIri, string? toGraphJson, string? optionsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_bulk_load_from_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_bulk_load_from_file(IntPtr handle, string path, string format, string? baseIri, string? toGraphJson, string? optionsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_dump_to_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_dump_to_file(IntPtr handle, string path, string format, string? baseIri, string? fromGraphJson, string? prefixesJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_from_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr parse_from_file(string path, string format, string? baseIri, string? optionsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_serialize_to_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr serialize_to_file(string path, string quadsJson, string format, string? baseIri, string? prefixesJson);
+
+    // Stream callback I/O
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_load_from_callback", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_load_from_callback(IntPtr handle, IntPtr callback, IntPtr context, string format, string? baseIri, string? toGraphJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_store_dump_to_callback", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr store_dump_to_callback(IntPtr handle, IntPtr callback, IntPtr context, string format, string? baseIri, string? fromGraphJson, string? prefixesJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_from_callback", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr parse_from_callback(IntPtr callback, IntPtr context, string format, string? baseIri);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_serialize_to_callback", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr serialize_to_callback(IntPtr callback, IntPtr context, string quadsJson, string format, string? baseIri);
+
+    // Iterator
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_from_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr parse_iter_from_file(string path, string format, string? baseIri);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_next")]
+    internal static partial IntPtr parse_iter_next(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_parse_iter_destroy")]
+    internal static partial void parse_iter_destroy(IntPtr handle);
+
+    // Query results serialization
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_solutions_serialize_to_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_solutions_serialize_to_file(string path, string format, string variablesJson, string solutionsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_boolean_serialize_to_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_boolean_serialize_to_file(string path, string format, [MarshalAs(UnmanagedType.I1)] bool value);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_query_triples_serialize_to_file", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr query_triples_serialize_to_file(string path, string rdfFormat, string triplesJson);
+
+    // Canonicalization
+    [LibraryImport(LibName, EntryPoint = "oxigraph_canonicalize", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr canonicalize(string quadsJson, string algorithm);
+
+    // Dataset (in-memory)
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_new")]
+    internal static partial IntPtr dataset_new();
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_from_quads", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr dataset_from_quads(string quadsJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_insert", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr dataset_insert(IntPtr handle, string quadJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_remove", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr dataset_remove(IntPtr handle, string quadJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_contains", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr dataset_contains(IntPtr handle, string quadJson);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_count")]
+    internal static partial IntPtr dataset_count(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_clear")]
+    internal static partial IntPtr dataset_clear(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_iter")]
+    internal static partial IntPtr dataset_iter(IntPtr handle);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_canonicalize", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr dataset_canonicalize(IntPtr handle, string algorithm);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_dataset_destroy")]
+    internal static partial void dataset_destroy(IntPtr handle);
 
     // Memory
     [LibraryImport(LibName, EntryPoint = "oxigraph_free_string", StringMarshalling = StringMarshalling.Utf8)]

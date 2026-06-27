@@ -17,6 +17,10 @@ public sealed record Quad(
     [property: JsonConverter(typeof(GraphNameConverter))]
     IGraphName Graph)
 {
+    /// <summary>The underlying Triple (same S/P/O, no graph).</summary>
+    [JsonIgnore]
+    public Triple Triple => new(Subject, Predicate, Object);
+
     public override string ToString()
         => $"{Subject} {Predicate} {Object} {Graph} .";
 }

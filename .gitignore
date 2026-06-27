@@ -1,3 +1,20 @@
+# .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.trx
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.csproj.lscache
+
 **/target
 **/*.rs.bk
 Cargo.lock

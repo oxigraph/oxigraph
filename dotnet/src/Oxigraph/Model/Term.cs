@@ -32,7 +32,9 @@ public class TermConverter : JsonConverter<ITerm>
             "literal" => new Literal(
                 value,
                 root.TryGetProperty("language", out var lang) && lang.ValueKind != JsonValueKind.Null ? lang.GetString() : null,
-                root.TryGetProperty("datatype", out var dt) && dt.ValueKind != JsonValueKind.Null ? new NamedNode(dt.GetString()!) : null),
+                root.TryGetProperty("datatype", out var dt) && dt.ValueKind != JsonValueKind.Null ? new NamedNode(dt.GetString()!) : null,
+                root.TryGetProperty("direction", out var dir) && dir.ValueKind != JsonValueKind.Null
+                    ? (dir.GetString() == "ltr" ? BaseDirection.Ltr : BaseDirection.Rtl) : null),
             _ => throw new JsonException($"Unknown term type: {kind}")
         };
     }
@@ -55,6 +57,8 @@ public class TermConverter : JsonConverter<ITerm>
                 writer.WriteString("value", lit.Value);
                 if (lit.Language != null)
                     writer.WriteString("language", lit.Language);
+                if (lit.Direction != null)
+                    writer.WriteString("direction", lit.Direction == BaseDirection.Ltr ? "ltr" : "rtl");
                 if (lit.Datatype != null)
                 {
                     writer.WritePropertyName("datatype");

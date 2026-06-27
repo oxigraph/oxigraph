@@ -22,3 +22,39 @@ internal sealed class StoreSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
         return true;
     }
 }
+
+/// <summary>
+/// SafeHandle wrapping a native Dataset pointer.
+/// </summary>
+internal sealed class DatasetSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public DatasetSafeHandle() : base(true) { }
+
+    public DatasetSafeHandle(IntPtr handle) : base(true)
+    {
+        SetHandle(handle);
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        OxigraphNative.dataset_destroy(handle);
+        return true;
+    }
+}
+
+/// <summary>SafeHandle for lazy quad iterators from parse.</summary>
+internal sealed class QuadIterSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public QuadIterSafeHandle() : base(true) { }
+
+    public QuadIterSafeHandle(IntPtr handle) : base(true)
+    {
+        SetHandle(handle);
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        OxigraphNative.parse_iter_destroy(handle);
+        return true;
+    }
+}

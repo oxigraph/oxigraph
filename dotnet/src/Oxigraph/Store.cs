@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Oxigraph.Interop;
 
@@ -7,9 +9,14 @@ namespace Oxigraph;
 /// An RDF store backed by RocksDB (on disk) or in-memory.
 /// Thread safety: not guaranteed. Callers must synchronize concurrent access.
 /// </summary>
-public sealed class Store : IDisposable
+public sealed class Store : IDisposable, IEnumerable<Quad>
 {
     private readonly StoreSafeHandle _handle;
+
+    private Store(IntPtr handle)
+    {
+        _handle = new StoreSafeHandle(handle);
+    }
 
     /// <summary>Create an in-memory store, or open/create a file-backed store at the given path.</summary>
     public Store(string? path = null)
@@ -42,11 +49,7 @@ public sealed class Store : IDisposable
         using var doc = JsonDocument.Parse(response);
         var handleVal = doc.RootElement.GetProperty("ok").GetProperty("handle").GetUInt64();
 
-        var store = new Store(); // dummy, we'll replace _handle
-        store._handle.Dispose();
-        typeof(Store).GetField("_handle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .SetValue(store, new StoreSafeHandle((IntPtr)handleVal));
-        return store;
+        return new Store((IntPtr)handleVal);
     }
 
     /// <summary>Insert a quad into the store.</summary>
@@ -121,9 +124,12 @@ public sealed class Store : IDisposable
         if (options.CustomFunctions != null)
         {
             foreach (var (name, func) in options.CustomFunctions)
-            {
                 CustomFunctions.Register(name, func);
-            }
+        }
+        if (options.CustomAggregateFunctions != null)
+        {
+            foreach (var (name, factory) in options.CustomAggregateFunctions)
+                CustomFunctions.RegisterAggregate(name, factory);
         }
 
         try
@@ -136,7 +142,9 @@ public sealed class Store : IDisposable
                 use_default_graph_as_union = options.UseDefaultGraphAsUnion,
                 default_graph = options.DefaultGraphs,
                 named_graphs = options.NamedGraphs,
-            });
+                substitutions = options.Substitutions,
+            },
+            new JsonSerializerOptions { Converters = { new TermConverter() } });
             var element = FFIHelper.CallValue<JsonElement>(() =>
                 OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
             return QueryResults.FromJson(element.GetRawText());
@@ -147,25 +155,57 @@ public sealed class Store : IDisposable
             if (options.CustomFunctions != null)
             {
                 foreach (var name in options.CustomFunctions.Keys)
-                {
                     CustomFunctions.Unregister(name);
-                }
+            }
+            if (options.CustomAggregateFunctions != null)
+            {
+                foreach (var name in options.CustomAggregateFunctions.Keys)
+                    CustomFunctions.UnregisterAggregate(name);
             }
         }
     }
 
-    /// <summary>Execute a SPARQL update.</summary>
+    /// <summary>Execute a SPARQL update. Supports custom functions via <see cref="CustomFunctions"/>.</summary>
     public void Update(string sparql, UpdateOptions? options = null)
     {
         options ??= new UpdateOptions();
-        var updateJson = JsonSerializer.Serialize(new
+
+        // Register custom functions before update
+        if (options.CustomFunctions != null)
         {
-            update = sparql,
-            base_iri = options.BaseIri,
-            prefixes = options.Prefixes,
-        });
-        FFIHelper.CallVoid(() =>
-            OxigraphNative.store_update(_handle.DangerousGetHandle(), updateJson));
+            foreach (var (name, func) in options.CustomFunctions)
+                CustomFunctions.Register(name, func);
+        }
+        if (options.CustomAggregateFunctions != null)
+        {
+            foreach (var (name, factory) in options.CustomAggregateFunctions)
+                CustomFunctions.RegisterAggregate(name, factory);
+        }
+
+        try
+        {
+            var updateJson = JsonSerializer.Serialize(new
+            {
+                update = sparql,
+                base_iri = options.BaseIri,
+                prefixes = options.Prefixes,
+            });
+            FFIHelper.CallVoid(() =>
+                OxigraphNative.store_update(_handle.DangerousGetHandle(), updateJson));
+        }
+        finally
+        {
+            if (options.CustomFunctions != null)
+            {
+                foreach (var name in options.CustomFunctions.Keys)
+                    CustomFunctions.Unregister(name);
+            }
+            if (options.CustomAggregateFunctions != null)
+            {
+                foreach (var name in options.CustomAggregateFunctions.Keys)
+                    CustomFunctions.UnregisterAggregate(name);
+            }
+        }
     }
 
     /// <summary>Clear all quads from the store.</summary>
@@ -182,6 +222,22 @@ public sealed class Store : IDisposable
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_extend(_handle.DangerousGetHandle(), json));
     }
+
+    /// <summary>
+    /// Insert a large set of quads without keeping them all in memory.
+    /// Uses RocksDB's bulk loading path — writes new SST files instead of
+    /// doing an in-memory extend. Much more efficient for huge data loads.
+    /// </summary>
+    public void BulkExtend(IEnumerable<Quad> quads)
+    {
+        var json = JsonSerializer.Serialize(quads.ToList());
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_bulk_extend(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>N-Quads serialization of the store contents.</summary>
+    public override string ToString()
+        => Dump(RdfFormat.NQuads);
 
     // ─── Named graph operations ───
 
@@ -255,17 +311,105 @@ public sealed class Store : IDisposable
             format = IO.FormatToString(format),
             base_iri = options.BaseIri,
             to_graph = options.ToGraph,
+            lenient = options.Lenient,
+            rename_blank_nodes = options.RenameBlankNodes,
         });
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_load(_handle.DangerousGetHandle(), json));
     }
 
+    /// <summary>Load RDF from a file path into the store (streaming, no memory limit).</summary>
+    public void LoadFromFile(string filePath, RdfFormat format, LoadOptions? options = null)
+    {
+        options ??= new LoadOptions();
+        var toGraphJson = options.ToGraph is not null
+            ? JsonSerializer.Serialize(options.ToGraph, new JsonSerializerOptions { Converters = { new GraphNameConverter() } })
+            : null;
+        var optsJson = JsonSerializer.Serialize(new
+        {
+            lenient = options.Lenient,
+            rename_blank_nodes = options.RenameBlankNodes,
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_load_from_file(
+                _handle.DangerousGetHandle(), filePath,
+                IO.FormatToString(format), options.BaseIri, toGraphJson, optsJson));
+    }
+
+    /// <summary>
+    /// Bulk-load RDF from a file path using parallel parsing (optimized for very large files).
+    /// This uses RocksDB's bulk loading path for maximum performance.
+    /// </summary>
+    public void BulkLoadFromFile(string filePath, RdfFormat format, LoadOptions? options = null)
+    {
+        options ??= new LoadOptions();
+        var toGraphJson = options.ToGraph is not null
+            ? JsonSerializer.Serialize(options.ToGraph, new JsonSerializerOptions { Converters = { new GraphNameConverter() } })
+            : null;
+        var optsJson = JsonSerializer.Serialize(new
+        {
+            lenient = options.Lenient,
+            rename_blank_nodes = options.RenameBlankNodes,
+        });
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_bulk_load_from_file(
+                _handle.DangerousGetHandle(), filePath,
+                IO.FormatToString(format), options.BaseIri, toGraphJson, optsJson));
+    }
+
     /// <summary>Bulk-load RDF data optimized for large files.</summary>
     public void BulkLoad(string data, RdfFormat format, LoadOptions? options = null)
     {
-        // In the current memory-only implementation, BulkLoad delegates to Load.
-        // With RocksDB, this would use the bulk loader for better performance.
+        // For in-memory data, delegate to Load (same transaction behavior).
         Load(data, format, options);
+    }
+
+    /// <summary>Load RDF from a .NET Stream into the store.</summary>
+    public void LoadFromStream(Stream stream, RdfFormat format, LoadOptions? options = null)
+    {
+        options ??= new LoadOptions();
+        using var ctx = new ReadContext(stream);
+        var toGraphJson = options.ToGraph is not null
+            ? JsonSerializer.Serialize(options.ToGraph, new JsonSerializerOptions { Converters = { new GraphNameConverter() } })
+            : null;
+
+        var resultPtr = OxigraphNative.store_load_from_callback(
+            _handle.DangerousGetHandle(),
+            Marshal.GetFunctionPointerForDelegate(ctx.Callback),
+            ctx.ContextPtr,
+            IO.FormatToString(format),
+            options.BaseIri,
+            toGraphJson);
+
+        var resultJson = Marshal.PtrToStringUTF8(resultPtr) ?? "{}";
+        OxigraphNative.free_string(resultPtr);
+        FFIHelper.ThrowIfError(resultJson);
+    }
+
+    /// <summary>Dump store contents to a .NET Stream.</summary>
+    public void DumpToStream(Stream stream, RdfFormat format, DumpOptions? options = null)
+    {
+        options ??= new DumpOptions();
+        using var ctx = new WriteContext(stream);
+        var fromGraphJson = options.FromGraph is not null
+            ? JsonSerializer.Serialize(options.FromGraph, new JsonSerializerOptions { Converters = { new GraphNameConverter() } })
+            : null;
+        var prefixesJson = options.Prefixes != null
+            ? JsonSerializer.Serialize(options.Prefixes)
+            : null;
+
+        var resultPtr = OxigraphNative.store_dump_to_callback(
+            _handle.DangerousGetHandle(),
+            Marshal.GetFunctionPointerForDelegate(ctx.Callback),
+            ctx.ContextPtr,
+            IO.FormatToString(format),
+            options.BaseIri,
+            fromGraphJson,
+            prefixesJson);
+
+        var resultJson = Marshal.PtrToStringUTF8(resultPtr) ?? "{}";
+        OxigraphNative.free_string(resultPtr);
+        FFIHelper.ThrowIfError(resultJson);
     }
 
     /// <summary>Dump store contents as RDF text.</summary>
@@ -281,9 +425,26 @@ public sealed class Store : IDisposable
             format = IO.FormatToString(format),
             base_iri = options.BaseIri,
             from_graph = options.FromGraph,
+            prefixes = options.Prefixes,
         }, converterOptions);
         return FFIHelper.Call<string>(() =>
             OxigraphNative.store_dump(_handle.DangerousGetHandle(), json));
+    }
+
+    /// <summary>Dump store contents to a file (streaming, no memory limit on output).</summary>
+    public void DumpToFile(string filePath, RdfFormat format, DumpOptions? options = null)
+    {
+        options ??= new DumpOptions();
+        var fromGraphJson = options.FromGraph is not null
+            ? JsonSerializer.Serialize(options.FromGraph, new JsonSerializerOptions { Converters = { new GraphNameConverter() } })
+            : null;
+        var prefixesJson = options.Prefixes != null
+            ? JsonSerializer.Serialize(options.Prefixes)
+            : null;
+        FFIHelper.CallVoid(() =>
+            OxigraphNative.store_dump_to_file(
+                _handle.DangerousGetHandle(), filePath,
+                IO.FormatToString(format), options.BaseIri, fromGraphJson, prefixesJson));
     }
 
     /// <summary>Flush pending writes to disk.</summary>
@@ -306,6 +467,15 @@ public sealed class Store : IDisposable
         FFIHelper.CallVoid(() =>
             OxigraphNative.store_backup(_handle.DangerousGetHandle(), targetDirectory));
     }
+
+    /// <summary>Iterate over all quads in the store via pattern matching.</summary>
+    public IEnumerator<Quad> GetEnumerator()
+    {
+        foreach (var q in Match())
+            yield return q;
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public void Dispose()
     {

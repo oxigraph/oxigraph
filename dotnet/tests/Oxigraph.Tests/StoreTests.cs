@@ -229,6 +229,16 @@ public class StoreTests
         Assert.Contains("http://example.com/s", s);
     }
 
+    [Fact]
+    public void Store_EnumerateAllQuads()
+    {
+        using var store = new Store();
+        store.Add(Q("http://example.com/s1", "http://example.com/p", "a"));
+        store.Add(Q("http://example.com/s2", "http://example.com/p", "b"));
+        var all = store.ToList();
+        Assert.Equal(2, all.Count);
+    }
+
     private static Quad Q(string s, string p, string o) =>
         new(new NamedNode(s), new NamedNode(p), new Literal(o), new DefaultGraph());
 }

@@ -129,4 +129,195 @@ public class SparqlTests
             CustomFunctions.Unregister("http://example.com/suffix");
         }
     }
+
+    // ─── Query Results Serialization ─────────────────
+
+    [Fact]
+    public void QueryBoolean_SerializeToFile_Roundtrip()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var result = store.Query("ASK { ?s ?p ?o }");
+            var boolean = Assert.IsType<QueryBoolean>(result);
+            Assert.True(boolean.Value);
+
+            boolean.SerializeToFile(tempFile, QueryResultsFormat.Json);
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("true", content);
+
+            // Parse back
+            var parsed = IO.ParseQueryResults(content, QueryResultsFormat.Json);
+            var parsedBool = Assert.IsType<QueryBoolean>(parsed);
+            Assert.True(parsedBool.Value);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public void QuerySolutions_SerializeToFile_Roundtrip()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var result = store.Query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
+            var solutions = Assert.IsType<QuerySolutions>(result);
+
+            solutions.SerializeToFile(tempFile, QueryResultsFormat.Json);
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+
+            // Parse back
+            var parsed = IO.ParseQueryResults(content, QueryResultsFormat.Json);
+            var parsedSols = Assert.IsType<QuerySolutions>(parsed);
+            Assert.Single(parsedSols);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public void QueryTriples_SerializeToFile_Roundtrip()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"), new Literal("test"), new DefaultGraph()));
+            var result = store.Query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+            var triples = Assert.IsType<QueryTriples>(result);
+
+            triples.SerializeToFile(tempFile, RdfFormat.NTriples);
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+
+            // Parse back
+            var parsed = IO.ParseFromFile(tempFile, RdfFormat.NTriples);
+            Assert.Single(parsed);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    // ─── SPARQL Substitutions ────────────────────────
+
+    [Fact]
+    public void Substitutions_FilterByVariable()
+    {
+        using var store = new Store();
+        store.Add(new Quad(
+            new NamedNode("http://example.com/s1"),
+            new NamedNode("http://example.com/p"),
+            new Literal("a"),
+            new DefaultGraph()));
+        store.Add(new Quad(
+            new NamedNode("http://example.com/s2"),
+            new NamedNode("http://example.com/p"),
+            new Literal("b"),
+            new DefaultGraph()));
+
+        // Substitute ?s with s1 — should only return the first quad's object
+        var results = store.Query(
+            "SELECT ?s ?o WHERE { ?s ?p ?o }",
+            new QueryOptions
+            {
+                Substitutions = new Dictionary<string, ITerm>
+                {
+                    ["s"] = new NamedNode("http://example.com/s1")
+                }
+            });
+
+        var solutions = Assert.IsType<QuerySolutions>(results);
+        Assert.Single(solutions);
+        Assert.Equal("a", ((Literal)solutions.First()["o"]!).Value);
+    }
+
+    // ─── Custom Aggregate ────────────────────────────
+
+    [Fact]
+    public void Custom_Aggregate_CountValues()
+    {
+        // Simple accumulator that counts values
+        var acc = new CountAggregate();
+        CustomFunctions.RegisterAggregate("http://example.com/myCount",
+            () => new CountAggregate());
+
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s1"),
+                new NamedNode("http://example.com/p"), new Literal("a"), new DefaultGraph()));
+            store.Add(new Quad(new NamedNode("http://example.com/s2"),
+                new NamedNode("http://example.com/p"), new Literal("b"), new DefaultGraph()));
+            store.Add(new Quad(new NamedNode("http://example.com/s3"),
+                new NamedNode("http://example.com/p"), new Literal("c"), new DefaultGraph()));
+
+            var results = store.Query(@"
+                PREFIX my: <http://example.com/>
+                SELECT (my:myCount(?o) AS ?cnt) WHERE { ?s ?p ?o }");
+
+            var sols = Assert.IsType<QuerySolutions>(results);
+            Assert.Single(sols);
+            var cnt = ((Literal)sols.First()["cnt"]!).Value;
+            Assert.Equal("3", cnt);
+        }
+        finally
+        {
+            CustomFunctions.UnregisterAggregate("http://example.com/myCount");
+        }
+    }
+
+    private sealed class CountAggregate : CustomFunctions.IAggregateAccumulator
+    {
+        private int _count;
+        public void Accumulate(ITerm term) => _count++;
+        public ITerm? Finish() => new Literal(_count.ToString());
+    }
+
+    // ─── Custom Functions in UPDATE ──────────────────
+
+    [Fact]
+    public void Custom_Function_In_Update()
+    {
+        CustomFunctions.Register("http://example.com/upper",
+            args => new Literal(((Literal)args[0]).Value.ToUpperInvariant()));
+
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"),
+                new Literal("hello"), new DefaultGraph()));
+
+            // Use custom function in INSERT to transform values
+            store.Update(@"
+                PREFIX my: <http://example.com/>
+                INSERT { ?s <http://example.com/new> ?upper }
+                WHERE  { ?s ?p ?o . BIND(my:upper(?o) AS ?upper) }",
+                new UpdateOptions
+                {
+                    CustomFunctions = new() {
+                        ["http://example.com/upper"] = args =>
+                            new Literal(((Literal)args[0]).Value.ToUpperInvariant())
+                    }
+                });
+
+            Assert.Equal(2UL, store.Count);
+            // Verify the transformed value exists
+            var results = store.Query(
+                "SELECT ?v WHERE { ?s <http://example.com/new> ?v }");
+            var sols = Assert.IsType<QuerySolutions>(results);
+            Assert.Single(sols);
+            Assert.Equal("HELLO", ((Literal)sols.First()["v"]!).Value);
+        }
+        finally
+        {
+            CustomFunctions.Unregister("http://example.com/upper");
+        }
+    }
 }

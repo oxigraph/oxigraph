@@ -1,5 +1,6 @@
 use crate::error::{error_json, ok_json, ErrorKind};
 use crate::model_ffi::{bool_to_response, c_str_to_str, parse_quad_value};
+use crate::stream_ffi::{CallbackReader, CallbackWriter, ReadFn, WriteFn};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
@@ -8,13 +9,35 @@ use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
-use std::os::raw::c_char;
+use std::fs::File;
+use std::os::raw::{c_char, c_void};
 use std::sync::Mutex;
 
 /// Type for C# callback: receives JSON array of Terms, returns JSON Term or null.
 type CustomFnCallback = unsafe extern "C" fn(args_json: *const c_char) -> *mut c_char;
 
+/// Aggregate function callbacks from C#.
+type AggregateNewCallback = unsafe extern "C" fn() -> *mut c_void;    // returns context handle
+type AggregateAccCallback = unsafe extern "C" fn(ctx: *mut c_void, term_json: *const c_char);
+type AggregateFinishCallback = unsafe extern "C" fn(ctx: *mut c_void) -> *mut c_char; // returns term JSON or null
+type AggregateFreeCallback = unsafe extern "C" fn(ctx: *mut c_void);
+
 static CUSTOM_FUNCTIONS: std::sync::LazyLock<Mutex<HashMap<String, CustomFnCallback>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Storage for aggregate function callback tuples.
+#[derive(Clone)]
+struct AggregateCallbacks {
+    new_fn: AggregateNewCallback,
+    acc_fn: AggregateAccCallback,
+    finish_fn: AggregateFinishCallback,
+    free_fn: AggregateFreeCallback,
+}
+
+// SAFETY: function pointers are Send.
+unsafe impl Send for AggregateCallbacks {}
+
+static AGGREGATE_FUNCTIONS: std::sync::LazyLock<Mutex<HashMap<String, AggregateCallbacks>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Register a custom SPARQL function from C#.
@@ -39,6 +62,71 @@ pub extern "C" fn oxigraph_register_custom_function(
 pub extern "C" fn oxigraph_unregister_custom_function(name: *const c_char) -> *mut c_char {
     let name_str = unsafe { c_str_to_str(name) };
     CUSTOM_FUNCTIONS.lock().unwrap().remove(name_str);
+    ok_json(&"unregistered")
+}
+
+// ─── Custom aggregate functions ─────────────────────
+
+/// Wrapper around C# aggregate callbacks that implements AggregateFunctionAccumulator.
+struct CallbackAggregateAccumulator {
+    ctx: *mut std::os::raw::c_void,
+    acc_fn: AggregateAccCallback,
+    finish_fn: AggregateFinishCallback,
+    free_fn: AggregateFreeCallback,
+}
+
+// SAFETY: The C# side ensures thread-safe access via its own locking.
+unsafe impl Send for CallbackAggregateAccumulator {}
+unsafe impl Sync for CallbackAggregateAccumulator {}
+
+impl oxigraph::sparql::AggregateFunctionAccumulator for CallbackAggregateAccumulator {
+    fn accumulate(&mut self, element: Term) {
+        let json = serde_json::to_string(&element).unwrap_or_default();
+        let c_str = std::ffi::CString::new(json).unwrap();
+        unsafe { (self.acc_fn)(self.ctx, c_str.as_ptr()) };
+    }
+
+    fn finish(&mut self) -> Option<Term> {
+        let ptr = unsafe { (self.finish_fn)(self.ctx) };
+        if ptr.is_null() { return None; }
+        let json = unsafe { crate::model_ffi::c_str_to_str(ptr) };
+        let term: Option<Term> = serde_json::from_str(json).unwrap_or(None);
+        crate::error::oxigraph_free_string(ptr);
+        term
+    }
+}
+
+impl Drop for CallbackAggregateAccumulator {
+    fn drop(&mut self) {
+        unsafe { (self.free_fn)(self.ctx) };
+    }
+}
+
+/// Register a custom aggregate SPARQL function.
+/// `new_fn` creates a context; `acc_fn` accumulates a term; `finish_fn` returns the result; `free_fn` destroys context.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_register_aggregate_function(
+    name: *const c_char,
+    new_fn: AggregateNewCallback,
+    acc_fn: AggregateAccCallback,
+    finish_fn: AggregateFinishCallback,
+    free_fn: AggregateFreeCallback,
+) -> *mut c_char {
+    let name_str = unsafe { c_str_to_str(name) }.to_string();
+    if name_str.is_empty() || new_fn as usize == 0 || acc_fn as usize == 0 || finish_fn as usize == 0 || free_fn as usize == 0 {
+        return error_json(ErrorKind::InvalidArgument { message: "Name or callbacks are null".into() });
+    }
+    AGGREGATE_FUNCTIONS.lock().unwrap().insert(name_str, AggregateCallbacks {
+        new_fn, acc_fn, finish_fn, free_fn,
+    });
+    ok_json(&"registered")
+}
+
+/// Unregister an aggregate function.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_unregister_aggregate_function(name: *const c_char) -> *mut c_char {
+    let name_str = unsafe { c_str_to_str(name) };
+    AGGREGATE_FUNCTIONS.lock().unwrap().remove(name_str);
     ok_json(&"unregistered")
 }
 
@@ -326,34 +414,116 @@ pub extern "C" fn oxigraph_store_query(
         );
     }
 
-    if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
-        let mut prepared = match evaluator.parse_query(query) {
-            Ok(p) => p,
-            Err(e) => {
-                return error_json(ErrorKind::InvalidArgument {
-                    message: format!("SPARQL syntax error: {e}"),
-                });
-            }
-        };
-        prepared.dataset_mut().set_default_graph_as_union();
-        let results = match prepared.on_store(store).execute() {
-            Ok(r) => r,
-            Err(e) => {
-                return error_json(ErrorKind::InvalidArgument {
-                    message: format!("SPARQL evaluation error: {e}"),
-                });
-            }
-        };
-        return query_results_to_response(results);
+    // Inject registered aggregate functions (snapshot to avoid lock lifetime issues)
+    let agg_fns: Vec<(String, AggregateCallbacks)> = {
+        AGGREGATE_FUNCTIONS
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    };
+    for (name, callbacks) in agg_fns {
+        let func_name = NamedNode::new(name).unwrap();
+        let new_fn = callbacks.new_fn;
+        let acc_fn = callbacks.acc_fn;
+        let finish_fn = callbacks.finish_fn;
+        let free_fn = callbacks.free_fn;
+        evaluator = evaluator.with_custom_aggregate_function(
+            func_name,
+            move || {
+                Box::new(CallbackAggregateAccumulator {
+                    ctx: unsafe { new_fn() },
+                    acc_fn,
+                    finish_fn,
+                    free_fn,
+                })
+            },
+        );
     }
 
-    let prepared = match evaluator.parse_query(query) {
+    // Helper to apply variable substitutions to a prepared query
+    fn apply_substitutions(
+        mut prepared: oxigraph::sparql::PreparedSparqlQuery,
+        substitutions: &Value,
+    ) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
+        if let Some(subs) = substitutions.as_object() {
+            for (var_name, term_json) in subs {
+                let var_name_owned: String = var_name.clone();
+                let var = match oxigraph::sparql::Variable::new(var_name_owned) {
+                    Ok(v) => v,
+                    Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
+                        message: format!("Invalid variable name '{var_name}': {e}"),
+                    })),
+                };
+                let term: Term = match serde_json::from_value(term_json.clone()) {
+                    Ok(t) => t,
+                    Err(e) => return Err(error_json(ErrorKind::InvalidArgument {
+                        message: format!("Invalid term for '{var_name}': {e}"),
+                    })),
+                };
+                prepared = prepared.substitute_variable(var, term);
+            }
+        }
+        Ok(prepared)
+    }
+
+    // Helper to apply dataset restrictions (default_graph, named_graphs, union)
+    fn configure_dataset(
+        mut prepared: oxigraph::sparql::PreparedSparqlQuery,
+        opts: &Value,
+    ) -> Result<oxigraph::sparql::PreparedSparqlQuery, *mut c_char> {
+        // Apply default_graph_as_union
+        if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
+            prepared.dataset_mut().set_default_graph_as_union();
+        }
+
+        // Apply default_graph restriction
+        if let Some(default_graphs) = opts.get("default_graph") {
+            if let Some(arr) = default_graphs.as_array() {
+                let graphs: Vec<GraphName> = arr
+                    .iter()
+                    .filter_map(|v| serde_json::from_value::<GraphName>(v.clone()).ok())
+                    .collect();
+                if !graphs.is_empty() {
+                    prepared.dataset_mut().set_default_graph(graphs);
+                }
+            } else if let Ok(graph) = serde_json::from_value::<GraphName>(default_graphs.clone()) {
+                prepared.dataset_mut().set_default_graph(vec![graph]);
+            }
+        }
+
+        // Apply named_graphs restriction
+        if let Some(named_graphs) = opts.get("named_graphs") {
+            if let Some(arr) = named_graphs.as_array() {
+                let graphs: Vec<NamedOrBlankNode> = arr
+                    .iter()
+                    .filter_map(|v| serde_json::from_value::<NamedOrBlankNode>(v.clone()).ok())
+                    .collect();
+                if !graphs.is_empty() {
+                    prepared.dataset_mut().set_available_named_graphs(graphs);
+                }
+            }
+        }
+
+        Ok(prepared)
+    }
+
+    let mut prepared = match evaluator.parse_query(query) {
         Ok(p) => p,
         Err(e) => {
             return error_json(ErrorKind::InvalidArgument {
                 message: format!("SPARQL syntax error: {e}"),
             });
         }
+    };
+    prepared = match apply_substitutions(prepared, &opts["substitutions"]) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    prepared = match configure_dataset(prepared, &opts) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
     let results = match prepared.on_store(store).execute() {
         Ok(r) => r,
@@ -415,6 +585,51 @@ pub extern "C" fn oxigraph_store_update(
                 };
             }
         }
+    }
+
+    // Inject custom functions (same as query path)
+    let custom_fns: Vec<(String, CustomFnCallback)> = {
+        CUSTOM_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), *v)).collect()
+    };
+    for (name, callback) in custom_fns {
+        let name_for_closure = name.clone();
+        evaluator = evaluator.with_custom_function(
+            NamedNode::new(name).unwrap(),
+            move |args: &[Term]| -> Option<Term> {
+                let mut arr: Vec<Value> = vec![Value::String(name_for_closure.clone())];
+                arr.extend(args.iter().map(|t| serde_json::to_value(t).unwrap_or_default()));
+                let args_json = serde_json::to_string(&arr).unwrap_or_default();
+                let args_c = std::ffi::CString::new(args_json).unwrap();
+                let result_ptr = unsafe { callback(args_c.as_ptr()) };
+                if result_ptr.is_null() { return None; }
+                let result_json = unsafe { crate::model_ffi::c_str_to_str(result_ptr) };
+                let term: Option<Term> = serde_json::from_str(result_json).unwrap_or(None);
+                crate::error::oxigraph_free_string(result_ptr);
+                term
+            },
+        );
+    }
+
+    // Inject custom aggregate functions (same as query path)
+    let agg_fns: Vec<(String, AggregateCallbacks)> = {
+        AGGREGATE_FUNCTIONS.lock().unwrap().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    };
+    for (name, callbacks) in agg_fns {
+        let new_fn = callbacks.new_fn;
+        let acc_fn = callbacks.acc_fn;
+        let finish_fn = callbacks.finish_fn;
+        let free_fn = callbacks.free_fn;
+        evaluator = evaluator.with_custom_aggregate_function(
+            NamedNode::new(name).unwrap(),
+            move || {
+                Box::new(CallbackAggregateAccumulator {
+                    ctx: unsafe { new_fn() },
+                    acc_fn,
+                    finish_fn,
+                    free_fn,
+                })
+            },
+        );
     }
 
     match evaluator.parse_update(update) {
@@ -580,6 +795,42 @@ pub extern "C" fn oxigraph_store_extend(
     };
     match store.extend(quads) {
         Ok(_) => ok_json(&"extended"),
+        Err(e) => error_json(ErrorKind::Store {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Bulk-extend using RocksDB bulk loader (writes new SST files).
+/// More efficient than extend for very large datasets.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_extend(
+    handle: StoreHandle,
+    quads_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let json_str = unsafe { c_str_to_str(quads_json) };
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(json_str) {
+        Ok(q) => q,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid quads JSON: {e}"),
+            });
+        }
+    };
+    let mut loader = store.bulk_loader();
+    if let Err(e) = loader.load_ok_quads::<oxigraph::store::StorageError, oxigraph::store::StorageError>(
+        quads.into_iter().map(Ok),
+    ) {
+        return error_json(ErrorKind::Store { message: e.to_string() });
+    }
+    match loader.commit() {
+        Ok(_) => ok_json(&"bulk extended"),
         Err(e) => error_json(ErrorKind::Store {
             message: e.to_string(),
         }),
@@ -774,6 +1025,20 @@ pub extern "C" fn oxigraph_serialize(input_json: *const c_char) -> *mut c_char {
             }
         };
     }
+    if let Some(prefixes) = opts.get("prefixes").and_then(|p| p.as_object()) {
+        for (prefix, iri_val) in prefixes {
+            if let Some(iri) = iri_val.as_str() {
+                serializer = match serializer.with_prefix(prefix, iri) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return error_json(ErrorKind::InvalidArgument {
+                            message: format!("Invalid prefix '{prefix}' IRI '{iri}': {e}"),
+                        });
+                    }
+                };
+            }
+        }
+    }
 
     let mut buf = Vec::new();
     let mut writer = serializer.for_writer(&mut buf);
@@ -791,7 +1056,7 @@ pub extern "C" fn oxigraph_serialize(input_json: *const c_char) -> *mut c_char {
 }
 
 /// Parse RDF text into quads.
-/// `input_json`: {"data":"<turtle data>","format":"turtle","base_iri":null}
+/// `input_json`: {"data":"...","format":"turtle","base_iri":null,"without_named_graphs":false,"rename_blank_nodes":false,"lenient":false}
 #[unsafe(no_mangle)]
 pub extern "C" fn oxigraph_parse(input_json: *const c_char) -> *mut c_char {
     let json_str = unsafe { c_str_to_str(input_json) };
@@ -806,26 +1071,15 @@ pub extern "C" fn oxigraph_parse(input_json: *const c_char) -> *mut c_char {
 
     let data = opts["data"].as_str().unwrap_or("");
     let format_str = opts["format"].as_str().unwrap_or("turtle");
-    let format = match parse_format(format_str) {
-        Some(f) => f,
-        None => {
-            return error_json(ErrorKind::InvalidArgument {
-                message: format!("Unknown RDF format: {format_str}"),
-            });
-        }
-    };
+    let base_iri = opts["base_iri"].as_str();
+    let without_named_graphs = opts["without_named_graphs"].as_bool().unwrap_or(false);
+    let rename_blank_nodes = opts["rename_blank_nodes"].as_bool().unwrap_or(false);
+    let lenient = opts["lenient"].as_bool().unwrap_or(false);
 
-    let mut parser = RdfParser::from_format(format);
-    if let Some(base_iri) = opts["base_iri"].as_str() {
-        parser = match parser.with_base_iri(base_iri) {
-            Ok(p) => p,
-            Err(e) => {
-                return error_json(ErrorKind::InvalidArgument {
-                    message: format!("Invalid base IRI: {e}"),
-                });
-            }
-        };
-    }
+    let parser = match build_parser_with_options(format_str, base_iri, None, without_named_graphs, rename_blank_nodes, lenient) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
 
     let quads: Vec<oxigraph::model::Quad> = parser
         .for_slice(data.as_bytes())
@@ -883,6 +1137,12 @@ pub extern "C" fn oxigraph_store_load(
             parser = parser.with_default_graph(graph);
         }
     }
+    if opts["lenient"].as_bool().unwrap_or(false) {
+        parser = parser.lenient();
+    }
+    if opts["rename_blank_nodes"].as_bool().unwrap_or(false) {
+        parser = parser.rename_blank_nodes();
+    }
 
     match store.load_from_slice(parser, data.as_bytes()) {
         Ok(_) => ok_json(&"loaded"),
@@ -891,6 +1151,859 @@ pub extern "C" fn oxigraph_store_load(
             file: None,
             line: None,
         }),
+    }
+}
+
+// ─── Shared helpers ───────────────────────────────
+
+/// Build an RdfParser from format string and options.
+fn build_parser(
+    format_str: &str,
+    base_iri: Option<&str>,
+    to_graph_json: Option<&Value>,
+) -> Result<RdfParser, *mut c_char> {
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return Err(error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            }));
+        }
+    };
+    let mut parser = RdfParser::from_format(format);
+    if let Some(iri) = base_iri.filter(|s| !s.is_empty()) {
+        parser = match parser.with_base_iri(iri) {
+            Ok(p) => p,
+            Err(e) => {
+                return Err(error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                }));
+            }
+        };
+    }
+    if let Some(graph) = to_graph_json.and_then(|v| serde_json::from_value::<GraphName>(v.clone()).ok())
+    {
+        parser = parser.with_default_graph(graph);
+    }
+    Ok(parser)
+}
+
+/// Build parser with additional parse options.
+fn build_parser_with_options(
+    format_str: &str,
+    base_iri: Option<&str>,
+    to_graph_json: Option<&Value>,
+    without_named_graphs: bool,
+    rename_blank_nodes: bool,
+    lenient: bool,
+) -> Result<RdfParser, *mut c_char> {
+    let mut parser = build_parser(format_str, base_iri, to_graph_json)?;
+    if without_named_graphs {
+        parser = parser.without_named_graphs();
+    }
+    if rename_blank_nodes {
+        parser = parser.rename_blank_nodes();
+    }
+    if lenient {
+        parser = parser.lenient();
+    }
+    Ok(parser)
+}
+
+/// Build an RdfSerializer from format string and options.
+fn build_serializer(
+    format_str: &str,
+    base_iri: Option<&str>,
+) -> Result<RdfSerializer, *mut c_char> {
+    let format = match parse_format(format_str) {
+        Some(f) => f,
+        None => {
+            return Err(error_json(ErrorKind::InvalidArgument {
+                message: format!("Unknown RDF format: {format_str}"),
+            }));
+        }
+    };
+    let mut serializer = RdfSerializer::from_format(format);
+    if let Some(iri) = base_iri.filter(|s| !s.is_empty()) {
+        serializer = match serializer.with_base_iri(iri) {
+            Ok(s) => s,
+            Err(e) => {
+                return Err(error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid base IRI: {e}"),
+                }));
+            }
+        };
+    }
+    Ok(serializer)
+}
+
+// ─── File-based I/O ───────────────────────────────
+
+/// Load RDF from a file path into the store.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_load_from_file(
+    handle: StoreHandle,
+    path: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+    to_graph_json: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let to_graph_str = unsafe { c_str_to_str(to_graph_json) };
+
+    let to_graph_val: Option<Value> = if to_graph_str.is_empty() {
+        None
+    } else {
+        match serde_json::from_str(to_graph_str) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid to_graph JSON: {e}"),
+                });
+            }
+        }
+    };
+
+    // Parse lenient/rename_blank_nodes from options_json
+    let opts_str = unsafe { c_str_to_str(options_json) };
+    let (lenient, rename_blank_nodes) = if opts_str.is_empty() {
+        (false, false)
+    } else {
+        let opts: Value = match serde_json::from_str(opts_str) {
+            Ok(v) => v,
+            Err(_) => Value::Null,
+        };
+        (
+            opts["lenient"].as_bool().unwrap_or(false),
+            opts["rename_blank_nodes"].as_bool().unwrap_or(false),
+        )
+    };
+
+    let parser = match build_parser_with_options(
+        format_str, Some(base_iri_str), to_graph_val.as_ref(),
+        false, rename_blank_nodes, lenient,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let file = match File::open(path_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return error_json(ErrorKind::Parse {
+                message: format!("Cannot open file '{path_str}': {e}"),
+                file: Some(path_str.to_string()),
+                line: None,
+            });
+        }
+    };
+
+    match store.load_from_reader(parser, file) {
+        Ok(_) => ok_json(&"loaded"),
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: Some(path_str.to_string()),
+            line: None,
+        }),
+    }
+}
+
+/// Bulk-load RDF from a file path into the store (parallel, optimized for large files).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_bulk_load_from_file(
+    handle: StoreHandle,
+    path: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+    to_graph_json: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let to_graph_str = unsafe { c_str_to_str(to_graph_json) };
+
+    let to_graph_val: Option<Value> = if to_graph_str.is_empty() {
+        None
+    } else {
+        match serde_json::from_str(to_graph_str) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid to_graph JSON: {e}"),
+                });
+            }
+        }
+    };
+
+    // Parse lenient/rename_blank_nodes from options_json
+    let opts_str = unsafe { c_str_to_str(options_json) };
+    let (lenient, rename_blank_nodes) = if opts_str.is_empty() {
+        (false, false)
+    } else {
+        let opts: Value = match serde_json::from_str(opts_str) {
+            Ok(v) => v,
+            Err(_) => Value::Null,
+        };
+        (
+            opts["lenient"].as_bool().unwrap_or(false),
+            opts["rename_blank_nodes"].as_bool().unwrap_or(false),
+        )
+    };
+
+    let parser = match build_parser_with_options(
+        format_str, Some(base_iri_str), to_graph_val.as_ref(),
+        false, rename_blank_nodes, lenient,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let mut loader = store.bulk_loader();
+    let result = loader.parallel_load_from_file(parser, path_str);
+    match result {
+        Ok(_) => match loader.commit() {
+            Ok(_) => ok_json(&"bulk loaded"),
+            Err(e) => error_json(ErrorKind::Store {
+                message: e.to_string(),
+            }),
+        },
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: Some(path_str.to_string()),
+            line: None,
+        }),
+    }
+}
+
+/// Dump store contents to a file.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_dump_to_file(
+    handle: StoreHandle,
+    path: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+    from_graph_json: *const c_char,
+    prefixes_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Store handle is null".into(),
+        });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let from_graph_str = unsafe { c_str_to_str(from_graph_json) };
+
+    let serializer = match build_serializer(format_str, Some(base_iri_str)) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    // Apply prefixes if provided
+    let prefixes_str = unsafe { c_str_to_str(prefixes_json) };
+    let serializer = if prefixes_str.is_empty() {
+        serializer
+    } else {
+        match serde_json::from_str::<Value>(prefixes_str) {
+            Ok(prefixes_val) => {
+                let mut s = serializer;
+                if let Some(prefixes_obj) = prefixes_val.as_object() {
+                    for (prefix, iri_val) in prefixes_obj {
+                        if let Some(iri) = iri_val.as_str() {
+                            s = match s.with_prefix(prefix, iri) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    return error_json(ErrorKind::InvalidArgument {
+                                        message: format!("Invalid prefix '{prefix}' IRI '{iri}': {e}"),
+                                    });
+                                }
+                            };
+                        }
+                    }
+                }
+                s
+            }
+            Err(_) => serializer,
+        }
+    };
+
+    let file = match File::create(path_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return error_json(ErrorKind::Parse {
+                message: format!("Cannot create file '{path_str}': {e}"),
+                file: Some(path_str.to_string()),
+                line: None,
+            });
+        }
+    };
+
+    let result = if from_graph_str.is_empty() {
+        store.dump_to_writer(serializer, file)
+    } else {
+        match serde_json::from_str::<GraphName>(from_graph_str) {
+            Ok(graph) => store.dump_graph_to_writer(&graph, serializer, file),
+            Err(e) => {
+                return error_json(ErrorKind::InvalidArgument {
+                    message: format!("Invalid from_graph JSON: {e}"),
+                });
+            }
+        }
+    };
+
+    match result {
+        Ok(_) => ok_json(&"dumped"),
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: Some(path_str.to_string()),
+            line: None,
+        }),
+    }
+}
+
+/// Parse RDF from a file path (standalone, no store needed).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_from_file(
+    path: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let opts_str = unsafe { c_str_to_str(options_json) };
+
+    let (without_named_graphs, rename_blank_nodes, lenient) = if opts_str.is_empty() {
+        (false, false, false)
+    } else {
+        let opts: Value = match serde_json::from_str(opts_str) {
+            Ok(v) => v,
+            Err(_) => Value::Null,
+        };
+        (
+            opts["without_named_graphs"].as_bool().unwrap_or(false),
+            opts["rename_blank_nodes"].as_bool().unwrap_or(false),
+            opts["lenient"].as_bool().unwrap_or(false),
+        )
+    };
+
+    let parser = match build_parser_with_options(
+        format_str, Some(base_iri_str), None,
+        without_named_graphs, rename_blank_nodes, lenient,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let file = match File::open(path_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return error_json(ErrorKind::Parse {
+                message: format!("Cannot open file '{path_str}': {e}"),
+                file: Some(path_str.to_string()),
+                line: None,
+            });
+        }
+    };
+
+    let quads: Vec<oxigraph::model::Quad> = parser.for_reader(file).filter_map(|q| q.ok()).collect();
+    ok_json(&quads)
+}
+
+/// Serialize quads to a file (standalone).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_serialize_to_file(
+    path: *const c_char,
+    quads_json: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+    prefixes_json: *const c_char,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let quads_str = unsafe { c_str_to_str(quads_json) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(quads_str) {
+        Ok(q) => q,
+        Err(e) => {
+            return error_json(ErrorKind::InvalidArgument {
+                message: format!("Invalid quads JSON: {e}"),
+            });
+        }
+    };
+
+    let serializer = match build_serializer(format_str, Some(base_iri_str)) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    // Apply prefixes if provided
+    let prefixes_str = unsafe { c_str_to_str(prefixes_json) };
+    let serializer = if prefixes_str.is_empty() {
+        serializer
+    } else {
+        match serde_json::from_str::<Value>(prefixes_str) {
+            Ok(prefixes_val) => {
+                let mut s = serializer;
+                if let Some(prefixes_obj) = prefixes_val.as_object() {
+                    for (prefix, iri_val) in prefixes_obj {
+                        if let Some(iri) = iri_val.as_str() {
+                            s = match s.with_prefix(prefix, iri) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    return error_json(ErrorKind::InvalidArgument {
+                                        message: format!("Invalid prefix '{prefix}' IRI '{iri}': {e}"),
+                                    });
+                                }
+                            };
+                        }
+                    }
+                }
+                s
+            }
+            Err(_) => serializer,
+        }
+    };
+
+    let file = match File::create(path_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return error_json(ErrorKind::Parse {
+                message: format!("Cannot create file '{path_str}': {e}"),
+                file: Some(path_str.to_string()),
+                line: None,
+            });
+        }
+    };
+
+    let mut writer = serializer.for_writer(file);
+    for quad in &quads {
+        if let Err(e) = writer.serialize_quad(quad) {
+            return error_json(ErrorKind::Parse {
+                message: e.to_string(),
+                file: Some(path_str.to_string()),
+                line: None,
+            });
+        }
+    }
+    match writer.finish() {
+        Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse {
+            message: e.to_string(),
+            file: Some(path_str.to_string()),
+            line: None,
+        }),
+    }
+}
+
+// ─── Stream/callback-based I/O ─────────────────────
+
+/// Load RDF from a .NET Stream (via read callback) into the store.
+/// `context` is passed as-is to every callback invocation.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_load_from_callback(
+    handle: StoreHandle,
+    callback: ReadFn,
+    context: *mut std::os::raw::c_void,
+    format: *const c_char,
+    base_iri: *const c_char,
+    to_graph_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    if callback as usize == 0 || context.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Callback or context is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let to_graph_str = unsafe { c_str_to_str(to_graph_json) };
+
+    let to_graph_val: Option<Value> = if to_graph_str.is_empty() {
+        None
+    } else {
+        match serde_json::from_str(to_graph_str) {
+            Ok(v) => Some(v),
+            Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid to_graph JSON: {e}") }),
+        }
+    };
+
+    let parser = match build_parser(format_str, Some(base_iri_str), to_graph_val.as_ref()) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let reader = CallbackReader::new(context, callback);
+    match store.load_from_reader(parser, reader) {
+        Ok(_) => ok_json(&"loaded"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+/// Dump store contents to a .NET Stream (via write callback).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_store_dump_to_callback(
+    handle: StoreHandle,
+    callback: WriteFn,
+    context: *mut std::os::raw::c_void,
+    format: *const c_char,
+    base_iri: *const c_char,
+    from_graph_json: *const c_char,
+    prefixes_json: *const c_char,
+) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Store handle is null".into() });
+    }
+    if callback as usize == 0 || context.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Callback or context is null".into() });
+    }
+    let store = unsafe { &mut *(*handle).get() };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+    let from_graph_str = unsafe { c_str_to_str(from_graph_json) };
+
+    let serializer = match build_serializer(format_str, Some(base_iri_str)) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    // Apply prefixes if provided
+    let prefixes_str = unsafe { c_str_to_str(prefixes_json) };
+    let serializer = if prefixes_str.is_empty() {
+        serializer
+    } else {
+        match serde_json::from_str::<Value>(prefixes_str) {
+            Ok(prefixes_val) => {
+                let mut s = serializer;
+                if let Some(prefixes_obj) = prefixes_val.as_object() {
+                    for (prefix, iri_val) in prefixes_obj {
+                        if let Some(iri) = iri_val.as_str() {
+                            s = match s.with_prefix(prefix, iri) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    return error_json(ErrorKind::InvalidArgument {
+                                        message: format!("Invalid prefix '{prefix}' IRI '{iri}': {e}"),
+                                    });
+                                }
+                            };
+                        }
+                    }
+                }
+                s
+            }
+            Err(_) => serializer,
+        }
+    };
+
+    let writer = CallbackWriter::new(context, callback);
+    let result = if from_graph_str.is_empty() {
+        store.dump_to_writer(serializer, writer)
+    } else {
+        match serde_json::from_str::<GraphName>(from_graph_str) {
+            Ok(graph) => store.dump_graph_to_writer(&graph, serializer, writer),
+            Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid from_graph JSON: {e}") }),
+        }
+    };
+
+    match result {
+        Ok(_) => ok_json(&"dumped"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+/// Parse RDF from a .NET Stream (via read callback) into quads JSON.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_from_callback(
+    callback: ReadFn,
+    context: *mut std::os::raw::c_void,
+    format: *const c_char,
+    base_iri: *const c_char,
+) -> *mut c_char {
+    if callback as usize == 0 || context.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Callback or context is null".into() });
+    }
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+
+    let parser = match build_parser(format_str, Some(base_iri_str), None) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let reader = CallbackReader::new(context, callback);
+    let quads: Vec<oxigraph::model::Quad> = parser.for_reader(reader).filter_map(|q| q.ok()).collect();
+    ok_json(&quads)
+}
+
+/// Serialize quads to a .NET Stream (via write callback).
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_serialize_to_callback(
+    callback: WriteFn,
+    context: *mut std::os::raw::c_void,
+    quads_json: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+) -> *mut c_char {
+    if callback as usize == 0 || context.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Callback or context is null".into() });
+    }
+    let quads_str = unsafe { c_str_to_str(quads_json) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(quads_str) {
+        Ok(q) => q,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid quads JSON: {e}") }),
+    };
+
+    let serializer = match build_serializer(format_str, Some(base_iri_str)) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    let mut writer = serializer.for_writer(CallbackWriter::new(context, callback));
+    for quad in &quads {
+        if let Err(e) = writer.serialize_quad(quad) {
+            return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None });
+        }
+    }
+    match writer.finish() {
+        Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+// ─── Iterator FFI ──────────────────────────────────
+
+/// Opaque handle to a lazy quad iterator (from parse).
+pub type QuadIterHandle = *mut UnsafeCell<Box<dyn Iterator<Item = Result<oxigraph::model::Quad, oxigraph::io::RdfParseError>> + 'static>>;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_iter_from_file(
+    path: *const c_char,
+    format: *const c_char,
+    base_iri: *const c_char,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let base_iri_str = unsafe { c_str_to_str(base_iri) };
+
+    let parser = match build_parser(format_str, Some(base_iri_str), None) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+
+    let file = match File::open(path_str) {
+        Ok(f) => f,
+        Err(e) => return error_json(ErrorKind::Parse {
+            message: format!("Cannot open file '{path_str}': {e}"),
+            file: Some(path_str.to_string()), line: None,
+        }),
+    };
+
+    let iter: Box<dyn Iterator<Item = Result<oxigraph::model::Quad, oxigraph::io::RdfParseError>> + 'static> =
+        Box::new(parser.for_reader(file));
+    let boxed = Box::new(UnsafeCell::new(iter));
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => {
+            unsafe { drop(Box::from_raw(ptr)); }
+            error_json(ErrorKind::Store { message: e.to_string() })
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_iter_next(handle: QuadIterHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Iterator handle is null".into() });
+    }
+    let iter = unsafe { &mut *(*handle).get() };
+    match iter.next() {
+        Some(Ok(quad)) => ok_json(&quad),
+        Some(Err(e)) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+        None => ok_json(&serde_json::Value::Null), // end of iteration
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_parse_iter_destroy(handle: QuadIterHandle) {
+    if handle.is_null() { return; }
+    unsafe { drop(Box::from_raw(handle)); }
+}
+
+// ─── Query Results Serialization ────────────────────
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_solutions_serialize_to_file(
+    path: *const c_char,
+    format: *const c_char,
+    variables_json: *const c_char,
+    solutions_json: *const c_char,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+    let vars_str = unsafe { c_str_to_str(variables_json) };
+    let sols_str = unsafe { c_str_to_str(solutions_json) };
+
+    let qformat = match format_str.to_lowercase().as_str() {
+        "xml" => QueryResultsFormat::Xml,
+        "json" => QueryResultsFormat::Json,
+        "csv" => QueryResultsFormat::Csv,
+        "tsv" => QueryResultsFormat::Tsv,
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown format: {format_str}") }),
+    };
+
+    let variables: Vec<String> = match serde_json::from_str(vars_str) {
+        Ok(v) => v,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid variables JSON: {e}") }),
+    };
+    let solutions: Vec<Value> = match serde_json::from_str(sols_str) {
+        Ok(s) => s,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid solutions JSON: {e}") }),
+    };
+
+    let file = match File::create(path_str) {
+        Ok(f) => f,
+        Err(e) => return error_json(ErrorKind::Parse {
+            message: format!("Cannot create file '{path_str}': {e}"),
+            file: Some(path_str.to_string()), line: None,
+        }),
+    };
+
+    use oxigraph::sparql::results::QueryResultsSerializer;
+    // Build Variable list from owned Strings
+    let vars: Vec<oxigraph::sparql::Variable> = variables
+        .iter()
+        .map(|v| {
+            let s: String = v.clone();
+            oxigraph::sparql::Variable::new(s)
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_default();
+    let mut serializer = match QueryResultsSerializer::from_format(qformat)
+        .serialize_solutions_to_writer(file, vars) {
+            Ok(s) => s,
+            Err(e) => return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+        };
+    for row in &solutions {
+        let mut pairs: Vec<(oxigraph::sparql::Variable, oxigraph::model::Term)> = Vec::new();
+        if let Some(obj) = row.as_object() {
+            for (k, v) in obj {
+                let key_owned: String = k.clone();
+                if let (Ok(var), Ok(term)) = (
+                    oxigraph::sparql::Variable::new(key_owned),
+                    serde_json::from_value::<oxigraph::model::Term>(v.clone()),
+                ) {
+                    pairs.push((var, term));
+                }
+            }
+        }
+        if let Err(e) = serializer.serialize(pairs.iter().map(|(v, t)| (v, t))) {
+            return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None });
+        }
+    }
+    match serializer.finish() {
+        Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_boolean_serialize_to_file(
+    path: *const c_char,
+    format: *const c_char,
+    value: bool,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let format_str = unsafe { c_str_to_str(format) };
+
+    let qformat = match format_str.to_lowercase().as_str() {
+        "xml" => QueryResultsFormat::Xml,
+        "json" => QueryResultsFormat::Json,
+        "csv" => QueryResultsFormat::Csv,
+        "tsv" => QueryResultsFormat::Tsv,
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown format: {format_str}") }),
+    };
+
+    let file = match File::create(path_str) {
+        Ok(f) => f,
+        Err(e) => return error_json(ErrorKind::Parse {
+            message: format!("Cannot create file '{path_str}': {e}"),
+            file: Some(path_str.to_string()), line: None,
+        }),
+    };
+
+    use oxigraph::sparql::results::QueryResultsSerializer;
+    match QueryResultsSerializer::from_format(qformat).serialize_boolean_to_writer(file, value) {
+        Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_query_triples_serialize_to_file(
+    path: *const c_char,
+    rdf_format: *const c_char,
+    triples_json: *const c_char,
+) -> *mut c_char {
+    let path_str = unsafe { c_str_to_str(path) };
+    let fmt_str = unsafe { c_str_to_str(rdf_format) };
+    let triples_str = unsafe { c_str_to_str(triples_json) };
+
+    let triples: Vec<oxigraph::model::Triple> = match serde_json::from_str(triples_str) {
+        Ok(t) => t,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid triples JSON: {e}") }),
+    };
+
+    let serializer = match build_serializer(fmt_str, None) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    let file = match File::create(path_str) {
+        Ok(f) => f,
+        Err(e) => return error_json(ErrorKind::Parse {
+            message: format!("Cannot create file '{path_str}': {e}"),
+            file: Some(path_str.to_string()), line: None,
+        }),
+    };
+
+    let mut writer = serializer.for_writer(file);
+    for triple in &triples {
+        if let Err(e) = writer.serialize_triple(triple) {
+            return error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None });
+        }
+    }
+    match writer.finish() {
+        Ok(_) => ok_json(&"serialized"),
+        Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
     }
 }
 
@@ -936,6 +2049,20 @@ pub extern "C" fn oxigraph_store_dump(
                 });
             }
         };
+    }
+    if let Some(prefixes) = opts.get("prefixes").and_then(|p| p.as_object()) {
+        for (prefix, iri_val) in prefixes {
+            if let Some(iri) = iri_val.as_str() {
+                serializer = match serializer.with_prefix(prefix, iri) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return error_json(ErrorKind::InvalidArgument {
+                            message: format!("Invalid prefix '{prefix}' IRI '{iri}': {e}"),
+                        });
+                    }
+                };
+            }
+        }
     }
 
     let mut buf = Vec::new();
@@ -1006,6 +2133,195 @@ pub extern "C" fn oxigraph_parse_query_results(input_json: *const c_char) -> *mu
         },
         Err(e) => error_json(ErrorKind::Parse { message: e.to_string(), file: None, line: None }),
     }
+}
+
+/// Canonicalize a list of quads (renames blank nodes consistently).
+/// `algorithm`: "unstable", "rdfc10_sha256", "rdfc10_sha384"
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_canonicalize(
+    quads_json: *const c_char,
+    algorithm: *const c_char,
+) -> *mut c_char {
+    let quads_str = unsafe { c_str_to_str(quads_json) };
+    let algo_str = unsafe { c_str_to_str(algorithm) };
+
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(quads_str) {
+        Ok(q) => q,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid quads: {e}") }),
+    };
+
+    let mut dataset = oxigraph::model::Dataset::new();
+    for quad in quads {
+        dataset.insert(quad);
+    }
+
+    let algo = match algo_str {
+        "unstable" => oxigraph::model::dataset::CanonicalizationAlgorithm::Unstable,
+        "rdfc10_sha256" => oxigraph::model::dataset::CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: oxigraph::model::dataset::CanonicalizationHashAlgorithm::Sha256,
+        },
+        "rdfc10_sha384" => oxigraph::model::dataset::CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: oxigraph::model::dataset::CanonicalizationHashAlgorithm::Sha384,
+        },
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown canonicalization algorithm: {algo_str}") }),
+    };
+
+    dataset.canonicalize(algo);
+
+    let result: Vec<oxigraph::model::Quad> = dataset.iter().collect();
+    ok_json(&result)
+}
+
+// ─── In-Memory Dataset FFI ──────────────────────────
+
+/// Opaque handle to an in-memory oxigraph::model::Dataset.
+pub type DatasetHandle = *mut UnsafeCell<oxigraph::model::Dataset>;
+
+/// Create a new empty Dataset.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_new() -> *mut c_char {
+    let boxed = Box::new(UnsafeCell::new(oxigraph::model::Dataset::new()));
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Create a Dataset with initial quads.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_from_quads(quads_json: *const c_char) -> *mut c_char {
+    let json_str = unsafe { c_str_to_str(quads_json) };
+    let quads: Vec<oxigraph::model::Quad> = match serde_json::from_str(json_str) {
+        Ok(q) => q,
+        Err(e) => return error_json(ErrorKind::InvalidArgument { message: format!("Invalid quads: {e}") }),
+    };
+    let mut dataset = oxigraph::model::Dataset::new();
+    for quad in quads {
+        dataset.insert(quad);
+    }
+    let boxed = Box::new(UnsafeCell::new(dataset));
+    let ptr = Box::into_raw(boxed);
+    let handle_value = ptr as u64;
+    match serde_json::to_string(&handle_value) {
+        Ok(json) => {
+            let full = format!("{{\"ok\":{{\"handle\":{}}}}}", json);
+            std::ffi::CString::new(full).unwrap().into_raw()
+        }
+        Err(e) => error_json(ErrorKind::Store { message: e.to_string() }),
+    }
+}
+
+/// Insert a quad into the Dataset.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_insert(handle: DatasetHandle, quad_json: *const c_char) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    let quad = match parse_quad_value(unsafe { c_str_to_str(quad_json) }) {
+        Ok(q) => q,
+        Err(e) => return error_json(e),
+    };
+    dataset.insert(quad);
+    ok_json(&"inserted")
+}
+
+/// Remove a quad from the Dataset. Returns error if not found.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_remove(handle: DatasetHandle, quad_json: *const c_char) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    let quad = match parse_quad_value(unsafe { c_str_to_str(quad_json) }) {
+        Ok(q) => q,
+        Err(e) => return error_json(e),
+    };
+    if dataset.remove(&quad) {
+        ok_json(&"removed")
+    } else {
+        error_json(ErrorKind::InvalidArgument { message: "Quad not found in dataset".into() })
+    }
+}
+
+/// Check if Dataset contains a quad.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_contains(handle: DatasetHandle, quad_json: *const c_char) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    let quad = match parse_quad_value(unsafe { c_str_to_str(quad_json) }) {
+        Ok(q) => q,
+        Err(e) => return error_json(e),
+    };
+    bool_to_response(dataset.contains(&quad))
+}
+
+/// Get Dataset quad count.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_count(handle: DatasetHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    ok_json(&dataset.len())
+}
+
+/// Clear all quads from the Dataset.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_clear(handle: DatasetHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    dataset.clear();
+    ok_json(&"cleared")
+}
+
+/// Get all quads from the Dataset as JSON array.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_iter(handle: DatasetHandle) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    let quads: Vec<oxigraph::model::Quad> = dataset.iter().collect();
+    ok_json(&quads)
+}
+
+/// Canonicalize Dataset with the given algorithm.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_canonicalize(handle: DatasetHandle, algorithm: *const c_char) -> *mut c_char {
+    if handle.is_null() {
+        return error_json(ErrorKind::InvalidArgument { message: "Dataset handle is null".into() });
+    }
+    let dataset = unsafe { &mut *(*handle).get() };
+    let algo_str = unsafe { c_str_to_str(algorithm) };
+    let algo = match algo_str {
+        "unstable" => oxigraph::model::dataset::CanonicalizationAlgorithm::Unstable,
+        "rdfc10_sha256" => oxigraph::model::dataset::CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: oxigraph::model::dataset::CanonicalizationHashAlgorithm::Sha256,
+        },
+        "rdfc10_sha384" => oxigraph::model::dataset::CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: oxigraph::model::dataset::CanonicalizationHashAlgorithm::Sha384,
+        },
+        _ => return error_json(ErrorKind::InvalidArgument { message: format!("Unknown canonicalization algorithm: {algo_str}") }),
+    };
+    dataset.canonicalize(algo);
+    ok_json(&"canonicalized")
+}
+
+/// Destroy a Dataset and free memory.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_dataset_destroy(handle: DatasetHandle) {
+    if handle.is_null() { return; }
+    unsafe { drop(Box::from_raw(handle)); }
 }
 
 /// Map C# format string to RdfFormat.
