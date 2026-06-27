@@ -30,7 +30,7 @@ use std::ops::RangeInclusive;
 
 pub struct AlgebraBuilder<'a> {
     base_iri: Option<Iri<OxString>>,
-    prefixes: HashMap<OxString, OxString>,
+    prefixes: HashMap<OxString, Iri<OxString>>,
     custom_aggregate_functions: &'a HashSet<NamedNode>,
     buffer: String,
 }
@@ -38,7 +38,7 @@ pub struct AlgebraBuilder<'a> {
 impl<'a> AlgebraBuilder<'a> {
     pub fn new(
         base_iri: Option<Iri<OxString>>,
-        prefixes: HashMap<OxString, OxString>,
+        prefixes: HashMap<OxString, Iri<OxString>>,
         custom_aggregate_functions: &'a HashSet<NamedNode>,
     ) -> Self {
         Self {
@@ -236,7 +236,7 @@ impl<'a> AlgebraBuilder<'a> {
                 self.base_iri = Some(Iri::parse_unchecked(self.build_iri(base_iri)?));
             }
             ast::PrologueDecl::Prefix(prefix, iri) => {
-                let iri = self.build_iri(iri)?;
+                let iri = Iri::parse_unchecked(self.build_iri(iri)?);
                 self.prefixes.insert(OxString::new_owned(prefix), iri);
             }
             #[cfg(feature = "sparql-12")]
@@ -1628,7 +1628,8 @@ impl<'a> AlgebraBuilder<'a> {
         if let Some(base) = self.prefixes.get(pname.inner.0) {
             let (pname_local, might_be_invalid_iri) = unescape_local_name(pname.inner.1);
             let iri = OxString::concat([base.as_str(), pname_local.as_ref()]);
-            if might_be_invalid_iri {
+            if might_be_invalid_iri || base.path().is_empty() {
+                // We validate again. We always validate if the local part might be the IRI authority.
                 Iri::parse(iri.as_str()).map_err(|e| {
                     AlgebraBuilderError::new(
                         pname.span,
