@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Oxigraph</RootNamespace>
+    <AssemblyName>Oxigraph</AssemblyName>
+  </PropertyGroup>
+
+</Project>

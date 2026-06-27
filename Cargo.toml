@@ -16,6 +16,7 @@ members = [
   "lib/sparopt",
   "lib/sparql-smith",
   "oxrocksdb-sys",
+  "dotnet/src/oxigraph-dotnet",
   "python",
   "testsuite",
 ]
