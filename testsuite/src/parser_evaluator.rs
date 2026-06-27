@@ -16,6 +16,7 @@ use oxrdf::OxString;
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::io;
 
 pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -131,6 +132,12 @@ fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
     let Err(error) = load_dataset(action, format, false, false) else {
         bail!("File parsed without errors even if it should not");
     };
+    // We ensure we do not fail because of an I/O error but a syntax one
+    for parent_error in error.chain() {
+        if parent_error.is::<io::Error>() {
+            return Err(error);
+        }
+    }
     if let Some(result) = &test.result {
         let expected = read_file_to_string(result)?;
         ensure!(
