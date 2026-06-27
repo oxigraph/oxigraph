@@ -7,7 +7,40 @@ use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::{json, Map, Value};
 use std::cell::UnsafeCell;
+use std::collections::HashMap;
 use std::os::raw::c_char;
+use std::sync::Mutex;
+
+/// Type for C# callback: receives JSON array of Terms, returns JSON Term or null.
+type CustomFnCallback = unsafe extern "C" fn(args_json: *const c_char) -> *mut c_char;
+
+static CUSTOM_FUNCTIONS: std::sync::LazyLock<Mutex<HashMap<String, CustomFnCallback>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Register a custom SPARQL function from C#.
+/// `name` is the function IRI, `callback` is a C# UnmanagedCallersOnly function pointer.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_register_custom_function(
+    name: *const c_char,
+    callback: CustomFnCallback,
+) -> *mut c_char {
+    let name_str = unsafe { c_str_to_str(name) }.to_string();
+    if name_str.is_empty() || callback as usize == 0 {
+        return error_json(ErrorKind::InvalidArgument {
+            message: "Name or callback is null".into(),
+        });
+    }
+    CUSTOM_FUNCTIONS.lock().unwrap().insert(name_str, callback);
+    ok_json(&"registered")
+}
+
+/// Unregister a custom SPARQL function.
+#[unsafe(no_mangle)]
+pub extern "C" fn oxigraph_unregister_custom_function(name: *const c_char) -> *mut c_char {
+    let name_str = unsafe { c_str_to_str(name) };
+    CUSTOM_FUNCTIONS.lock().unwrap().remove(name_str);
+    ok_json(&"unregistered")
+}
 
 /// Opaque handle to a Store. Passed from Rust to C# and back.
 pub type StoreHandle = *mut UnsafeCell<Store>;
@@ -261,6 +294,38 @@ pub extern "C" fn oxigraph_store_query(
             }
         }
     }
+    // Inject registered custom functions (snapshot to avoid lock lifetime issues)
+    let custom_fns: Vec<(String, CustomFnCallback)> = {
+        CUSTOM_FUNCTIONS
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
+    };
+    for (name, callback) in custom_fns {
+        let name_for_closure = name.clone();
+        let func_name = NamedNode::new(name).unwrap();
+        evaluator = evaluator.with_custom_function(
+            func_name,
+            move |args: &[Term]| -> Option<Term> {
+                // Build JSON array: [function_name, term1, term2, ...]
+                let mut arr: Vec<Value> = vec![Value::String(name_for_closure.clone())];
+                arr.extend(args.iter().map(|t| serde_json::to_value(t).unwrap_or_default()));
+                let args_json = serde_json::to_string(&arr).unwrap_or_default();
+                let args_c = std::ffi::CString::new(args_json).unwrap();
+                let result_ptr = unsafe { callback(args_c.as_ptr()) };
+                if result_ptr.is_null() {
+                    return None;
+                }
+                let result_json = unsafe { crate::model_ffi::c_str_to_str(result_ptr) };
+                let term: Option<Term> = serde_json::from_str(result_json).unwrap_or(None);
+                crate::error::oxigraph_free_string(result_ptr);
+                term
+            },
+        );
+    }
+
     if opts["use_default_graph_as_union"].as_bool().unwrap_or(false) {
         let mut prepared = match evaluator.parse_query(query) {
             Ok(p) => p,
@@ -974,6 +1039,58 @@ pub extern "C" fn oxigraph_store_destroy(handle: StoreHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::oxigraph_free_string;
+    use std::ffi::CString;
+
+    unsafe extern "C" fn test_callback(args_json: *const c_char) -> *mut c_char {
+        let json = unsafe { crate::model_ffi::c_str_to_str(args_json) };
+        let parsed: Vec<Value> = serde_json::from_str(json).unwrap();
+        if parsed.len() >= 2 {
+            if let Some(v) = parsed[1].get("value") {
+                let mut result = v.as_str().unwrap_or("").to_string();
+                result.push_str("_test");
+                let term = serde_json::json!({"type":"literal","value":result});
+                let s = CString::new(serde_json::to_string(&term).unwrap()).unwrap();
+                return s.into_raw();
+            }
+        }
+        std::ptr::null_mut()
+    }
+
+    #[test]
+    fn test_custom_function() {
+        let name = CString::new("http://example.com/testfn").unwrap();
+        let result = oxigraph_register_custom_function(name.as_ptr(), test_callback as CustomFnCallback);
+        let json = unsafe { crate::model_ffi::c_str_to_str(result) };
+        assert!(json.contains("\"ok\""));
+
+        let handle = {
+            let ptr = oxigraph_store_new();
+            let json = unsafe { crate::model_ffi::c_str_to_str(ptr) };
+            let v: Value = serde_json::from_str(json).unwrap();
+            let h = v["ok"]["handle"].as_u64().unwrap() as StoreHandle;
+            crate::error::oxigraph_free_string(ptr);
+            h
+        };
+
+        let quad_json = r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"literal","value":"hello"},"graph":{"type":"default"}}"#;
+        let quad_c = CString::new(quad_json).unwrap();
+        let add_result = oxigraph_store_add(handle, quad_c.as_ptr());
+        let add_json = unsafe { crate::model_ffi::c_str_to_str(add_result) };
+        assert!(add_json.contains("\"ok\""));
+        crate::error::oxigraph_free_string(add_result);
+
+        let query_json = r#"{"query":"SELECT ?result WHERE { ?s ?p ?o . BIND(<http://example.com/testfn>(?o) AS ?result) }","base_iri":"","prefixes":{},"use_default_graph_as_union":false,"default_graph":null,"named_graphs":null}"#;
+        let query_c = CString::new(query_json).unwrap();
+        let query_result = oxigraph_store_query(handle, query_c.as_ptr());
+        let query_str = unsafe { crate::model_ffi::c_str_to_str(query_result) };
+        assert!(query_str.contains("hello_test"), "Expected hello_test in: {query_str}");
+        crate::error::oxigraph_free_string(query_result);
+
+        oxigraph_store_destroy(handle);
+        let unreg = oxigraph_unregister_custom_function(name.as_ptr());
+        crate::error::oxigraph_free_string(unreg);
+    }
 
     #[test]
     fn test_store_lifecycle() {

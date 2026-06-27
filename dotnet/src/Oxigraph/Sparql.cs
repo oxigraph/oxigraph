@@ -123,7 +123,8 @@ public sealed record QueryOptions(
     Dictionary<string, string>? Prefixes = null,
     bool UseDefaultGraphAsUnion = false,
     IReadOnlyList<IGraphName>? DefaultGraphs = null,
-    IReadOnlyList<IGraphName>? NamedGraphs = null);
+    IReadOnlyList<IGraphName>? NamedGraphs = null,
+    Dictionary<string, Func<ITerm[], ITerm?>>? CustomFunctions = null);
 
 /// <summary>Options for SPARQL updates.</summary>
 public sealed record UpdateOptions(

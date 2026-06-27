@@ -92,6 +92,13 @@ internal static partial class OxigraphNative
     [LibraryImport(LibName, EntryPoint = "oxigraph_store_dump", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr store_dump(IntPtr handle, string dumpJson);
 
+    // Custom functions
+    [LibraryImport(LibName, EntryPoint = "oxigraph_register_custom_function", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr register_custom_function(string name, IntPtr callback);
+
+    [LibraryImport(LibName, EntryPoint = "oxigraph_unregister_custom_function", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr unregister_custom_function(string name);
+
     // Memory
     [LibraryImport(LibName, EntryPoint = "oxigraph_free_string", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial void free_string(IntPtr ptr);

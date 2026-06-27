@@ -88,4 +88,45 @@ public class SparqlTests
 
         Assert.Equal(0UL, store.Count);
     }
+
+    [Fact]
+    public void Custom_Function_Register_Only()
+    {
+        // Just verify registration doesn't crash
+        CustomFunctions.Register("http://example.com/suffix", args =>
+            new Literal(((Literal)args[0]).Value + "_suffix"));
+        CustomFunctions.Unregister("http://example.com/suffix");
+    }
+
+    [Fact]
+    public void Custom_Function()
+    {
+        CustomFunctions.Register("http://example.com/suffix", args =>
+            new Literal(((Literal)args[0]).Value + "_suffix"));
+
+        try
+        {
+            using var store = new Store();
+            store.Add(new Quad(
+                new NamedNode("http://example.com/s"),
+                new NamedNode("http://example.com/p"),
+                new Literal("hello"),
+                new DefaultGraph()));
+
+            var results = store.Query(@"
+                PREFIX my: <http://example.com/>
+                SELECT ?result WHERE {
+                    ?s ?p ?o .
+                    BIND(my:suffix(?o) AS ?result)
+                }");
+            var solutions = Assert.IsType<QuerySolutions>(results);
+            Assert.Single(solutions);
+            var val = solutions.First()["result"];
+            Assert.Equal("hello_suffix", ((Literal)val!).Value);
+        }
+        finally
+        {
+            CustomFunctions.Unregister("http://example.com/suffix");
+        }
+    }
 }

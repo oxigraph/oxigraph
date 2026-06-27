@@ -112,22 +112,46 @@ public sealed class Store : IDisposable
         return quads ?? [];
     }
 
-    /// <summary>Execute a SPARQL query.</summary>
+    /// <summary>Execute a SPARQL query. Supports custom functions via <see cref="CustomFunctions"/>.</summary>
     public QueryResults Query(string sparql, QueryOptions? options = null)
     {
         options ??= new QueryOptions();
-        var queryJson = JsonSerializer.Serialize(new
+
+        // Register custom functions before query
+        if (options.CustomFunctions != null)
         {
-            query = sparql,
-            base_iri = options.BaseIri,
-            prefixes = options.Prefixes,
-            use_default_graph_as_union = options.UseDefaultGraphAsUnion,
-            default_graph = options.DefaultGraphs,
-            named_graphs = options.NamedGraphs,
-        });
-        var element = FFIHelper.CallValue<JsonElement>(() =>
-            OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
-        return QueryResults.FromJson(element.GetRawText());
+            foreach (var (name, func) in options.CustomFunctions)
+            {
+                CustomFunctions.Register(name, func);
+            }
+        }
+
+        try
+        {
+            var queryJson = JsonSerializer.Serialize(new
+            {
+                query = sparql,
+                base_iri = options.BaseIri,
+                prefixes = options.Prefixes,
+                use_default_graph_as_union = options.UseDefaultGraphAsUnion,
+                default_graph = options.DefaultGraphs,
+                named_graphs = options.NamedGraphs,
+            });
+            var element = FFIHelper.CallValue<JsonElement>(() =>
+                OxigraphNative.store_query(_handle.DangerousGetHandle(), queryJson));
+            return QueryResults.FromJson(element.GetRawText());
+        }
+        finally
+        {
+            // Clean up registered functions
+            if (options.CustomFunctions != null)
+            {
+                foreach (var name in options.CustomFunctions.Keys)
+                {
+                    CustomFunctions.Unregister(name);
+                }
+            }
+        }
     }
 
     /// <summary>Execute a SPARQL update.</summary>
