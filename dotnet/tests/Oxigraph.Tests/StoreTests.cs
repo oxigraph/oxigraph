@@ -744,6 +744,150 @@ public class StoreTests
         finally { File.Delete(tempFile); }
     }
 
+    // ═══════════════════════════════════════════════════
+    // Async API tests
+    // ═══════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Async_Query_ReturnsResults()
+    {
+        using var store = new Store();
+        store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+        var results = await store.QueryAsync("SELECT ?s WHERE { ?s ?p ?o }");
+        var sols = Assert.IsAssignableFrom<QuerySolutions>(results);
+        Assert.Single(sols);
+    }
+
+    [Fact]
+    public async Task Async_Update_InsertsData()
+    {
+        using var store = new Store();
+        await store.UpdateAsync("INSERT DATA { <http://example.com/s> <http://example.com/p> \"test\" }");
+        Assert.Equal(1UL, store.Count);
+    }
+
+    [Fact]
+    public async Task Async_Query_WithCancellationToken()
+    {
+        using var store = new Store();
+        store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var results = await store.QueryAsync("SELECT ?s WHERE { ?s ?p ?o }", ct: cts.Token);
+        Assert.IsAssignableFrom<QuerySolutions>(results);
+    }
+
+    [Fact]
+    public async Task Async_LoadFromFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "<http://example.com/s> <http://example.com/p> \"hello\" .");
+            using var store = new Store();
+            await store.LoadFromFileAsync(tempFile, RdfFormat.NTriples);
+            Assert.Equal(1UL, store.Count);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public async Task Async_BulkLoadFromFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var lines = string.Join("\n", Enumerable.Range(0, 20).Select(i =>
+                $"<http://example.com/s{i}> <http://example.com/p> \"value{i}\" ."));
+            File.WriteAllText(tempFile, lines);
+            using var store = new Store();
+            await store.BulkLoadFromFileAsync(tempFile, RdfFormat.NTriples);
+            Assert.Equal(20UL, store.Count);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public async Task Async_DumpToFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            using var store = new Store();
+            store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+            await store.DumpToFileAsync(tempFile, RdfFormat.NTriples,
+                new DumpOptions { FromGraph = new DefaultGraph() });
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public async Task Async_LoadFromStream()
+    {
+        var data = "<http://example.com/s> <http://example.com/p> \"stream\" .";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(data));
+        using var store = new Store();
+        await store.LoadFromStreamAsync(stream, RdfFormat.NTriples);
+        Assert.Equal(1UL, store.Count);
+    }
+
+    [Fact]
+    public async Task Async_DumpToStream()
+    {
+        using var store = new Store();
+        store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+        using var output = new MemoryStream();
+        await store.DumpToStreamAsync(output, RdfFormat.NTriples,
+            new DumpOptions { FromGraph = new DefaultGraph() });
+        output.Position = 0;
+        var content = new StreamReader(output).ReadToEnd();
+        Assert.Contains("http://example.com/s", content);
+    }
+
+    [Fact]
+    public async Task Async_Backup()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "oxigraph-test-" + Guid.NewGuid());
+        var backupDir = Path.Combine(Path.GetTempPath(), "oxigraph-backup-" + Guid.NewGuid());
+        try
+        {
+            using (var store = new Store(tempDir))
+            {
+                store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+                await store.BackupAsync(backupDir);
+            }
+            using var restored = new Store(backupDir);
+            Assert.Equal(1UL, restored.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task Async_Update_WithCancellationToken()
+    {
+        using var store = new Store();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await store.UpdateAsync("INSERT DATA { <http://example.com/s> <http://example.com/p> \"x\" }",
+            ct: cts.Token);
+        Assert.Equal(1UL, store.Count);
+    }
+
+    [Fact]
+    public async Task Async_Query_CanceledToken_Throws()
+    {
+        using var store = new Store();
+        store.Add(Q("http://example.com/s", "http://example.com/p", "test"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            store.QueryAsync("SELECT ?s WHERE { ?s ?p ?o }", ct: cts.Token));
+    }
+
     private static Quad Q(string s, string p, string o) =>
         new(new NamedNode(s), new NamedNode(p), new Literal(o), new DefaultGraph());
 }

@@ -603,6 +603,61 @@ public sealed class Store : IDisposable, IEnumerable<Quad>
         _handle.Dispose();
     }
 
+    // ═══════════════════════════════════════════════════
+    // Async API
+    // ═══════════════════════════════════════════════════
+
+    /// <inheritdoc cref="Query" />
+    public Task<QueryResults> QueryAsync(string sparql, QueryOptions? options = null,
+        CancellationToken ct = default)
+        => Task.Run(() => Query(sparql, options), ct);
+
+    /// <inheritdoc cref="Update" />
+    public Task UpdateAsync(string sparql, UpdateOptions? options = null,
+        CancellationToken ct = default)
+        => Task.Run(() => Update(sparql, options), ct);
+
+    /// <inheritdoc cref="LoadFromFile" />
+    public Task LoadFromFileAsync(string filePath, RdfFormat format,
+        LoadOptions? options = null, CancellationToken ct = default)
+        => Task.Run(() => LoadFromFile(filePath, format, options), ct);
+
+    /// <inheritdoc cref="BulkLoadFromFile" />
+    public Task BulkLoadFromFileAsync(string filePath, RdfFormat format,
+        LoadOptions? options = null, CancellationToken ct = default)
+        => Task.Run(() => BulkLoadFromFile(filePath, format, options), ct);
+
+    /// <inheritdoc cref="DumpToFile" />
+    public Task DumpToFileAsync(string filePath, RdfFormat format,
+        DumpOptions? options = null, CancellationToken ct = default)
+        => Task.Run(() => DumpToFile(filePath, format, options), ct);
+
+    /// <inheritdoc cref="LoadFromStream" />
+    public async Task LoadFromStreamAsync(Stream stream, RdfFormat format,
+        LoadOptions? options = null, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+        ms.Position = 0;
+        await Task.Run(() => LoadFromStream(ms, format, options), ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc cref="DumpToStream" />
+    public async Task DumpToStreamAsync(Stream stream, RdfFormat format,
+        DumpOptions? options = null, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await Task.Run(() => DumpToStream(ms, format, options), ct)
+            .ConfigureAwait(false);
+        ms.Position = 0;
+        await ms.CopyToAsync(stream, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc cref="Backup" />
+    public Task BackupAsync(string targetDirectory, CancellationToken ct = default)
+        => Task.Run(() => Backup(targetDirectory), ct);
+
     private static string ReadAndFree(IntPtr ptr)
     {
         if (ptr == IntPtr.Zero)

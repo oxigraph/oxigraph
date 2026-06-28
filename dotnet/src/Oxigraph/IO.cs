@@ -146,6 +146,44 @@ public static class IO
         RdfFormat.StreamingJsonLd => "jsonld",
         _ => throw new ArgumentException($"Unknown format: {format}"),
     };
+
+    // ═══════════════════════════════════════════════════
+    // Async API
+    // ═══════════════════════════════════════════════════
+
+    /// <inheritdoc cref="ParseFromFile" />
+    public static Task<IReadOnlyList<Quad>> ParseFromFileAsync(string filePath,
+        RdfFormat format, string? baseIri = null, ParseOptions? parseOptions = null,
+        CancellationToken ct = default)
+        => Task.Run(() => ParseFromFile(filePath, format, baseIri, parseOptions), ct);
+
+    /// <inheritdoc cref="SerializeToFile" />
+    public static Task SerializeToFileAsync(string filePath, IEnumerable<Quad> quads,
+        RdfFormat format, DumpOptions? options = null, CancellationToken ct = default)
+        => Task.Run(() => SerializeToFile(filePath, quads, format, options), ct);
+
+    /// <inheritdoc cref="ParseFromStream" />
+    public static async Task<IReadOnlyList<Quad>> ParseFromStreamAsync(Stream stream,
+        RdfFormat format, string? baseIri = null, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+        ms.Position = 0;
+        return await Task.Run(() => ParseFromStream(ms, format, baseIri), ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc cref="SerializeToStream" />
+    public static async Task SerializeToStreamAsync(Stream stream,
+        IEnumerable<Quad> quads, RdfFormat format, DumpOptions? options = null,
+        CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await Task.Run(() => SerializeToStream(ms, quads, format, options), ct)
+            .ConfigureAwait(false);
+        ms.Position = 0;
+        await ms.CopyToAsync(stream, ct).ConfigureAwait(false);
+    }
 }
 
 /// <summary>

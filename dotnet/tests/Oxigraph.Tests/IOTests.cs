@@ -1047,4 +1047,84 @@ public class IOTests
             parseOptions: new ParseOptions { Lenient = true });
         Assert.Single(quads);
     }
+
+    // ═══════════════════════════════════════════════════
+    // Async IO tests
+    // ═══════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Async_ParseFromFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "@prefix ex: <http://example.com/> . ex:s ex:p \"hello\" .");
+            var quads = await IO.ParseFromFileAsync(tempFile, RdfFormat.Turtle, "http://example.com/");
+            Assert.Single(quads);
+            Assert.Equal("http://example.com/s", ((NamedNode)quads[0].Subject).Value);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public async Task Async_SerializeToFile()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var quads = new[] {
+                new Quad(new NamedNode("http://example.com/s"), new NamedNode("http://example.com/p"),
+                    new Literal("hello"), new DefaultGraph())
+            };
+            await IO.SerializeToFileAsync(tempFile, quads, RdfFormat.NTriples);
+            var content = File.ReadAllText(tempFile);
+            Assert.Contains("http://example.com/s", content);
+        }
+        finally { File.Delete(tempFile); }
+    }
+
+    [Fact]
+    public async Task Async_ParseFromStream()
+    {
+        var data = "<http://example.com/s> <http://example.com/p> \"stream\" .";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(data));
+        var quads = await IO.ParseFromStreamAsync(stream, RdfFormat.NTriples);
+        Assert.Single(quads);
+        Assert.Equal("http://example.com/s", ((NamedNode)quads[0].Subject).Value);
+    }
+
+    [Fact]
+    public async Task Async_SerializeToStream()
+    {
+        var quads = new[] {
+            new Quad(new NamedNode("http://example.com/s"), new NamedNode("http://example.com/p"),
+                new Literal("hello"), new DefaultGraph())
+        };
+        using var output = new MemoryStream();
+        await IO.SerializeToStreamAsync(output, quads, RdfFormat.NTriples);
+        output.Position = 0;
+        var content = new StreamReader(output).ReadToEnd();
+        Assert.Contains("http://example.com/s", content);
+    }
+
+    [Fact]
+    public async Task Async_ParseFromStream_WithCancellation()
+    {
+        var data = "<http://example.com/s> <http://example.com/p> \"test\" .";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(data));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var quads = await IO.ParseFromStreamAsync(stream, RdfFormat.NTriples, ct: cts.Token);
+        Assert.Single(quads);
+    }
+
+    [Fact]
+    public async Task Async_ParseFromStream_Canceled_Throws()
+    {
+        using var stream = new MemoryStream(
+            System.Text.Encoding.UTF8.GetBytes("<http://x> <http://y> \"z\" ."));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            IO.ParseFromStreamAsync(stream, RdfFormat.NTriples, ct: cts.Token));
+    }
 }

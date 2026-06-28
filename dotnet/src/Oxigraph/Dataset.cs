@@ -235,4 +235,19 @@ public sealed class Dataset : IEnumerable<Quad>, IDisposable
     /// <summary>N-Quads serialization of the dataset.</summary>
     public override string ToString()
         => Dump(RdfFormat.NQuads);
+
+    // ═══════════════════════════════════════════════════
+    // Async API
+    // ═══════════════════════════════════════════════════
+
+    /// <inheritdoc cref="Load" />
+    public Task LoadAsync(string data, RdfFormat format, LoadOptions? options = null,
+        CancellationToken ct = default)
+        => Task.Run(() => Load(data, format, options), ct);
+
+    /// <inheritdoc cref="Canonicalize" />
+    public Task CanonicalizeAsync(
+        CanonicalizationAlgorithm algorithm = CanonicalizationAlgorithm.Unstable,
+        CancellationToken ct = default)
+        => Task.Run(() => Canonicalize(algorithm), ct);
 }
