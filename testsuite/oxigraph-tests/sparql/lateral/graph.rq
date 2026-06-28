@@ -2,5 +2,5 @@ PREFIX ex: <http://example.org/>
 
 SELECT ?s ?o WHERE {
     VALUES ?s { ex:S }
-    LATERAL { GRAPH ex:G { FILTER(BOUND(?s)) . VALUES ?o { ex:O } } }
+    LATERAL { GRAPH <singleton.ttl> { FILTER(BOUND(?s)) . VALUES ?o { ex:O } } }
 }

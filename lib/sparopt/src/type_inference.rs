@@ -27,19 +27,14 @@ pub fn infer_graph_pattern_types(
             types
         }
         GraphPattern::Path {
-            subject,
-            object,
-            graph_name,
-            ..
+            subject, object, ..
         } => {
             add_ground_term_pattern_types(subject, &mut types, false);
             add_ground_term_pattern_types(object, &mut types, true);
-            if let Some(NamedNodePattern::Variable(v)) = graph_name {
-                types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
-            }
             types
         }
-        GraphPattern::Graph { graph_name } => {
+        GraphPattern::Graph { graph_name, inner } => {
+            let mut types = infer_graph_pattern_types(inner, types);
             if let NamedNodePattern::Variable(v) = graph_name {
                 types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
             }
