@@ -5,13 +5,12 @@ use logos::Logos;
 use std::fmt;
 
 pub fn lex_sparql(slice: &str) -> Vec<Spanned<Token<'_>>> {
-    Token::lexer(slice)
-        .spanned()
-        .map(|(token, span)| {
-            SimpleSpan::from(span.clone())
-                .make_wrapped(token.unwrap_or_else(|()| Token::Error(&slice[span])))
-        })
-        .collect()
+    let mut tokens = Vec::with_capacity(slice.len() / 4);
+    tokens.extend(Token::lexer(slice).spanned().map(|(token, span)| {
+        SimpleSpan::from(span.clone())
+            .make_wrapped(token.unwrap_or_else(|()| Token::Error(&slice[span])))
+    }));
+    tokens
 }
 
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
