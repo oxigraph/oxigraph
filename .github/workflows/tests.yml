@@ -186,7 +186,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@8b3c737da4b541bf0fb5a3e0488ff20535badac9 # v2.82.1
         with: { tool: cargo-semver-checks }
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
@@ -288,7 +288,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
@@ -439,7 +439,7 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         id: cache-corpus
         with:
           path: fuzz/corpus/${{ matrix.target }}
@@ -498,7 +498,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: lib/oxigraph/benches/data
           key: bench-data-${{ hashFiles('lib/oxigraph/benches/data') }}
