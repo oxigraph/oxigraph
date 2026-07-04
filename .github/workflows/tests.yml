@@ -563,3 +563,38 @@ jobs:
         with:
           persist-credentials: false
       - uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+
+  wheel_pyemscripten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.14"
+          enable-cache: false
+      - run: uv sync --only-group pyodide
+        working-directory: ./python
+      - id: pyodide-config
+        run: |
+          echo "rust-toolchain=$(pyodide config get rust_toolchain)" >> "$GITHUB_OUTPUT"
+          echo "emscripten-version=$(pyodide config get emscripten_version)" >> "$GITHUB_OUTPUT"
+          echo "pyodide-abi-version=$(uv run pyodide config get pyodide_abi_version)" >> "$GITHUB_OUTPUT"
+          echo "rustflags=$(uv run pyodide config get rustflags)" >> "$GITHUB_OUTPUT"
+        working-directory: ./python
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: ${{ steps.pyodide-config.outputs.rust-toolchain }}
+          target: wasm32-unknown-emscripten
+      - uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
+        with:
+          version: ${{ steps.pyodide-config.outputs.emscripten-version }}
+          no-cache: true
+      - run: uv run --locked --only-dev maturin build --release
+        working-directory: ./python
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_EMSCRIPTEN_RUSTFLAGS: ${{ steps.pyodide-config.outputs.rustflags }}
+          MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION: ${{ steps.pyodide-config.outputs.pyodide-abi-version }}
+      - run: uvx twine check target/wheels/*
