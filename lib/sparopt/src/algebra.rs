@@ -1106,6 +1106,38 @@ impl GraphPattern {
         }
     }
 
+    /// Returns the variables used by this pattern, in the order they are
+    /// first encountered during a left-to-right, depth-first walk of the
+    /// pattern tree (duplicates removed, keeping the first occurrence).
+    ///
+    /// For [`Join`](Self::Join) nodes specifically, `left` is always visited
+    /// before `right`. This means that after
+    /// [`Optimizer::optimize_graph_pattern`](crate::Optimizer::optimize_graph_pattern)
+    /// has run its greedy join-reordering pass, the nested (left-deep) `Join`
+    /// tree it produces will yield variables here in the same order the
+    /// optimizer chose to introduce them -- i.e. this doubles as a view onto
+    /// sparopt's join / variable-elimination order.
+    ///
+    /// This is intended for execution engines that drive their own join
+    /// algorithm (for example a worst-case-optimal / Leapfrog Triejoin
+    /// executor) and want to consume sparopt's structural join-ordering
+    /// decision as an initial seed or tie-breaker for their own
+    /// variable-elimination order, rather than recomputing it from scratch.
+    ///
+    /// Note this reflects the *structure* of the pattern tree as given; it
+    /// is only meaningful as "the optimizer's chosen order" when called on
+    /// the output of [`Optimizer::optimize_graph_pattern`](crate::Optimizer::optimize_graph_pattern).
+    pub fn join_order_variables(&self) -> Vec<Variable> {
+        let mut seen = HashSet::new();
+        let mut order = Vec::new();
+        self.lookup_used_variables(&mut |v| {
+            if seen.insert(v) {
+                order.push(v.clone());
+            }
+        });
+        order
+    }
+
     fn from_sparql_algebra(
         pattern: &AlGraphPattern,
         blank_nodes: &mut HashMap<BlankNode, Variable>,
@@ -1638,5 +1670,81 @@ fn lookup_term_pattern_variables<'a>(
             callback(v);
         }
         lookup_term_pattern_variables(&t.object, callback);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn var(name: &str) -> Variable {
+        Variable::new(name.to_owned()).unwrap()
+    }
+
+    fn quad_pattern(subject: &str, predicate: &str, object: &str) -> GraphPattern {
+        GraphPattern::QuadPattern {
+            subject: GroundTermPattern::Variable(var(subject)),
+            predicate: NamedNodePattern::Variable(var(predicate)),
+            object: GroundTermPattern::Variable(var(object)),
+            graph_name: None,
+        }
+    }
+
+    #[test]
+    fn join_order_variables_matches_left_to_right_join_structure() {
+        // { ?s ?p1 ?o1 . ?s ?p2 ?o2 . ?o1 ?p3 ?o3 }
+        // built as a left-deep join tree, mirroring the shape `reorder_joins`
+        // produces: Join { left: Join { left: A, right: B }, right: C }.
+        let a = quad_pattern("s", "p1", "o1");
+        let b = quad_pattern("s", "p2", "o2");
+        let c = quad_pattern("o1", "p3", "o3");
+        let pattern = GraphPattern::Join {
+            left: Box::new(GraphPattern::Join {
+                left: Box::new(a),
+                right: Box::new(b),
+                algorithm: JoinAlgorithm::default(),
+            }),
+            right: Box::new(c),
+            algorithm: JoinAlgorithm::default(),
+        };
+
+        let order = pattern.join_order_variables();
+        assert_eq!(
+            order,
+            vec![
+                var("s"),
+                var("p1"),
+                var("o1"),
+                var("p2"),
+                var("o2"),
+                var("p3"),
+                var("o3"),
+            ]
+        );
+    }
+
+    #[test]
+    fn join_order_variables_deduplicates_keeping_first_occurrence() {
+        // ?s is shared between both sides of the join and must only appear once,
+        // at the position where it is first encountered (left side).
+        let left = quad_pattern("s", "p1", "o1");
+        let right = quad_pattern("s", "p2", "o2");
+        let pattern = GraphPattern::Join {
+            left: Box::new(left),
+            right: Box::new(right),
+            algorithm: JoinAlgorithm::default(),
+        };
+
+        let order = pattern.join_order_variables();
+        assert_eq!(
+            order,
+            vec![var("s"), var("p1"), var("o1"), var("p2"), var("o2")]
+        );
+    }
+
+    #[test]
+    fn join_order_variables_is_empty_for_variable_free_pattern() {
+        let pattern = GraphPattern::empty_singleton();
+        assert!(pattern.join_order_variables().is_empty());
     }
 }
