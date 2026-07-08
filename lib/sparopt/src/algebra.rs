@@ -1199,11 +1199,32 @@ impl GraphPattern {
                 expression: Expression::from_sparql_algebra(expression, graph_name),
                 variable: variable.clone(),
             },
-            AlGraphPattern::Minus { left, right } => Self::Minus {
-                left: Box::new(Self::from_sparql_algebra(left, graph_name, blank_nodes)),
-                right: Box::new(Self::from_sparql_algebra(right, graph_name, blank_nodes)),
-                algorithm: MinusAlgorithm::default(),
-            },
+            AlGraphPattern::Minus { left, right } => {
+                // The right-hand side of MINUS must not structurally share the
+                // ambient GRAPH variable with the left-hand side: per SPARQL
+                // semantics, the outer GRAPH operator's variable is not
+                // supposed to be considered when checking whether the two
+                // sides of a MINUS are disjoint (see W3C test
+                // "outer GRAPH operator does not affect MINUS disjointness").
+                // Using the same variable for both sides' graph_name would
+                // make it a natural join key between the branches, which
+                // breaks that disjointness check. We give the right branch a
+                // fresh variable instead.
+                let right_graph_name = if let Some(NamedNodePattern::Variable(_)) = graph_name {
+                    Some(NamedNodePattern::Variable(new_var()))
+                } else {
+                    graph_name.cloned()
+                };
+                Self::Minus {
+                    left: Box::new(Self::from_sparql_algebra(left, graph_name, blank_nodes)),
+                    right: Box::new(Self::from_sparql_algebra(
+                        right,
+                        right_graph_name.as_ref(),
+                        blank_nodes,
+                    )),
+                    algorithm: MinusAlgorithm::default(),
+                }
+            }
             AlGraphPattern::Values {
                 variables,
                 bindings,

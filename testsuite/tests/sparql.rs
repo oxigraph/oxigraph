@@ -38,8 +38,10 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
         &[
             // xsd:string cast is using xsd:double canonical serialization
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/cast/manifest#cast-string",
-            // Our scoping of variables introduced by GRAPH is wrong
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#graph-minus",
+            // Empty named graphs (zero triples, e.g. `empty.ttl`) cannot be
+            // represented by `oxrdf::Dataset`, which derives the set of
+            // existing named graphs purely by scanning stored quads. See
+            // https://github.com/oxigraph/oxigraph/issues/1805.
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-graph",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest#graph",
             // Our property path handling is wrong
