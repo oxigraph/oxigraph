@@ -605,6 +605,29 @@ impl Dataset {
             .collect()
     }
 
+    /// Returns a map from each blank node of the dataset to a content-derived hash
+    /// following the [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) hashing.
+    ///
+    /// Unlike [`canonicalize_blank_nodes`](Self::canonicalize_blank_nodes), a blank node hash only
+    /// depends on the subgraph reachable from it, so an unrelated change does not alter the hash of
+    /// an untouched blank node. Automorphic (interchangeable) blank nodes share the same hash.
+    ///
+    /// <div class="warning">Only `CanonicalizationAlgorithm::Rdfc10` produces hashes that are stable across Oxigraph versions.</div>
+    ///
+    /// <div class="warning">
+    ///     This implementation's worst-case complexity is exponential with respect to the number of blank nodes in the input dataset.
+    ///     See [the RDFC specification section about it](https://www.w3.org/TR/rdf-canon/#dataset-poisoning).
+    /// </div>
+    pub fn canonical_hashes(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+    ) -> HashMap<BlankNode, String> {
+        self.canonical_interned_hashes(algorithm)
+            .into_iter()
+            .map(|(from, hash)| (from.decode_from(&self.interner), hash))
+            .collect()
+    }
+
     fn canonicalize_interned_blank_nodes(
         &self,
         algorithm: CanonicalizationAlgorithm,
@@ -691,6 +714,41 @@ impl Dataset {
         canonicalization_state
             .canonical_issuer
             .issued_identifier_map
+    }
+
+    fn canonical_interned_hashes(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+    ) -> HashMap<InternedBlankNode, String> {
+        let hash_algorithm = Self::canonicalization_hash_algorithm(algorithm);
+        let canonicalization_state = CanonicalizationState {
+            blank_node_to_quads_map: self.build_blank_node_to_quads_map(),
+            hash_to_blank_nodes_map: BTreeMap::new(),
+            canonical_issuer: IdentifierIssuer::new("c14n"),
+        };
+        let mut hashes =
+            HashMap::with_capacity(canonicalization_state.blank_node_to_quads_map.len());
+        for n in canonicalization_state.blank_node_to_quads_map.keys() {
+            // Combine the first and n-degree hashes so the result depends only on the subgraph
+            // reachable from the blank node, never on whether another node shares its first
+            // degree hash. The canonical issuer stays empty so the n-degree hash is built from
+            // content, not from the c14n labeling.
+            let first_degree =
+                self.hash_first_degree_quads(&canonicalization_state, *n, hash_algorithm);
+            let mut temporary_issuer = IdentifierIssuer::new("b");
+            Self::issue_identifier(&mut temporary_issuer, *n);
+            let (_, n_degree) = self.hash_n_degree_quads(
+                &canonicalization_state,
+                *n,
+                &temporary_issuer,
+                hash_algorithm,
+            );
+            hashes.insert(
+                *n,
+                Self::hash_function(&format!("{first_degree} {n_degree}"), hash_algorithm),
+            );
+        }
+        hashes
     }
 
     fn canonicalization_hash_algorithm(
@@ -2072,5 +2130,86 @@ mod tests {
         expected.insert(QuadRef::new(&c14n2, &p, &c14n1, GraphNameRef::DefaultGraph));
         expected.insert(QuadRef::new(&c14n3, &p, &c14n0, GraphNameRef::DefaultGraph));
         assert_eq!(dataset, expected);
+    }
+
+    #[test]
+    fn test_canonical_hashes() {
+        let p = NamedNode::new_unchecked("http://example.com/#p");
+        let q = NamedNode::new_unchecked("http://example.com/#q");
+        let r = NamedNode::new_unchecked("http://example.com/#r");
+        let e0 = BlankNode::new_unchecked("e0");
+        let e1 = BlankNode::new_unchecked("e1");
+        let e2 = BlankNode::new_unchecked("e2");
+        let e3 = BlankNode::new_unchecked("e3");
+
+        let mut dataset = Dataset::new();
+        dataset.insert(QuadRef::new(&p, &q, &e0, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&p, &q, &e1, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e0, &p, &e2, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e1, &p, &e3, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e2, &r, &e3, GraphNameRef::DefaultGraph));
+        let algorithm = CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+        };
+
+        // e0 and e1 share a first degree hash, so this exercises the n-degree path.
+        let hashes = dataset.canonical_hashes(algorithm);
+        assert_eq!(hashes.len(), 4);
+        assert_eq!(hashes.values().collect::<HashSet<_>>().len(), 4);
+
+        // A disconnected blank node leaves the existing hashes unchanged.
+        let mut extended = dataset.clone();
+        extended.insert(QuadRef::new(
+            &p,
+            &q,
+            &BlankNode::new_unchecked("e4"),
+            GraphNameRef::DefaultGraph,
+        ));
+        let extended_hashes = extended.canonical_hashes(algorithm);
+        for (node, hash) in &hashes {
+            assert_eq!(extended_hashes.get(node), Some(hash));
+        }
+
+        assert_eq!(dataset.len(), 5);
+        assert!(dataset.contains(QuadRef::new(&e0, &p, &e2, GraphNameRef::DefaultGraph)));
+    }
+
+    #[test]
+    fn test_canonical_hashes_share_hash_for_automorphic_nodes() {
+        let p = NamedNode::new_unchecked("http://example.com/#p");
+        let o = NamedNode::new_unchecked("http://example.com/#o");
+        let e0 = BlankNode::new_unchecked("e0");
+        let e1 = BlankNode::new_unchecked("e1");
+
+        let mut dataset = Dataset::new();
+        dataset.insert(QuadRef::new(&e0, &p, &o, GraphNameRef::DefaultGraph));
+        dataset.insert(QuadRef::new(&e1, &p, &o, GraphNameRef::DefaultGraph));
+
+        // e0 and e1 are interchangeable, so they share a hash.
+        let hashes = dataset.canonical_hashes(CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+        });
+        assert_eq!(hashes.len(), 2);
+        assert_eq!(hashes[&e0], hashes[&e1]);
+    }
+
+    #[test]
+    fn test_canonical_hashes_are_stable_under_disconnected_additions() {
+        let p = NamedNode::new_unchecked("http://example.com/#p");
+        let o = NamedNode::new_unchecked("http://example.com/#o");
+        let x = BlankNode::new_unchecked("x");
+        let y = BlankNode::new_unchecked("y");
+        let algorithm = CanonicalizationAlgorithm::Rdfc10 {
+            hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+        };
+
+        let mut base = Dataset::new();
+        base.insert(QuadRef::new(&x, &p, &o, GraphNameRef::DefaultGraph));
+        let base_hash = base.canonical_hashes(algorithm)[&x].clone();
+
+        // Adding a disconnected blank node that shares x's first degree hash must not change x's hash.
+        let mut extended = base.clone();
+        extended.insert(QuadRef::new(&y, &p, &o, GraphNameRef::DefaultGraph));
+        assert_eq!(extended.canonical_hashes(algorithm)[&x], base_hash);
     }
 }

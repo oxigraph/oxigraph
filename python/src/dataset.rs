@@ -1,8 +1,11 @@
-use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef};
+use crate::model::{
+    PyBlankNode, PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef,
+};
 use oxigraph::model::Quad;
 use oxigraph::model::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm, Dataset};
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
+use std::collections::HashMap;
 use std::fmt;
 
 /// An in-memory `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_.
@@ -212,6 +215,33 @@ impl PyDataset {
     /// True
     fn canonicalize(&mut self, algorithm: &PyCanonicalizationAlgorithm) {
         self.inner.canonicalize(algorithm.inner)
+    }
+
+    /// Computes a content-derived hash for each blank node without modifying the dataset.
+    ///
+    /// Unlike the labels produced by :py:meth:`canonicalize`, a blank node hash only depends on the subgraph reachable from it, so an unrelated change does not alter the hash of an untouched blank node. Automorphic (interchangeable) blank nodes share the same hash.
+    ///
+    /// Warning: :py:attr:`CanonicalizationAlgorithm.UNSTABLE` may produce different hashes between PyOxigraph versions; the RDFC 1.0 algorithms are stable.
+    ///
+    /// Warning: This implementation's worst-case complexity is exponential with respect to the number of blank nodes in the input dataset.
+    ///
+    /// :param algorithm: the canonicalization algorithm to use.
+    /// :type algorithm: CanonicalizationAlgorithm
+    /// :return: the mapping from each blank node to its hash.
+    /// :rtype: dict[BlankNode, str]
+    ///
+    /// >>> d = Dataset([Quad(BlankNode('a'), NamedNode('http://example.com/p'), Literal('x'))])
+    /// >>> d.canonical_hashes(CanonicalizationAlgorithm.RDFC_1_0)
+    /// {<BlankNode value=a>: '3bd53f7c7e8126517572962facf21123a3c507f585cda575b712a5dee1b7e496'}
+    fn canonical_hashes(
+        &self,
+        algorithm: &PyCanonicalizationAlgorithm,
+    ) -> HashMap<PyBlankNode, String> {
+        self.inner
+            .canonical_hashes(algorithm.inner)
+            .into_iter()
+            .map(|(node, hash)| (node.into(), hash))
+            .collect()
     }
 
     fn __bool__(&self) -> bool {

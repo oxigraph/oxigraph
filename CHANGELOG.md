@@ -2,6 +2,8 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `oxrdf`: the `Dataset::canonical_hashes` method returning a content-derived hash per blank node without modifying the dataset.
+- Python: the `Dataset.canonical_hashes` method returning a content-derived hash per blank node without modifying the dataset.
 
 
 # [0.5.7] - 2026-04-19
