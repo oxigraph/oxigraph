@@ -609,50 +609,14 @@ impl Dataset {
         &self,
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<InternedBlankNode, BlankNode> {
-        let hash_algorithm = match algorithm {
-            CanonicalizationAlgorithm::Unstable => None,
-            #[cfg(feature = "rdfc-10")]
-            CanonicalizationAlgorithm::Rdfc10 { hash_algorithm } => Some(hash_algorithm),
-        };
+        let hash_algorithm = Self::canonicalization_hash_algorithm(algorithm);
         // https://www.w3.org/TR/rdf-canon/#canon-algo-algo
-        // 1)
+        // 1) and 2)
         let mut canonicalization_state = CanonicalizationState {
-            blank_node_to_quads_map: QuadsPerBlankNode::new(),
+            blank_node_to_quads_map: self.build_blank_node_to_quads_map(),
             hash_to_blank_nodes_map: BTreeMap::new(),
             canonical_issuer: IdentifierIssuer::new("c14n"),
         };
-        // 2)
-        for quad in &self.spog {
-            if let InternedNamedOrBlankNode::BlankNode(bnode) = quad.0 {
-                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
-                    bnode,
-                    quad,
-                    &mut canonicalization_state.blank_node_to_quads_map,
-                );
-            }
-            if let InternedTerm::BlankNode(bnode) = &quad.2 {
-                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
-                    *bnode,
-                    quad,
-                    &mut canonicalization_state.blank_node_to_quads_map,
-                );
-            }
-            #[cfg(feature = "rdf-12")]
-            if let InternedTerm::Triple(t) = &quad.2 {
-                Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
-                    t,
-                    quad,
-                    &mut canonicalization_state.blank_node_to_quads_map,
-                );
-            }
-            if let InternedGraphName::BlankNode(bnode) = &quad.3 {
-                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
-                    *bnode,
-                    quad,
-                    &mut canonicalization_state.blank_node_to_quads_map,
-                );
-            }
-        }
         // 3)
         for n in canonicalization_state.blank_node_to_quads_map.keys() {
             // 3.1)
@@ -727,6 +691,54 @@ impl Dataset {
         canonicalization_state
             .canonical_issuer
             .issued_identifier_map
+    }
+
+    fn canonicalization_hash_algorithm(
+        algorithm: CanonicalizationAlgorithm,
+    ) -> Option<CanonicalizationHashAlgorithm> {
+        match algorithm {
+            CanonicalizationAlgorithm::Unstable => None,
+            #[cfg(feature = "rdfc-10")]
+            CanonicalizationAlgorithm::Rdfc10 { hash_algorithm } => Some(hash_algorithm),
+        }
+    }
+
+    /// Builds the [blank node to quads map](https://www.w3.org/TR/rdf-canon/#dfn-blank-node-to-quads-map)
+    /// (step 2 of the canonicalization algorithm).
+    fn build_blank_node_to_quads_map(&self) -> QuadsPerBlankNode<'_> {
+        let mut blank_node_to_quads_map = QuadsPerBlankNode::new();
+        for quad in &self.spog {
+            if let InternedNamedOrBlankNode::BlankNode(bnode) = quad.0 {
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    bnode,
+                    quad,
+                    &mut blank_node_to_quads_map,
+                );
+            }
+            if let InternedTerm::BlankNode(bnode) = &quad.2 {
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    *bnode,
+                    quad,
+                    &mut blank_node_to_quads_map,
+                );
+            }
+            #[cfg(feature = "rdf-12")]
+            if let InternedTerm::Triple(t) = &quad.2 {
+                Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
+                    t,
+                    quad,
+                    &mut blank_node_to_quads_map,
+                );
+            }
+            if let InternedGraphName::BlankNode(bnode) = &quad.3 {
+                Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
+                    *bnode,
+                    quad,
+                    &mut blank_node_to_quads_map,
+                );
+            }
+        }
+        blank_node_to_quads_map
     }
 
     #[cfg(feature = "rdf-12")]
