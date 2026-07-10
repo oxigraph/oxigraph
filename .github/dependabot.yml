@@ -3,20 +3,32 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   - package-ecosystem: "pip"
     directory: "/python/"
     versioning-strategy: increase-if-necessary
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      pip:
+        patterns:
+          - "*"
     cooldown:
       default-days: 7
   - package-ecosystem: "npm"
     directory: "/js/"
     versioning-strategy: increase-if-necessary
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
+    groups:
+      npm:
+        patterns:
+          - "*"
