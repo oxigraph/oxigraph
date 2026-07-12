@@ -54,6 +54,7 @@ pub trait ExpressionEvaluatorContext<'a> {
     fn build_externalize_expression_term(
         &mut self,
     ) -> impl Fn(Self::Term) -> Option<ExpressionTerm> + 'a; // TODO: return result
+    fn build_externalize_term(&mut self) -> impl Fn(Self::Term) -> Option<Term> + 'a; // TODO: return result
     fn now(&mut self) -> DateTime;
     fn base_iri(&mut self) -> Option<Iri<OxString>>;
     fn custom_functions(&mut self) -> &CustomFunctionRegistry;
@@ -465,16 +466,31 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
         }
         Expression::FunctionCall(function, parameters) => match function {
             Function::Str => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
-                Rc::new(move |tuple| {
-                    Some(ExpressionTerm::StringLiteral(match e(tuple)?.into() {
-                        Term::NamedNode(term) => term.into_string(),
-                        Term::BlankNode(_) => return None,
-                        Term::Literal(term) => term.into_value(),
-                        #[cfg(feature = "sparql-12")]
-                        Term::Triple(_) => return None,
-                    }))
-                })
+                if let Some(e) = try_build_internal_expression_evaluator(&parameters[0], context)? {
+                    let externalize = context.build_externalize_term();
+                    Rc::new(move |tuple| {
+                        Some(ExpressionTerm::StringLiteral(
+                            match externalize(e(tuple)?)? {
+                                Term::NamedNode(term) => term.into_string(),
+                                Term::BlankNode(_) => return None,
+                                Term::Literal(term) => term.into_value(),
+                                #[cfg(feature = "sparql-12")]
+                                Term::Triple(_) => return None,
+                            },
+                        ))
+                    })
+                } else {
+                    let e = build_expression_evaluator(&parameters[0], context)?;
+                    Rc::new(move |tuple| {
+                        Some(ExpressionTerm::StringLiteral(match e(tuple)?.into() {
+                            Term::NamedNode(term) => term.into_string(),
+                            Term::BlankNode(_) => return None,
+                            Term::Literal(term) => term.into_value(),
+                            #[cfg(feature = "sparql-12")]
+                            Term::Triple(_) => return None,
+                        }))
+                    })
+                }
             }
             Function::Lang => {
                 let e = build_expression_evaluator(&parameters[0], context)?;

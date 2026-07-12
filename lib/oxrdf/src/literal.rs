@@ -425,7 +425,7 @@ impl From<f64> for Literal {
 impl From<Boolean> for Literal {
     #[inline]
     fn from(value: Boolean) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::BOOLEAN)
+        bool::from(value).into()
     }
 }
 
