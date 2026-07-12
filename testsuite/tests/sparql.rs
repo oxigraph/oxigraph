@@ -16,9 +16,6 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
         &[
-            // Multiple writing of the same xsd:integer. Our system does some normalization.
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
             // We use XSD 1.1 equality on dates
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
             // This test relies on naive iteration on the input file

@@ -2008,6 +2008,11 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
         move |t| dataset.externalize_expression_term(t).ok()
     }
 
+    fn build_externalize_term(&mut self) -> impl Fn(Self::Term) -> Option<Term> + 'a {
+        let dataset = self.evaluator.dataset.clone();
+        move |t| dataset.externalize_term(t).ok()
+    }
+
     fn now(&mut self) -> DateTime {
         self.evaluator.now
     }
