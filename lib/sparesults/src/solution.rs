@@ -19,6 +19,7 @@ use std::sync::Arc;
 /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[derive(Default)]
 pub struct QuerySolution {
     variables: Arc<[Variable]>,
     values: Vec<Option<Term>>,
