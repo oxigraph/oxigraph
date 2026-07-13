@@ -1399,12 +1399,67 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 }
 
                 cast_fn!(xsd::STRING, |t: ExpressionTerm| Some(
-                    ExpressionTerm::StringLiteral(match t.into() {
-                        Term::NamedNode(term) => term.into_string(),
-                        Term::BlankNode(_) => return None,
-                        Term::Literal(term) => term.into_value(),
+                    ExpressionTerm::StringLiteral(match t {
+                        ExpressionTerm::NamedNode(term) => term.into_string(),
+                        ExpressionTerm::BlankNode(_) => return None,
+                        ExpressionTerm::StringLiteral(value)
+                        | ExpressionTerm::LangStringLiteral { value, .. }
+                        | ExpressionTerm::OtherTypedLiteral { value, .. } => value,
                         #[cfg(feature = "sparql-12")]
-                        Term::Triple(_) => return None,
+                        ExpressionTerm::DirLangStringLiteral { value, .. } => value,
+                        ExpressionTerm::BooleanLiteral(value) => Literal::from(value).into_value(),
+                        // TODO: avoid the intermediate allocation
+                        ExpressionTerm::IntegerLiteral(value) => Literal::from(value).into_value(),
+                        ExpressionTerm::DecimalLiteral(value) => Literal::from(value).into_value(),
+                        ExpressionTerm::FloatLiteral(value) => {
+                            // TODO: -0
+                            if Float::from(0.000_001) <= value.abs()
+                                && value.abs() < Float::from(1_000_000.)
+                                || Float::from(-0.) <= value && value <= Float::from(0.)
+                            {
+                                OxString::new_owned(&f32::from(value).to_string())
+                            } else {
+                                Literal::from(value).into_value()
+                            }
+                        }
+                        ExpressionTerm::DoubleLiteral(value) => {
+                            // TODO: -0
+                            if Double::from(0.000_001) <= value.abs()
+                                && value.abs() < Double::from(1_000_000.)
+                                || Double::from(-0.) <= value && value <= Double::from(0.)
+                            {
+                                OxString::new_owned(&f64::from(value).to_string())
+                            } else {
+                                Literal::from(value).into_value()
+                            }
+                        }
+                        ExpressionTerm::DateTimeLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DateLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::TimeLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "calendar-ext")]
+                        ExpressionTerm::GYearLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "calendar-ext")]
+                        ExpressionTerm::GYearMonthLiteral(value) =>
+                            Literal::from(value).into_value(),
+                        #[cfg(feature = "calendar-ext")]
+                        ExpressionTerm::GMonthLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "calendar-ext")]
+                        ExpressionTerm::GMonthDayLiteral(value) =>
+                            Literal::from(value).into_value(),
+                        #[cfg(feature = "calendar-ext")]
+                        ExpressionTerm::GDayLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DurationLiteral(value) => Literal::from(value).into_value(),
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::YearMonthDurationLiteral(value) =>
+                            Literal::from(value).into_value(),
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DayTimeDurationLiteral(value) =>
+                            Literal::from(value).into_value(),
+                        #[cfg(feature = "sparql-12")]
+                        ExpressionTerm::Triple(_) => return None,
                     })
                 ));
                 cast_fn!(xsd::BOOLEAN, |t: ExpressionTerm| Some(

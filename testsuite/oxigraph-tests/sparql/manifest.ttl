@@ -42,6 +42,7 @@
     :duplicated_values_var
     :order_by_rand
     :port_local_name
+    :xsd_string_cast
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -207,3 +208,8 @@
 :port_local_name rdf:type mf:NegativeSyntaxTest ;
     mf:name "the local name is a port number, it must be validated a such" ;
     mf:action <port_local_name.rq> .
+
+:xsd_string_cast rdf:type mf:QueryEvaluationTest ;
+    mf:name "xsd:string cast edge case testing" ;
+    mf:action [ qt:query <xsd_string_cast.rq> ] ;
+    mf:result  <xsd_string_cast.srx> .

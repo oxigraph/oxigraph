@@ -1,0 +1,18 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?v (xsd:string(?v) AS ?s) WHERE {
+    VALUES ?v {
+        "0.0000001"^^xsd:float "0.0000001"^^xsd:double
+        "0.000001"^^xsd:float "0.000001"^^xsd:double
+        "999999"^^xsd:float "999999"^^xsd:double
+        "1000000"^^xsd:float "1000000"^^xsd:double
+        "0"^^xsd:float "0"^^xsd:double
+        "-0"^^xsd:float "-0"^^xsd:double
+        "INF"^^xsd:float "INF"^^xsd:double
+        "-INF"^^xsd:float "-INF"^^xsd:double
+        "0003-01-02T03:04:05"^^xsd:dateTime
+        "-0003-01-02T03:04:05"^^xsd:dateTime
+        "30000-01-02T03:04:05-00:00"^^xsd:dateTime
+        "2000-01-01T24:00:00Z"^^xsd:dateTime
+    }
+}

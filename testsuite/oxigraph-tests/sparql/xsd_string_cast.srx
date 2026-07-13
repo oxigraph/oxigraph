@@ -1,0 +1,169 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="v"/>
+        <variable name="s"/>
+    </head>
+    <results>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">1.0E-7</literal>
+            </binding>
+            <binding name="s">
+                <literal>1.0E-7</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">1.0E-7</literal>
+            </binding>
+            <binding name="s">
+                <literal>1.0E-7</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">0.000001</literal>
+            </binding>
+            <binding name="s">
+                <literal>0.000001</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">0.000001</literal>
+            </binding>
+            <binding name="s">
+                <literal>0.000001</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">999999</literal>
+            </binding>
+            <binding name="s">
+                <literal>999999</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">999999</literal>
+            </binding>
+            <binding name="s">
+                <literal>999999</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">1.0E6</literal>
+            </binding>
+            <binding name="s">
+                <literal>1.0E6</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">1.0E6</literal>
+            </binding>
+            <binding name="s">
+                <literal>1.0E6</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">0</literal>
+            </binding>
+            <binding name="s">
+                <literal>0</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">0</literal>
+            </binding>
+            <binding name="s">
+                <literal>0</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">-0</literal>
+            </binding>
+            <binding name="s">
+                <literal>-0</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">-0</literal>
+            </binding>
+            <binding name="s">
+                <literal>-0</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">INF</literal>
+            </binding>
+            <binding name="s">
+                <literal>INF</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">INF</literal>
+            </binding>
+            <binding name="s">
+                <literal>INF</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">-INF</literal>
+            </binding>
+            <binding name="s">
+                <literal>-INF</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">-INF</literal>
+            </binding>
+            <binding name="s">
+                <literal>-INF</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">0003-01-02T03:04:05</literal>
+            </binding>
+            <binding name="s">
+                <literal>0003-01-02T03:04:05</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">-0003-01-02T03:04:05</literal>
+            </binding>
+            <binding name="s">
+                <literal>-0003-01-02T03:04:05</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">30000-01-02T03:04:05Z</literal>
+            </binding>
+            <binding name="s">
+                <literal>30000-01-02T03:04:05Z</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="v">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">2000-01-02T00:00:00Z</literal>
+            </binding>
+            <binding name="s">
+                <literal>2000-01-02T00:00:00Z</literal>
+            </binding>
+        </result>
+    </results>
+</sparql>
