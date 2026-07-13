@@ -365,18 +365,20 @@ impl QueryEvaluator {
 
             fn build_internalize_expression_term(
                 &mut self,
-            ) -> impl Fn(ExpressionTerm) -> Option<Term> + 'a {
-                |t| Some(t.into())
+            ) -> impl Fn(ExpressionTerm) -> Result<Term, QueryEvaluationError> + 'a {
+                |t| Ok(t.into())
             }
 
             fn build_externalize_expression_term(
                 &mut self,
-            ) -> impl Fn(Term) -> Option<ExpressionTerm> + 'a {
-                |t| Some(t.into())
+            ) -> impl Fn(Term) -> Result<ExpressionTerm, QueryEvaluationError> + 'a {
+                |t| Ok(t.into())
             }
 
-            fn build_externalize_term(&mut self) -> impl Fn(Term) -> Option<Term> + 'a {
-                Some
+            fn build_externalize_term(
+                &mut self,
+            ) -> impl Fn(Term) -> Result<Term, QueryEvaluationError> + 'a {
+                Ok
             }
 
             fn now(&mut self) -> DateTime {
@@ -400,11 +402,13 @@ impl QueryEvaluator {
             },
         )
         .ok()?(&substitutions.into_iter().collect::<HashMap<_, _>>())
+        .ok()
+        .flatten()
     }
 
     /// Evaluates a SPARQL expression against an empty dataset with optional variable substitutions.
     ///
-    /// Returns the computed term or `None` if an error occurs or the expression is invalid.
+    /// Returns the computed term or `None` if the expression is invalid.
     pub fn evaluate_expression<'a>(
         &self,
         expression: &sparopt::algebra::Expression,
