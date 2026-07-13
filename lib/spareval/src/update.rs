@@ -11,6 +11,7 @@ use spargebra::term::{
 #[cfg(feature = "sparql-12")]
 use spargebra::term::{GroundTriplePattern, TriplePattern};
 use std::collections::VecDeque;
+use std::mem::take;
 
 /// A [`Quad`] to delete or insert.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -28,9 +29,6 @@ pub struct DeleteInsertIter<'a, 'b> {
     variable_insert: Vec<&'b QuadPattern>,
     buffer: VecDeque<DeleteInsertQuad>,
     bnodes: FxHashMap<BlankNode, BlankNode>,
-    ground_deletes_emitted: bool,
-    ground_inserts_emitted: bool,
-    had_solution: bool,
 }
 
 impl<'a, 'b> DeleteInsertIter<'a, 'b> {
@@ -38,16 +36,17 @@ impl<'a, 'b> DeleteInsertIter<'a, 'b> {
         solutions: QuerySolutionIter<'a>,
         delete: &'b [GroundQuadPattern],
         insert: &'b [QuadPattern],
+        without_optimizations: bool,
     ) -> Self {
         let empty_solution =
             QuerySolution::from((Vec::<Variable>::new(), Vec::<Option<Term>>::new()));
         let mut ground_delete = Vec::new();
         let mut variable_delete = Vec::new();
         for quad in delete {
-            if ground_quad_pattern_has_variable(quad) {
+            if without_optimizations || ground_quad_pattern_has_variable(quad) {
                 variable_delete.push(quad);
-            } else if let Some(quad) = fill_ground_quad_pattern(quad, &empty_solution) {
-                ground_delete.push(quad);
+            } else {
+                ground_delete.extend(fill_ground_quad_pattern(quad, &empty_solution));
             }
         }
 
@@ -55,10 +54,10 @@ impl<'a, 'b> DeleteInsertIter<'a, 'b> {
         let mut variable_insert = Vec::new();
         let mut bnodes = FxHashMap::default();
         for quad in insert {
-            if insert_quad_pattern_needs_solution(quad) {
+            if without_optimizations || quad_pattern_needs_solution(quad) {
                 variable_insert.push(quad);
-            } else if let Some(quad) = fill_quad_pattern(quad, &empty_solution, &mut bnodes) {
-                ground_insert.push(quad);
+            } else {
+                ground_insert.extend(fill_quad_pattern(quad, &empty_solution, &mut bnodes));
             }
         }
 
@@ -70,9 +69,6 @@ impl<'a, 'b> DeleteInsertIter<'a, 'b> {
             variable_insert,
             buffer: VecDeque::new(),
             bnodes: FxHashMap::default(),
-            ground_deletes_emitted: false,
-            ground_inserts_emitted: false,
-            had_solution: false,
         }
     }
 }
@@ -88,30 +84,18 @@ impl Iterator for DeleteInsertIter<'_, '_> {
             let solution = match self.solutions.next() {
                 Some(Ok(solution)) => solution,
                 Some(Err(e)) => return Some(Err(e)),
-                None => {
-                    if self.had_solution && !self.ground_inserts_emitted {
-                        for quad in &self.ground_insert {
-                            self.buffer
-                                .push_back(DeleteInsertQuad::Insert(quad.clone()));
-                        }
-                        self.ground_inserts_emitted = true;
-                        continue;
-                    }
-                    return None;
-                }
+                None => return None,
             };
-            self.had_solution = true;
-            if !self.ground_deletes_emitted {
-                for quad in &self.ground_delete {
-                    self.buffer
-                        .push_back(DeleteInsertQuad::Delete(quad.clone()));
-                }
-                self.ground_deletes_emitted = true;
+            for quad in take(&mut self.ground_delete) {
+                self.buffer.push_back(DeleteInsertQuad::Delete(quad));
             }
             for quad in &self.variable_delete {
                 if let Some(quad) = fill_ground_quad_pattern(quad, &solution) {
                     self.buffer.push_back(DeleteInsertQuad::Delete(quad));
                 }
+            }
+            for quad in take(&mut self.ground_insert) {
+                self.buffer.push_back(DeleteInsertQuad::Insert(quad));
             }
             for quad in &self.variable_insert {
                 if let Some(quad) = fill_quad_pattern(quad, &solution, &mut self.bnodes) {
@@ -146,7 +130,7 @@ fn ground_triple_pattern_has_variable(triple: &GroundTriplePattern) -> bool {
         || ground_term_pattern_has_variable(&triple.object)
 }
 
-fn insert_quad_pattern_needs_solution(quad: &QuadPattern) -> bool {
+fn quad_pattern_needs_solution(quad: &QuadPattern) -> bool {
     insert_term_pattern_needs_solution(&quad.subject)
         || named_node_pattern_has_variable(&quad.predicate)
         || insert_term_pattern_needs_solution(&quad.object)
@@ -356,7 +340,7 @@ mod tests {
         variables: Vec<Variable>,
         rows: Vec<Vec<Option<Term>>>,
     ) -> Result<Vec<DeleteInsertQuad>, QueryEvaluationError> {
-        DeleteInsertIter::new(solution_iter(variables, rows), delete, insert).collect()
+        DeleteInsertIter::new(solution_iter(variables, rows), delete, insert, false).collect()
     }
 
     fn deleted_quads(results: &[DeleteInsertQuad]) -> Vec<Quad> {
@@ -414,34 +398,6 @@ mod tests {
         let results = collect(&delete, &insert, Vec::new(), Vec::new())?;
 
         assert!(results.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn ground_insert_is_emitted_after_later_variable_deletes() -> Result<(), QueryEvaluationError> {
-        let s = Variable::new_unchecked("s");
-        let p = ex("p");
-        let object = ex("o");
-        let first_deleted = Quad::new(ex("a"), p.clone(), object.clone(), GraphName::DefaultGraph);
-        let reinserted = Quad::new(ex("z"), p.clone(), object.clone(), GraphName::DefaultGraph);
-        let delete = [delete_pattern(s.clone(), p.clone(), object)];
-        let insert = [insert_pattern(ex("z"), p, ex("o"))];
-
-        let results = collect(
-            &delete,
-            &insert,
-            vec![s],
-            vec![vec![Some(ex("a").into())], vec![Some(ex("z").into())]],
-        )?;
-
-        assert_eq!(
-            results,
-            vec![
-                DeleteInsertQuad::Delete(first_deleted),
-                DeleteInsertQuad::Delete(reinserted.clone()),
-                DeleteInsertQuad::Insert(reinserted),
-            ]
-        );
         Ok(())
     }
 

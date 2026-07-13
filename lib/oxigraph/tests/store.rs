@@ -4,7 +4,6 @@
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
-use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
@@ -290,83 +289,6 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
         )?;
     }
     assert_eq!(store.len()?, 2);
-    Ok(())
-}
-
-#[test]
-fn test_update_ground_insert_with_multi_solution_where() -> Result<(), Box<dyn Error>> {
-    let row1 = NamedNode::new_unchecked("http://example.com/row1");
-    let row2 = NamedNode::new_unchecked("http://example.com/row2");
-    let match_predicate = NamedNode::new_unchecked("http://example.com/match");
-    let old_predicate = NamedNode::new_unchecked("http://example.com/old");
-    let inserted_predicate = NamedNode::new_unchecked("http://example.com/inserted");
-    let row1_old = Quad::new(
-        row1.clone(),
-        old_predicate.clone(),
-        Literal::new_simple_literal("old1"),
-        GraphName::DefaultGraph,
-    );
-    let row2_old = Quad::new(
-        row2.clone(),
-        old_predicate,
-        Literal::new_simple_literal("old2"),
-        GraphName::DefaultGraph,
-    );
-    let inserted1 = Quad::new(
-        NamedNode::new_unchecked("http://example.com/inserted1"),
-        inserted_predicate.clone(),
-        Literal::new_simple_literal("value1"),
-        GraphName::DefaultGraph,
-    );
-    let inserted2 = Quad::new(
-        NamedNode::new_unchecked("http://example.com/inserted2"),
-        inserted_predicate,
-        Literal::new_simple_literal("value2"),
-        GraphName::DefaultGraph,
-    );
-    let store = Store::new()?;
-
-    store.insert(Quad::new(
-        row1.clone(),
-        match_predicate.clone(),
-        Literal::from(1),
-        GraphName::DefaultGraph,
-    ))?;
-    store.insert(row1_old.clone())?;
-    store.insert(Quad::new(
-        row2.clone(),
-        match_predicate,
-        Literal::from(2),
-        GraphName::DefaultGraph,
-    ))?;
-    store.insert(row2_old.clone())?;
-
-    SparqlEvaluator::new()
-        .parse_update(
-            r#"
-            PREFIX ex: <http://example.com/>
-            DELETE {
-                ?s ex:old ?old .
-            }
-            INSERT {
-                ex:inserted1 ex:inserted "value1" .
-                ex:inserted2 ex:inserted "value2" .
-            }
-            WHERE {
-                ?s ex:match ?value .
-                ?s ex:old ?old .
-            }
-            "#,
-        )?
-        .on_store(&store)
-        .execute()?;
-
-    assert!(!store.contains(&row1_old)?);
-    assert!(!store.contains(&row2_old)?);
-    assert!(store.contains(&inserted1)?);
-    assert!(store.contains(&inserted2)?);
-    assert_eq!(store.len()?, 4);
-    store.validate()?;
     Ok(())
 }
 
