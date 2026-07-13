@@ -777,6 +777,7 @@ impl<'a> PreparedDeleteInsertUpdate<'a> {
             solutions?,
             &self.operation.delete,
             &self.operation.insert,
+            self.evaluator.without_optimizations,
         ))
     }
 }
