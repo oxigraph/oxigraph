@@ -48,11 +48,11 @@ build = ["maturin~=1.0", "ruff~=0.15.0"]
 dev = [
   { include-group = "build" },
   "furo",
-  "mypy~=1.0",
+  "mypy~=2.1",
   "ty~=0.0.17",
   "sphinx>=7.0,<10.0",
   "sphinx-lint~=1.0",
-  "regex<2026.2.0",            # TODO: fixes an installation bug with pypy
+  "regex<2026.7.0",            # TODO: fixes an installation bug with pypy
 ]
 
 [tool.ruff]
