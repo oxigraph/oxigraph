@@ -373,7 +373,7 @@ pub enum ExprTripleTermObject<'a> {
     TripleTerm(Box<ExprTripleTerm<'a>>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum BuiltInName {
     Coalesce,
     If,

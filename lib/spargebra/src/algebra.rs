@@ -1,7 +1,9 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
 use crate::term::*;
+use crate::vocab::sparql;
 use oxrdf::OxString;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as _;
 
@@ -143,7 +145,7 @@ pub enum Expression {
     /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce).
     Coalesce(Vec<Self>),
     /// A regular function call.
-    FunctionCall(Function, Vec<Self>),
+    FunctionCall(NamedNode, Vec<Self>),
 }
 
 impl Expression {
@@ -178,8 +180,8 @@ impl Expression {
             Self::UnaryMinus(e) => fmt_sse_unary_expression(f, "-", e),
             Self::Not(e) => fmt_sse_unary_expression(f, "!", e),
             Self::FunctionCall(function, parameters) => {
-                f.write_str("( ")?;
-                function.fmt_sse(f)?;
+                f.write_str("(")?;
+                write!(f, "{function}")?;
                 for p in parameters {
                     f.write_str(" ")?;
                     p.fmt_sse(f)?;
@@ -314,7 +316,11 @@ impl fmt::Display for Expression {
                 _ => write!(f, "!({e})"),
             },
             Self::FunctionCall(function, parameters) => {
-                write!(f, "{function}")?;
+                if let Some(name) = function_name(function) {
+                    f.write_str(name)?;
+                } else {
+                    write!(f, "{function}")?;
+                }
                 write_arg_list(parameters, f)
             }
             Self::Bound(v) => write!(f, "BOUND({v})"),
@@ -371,225 +377,78 @@ fn write_arg_list(
     f.write_str(")")
 }
 
-/// A function name.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Function {
-    Str,
-    Lang,
-    LangMatches,
-    Datatype,
-    Iri,
-    BNode,
-    Rand,
-    Abs,
-    Ceil,
-    Floor,
-    Round,
-    Concat,
-    SubStr,
-    StrLen,
-    Replace,
-    UCase,
-    LCase,
-    EncodeForUri,
-    Contains,
-    StrStarts,
-    StrEnds,
-    StrBefore,
-    StrAfter,
-    Year,
-    Month,
-    Day,
-    Hours,
-    Minutes,
-    Seconds,
-    Timezone,
-    Tz,
-    Now,
-    Uuid,
-    StrUuid,
-    Md5,
-    Sha1,
-    Sha256,
-    Sha384,
-    Sha512,
-    StrLang,
-    StrDt,
-    IsIri,
-    IsBlank,
-    IsLiteral,
-    IsNumeric,
-    Regex,
-    #[cfg(feature = "sparql-12")]
-    Triple,
-    #[cfg(feature = "sparql-12")]
-    Subject,
-    #[cfg(feature = "sparql-12")]
-    Predicate,
-    #[cfg(feature = "sparql-12")]
-    Object,
-    #[cfg(feature = "sparql-12")]
-    IsTriple,
-    #[cfg(feature = "sparql-12")]
-    LangDir,
-    #[cfg(feature = "sparql-12")]
-    HasLang,
-    #[cfg(feature = "sparql-12")]
-    HasLangDir,
-    #[cfg(feature = "sparql-12")]
-    StrLangDir,
-    #[cfg(feature = "sep-0002")]
-    Adjust,
-    Custom(NamedNode),
-}
-
-impl Function {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
-        match self {
-            Self::Str => f.write_str("str"),
-            Self::Lang => f.write_str("lang"),
-            Self::LangMatches => f.write_str("langmatches"),
-            Self::Datatype => f.write_str("datatype"),
-            Self::Iri => f.write_str("iri"),
-            Self::BNode => f.write_str("bnode"),
-            Self::Rand => f.write_str("rand"),
-            Self::Abs => f.write_str("abs"),
-            Self::Ceil => f.write_str("ceil"),
-            Self::Floor => f.write_str("floor"),
-            Self::Round => f.write_str("round"),
-            Self::Concat => f.write_str("concat"),
-            Self::SubStr => f.write_str("substr"),
-            Self::StrLen => f.write_str("strlen"),
-            Self::Replace => f.write_str("replace"),
-            Self::UCase => f.write_str("ucase"),
-            Self::LCase => f.write_str("lcase"),
-            Self::EncodeForUri => f.write_str("encode_for_uri"),
-            Self::Contains => f.write_str("contains"),
-            Self::StrStarts => f.write_str("strstarts"),
-            Self::StrEnds => f.write_str("strends"),
-            Self::StrBefore => f.write_str("strbefore"),
-            Self::StrAfter => f.write_str("strafter"),
-            Self::Year => f.write_str("year"),
-            Self::Month => f.write_str("month"),
-            Self::Day => f.write_str("day"),
-            Self::Hours => f.write_str("hours"),
-            Self::Minutes => f.write_str("minutes"),
-            Self::Seconds => f.write_str("seconds"),
-            Self::Timezone => f.write_str("timezone"),
-            Self::Tz => f.write_str("tz"),
-            Self::Now => f.write_str("now"),
-            Self::Uuid => f.write_str("uuid"),
-            Self::StrUuid => f.write_str("struuid"),
-            Self::Md5 => f.write_str("md5"),
-            Self::Sha1 => f.write_str("sha1"),
-            Self::Sha256 => f.write_str("sha256"),
-            Self::Sha384 => f.write_str("sha384"),
-            Self::Sha512 => f.write_str("sha512"),
-            Self::StrLang => f.write_str("strlang"),
-            Self::StrDt => f.write_str("strdt"),
-            Self::IsIri => f.write_str("isiri"),
-            Self::IsBlank => f.write_str("isblank"),
-            Self::IsLiteral => f.write_str("isliteral"),
-            Self::IsNumeric => f.write_str("isnumeric"),
-            Self::Regex => f.write_str("regex"),
-            #[cfg(feature = "sparql-12")]
-            Self::Triple => f.write_str("triple"),
-            #[cfg(feature = "sparql-12")]
-            Self::Subject => f.write_str("subject"),
-            #[cfg(feature = "sparql-12")]
-            Self::Predicate => f.write_str("predicate"),
-            #[cfg(feature = "sparql-12")]
-            Self::Object => f.write_str("object"),
-            #[cfg(feature = "sparql-12")]
-            Self::IsTriple => f.write_str("istriple"),
-            #[cfg(feature = "sparql-12")]
-            Function::LangDir => f.write_str("langdir"),
-            #[cfg(feature = "sparql-12")]
-            Function::HasLang => f.write_str("haslang"),
-            #[cfg(feature = "sparql-12")]
-            Function::HasLangDir => f.write_str("haslangdir"),
-            #[cfg(feature = "sparql-12")]
-            Function::StrLangDir => f.write_str("strlangdir"),
-            #[cfg(feature = "sep-0002")]
-            Self::Adjust => f.write_str("adjust"),
-            Self::Custom(iri) => write!(f, "{iri}"),
-        }
-    }
-}
-
-impl fmt::Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Str => f.write_str("STR"),
-            Self::Lang => f.write_str("LANG"),
-            Self::LangMatches => f.write_str("LANGMATCHES"),
-            Self::Datatype => f.write_str("DATATYPE"),
-            Self::Iri => f.write_str("IRI"),
-            Self::BNode => f.write_str("BNODE"),
-            Self::Rand => f.write_str("RAND"),
-            Self::Abs => f.write_str("ABS"),
-            Self::Ceil => f.write_str("CEIL"),
-            Self::Floor => f.write_str("FLOOR"),
-            Self::Round => f.write_str("ROUND"),
-            Self::Concat => f.write_str("CONCAT"),
-            Self::SubStr => f.write_str("SUBSTR"),
-            Self::StrLen => f.write_str("STRLEN"),
-            Self::Replace => f.write_str("REPLACE"),
-            Self::UCase => f.write_str("UCASE"),
-            Self::LCase => f.write_str("LCASE"),
-            Self::EncodeForUri => f.write_str("ENCODE_FOR_URI"),
-            Self::Contains => f.write_str("CONTAINS"),
-            Self::StrStarts => f.write_str("STRSTARTS"),
-            Self::StrEnds => f.write_str("STRENDS"),
-            Self::StrBefore => f.write_str("STRBEFORE"),
-            Self::StrAfter => f.write_str("STRAFTER"),
-            Self::Year => f.write_str("YEAR"),
-            Self::Month => f.write_str("MONTH"),
-            Self::Day => f.write_str("DAY"),
-            Self::Hours => f.write_str("HOURS"),
-            Self::Minutes => f.write_str("MINUTES"),
-            Self::Seconds => f.write_str("SECONDS"),
-            Self::Timezone => f.write_str("TIMEZONE"),
-            Self::Tz => f.write_str("TZ"),
-            Self::Now => f.write_str("NOW"),
-            Self::Uuid => f.write_str("UUID"),
-            Self::StrUuid => f.write_str("STRUUID"),
-            Self::Md5 => f.write_str("MD5"),
-            Self::Sha1 => f.write_str("SHA1"),
-            Self::Sha256 => f.write_str("SHA256"),
-            Self::Sha384 => f.write_str("SHA384"),
-            Self::Sha512 => f.write_str("SHA512"),
-            Self::StrLang => f.write_str("STRLANG"),
-            Self::StrDt => f.write_str("STRDT"),
-            Self::IsIri => f.write_str("isIRI"),
-            Self::IsBlank => f.write_str("isBLANK"),
-            Self::IsLiteral => f.write_str("isLITERAL"),
-            Self::IsNumeric => f.write_str("isNUMERIC"),
-            Self::Regex => f.write_str("REGEX"),
-            #[cfg(feature = "sparql-12")]
-            Self::Triple => f.write_str("TRIPLE"),
-            #[cfg(feature = "sparql-12")]
-            Self::Subject => f.write_str("SUBJECT"),
-            #[cfg(feature = "sparql-12")]
-            Self::Predicate => f.write_str("PREDICATE"),
-            #[cfg(feature = "sparql-12")]
-            Self::Object => f.write_str("OBJECT"),
-            #[cfg(feature = "sparql-12")]
-            Self::IsTriple => f.write_str("isTRIPLE"),
-            #[cfg(feature = "sparql-12")]
-            Function::LangDir => f.write_str("LANGDIR"),
-            #[cfg(feature = "sparql-12")]
-            Function::HasLang => f.write_str("hasLANG"),
-            #[cfg(feature = "sparql-12")]
-            Function::HasLangDir => f.write_str("hasLANGDIR"),
-            #[cfg(feature = "sparql-12")]
-            Function::StrLangDir => f.write_str("STRLANGDIR"),
-            #[cfg(feature = "sep-0002")]
-            Self::Adjust => f.write_str("ADJUST"),
-            Self::Custom(iri) => iri.fmt(f),
-        }
-    }
+fn function_name(function: &NamedNode) -> Option<&'static str> {
+    Some(match function.as_str() {
+        "http://www.w3.org/ns/sparql#str" => "STR",
+        "http://www.w3.org/ns/sparql#lang" => "LANG",
+        "http://www.w3.org/ns/sparql#langMatches" => "LANGMATCHES",
+        "http://www.w3.org/ns/sparql#datatype" => "DATATYPE",
+        "http://www.w3.org/ns/sparql#iri" => "IRI",
+        "http://www.w3.org/ns/sparql#uri" => "URI",
+        "http://www.w3.org/ns/sparql#bnode" => "BNODE",
+        "http://www.w3.org/ns/sparql#rand" => "RAND",
+        "http://www.w3.org/ns/sparql#abs" => "ABS",
+        "http://www.w3.org/ns/sparql#ceil" => "CEIL",
+        "http://www.w3.org/ns/sparql#floor" => "FLOOR",
+        "http://www.w3.org/ns/sparql#round" => "ROUND",
+        "http://www.w3.org/ns/sparql#concat" => "CONCAT",
+        "http://www.w3.org/ns/sparql#substr" => "SUBSTR",
+        "http://www.w3.org/ns/sparql#strlen" => "STRLEN",
+        "http://www.w3.org/ns/sparql#replace" => "REPLACE",
+        "http://www.w3.org/ns/sparql#ucase" => "UCASE",
+        "http://www.w3.org/ns/sparql#lcase" => "LCASE",
+        "http://www.w3.org/ns/sparql#encode" => "ENCODE_FOR_URI",
+        "http://www.w3.org/ns/sparql#contains" => "CONTAINS",
+        "http://www.w3.org/ns/sparql#strstarts" => "STRSTARTS",
+        "http://www.w3.org/ns/sparql#strends" => "STRENDS",
+        "http://www.w3.org/ns/sparql#strbefore" => "STRBEFORE",
+        "http://www.w3.org/ns/sparql#strafter" => "STRAFTER",
+        "http://www.w3.org/ns/sparql#year" => "YEAR",
+        "http://www.w3.org/ns/sparql#month" => "MONTH",
+        "http://www.w3.org/ns/sparql#day" => "DAY",
+        "http://www.w3.org/ns/sparql#hours" => "HOURS",
+        "http://www.w3.org/ns/sparql#minutes" => "MINUTES",
+        "http://www.w3.org/ns/sparql#seconds" => "SECONDS",
+        "http://www.w3.org/ns/sparql#timezone" => "TIMEZONE",
+        "http://www.w3.org/ns/sparql#tz" => "TZ",
+        "http://www.w3.org/ns/sparql#now" => "NOW",
+        "http://www.w3.org/ns/sparql#uuid" => "UUID",
+        "http://www.w3.org/ns/sparql#struuid" => "STRUUID",
+        "http://www.w3.org/ns/sparql#md5" => "MD5",
+        "http://www.w3.org/ns/sparql#sha1" => "SHA1",
+        "http://www.w3.org/ns/sparql#sha256" => "SHA256",
+        "http://www.w3.org/ns/sparql#sha384" => "SHA384",
+        "http://www.w3.org/ns/sparql#sha512" => "SHA512",
+        "http://www.w3.org/ns/sparql#strlang" => "STRLANG",
+        "http://www.w3.org/ns/sparql#strdt" => "STRDT",
+        "http://www.w3.org/ns/sparql#isIRI" => "isIRI",
+        "http://www.w3.org/ns/sparql#isURI" => "isURI",
+        "http://www.w3.org/ns/sparql#isBlank" => "isBLANK",
+        "http://www.w3.org/ns/sparql#isLiteral" => "isLITERAL",
+        "http://www.w3.org/ns/sparql#isNumeric" => "isNUMERIC",
+        "http://www.w3.org/ns/sparql#regex" => "REGEX",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#triple" => "TRIPLE",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#subject" => "SUBJECT",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#predicate" => "PREDICATE",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#object" => "OBJECT",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#isTriple" => "isTRIPLE",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#langdir" => "LANGDIR",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#hasLang" => "hasLANG",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#hasLangdir" => "hasLANGDIR",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#strlangdir" => "STRLANGDIR",
+        #[cfg(feature = "sep-0002")]
+        "http://www.w3.org/ns/sparql#adjust" => "ADJUST",
+        _ => return None,
+    })
 }
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery).
@@ -1491,9 +1350,11 @@ pub enum AggregateExpression {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
     CountSolutions { distinct: bool },
     FunctionCall {
-        name: AggregateFunction,
+        name: NamedNode,
         expr: Expression,
         distinct: bool,
+        /// Optional parameters to the aggregate. Currently only "separator" for GROUP_CONCAT is used.
+        scalarvals: BTreeMap<OxString, OxString>,
     },
 }
 
@@ -1509,32 +1370,20 @@ impl AggregateExpression {
                 f.write_str(")")
             }
             Self::FunctionCall {
-                name:
-                    AggregateFunction::GroupConcat {
-                        separator: Some(separator),
-                    },
-                expr,
-                distinct,
-            } => {
-                f.write_str("(group_concat ")?;
-                if *distinct {
-                    f.write_str("distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, " {})", Literal::new_simple_literal(separator.clone()))
-            }
-            Self::FunctionCall {
                 name,
                 expr,
                 distinct,
+                scalarvals,
             } => {
                 f.write_str("(")?;
-                name.fmt_sse(f)?;
-                f.write_str(" ")?;
+                write!(f, "{name} ")?;
                 if *distinct {
                     f.write_str("distinct ")?;
                 }
                 expr.fmt_sse(f)?;
+                for v in scalarvals.values() {
+                    write!(f, " {}", Literal::new_simple_literal(v.clone()))?;
+                }
                 f.write_str(")")
             }
         }
@@ -1558,93 +1407,43 @@ impl fmt::Display for AggregateExpression {
                 }
             }
             Self::FunctionCall {
-                name:
-                    AggregateFunction::GroupConcat {
-                        separator: Some(separator),
-                    },
-                expr,
-                distinct,
-            } => {
-                if *distinct {
-                    write!(
-                        f,
-                        "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
-                        expr,
-                        Literal::new_simple_literal(separator.clone())
-                    )
-                } else {
-                    write!(
-                        f,
-                        "GROUP_CONCAT({}; SEPARATOR = {})",
-                        expr,
-                        Literal::new_simple_literal(separator.clone())
-                    )
-                }
-            }
-            Self::FunctionCall {
                 name,
                 expr,
                 distinct,
+                scalarvals,
             } => {
-                if *distinct {
-                    write!(f, "{name}(DISTINCT {expr})")
+                if *name == sparql::AGG_COUNT {
+                    f.write_str("COUNT")
+                } else if *name == sparql::AGG_SUM {
+                    f.write_str("SUM")
+                } else if *name == sparql::AGG_AVG {
+                    f.write_str("AVG")
+                } else if *name == sparql::AGG_MIN {
+                    f.write_str("MIN")
+                } else if *name == sparql::AGG_MAX {
+                    f.write_str("MAX")
+                } else if *name == sparql::AGG_GROUP_CONCAT {
+                    f.write_str("GROUP_CONCAT")
+                } else if *name == sparql::AGG_SAMPLE {
+                    f.write_str("SAMPLE")
                 } else {
-                    write!(f, "{name}({expr})")
+                    name.fmt(f)
+                }?;
+                f.write_char('(')?;
+                if *distinct {
+                    f.write_str("DISTINCT ")?;
                 }
+                expr.fmt(f)?;
+                for (k, v) in scalarvals {
+                    write!(
+                        f,
+                        "; {} = {}",
+                        k.to_uppercase(),
+                        Literal::new_simple_literal(v.clone())
+                    )?;
+                }
+                f.write_char(')')
             }
-        }
-    }
-}
-
-/// An aggregate function name.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum AggregateFunction {
-    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
-    Count,
-    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum).
-    Sum,
-    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg).
-    Avg,
-    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin).
-    Min,
-    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
-    Max,
-    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
-    GroupConcat {
-        separator: Option<OxString>,
-    },
-    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
-    Sample,
-    Custom(NamedNode),
-}
-
-impl AggregateFunction {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
-        match self {
-            Self::Count => f.write_str("count"),
-            Self::Sum => f.write_str("sum"),
-            Self::Avg => f.write_str("avg"),
-            Self::Min => f.write_str("min"),
-            Self::Max => f.write_str("max"),
-            Self::GroupConcat { .. } => f.write_str("group_concat"),
-            Self::Sample => f.write_str("sample"),
-            Self::Custom(iri) => write!(f, "{iri}"),
-        }
-    }
-}
-
-impl fmt::Display for AggregateFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Count => f.write_str("COUNT"),
-            Self::Sum => f.write_str("SUM"),
-            Self::Avg => f.write_str("AVG"),
-            Self::Min => f.write_str("MIN"),
-            Self::Max => f.write_str("MAX"),
-            Self::GroupConcat { .. } => f.write_str("GROUP_CONCAT"),
-            Self::Sample => f.write_str("SAMPLE"),
-            Self::Custom(iri) => iri.fmt(f),
         }
     }
 }

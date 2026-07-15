@@ -1,7 +1,8 @@
 use crate::algebra::{Expression, GraphPattern};
 use oxrdf::Variable;
-use spargebra::algebra::Function;
+use oxrdf::vocab::xsd;
 use spargebra::term::{GroundTerm, GroundTermPattern, NamedNodePattern};
+use spargebra::vocab::sparql;
 use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr};
 
@@ -175,24 +176,30 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             VariableType::LITERAL
         }
         Expression::Variable(v) => types.get(v),
-        Expression::FunctionCall(Function::Datatype | Function::Iri, _) => {
+        Expression::FunctionCall(name, _)
+            if [
+                sparql::DATATYPE,
+                sparql::IRI,
+                sparql::URI,
+                #[cfg(feature = "sparql-12")]
+                sparql::PREDICATE,
+            ]
+            .contains(name) =>
+        {
             VariableType::NAMED_NODE | VariableType::UNDEF
         }
-        #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(Function::Predicate, _) => {
-            VariableType::NAMED_NODE | VariableType::UNDEF
-        }
-        Expression::FunctionCall(Function::BNode, args) => {
+        Expression::FunctionCall(name, args) if *name == sparql::BNODE => {
             if args.is_empty() {
                 VariableType::BLANK_NODE
             } else {
                 VariableType::BLANK_NODE | VariableType::UNDEF
             }
         }
-        Expression::FunctionCall(
-            Function::Rand | Function::Now | Function::Uuid | Function::StrUuid,
-            _,
-        ) => VariableType::LITERAL,
+        Expression::FunctionCall(name, _)
+            if [sparql::RAND, sparql::NOW, sparql::UUID, sparql::STRUUID].contains(name) =>
+        {
+            VariableType::LITERAL
+        }
         Expression::Or(_)
         | Expression::And(_)
         | Expression::Equal(_, _)
@@ -206,61 +213,104 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         | Expression::Divide(_, _)
         | Expression::UnaryPlus(_)
         | Expression::UnaryMinus(_)
-        | Expression::Not(_)
-        | Expression::FunctionCall(
-            Function::Str
-            | Function::Lang
-            | Function::LangMatches
-            | Function::Abs
-            | Function::Ceil
-            | Function::Floor
-            | Function::Round
-            | Function::Concat
-            | Function::SubStr
-            | Function::StrLen
-            | Function::Replace
-            | Function::UCase
-            | Function::LCase
-            | Function::EncodeForUri
-            | Function::Contains
-            | Function::StrStarts
-            | Function::StrEnds
-            | Function::StrBefore
-            | Function::StrAfter
-            | Function::Year
-            | Function::Month
-            | Function::Day
-            | Function::Hours
-            | Function::Minutes
-            | Function::Seconds
-            | Function::Timezone
-            | Function::Tz
-            | Function::Md5
-            | Function::Sha1
-            | Function::Sha256
-            | Function::Sha384
-            | Function::Sha512
-            | Function::StrLang
-            | Function::StrDt
-            | Function::IsIri
-            | Function::IsBlank
-            | Function::IsLiteral
-            | Function::IsNumeric
-            | Function::Regex,
-            _,
-        ) => VariableType::LITERAL | VariableType::UNDEF,
-        #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(
-            Function::LangDir | Function::StrLangDir | Function::HasLang | Function::HasLangDir,
-            _,
-        ) => VariableType::LITERAL | VariableType::UNDEF,
-        #[cfg(feature = "sep-0002")]
-        Expression::FunctionCall(Function::Adjust, _) => {
-            VariableType::LITERAL | VariableType::UNDEF
-        }
-        #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(Function::IsTriple, _) => {
-            VariableType::LITERAL | VariableType::UNDEF
+        | Expression::Not(_) => VariableType::LITERAL | VariableType::UNDEF,
+        Expression::FunctionCall(name, _)
+            if [
+                sparql::STR,
+                sparql::LANG,
+                sparql::LANG_MATCHES,
+                sparql::ABS,
+                sparql::CEIL,
+                sparql::FLOOR,
+                sparql::ROUND,
+                sparql::CONCAT,
+                sparql::SUBSTR,
+                sparql::STRLEN,
+                sparql::REPLACE,
+                sparql::UCASE,
+                sparql::LCASE,
+                sparql::ENCODE_FOR_URI,
+                sparql::CONTAINS,
+                sparql::STRSTARTS,
+                sparql::STRENDS,
+                sparql::STRBEFORE,
+                sparql::STRAFTER,
+                sparql::YEAR,
+                sparql::MONTH,
+                sparql::DAY,
+                sparql::HOURS,
+                sparql::MINUTES,
+                sparql::SECONDS,
+                sparql::TIMEZONE,
+                sparql::TZ,
+                sparql::MD5,
+                sparql::SHA1,
+                sparql::SHA256,
+                sparql::SHA384,
+                sparql::SHA512,
+                sparql::STRLANG,
+                sparql::STRDT,
+                sparql::IS_IRI,
+                sparql::IS_URI,
+                sparql::IS_BLANK,
+                sparql::IS_LITERAL,
+                sparql::IS_NUMERIC,
+                sparql::REGEX,
+                #[cfg(feature = "sparql-12")]
+                sparql::LANGDIR,
+                #[cfg(feature = "sparql-12")]
+                sparql::STRLANGDIR,
+                #[cfg(feature = "sparql-12")]
+                sparql::HAS_LANG,
+                #[cfg(feature = "sparql-12")]
+                sparql::HAS_LANGDIR,
+                #[cfg(feature = "sparql-12")]
+                sparql::IS_TRIPLE,
+                #[cfg(feature = "sep-0002")]
+                sparql::ADJUST,
+                xsd::ANY_URI,
+                xsd::BASE_64_BINARY,
+                xsd::BOOLEAN,
+                xsd::BYTE,
+                xsd::DATE,
+                xsd::DAY_TIME_DURATION,
+                xsd::DATE_TIME,
+                xsd::DATE_TIME_STAMP,
+                xsd::DECIMAL,
+                xsd::DOUBLE,
+                xsd::DURATION,
+                xsd::FLOAT,
+                xsd::G_DAY,
+                xsd::G_MONTH,
+                xsd::G_MONTH_DAY,
+                xsd::G_YEAR,
+                xsd::G_YEAR_MONTH,
+                xsd::HEX_BINARY,
+                xsd::INT,
+                xsd::INTEGER,
+                xsd::LANGUAGE,
+                xsd::LONG,
+                xsd::NAME,
+                xsd::NC_NAME,
+                xsd::NEGATIVE_INTEGER,
+                xsd::NMTOKEN,
+                xsd::NON_NEGATIVE_INTEGER,
+                xsd::NON_POSITIVE_INTEGER,
+                xsd::NORMALIZED_STRING,
+                xsd::POSITIVE_INTEGER,
+                xsd::TIME,
+                xsd::SHORT,
+                xsd::STRING,
+                xsd::TOKEN,
+                xsd::UNSIGNED_BYTE,
+                xsd::UNSIGNED_INT,
+                xsd::UNSIGNED_LONG,
+                xsd::UNSIGNED_SHORT,
+                xsd::YEAR_MONTH_DURATION,
+            ]
+            .contains(name) =>
+        {
+            VariableType::LITERAL | VariableType::UNDEF // TODO: add xsd: cast functions
         }
         Expression::SameTerm(left, right) => {
             if infer_expression_type(left, types).undef || infer_expression_type(right, types).undef
@@ -290,14 +340,18 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             t
         }
         #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(Function::Triple, _) => VariableType::TRIPLE | VariableType::UNDEF,
+        Expression::FunctionCall(name, _) if *name == sparql::TRIPLE => {
+            VariableType::TRIPLE | VariableType::UNDEF
+        }
         #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(Function::Subject, _) => {
+        Expression::FunctionCall(name, _) if *name == sparql::SUBJECT => {
             VariableType::SUBJECT | VariableType::UNDEF
         }
         #[cfg(feature = "sparql-12")]
-        Expression::FunctionCall(Function::Object, _) => VariableType::TERM | VariableType::UNDEF,
-        Expression::FunctionCall(Function::Custom(_), _) => VariableType::ANY,
+        Expression::FunctionCall(name, _) if *name == sparql::OBJECT => {
+            VariableType::TERM | VariableType::UNDEF
+        }
+        Expression::FunctionCall(_, _) => VariableType::ANY,
     }
 }
 

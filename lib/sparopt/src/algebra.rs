@@ -3,19 +3,20 @@
 use oxrdf::OxString;
 use oxrdf::vocab::xsd;
 use rand::random;
+pub use spargebra::algebra::PropertyPathExpression;
 use spargebra::algebra::{
-    AggregateExpression as AlAggregateExpression, AggregateFunction, Expression as AlExpression,
+    AggregateExpression as AlAggregateExpression, Expression as AlExpression,
     GraphPattern as AlGraphPattern, OrderExpression as AlOrderExpression,
 };
-pub use spargebra::algebra::{Function, PropertyPathExpression};
 use spargebra::term::{BlankNode, TermPattern, TriplePattern};
 pub use spargebra::term::{
     GroundTerm, GroundTermPattern, Literal, NamedNode, NamedNodePattern, Variable,
 };
 #[cfg(feature = "sparql-12")]
 use spargebra::term::{GroundTriple, GroundTriplePattern};
+use spargebra::vocab::sparql;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, Div, Mul, Neg, Not, Sub};
 
@@ -62,7 +63,7 @@ pub enum Expression {
     /// [COALESCE](https://www.w3.org/TR/sparql11-query/#func-coalesce).
     Coalesce(Vec<Self>),
     /// A regular function call.
-    FunctionCall(Function, Vec<Self>),
+    FunctionCall(NamedNode, Vec<Self>),
 }
 
 impl Expression {
@@ -188,7 +189,7 @@ impl Expression {
         Self::Coalesce(args)
     }
 
-    pub fn call(name: Function, args: Vec<Self>) -> Self {
+    pub fn call(name: NamedNode, args: Vec<Self>) -> Self {
         Self::FunctionCall(name, args)
     }
 
@@ -368,13 +369,19 @@ impl Expression {
             | Self::LessOrEqual(_, _)
             | Self::Not(_)
             | Self::Exists(_)
-            | Self::Bound(_)
-            | Self::FunctionCall(
-                Function::IsBlank | Function::IsIri | Function::IsLiteral | Function::IsNumeric,
-                _,
-            ) => true,
+            | Self::Bound(_) => true,
+            Self::FunctionCall(name, _)
+                if *name == sparql::IS_BLANK
+                    || *name == sparql::IS_IRI
+                    || *name == sparql::IS_URI
+                    || *name == sparql::IS_LITERAL
+                    || *name == sparql::IS_NUMERIC
+                    || *name == xsd::BOOLEAN =>
+            {
+                true
+            }
             #[cfg(feature = "sparql-12")]
-            Self::FunctionCall(Function::IsTriple, _) => true,
+            Self::FunctionCall(name, _) if *name == sparql::IS_TRIPLE => true,
             Self::Literal(literal) => *literal.datatype() == xsd::BOOLEAN,
             Self::If(_, a, b) => a.returns_boolean() && b.returns_boolean(),
             _ => false,
@@ -430,7 +437,7 @@ impl From<GroundTermPattern> for Expression {
 impl From<GroundTriple> for Expression {
     fn from(value: GroundTriple) -> Self {
         Self::FunctionCall(
-            Function::Triple,
+            sparql::TRIPLE,
             vec![
                 value.subject.into(),
                 value.predicate.into(),
@@ -444,7 +451,7 @@ impl From<GroundTriple> for Expression {
 impl From<GroundTriplePattern> for Expression {
     fn from(value: GroundTriplePattern) -> Self {
         Self::FunctionCall(
-            Function::Triple,
+            sparql::TRIPLE,
             vec![
                 value.subject.into(),
                 value.predicate.into(),
@@ -1575,9 +1582,10 @@ pub enum AggregateExpression {
         distinct: bool,
     },
     FunctionCall {
-        name: AggregateFunction,
+        name: NamedNode,
         expr: Expression,
         distinct: bool,
+        scalarvals: BTreeMap<OxString, OxString>,
     },
 }
 
@@ -1591,10 +1599,12 @@ impl AggregateExpression {
                 name,
                 expr,
                 distinct,
+                scalarvals,
             } => Self::FunctionCall {
                 name: name.clone(),
                 expr: Expression::from_sparql_algebra(expr),
                 distinct: *distinct,
+                scalarvals: scalarvals.clone(),
             },
         }
     }
@@ -1610,10 +1620,12 @@ impl From<&AggregateExpression> for AlAggregateExpression {
                 name,
                 expr,
                 distinct,
+                scalarvals,
             } => Self::FunctionCall {
                 name: name.clone(),
                 expr: expr.into(),
                 distinct: *distinct,
+                scalarvals: scalarvals.clone(),
             },
         }
     }

@@ -13,6 +13,7 @@ mod parser;
 pub mod query;
 pub mod term;
 pub mod update;
+pub mod vocab;
 
 use crate::algebra_builder::AlgebraBuilder;
 pub use crate::error::{SparqlSyntaxError, TextPosition};
