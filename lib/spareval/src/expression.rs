@@ -80,10 +80,10 @@ pub enum ExpressionEvaluationError<C> {
     /// The given custom function is not supported
     #[error("The custom function {0} is not supported")]
     UnsupportedCustomFunction(NamedNode),
-    /// The given custom function arity is not supported
-    #[error("The custom function {name} requires between {} and {} arguments, but {actual} were given", .expected.start(), .expected.end())]
-    UnsupportedCustomFunctionArity {
-        name: NamedNode,
+    /// The given function arity is not supported
+    #[error("The function {name} requires between {} and {} arguments, but {actual} were given", .expected.start(), .expected.end())]
+    UnsupportedFunctionArity {
+        name: Function,
         expected: RangeInclusive<usize>,
         actual: usize,
     },
@@ -567,7 +567,8 @@ where
         }
         Expression::FunctionCall(function, parameters) => match function {
             Function::Str => {
-                if let Some(e) = try_build_internal_expression_evaluator(&parameters[0], context)? {
+                let [p] = extract_parameters(Function::Str, parameters)?;
+                if let Some(e) = try_build_internal_expression_evaluator(p, context)? {
                     let externalize = context.build_externalize_term();
                     Rc::new(move |tuple| {
                         Ok(Some(ExpressionTerm::StringLiteral(
@@ -581,7 +582,7 @@ where
                         )))
                     })
                 } else {
-                    let e = build_expression_evaluator(&parameters[0], context)?;
+                    let e = build_expression_evaluator(p, context)?;
                     Rc::new(move |tuple| {
                         Ok(Some(ExpressionTerm::StringLiteral(
                             match try_or_ok!(e(tuple)?).into() {
@@ -596,7 +597,8 @@ where
                 }
             }
             Function::Lang => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Lang, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::StringLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -614,8 +616,10 @@ where
                 })
             }
             Function::LangMatches => {
-                let language_tag = build_expression_evaluator(&parameters[0], context)?;
-                let language_range = build_expression_evaluator(&parameters[1], context)?;
+                let [language_tag, language_range] =
+                    extract_parameters(Function::LangMatches, parameters)?;
+                let language_tag = build_expression_evaluator(language_tag, context)?;
+                let language_range = build_expression_evaluator(language_range, context)?;
                 Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(mut language_tag) =
                         try_or_ok!(language_tag(tuple)?)
@@ -648,7 +652,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::LangDir => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::LangDir, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::StringLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -669,7 +674,8 @@ where
                 })
             }
             Function::Datatype => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Datatype, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::NamedNode(
                         match try_or_ok!(e(tuple)?) {
@@ -714,7 +720,8 @@ where
                 })
             }
             Function::Iri => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Iri, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 let base_iri = context.base_iri();
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::NamedNode(
@@ -752,7 +759,8 @@ where
                 Rc::new(|_| Ok(Some(ExpressionTerm::DoubleLiteral(random::<f64>().into()))))
             }
             Function::Abs => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Abs, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::IntegerLiteral(value) => Some(
@@ -772,7 +780,8 @@ where
                 })
             }
             Function::Ceil => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Ceil, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::IntegerLiteral(value) => {
@@ -792,7 +801,8 @@ where
                 })
             }
             Function::Floor => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Floor, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::IntegerLiteral(value) => {
@@ -812,7 +822,8 @@ where
                 })
             }
             Function::Round => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Round, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::IntegerLiteral(value) => {
@@ -858,10 +869,20 @@ where
                 })
             }
             Function::SubStr => {
-                let source = build_expression_evaluator(&parameters[0], context)?;
-                let starting_loc = build_expression_evaluator(&parameters[1], context)?;
-                let length = parameters
-                    .get(2)
+                let (source, starting_loc, length) = match parameters.as_slice() {
+                    [source, starting_loc] => (source, starting_loc, None),
+                    [source, starting_loc, length] => (source, starting_loc, Some(length)),
+                    _ => {
+                        return Err(ExpressionEvaluationError::UnsupportedFunctionArity {
+                            name: Function::SubStr,
+                            expected: 2..=3,
+                            actual: parameters.len(),
+                        });
+                    }
+                };
+                let source = build_expression_evaluator(source, context)?;
+                let starting_loc = build_expression_evaluator(starting_loc, context)?;
+                let length = length
                     .map(|l| build_expression_evaluator(l, context))
                     .transpose()?;
                 Rc::new(move |tuple| {
@@ -908,7 +929,8 @@ where
                 })
             }
             Function::StrLen => {
-                let arg = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::StrLen, parameters)?;
+                let arg = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let (string, _) = try_or_ok!(to_string_and_language(try_or_ok!(arg(tuple)?)));
                     Ok(Some(ExpressionTerm::IntegerLiteral(
@@ -917,11 +939,20 @@ where
                 })
             }
             Function::Replace => {
-                let arg = build_expression_evaluator(&parameters[0], context)?;
-                let replacement = build_expression_evaluator(&parameters[2], context)?;
-                if let Some(regex) =
-                    compile_static_pattern_if_exists(&parameters[1], parameters.get(3))
-                {
+                let (arg, pattern, replacement, flags) = match parameters.as_slice() {
+                    [arg, pattern, replacement] => (arg, pattern, replacement, None),
+                    [arg, pattern, replacement, flags] => (arg, pattern, replacement, Some(flags)),
+                    _ => {
+                        return Err(ExpressionEvaluationError::UnsupportedFunctionArity {
+                            name: Function::Replace,
+                            expected: 3..=4,
+                            actual: parameters.len(),
+                        });
+                    }
+                };
+                let arg = build_expression_evaluator(arg, context)?;
+                let replacement = build_expression_evaluator(replacement, context)?;
+                if let Some(regex) = compile_static_pattern_if_exists(pattern, flags) {
                     Rc::new(move |tuple| {
                         let (text, language) =
                             try_or_ok!(to_string_and_language(try_or_ok!(arg(tuple)?)));
@@ -939,9 +970,8 @@ where
                         )))
                     })
                 } else {
-                    let pattern = build_expression_evaluator(&parameters[1], context)?;
-                    let flags = parameters
-                        .get(3)
+                    let pattern = build_expression_evaluator(pattern, context)?;
+                    let flags = flags
                         .map(|flags| build_expression_evaluator(flags, context))
                         .transpose()?;
                     Rc::new(move |tuple| {
@@ -977,7 +1007,8 @@ where
                 }
             }
             Function::UCase => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::UCase, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let (mut value, language) =
                         try_or_ok!(to_string_and_language(try_or_ok!(e(tuple)?)));
@@ -991,7 +1022,8 @@ where
                 })
             }
             Function::LCase => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::LCase, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let (mut value, language) =
                         try_or_ok!(to_string_and_language(try_or_ok!(e(tuple)?)));
@@ -1005,8 +1037,9 @@ where
                 })
             }
             Function::StrStarts => {
-                let arg1 = build_expression_evaluator(&parameters[0], context)?;
-                let arg2 = build_expression_evaluator(&parameters[1], context)?;
+                let [arg1, arg2] = extract_parameters(Function::StrStarts, parameters)?;
+                let arg1 = build_expression_evaluator(arg1, context)?;
+                let arg2 = build_expression_evaluator(arg2, context)?;
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) = try_or_ok!(to_argument_compatible_strings(
                         try_or_ok!(arg1(tuple)?),
@@ -1016,7 +1049,8 @@ where
                 })
             }
             Function::EncodeForUri => {
-                let ltrl = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::EncodeForUri, parameters)?;
+                let ltrl = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let (ltlr, _) = try_or_ok!(to_string_and_language(try_or_ok!(ltrl(tuple)?)));
                     let mut result = Vec::with_capacity(ltlr.len());
@@ -1048,8 +1082,9 @@ where
                 })
             }
             Function::StrEnds => {
-                let arg1 = build_expression_evaluator(&parameters[0], context)?;
-                let arg2 = build_expression_evaluator(&parameters[1], context)?;
+                let [arg1, arg2] = extract_parameters(Function::StrEnds, parameters)?;
+                let arg1 = build_expression_evaluator(arg1, context)?;
+                let arg2 = build_expression_evaluator(arg2, context)?;
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) = try_or_ok!(to_argument_compatible_strings(
                         try_or_ok!(arg1(tuple)?),
@@ -1059,8 +1094,9 @@ where
                 })
             }
             Function::Contains => {
-                let arg1 = build_expression_evaluator(&parameters[0], context)?;
-                let arg2 = build_expression_evaluator(&parameters[1], context)?;
+                let [arg1, arg2] = extract_parameters(Function::Contains, parameters)?;
+                let arg1 = build_expression_evaluator(arg1, context)?;
+                let arg2 = build_expression_evaluator(arg2, context)?;
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) = try_or_ok!(to_argument_compatible_strings(
                         try_or_ok!(arg1(tuple)?),
@@ -1070,8 +1106,9 @@ where
                 })
             }
             Function::StrBefore => {
-                let arg1 = build_expression_evaluator(&parameters[0], context)?;
-                let arg2 = build_expression_evaluator(&parameters[1], context)?;
+                let [arg1, arg2] = extract_parameters(Function::StrBefore, parameters)?;
+                let arg1 = build_expression_evaluator(arg1, context)?;
+                let arg2 = build_expression_evaluator(arg2, context)?;
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) = try_or_ok!(to_argument_compatible_strings(
                         try_or_ok!(arg1(tuple)?),
@@ -1085,8 +1122,9 @@ where
                 })
             }
             Function::StrAfter => {
-                let arg1 = build_expression_evaluator(&parameters[0], context)?;
-                let arg2 = build_expression_evaluator(&parameters[1], context)?;
+                let [arg1, arg2] = extract_parameters(Function::StrAfter, parameters)?;
+                let arg1 = build_expression_evaluator(arg1, context)?;
+                let arg2 = build_expression_evaluator(arg2, context)?;
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) = try_or_ok!(to_argument_compatible_strings(
                         try_or_ok!(arg1(tuple)?),
@@ -1103,7 +1141,8 @@ where
                 })
             }
             Function::Year => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Year, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::IntegerLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1121,7 +1160,8 @@ where
                 })
             }
             Function::Month => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Month, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::IntegerLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1141,7 +1181,8 @@ where
                 })
             }
             Function::Day => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Day, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::IntegerLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1159,7 +1200,8 @@ where
                 })
             }
             Function::Hours => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Hours, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::IntegerLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1173,7 +1215,8 @@ where
                 })
             }
             Function::Minutes => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Minutes, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::IntegerLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1187,7 +1230,8 @@ where
                 })
             }
             Function::Seconds => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Seconds, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::DecimalLiteral(
                         match try_or_ok!(e(tuple)?) {
@@ -1200,7 +1244,8 @@ where
                 })
             }
             Function::Timezone => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Timezone, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let result = try_or_ok!(match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::DateTimeLiteral(date_time) => date_time.timezone(),
@@ -1236,7 +1281,8 @@ where
                 })
             }
             Function::Tz => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Tz, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     let timezone_offset = match try_or_ok!(e(tuple)?) {
                         ExpressionTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
@@ -1267,8 +1313,9 @@ where
             }
             #[cfg(feature = "sep-0002")]
             Function::Adjust => {
-                let dt = build_expression_evaluator(&parameters[0], context)?;
-                let tz = build_expression_evaluator(&parameters[1], context)?;
+                let [dt, tz] = extract_parameters(Function::Adjust, parameters)?;
+                let dt = build_expression_evaluator(dt, context)?;
+                let tz = build_expression_evaluator(tz, context)?;
                 Rc::new(move |tuple| {
                     let timezone_offset = Some(try_or_ok!(
                         match try_or_ok!(tz(tuple)?) {
@@ -1341,14 +1388,25 @@ where
                     &buffer,
                 ))))
             }),
-            Function::Md5 => build_hash_expression_evaluator::<_, Md5>(parameters, context)?,
-            Function::Sha1 => build_hash_expression_evaluator::<_, Sha1>(parameters, context)?,
-            Function::Sha256 => build_hash_expression_evaluator::<_, Sha256>(parameters, context)?,
-            Function::Sha384 => build_hash_expression_evaluator::<_, Sha384>(parameters, context)?,
-            Function::Sha512 => build_hash_expression_evaluator::<_, Sha512>(parameters, context)?,
+            Function::Md5 => {
+                build_hash_expression_evaluator::<_, Md5>(Function::Md5, parameters, context)?
+            }
+            Function::Sha1 => {
+                build_hash_expression_evaluator::<_, Sha1>(Function::Sha1, parameters, context)?
+            }
+            Function::Sha256 => {
+                build_hash_expression_evaluator::<_, Sha256>(Function::Sha256, parameters, context)?
+            }
+            Function::Sha384 => {
+                build_hash_expression_evaluator::<_, Sha384>(Function::Sha384, parameters, context)?
+            }
+            Function::Sha512 => {
+                build_hash_expression_evaluator::<_, Sha512>(Function::Sha512, parameters, context)?
+            }
             Function::StrLang => {
-                let lexical_form = build_expression_evaluator(&parameters[0], context)?;
-                let lang_tag = build_expression_evaluator(&parameters[1], context)?;
+                let [lexical_form, lang_tag] = extract_parameters(Function::StrLang, parameters)?;
+                let lexical_form = build_expression_evaluator(lexical_form, context)?;
+                let lang_tag = build_expression_evaluator(lang_tag, context)?;
                 Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = try_or_ok!(lexical_form(tuple)?)
                     else {
@@ -1368,9 +1426,11 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::StrLangDir => {
-                let lexical_form = build_expression_evaluator(&parameters[0], context)?;
-                let lang_tag = build_expression_evaluator(&parameters[1], context)?;
-                let direction = build_expression_evaluator(&parameters[2], context)?;
+                let [lexical_form, lang_tag, direction] =
+                    extract_parameters(Function::StrLangDir, parameters)?;
+                let lexical_form = build_expression_evaluator(lexical_form, context)?;
+                let lang_tag = build_expression_evaluator(lang_tag, context)?;
+                let direction = build_expression_evaluator(direction, context)?;
                 Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = try_or_ok!(lexical_form(tuple)?)
                     else {
@@ -1401,8 +1461,9 @@ where
                 })
             }
             Function::StrDt => {
-                let lexical_form = build_expression_evaluator(&parameters[0], context)?;
-                let datatype = build_expression_evaluator(&parameters[1], context)?;
+                let [lexical_form, datatype] = extract_parameters(Function::StrDt, parameters)?;
+                let lexical_form = build_expression_evaluator(lexical_form, context)?;
+                let datatype = build_expression_evaluator(datatype, context)?;
                 Rc::new(move |tuple| {
                     let ExpressionTerm::StringLiteral(value) = try_or_ok!(lexical_form(tuple)?)
                     else {
@@ -1418,7 +1479,8 @@ where
             }
 
             Function::IsIri => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::IsIri, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(try_or_ok!(e(tuple)?), ExpressionTerm::NamedNode(_)).into(),
@@ -1426,7 +1488,8 @@ where
                 })
             }
             Function::IsBlank => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::IsBlank, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(try_or_ok!(e(tuple)?), ExpressionTerm::BlankNode(_)).into(),
@@ -1434,7 +1497,8 @@ where
                 })
             }
             Function::IsLiteral => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::IsLiteral, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         match try_or_ok!(e(tuple)?) {
@@ -1448,7 +1512,8 @@ where
                 })
             }
             Function::IsNumeric => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::IsNumeric, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(
@@ -1464,7 +1529,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::HasLang => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::HasLang, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(
@@ -1478,7 +1544,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::HasLangDir => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::HasLangDir, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(
@@ -1490,19 +1557,27 @@ where
                 })
             }
             Function::Regex => {
-                let text = build_expression_evaluator(&parameters[0], context)?;
-                if let Some(regex) =
-                    compile_static_pattern_if_exists(&parameters[1], parameters.get(2))
-                {
+                let (text, pattern, flags) = match parameters.as_slice() {
+                    [text, pattern] => (text, pattern, None),
+                    [text, pattern, flags] => (text, pattern, Some(flags)),
+                    _ => {
+                        return Err(ExpressionEvaluationError::UnsupportedFunctionArity {
+                            name: Function::Regex,
+                            expected: 2..=3,
+                            actual: parameters.len(),
+                        });
+                    }
+                };
+                let text = build_expression_evaluator(text, context)?;
+                if let Some(regex) = compile_static_pattern_if_exists(pattern, flags) {
                     Rc::new(move |tuple| {
                         let (text, _) =
                             try_or_ok!(to_string_and_language(try_or_ok!(text(tuple)?)));
                         Ok(Some(regex.is_match(&text).into()))
                     })
                 } else {
-                    let pattern = build_expression_evaluator(&parameters[1], context)?;
-                    let flags = parameters
-                        .get(2)
+                    let pattern = build_expression_evaluator(pattern, context)?;
+                    let flags = flags
                         .map(|flags| build_expression_evaluator(flags, context))
                         .transpose()?;
                     Rc::new(move |tuple| {
@@ -1528,9 +1603,10 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::Triple => {
-                let s = build_expression_evaluator(&parameters[0], context)?;
-                let p = build_expression_evaluator(&parameters[1], context)?;
-                let o = build_expression_evaluator(&parameters[2], context)?;
+                let [s, p, o] = extract_parameters(Function::Triple, parameters)?;
+                let s = build_expression_evaluator(s, context)?;
+                let p = build_expression_evaluator(p, context)?;
+                let o = build_expression_evaluator(o, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         try_or_ok!(ExpressionTriple::new(
@@ -1544,7 +1620,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::Subject => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Subject, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(if let ExpressionTerm::Triple(t) = try_or_ok!(e(tuple)?) {
                         Some(t.subject.into())
@@ -1555,7 +1632,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::Predicate => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Predicate, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(if let ExpressionTerm::Triple(t) = try_or_ok!(e(tuple)?) {
                         Some(t.predicate.into())
@@ -1566,7 +1644,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::Object => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::Object, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(if let ExpressionTerm::Triple(t) = try_or_ok!(e(tuple)?) {
                         Some(t.object)
@@ -1577,7 +1656,8 @@ where
             }
             #[cfg(feature = "sparql-12")]
             Function::IsTriple => {
-                let e = build_expression_evaluator(&parameters[0], context)?;
+                let [p] = extract_parameters(Function::IsTriple, parameters)?;
+                let e = build_expression_evaluator(p, context)?;
                 Rc::new(move |tuple| {
                     Ok(Some(
                         matches!(try_or_ok!(e(tuple)?), ExpressionTerm::Triple(_)).into(),
@@ -1602,16 +1682,11 @@ where
                 macro_rules! cast_fn {
                     ($name:expr, $eval:expr) => {{
                         if *function_name == $name {
-                            if parameters.len() != 1 {
-                                return Err(
-                                    ExpressionEvaluationError::UnsupportedCustomFunctionArity {
-                                        name: function_name.clone(),
-                                        expected: 1..=1,
-                                        actual: parameters.len(),
-                                    },
-                                );
-                            }
-                            let e = build_expression_evaluator(&parameters[0], context)?;
+                            let [p] = extract_parameters(
+                                Function::Custom(function_name.clone()),
+                                parameters,
+                            )?;
+                            let e = build_expression_evaluator(p, context)?;
                             return Ok(Rc::new(move |tuple| Ok(($eval)(try_or_ok!(e(tuple)?)))));
                         }
                     }};
@@ -1631,7 +1706,6 @@ where
                         ExpressionTerm::IntegerLiteral(value) => Literal::from(value).into_value(),
                         ExpressionTerm::DecimalLiteral(value) => Literal::from(value).into_value(),
                         ExpressionTerm::FloatLiteral(value) => {
-                            // TODO: -0
                             if Float::from(0.000_001) <= value.abs()
                                 && value.abs() < Float::from(1_000_000.)
                                 || Float::from(-0.) <= value && value <= Float::from(0.)
@@ -1642,7 +1716,6 @@ where
                             }
                         }
                         ExpressionTerm::DoubleLiteral(value) => {
-                            // TODO: -0
                             if Double::from(0.000_001) <= value.abs()
                                 && value.abs() < Double::from(1_000_000.)
                                 || Double::from(-0.) <= value && value <= Double::from(0.)
@@ -1924,6 +1997,7 @@ where
 }
 
 fn build_hash_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>, H: Digest>(
+    function_name: Function,
     parameters: &[Expression],
     context: &mut C,
 ) -> Result<
@@ -1933,7 +2007,8 @@ fn build_hash_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>, H: Dig
 where
     C::Error: 'a,
 {
-    let arg = build_expression_evaluator(&parameters[0], context)?;
+    let [arg] = extract_parameters(function_name, parameters)?;
+    let arg = build_expression_evaluator(arg, context)?;
     Ok(Rc::new(move |tuple| {
         let ExpressionTerm::StringLiteral(input) = try_or_ok!(arg(tuple)?) else {
             return Ok(None);
@@ -2616,6 +2691,19 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
             b'a' + (low - 10)
         }));
     }
+}
+
+fn extract_parameters<E, const N: usize>(
+    function_name: Function,
+    parameters: &[Expression],
+) -> Result<&[Expression; N], ExpressionEvaluationError<E>> {
+    parameters
+        .try_into()
+        .map_err(|_| ExpressionEvaluationError::UnsupportedFunctionArity {
+            name: function_name,
+            expected: N..=N,
+            actual: parameters.len(),
+        })
 }
 
 #[cfg(test)]
