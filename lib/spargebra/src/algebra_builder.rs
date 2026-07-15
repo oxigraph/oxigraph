@@ -1,6 +1,6 @@
 use crate::algebra::{
-    AggregateExpression, AggregateFunction, Expression, Function, GraphPattern, GraphTarget,
-    OrderExpression, PropertyPathExpression, QueryDataset,
+    AggregateExpression, Expression, GraphPattern, GraphTarget, OrderExpression,
+    PropertyPathExpression, QueryDataset,
 };
 use crate::ast;
 use crate::error::AlgebraBuilderError;
@@ -15,6 +15,7 @@ use crate::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
     InsertDataOperation, LoadOperation, Update,
 };
+use crate::vocab::sparql;
 use chumsky::span::{SimpleSpan, Span, Spanned, WrappingSpan};
 use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
@@ -24,7 +25,7 @@ use oxrdf::{BlankNode, Literal, NamedNode, OxString, Variable};
 use rand::random;
 use std::borrow::Cow;
 use std::cmp::{max, min};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem::take;
 use std::ops::RangeInclusive;
 
@@ -815,36 +816,36 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         aggregate: Spanned<ast::Aggregate<'a>>,
     ) -> Result<AggregateExpression, AlgebraBuilderError> {
-        let (name, expression, distinct) = match aggregate.inner {
+        let (name, expression, distinct, scalarvals) = match aggregate.inner {
             ast::Aggregate::Count(distinct, expression) => {
                 if let Some(expression) = expression {
-                    (AggregateFunction::Count, expression, distinct)
+                    (sparql::AGG_COUNT, expression, distinct, BTreeMap::new())
                 } else {
                     return Ok(AggregateExpression::CountSolutions { distinct });
                 }
             }
             ast::Aggregate::Sum(distinct, expression) => {
-                (AggregateFunction::Sum, expression, distinct)
+                (sparql::AGG_SUM, expression, distinct, BTreeMap::new())
             }
             ast::Aggregate::Min(distinct, expression) => {
-                (AggregateFunction::Min, expression, distinct)
+                (sparql::AGG_MIN, expression, distinct, BTreeMap::new())
             }
             ast::Aggregate::Max(distinct, expression) => {
-                (AggregateFunction::Max, expression, distinct)
+                (sparql::AGG_MAX, expression, distinct, BTreeMap::new())
             }
             ast::Aggregate::Avg(distinct, expression) => {
-                (AggregateFunction::Avg, expression, distinct)
+                (sparql::AGG_AVG, expression, distinct, BTreeMap::new())
             }
             ast::Aggregate::Sample(distinct, expression) => {
-                (AggregateFunction::Sample, expression, distinct)
+                (sparql::AGG_SAMPLE, expression, distinct, BTreeMap::new())
             }
-            ast::Aggregate::GroupConcat(distinct, expression, separator) => (
-                AggregateFunction::GroupConcat {
-                    separator: separator.map(Self::build_string).transpose()?,
-                },
-                expression,
-                distinct,
-            ),
+            ast::Aggregate::GroupConcat(distinct, expression, separator) => {
+                let mut scalarvals = BTreeMap::new();
+                if let Some(separator) = separator {
+                    scalarvals.insert("separator".into(), Self::build_string(separator)?);
+                }
+                (sparql::AGG_GROUP_CONCAT, expression, distinct, scalarvals)
+            }
         };
         let expr = self.build_expression_without_aggregates(
             *expression,
@@ -854,6 +855,7 @@ impl<'a> AlgebraBuilder<'a> {
             name,
             expr,
             distinct,
+            scalarvals,
         })
     }
 
@@ -961,6 +963,7 @@ impl<'a> AlgebraBuilder<'a> {
                     .into_iter()
                     .map(|e| self.build_expression(e, aggregates))
                     .collect::<Result<_, _>>()?;
+                let arity = function_arity(name);
                 let name = match name {
                     ast::BuiltInName::Coalesce => {
                         return Ok(Expression::Coalesce(args));
@@ -983,74 +986,75 @@ impl<'a> AlgebraBuilder<'a> {
                         })?;
                         return Ok(Expression::SameTerm(Box::new(l), Box::new(r)));
                     }
-                    ast::BuiltInName::Str => Function::Str,
-                    ast::BuiltInName::Lang => Function::Lang,
-                    ast::BuiltInName::LangMatches => Function::LangMatches,
-                    ast::BuiltInName::Datatype => Function::Datatype,
-                    ast::BuiltInName::Iri | ast::BuiltInName::Uri => Function::Iri,
-                    ast::BuiltInName::BNode => Function::BNode,
-                    ast::BuiltInName::Rand => Function::Rand,
-                    ast::BuiltInName::Abs => Function::Abs,
-                    ast::BuiltInName::Ceil => Function::Ceil,
-                    ast::BuiltInName::Floor => Function::Floor,
-                    ast::BuiltInName::Round => Function::Round,
-                    ast::BuiltInName::Concat => Function::Concat,
-                    ast::BuiltInName::SubStr => Function::SubStr,
-                    ast::BuiltInName::StrLen => Function::StrLen,
-                    ast::BuiltInName::Replace => Function::Replace,
-                    ast::BuiltInName::UCase => Function::UCase,
-                    ast::BuiltInName::LCase => Function::LCase,
-                    ast::BuiltInName::EncodeForUri => Function::EncodeForUri,
-                    ast::BuiltInName::Contains => Function::Contains,
-                    ast::BuiltInName::StrStarts => Function::StrStarts,
-                    ast::BuiltInName::StrEnds => Function::StrEnds,
-                    ast::BuiltInName::StrBefore => Function::StrBefore,
-                    ast::BuiltInName::StrAfter => Function::StrAfter,
-                    ast::BuiltInName::Year => Function::Year,
-                    ast::BuiltInName::Month => Function::Month,
-                    ast::BuiltInName::Day => Function::Day,
-                    ast::BuiltInName::Hours => Function::Hours,
-                    ast::BuiltInName::Minutes => Function::Minutes,
-                    ast::BuiltInName::Seconds => Function::Seconds,
-                    ast::BuiltInName::Timezone => Function::Timezone,
-                    ast::BuiltInName::Tz => Function::Tz,
-                    ast::BuiltInName::Now => Function::Now,
-                    ast::BuiltInName::Uuid => Function::Uuid,
-                    ast::BuiltInName::StrUuid => Function::StrUuid,
-                    ast::BuiltInName::Md5 => Function::Md5,
-                    ast::BuiltInName::Sha1 => Function::Sha1,
-                    ast::BuiltInName::Sha256 => Function::Sha256,
-                    ast::BuiltInName::Sha384 => Function::Sha384,
-                    ast::BuiltInName::Sha512 => Function::Sha512,
-                    ast::BuiltInName::StrLang => Function::StrLang,
-                    ast::BuiltInName::StrDt => Function::StrDt,
-                    ast::BuiltInName::IsIri | ast::BuiltInName::IsUri => Function::IsIri,
-                    ast::BuiltInName::IsBlank => Function::IsBlank,
-                    ast::BuiltInName::IsLiteral => Function::IsLiteral,
-                    ast::BuiltInName::IsNumeric => Function::IsNumeric,
-                    ast::BuiltInName::Regex => Function::Regex,
+                    ast::BuiltInName::Str => sparql::STR,
+                    ast::BuiltInName::Lang => sparql::LANG,
+                    ast::BuiltInName::LangMatches => sparql::LANG_MATCHES,
+                    ast::BuiltInName::Datatype => sparql::DATATYPE,
+                    ast::BuiltInName::Iri => sparql::IRI,
+                    ast::BuiltInName::Uri => sparql::URI,
+                    ast::BuiltInName::BNode => sparql::BNODE,
+                    ast::BuiltInName::Rand => sparql::RAND,
+                    ast::BuiltInName::Abs => sparql::ABS,
+                    ast::BuiltInName::Ceil => sparql::CEIL,
+                    ast::BuiltInName::Floor => sparql::FLOOR,
+                    ast::BuiltInName::Round => sparql::ROUND,
+                    ast::BuiltInName::Concat => sparql::CONCAT,
+                    ast::BuiltInName::SubStr => sparql::SUBSTR,
+                    ast::BuiltInName::StrLen => sparql::STRLEN,
+                    ast::BuiltInName::Replace => sparql::REPLACE,
+                    ast::BuiltInName::UCase => sparql::UCASE,
+                    ast::BuiltInName::LCase => sparql::LCASE,
+                    ast::BuiltInName::EncodeForUri => sparql::ENCODE_FOR_URI,
+                    ast::BuiltInName::Contains => sparql::CONTAINS,
+                    ast::BuiltInName::StrStarts => sparql::STRSTARTS,
+                    ast::BuiltInName::StrEnds => sparql::STRENDS,
+                    ast::BuiltInName::StrBefore => sparql::STRBEFORE,
+                    ast::BuiltInName::StrAfter => sparql::STRAFTER,
+                    ast::BuiltInName::Year => sparql::YEAR,
+                    ast::BuiltInName::Month => sparql::MONTH,
+                    ast::BuiltInName::Day => sparql::DAY,
+                    ast::BuiltInName::Hours => sparql::HOURS,
+                    ast::BuiltInName::Minutes => sparql::MINUTES,
+                    ast::BuiltInName::Seconds => sparql::SECONDS,
+                    ast::BuiltInName::Timezone => sparql::TIMEZONE,
+                    ast::BuiltInName::Tz => sparql::TZ,
+                    ast::BuiltInName::Now => sparql::NOW,
+                    ast::BuiltInName::Uuid => sparql::UUID,
+                    ast::BuiltInName::StrUuid => sparql::STRUUID,
+                    ast::BuiltInName::Md5 => sparql::MD5,
+                    ast::BuiltInName::Sha1 => sparql::SHA1,
+                    ast::BuiltInName::Sha256 => sparql::SHA256,
+                    ast::BuiltInName::Sha384 => sparql::SHA384,
+                    ast::BuiltInName::Sha512 => sparql::SHA512,
+                    ast::BuiltInName::StrLang => sparql::STRLANG,
+                    ast::BuiltInName::StrDt => sparql::STRDT,
+                    ast::BuiltInName::IsIri => sparql::IS_IRI,
+                    ast::BuiltInName::IsUri => sparql::IS_URI,
+                    ast::BuiltInName::IsBlank => sparql::IS_BLANK,
+                    ast::BuiltInName::IsLiteral => sparql::IS_LITERAL,
+                    ast::BuiltInName::IsNumeric => sparql::IS_NUMERIC,
+                    ast::BuiltInName::Regex => sparql::REGEX,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::Triple => Function::Triple,
+                    ast::BuiltInName::Triple => sparql::TRIPLE,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::Subject => Function::Subject,
+                    ast::BuiltInName::Subject => sparql::SUBJECT,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::Predicate => Function::Predicate,
+                    ast::BuiltInName::Predicate => sparql::PREDICATE,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::Object => Function::Object,
+                    ast::BuiltInName::Object => sparql::OBJECT,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::IsTriple => Function::IsTriple,
+                    ast::BuiltInName::IsTriple => sparql::IS_TRIPLE,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::LangDir => Function::LangDir,
+                    ast::BuiltInName::LangDir => sparql::LANGDIR,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::HasLang => Function::HasLang,
+                    ast::BuiltInName::HasLang => sparql::HAS_LANG,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::HasLangDir => Function::HasLangDir,
+                    ast::BuiltInName::HasLangDir => sparql::HAS_LANGDIR,
                     #[cfg(feature = "sparql-12")]
-                    ast::BuiltInName::StrLangDir => Function::StrLangDir,
+                    ast::BuiltInName::StrLangDir => sparql::STRLANGDIR,
                     #[cfg(feature = "sep-0002")]
-                    ast::BuiltInName::Adjust => Function::Adjust,
+                    ast::BuiltInName::Adjust => sparql::ADJUST,
                 };
-                let arity = function_arity(&name);
                 if !arity.contains(&args.len()) {
                     return Err(AlgebraBuilderError::new(
                         expression.span,
@@ -1090,9 +1094,10 @@ impl<'a> AlgebraBuilder<'a> {
                     )?;
                     return Ok(register_aggregate(
                         AggregateExpression::FunctionCall {
-                            name: AggregateFunction::Custom(name),
+                            name,
                             expr,
                             distinct: args.distinct,
+                            scalarvals: BTreeMap::new(),
                         },
                         aggregates,
                     )
@@ -1107,7 +1112,7 @@ impl<'a> AlgebraBuilder<'a> {
                     ));
                 }
                 Expression::FunctionCall(
-                    Function::Custom(name),
+                    name,
                     args.args
                         .into_iter()
                         .map(|e| self.build_expression(e, aggregates))
@@ -1129,7 +1134,7 @@ impl<'a> AlgebraBuilder<'a> {
         t: ast::ExprTripleTerm<'a>,
     ) -> Result<Expression, AlgebraBuilderError> {
         Ok(Expression::FunctionCall(
-            Function::Triple,
+            sparql::TRIPLE,
             vec![
                 match t.subject {
                     ast::ExprTripleTermSubject::Iri(s) => self.build_named_node(s)?.into(),
@@ -2343,75 +2348,68 @@ fn read_hex_char<const SIZE: usize>(
     Ok((char, &input[SIZE..]))
 }
 
-fn function_arity(name: &Function) -> RangeInclusive<usize> {
+fn function_arity(name: ast::BuiltInName) -> RangeInclusive<usize> {
     match name {
-        Function::Str => 1..=1,
-        Function::Lang => 1..=1,
-        Function::LangMatches => 2..=2,
-        Function::Datatype => 1..=1,
-        Function::Iri => 1..=1,
-        Function::BNode => 0..=1,
-        Function::Rand => 0..=0,
-        Function::Abs => 1..=1,
-        Function::Ceil => 1..=1,
-        Function::Floor => 1..=1,
-        Function::Round => 1..=1,
-        Function::Concat => 0..=usize::MAX,
-        Function::SubStr => 2..=3,
-        Function::StrLen => 1..=1,
-        Function::Replace => 3..=4,
-        Function::UCase => 1..=1,
-        Function::LCase => 1..=1,
-        Function::EncodeForUri => 1..=1,
-        Function::Contains => 2..=2,
-        Function::StrStarts => 2..=2,
-        Function::StrEnds => 2..=2,
-        Function::StrBefore => 2..=2,
-        Function::StrAfter => 2..=2,
-        Function::Year => 1..=1,
-        Function::Month => 1..=1,
-        Function::Day => 1..=1,
-        Function::Hours => 1..=1,
-        Function::Minutes => 1..=1,
-        Function::Seconds => 1..=1,
-        Function::Timezone => 1..=1,
-        Function::Tz => 1..=1,
-        Function::Now => 0..=0,
-        Function::Uuid => 0..=0,
-        Function::StrUuid => 0..=0,
-        Function::Md5 => 1..=1,
-        Function::Sha1 => 1..=1,
-        Function::Sha256 => 1..=1,
-        Function::Sha384 => 1..=1,
-        Function::Sha512 => 1..=1,
-        Function::StrLang => 2..=2,
-        Function::StrDt => 2..=2,
-        Function::IsIri => 1..=1,
-        Function::IsBlank => 1..=1,
-        Function::IsLiteral => 1..=1,
-        Function::IsNumeric => 1..=1,
-        Function::Regex => 2..=3,
+        ast::BuiltInName::Coalesce | ast::BuiltInName::Concat => 0..=usize::MAX,
+        ast::BuiltInName::If => 3..=3,
+        ast::BuiltInName::SameTerm | ast::BuiltInName::LangMatches => 2..=2,
+        ast::BuiltInName::Str
+        | ast::BuiltInName::Lang
+        | ast::BuiltInName::Datatype
+        | ast::BuiltInName::Iri
+        | ast::BuiltInName::Uri
+        | ast::BuiltInName::Abs
+        | ast::BuiltInName::Ceil
+        | ast::BuiltInName::Floor
+        | ast::BuiltInName::Round
+        | ast::BuiltInName::StrLen
+        | ast::BuiltInName::UCase
+        | ast::BuiltInName::LCase
+        | ast::BuiltInName::EncodeForUri
+        | ast::BuiltInName::Year
+        | ast::BuiltInName::Month
+        | ast::BuiltInName::Day
+        | ast::BuiltInName::Hours
+        | ast::BuiltInName::Minutes
+        | ast::BuiltInName::Seconds
+        | ast::BuiltInName::Timezone
+        | ast::BuiltInName::Tz
+        | ast::BuiltInName::Md5
+        | ast::BuiltInName::Sha1
+        | ast::BuiltInName::Sha256
+        | ast::BuiltInName::Sha384
+        | ast::BuiltInName::Sha512
+        | ast::BuiltInName::IsIri
+        | ast::BuiltInName::IsUri
+        | ast::BuiltInName::IsBlank
+        | ast::BuiltInName::IsLiteral
+        | ast::BuiltInName::IsNumeric => 1..=1,
+        ast::BuiltInName::BNode => 0..=1,
+        ast::BuiltInName::Rand
+        | ast::BuiltInName::Now
+        | ast::BuiltInName::Uuid
+        | ast::BuiltInName::StrUuid => 0..=0,
+        ast::BuiltInName::SubStr | ast::BuiltInName::Regex => 2..=3,
+        ast::BuiltInName::Replace => 3..=4,
+        ast::BuiltInName::Contains
+        | ast::BuiltInName::StrStarts
+        | ast::BuiltInName::StrEnds
+        | ast::BuiltInName::StrBefore
+        | ast::BuiltInName::StrAfter
+        | ast::BuiltInName::StrLang
+        | ast::BuiltInName::StrDt => 2..=2,
         #[cfg(feature = "sparql-12")]
-        Function::Triple => 3..=3,
+        ast::BuiltInName::Triple | ast::BuiltInName::StrLangDir => 3..=3,
         #[cfg(feature = "sparql-12")]
-        Function::Subject => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::Predicate => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::Object => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::IsTriple => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::LangDir => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::HasLang => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::HasLangDir => 1..=1,
-        #[cfg(feature = "sparql-12")]
-        Function::StrLangDir => 3..=3,
+        ast::BuiltInName::Subject
+        | ast::BuiltInName::Predicate
+        | ast::BuiltInName::Object
+        | ast::BuiltInName::IsTriple
+        | ast::BuiltInName::LangDir
+        | ast::BuiltInName::HasLang
+        | ast::BuiltInName::HasLangDir => 1..=1,
         #[cfg(feature = "sep-0002")]
-        Function::Adjust => 2..=2,
-        Function::Custom(_) => 0..=usize::MAX,
+        ast::BuiltInName::Adjust => 2..=2,
     }
 }
 

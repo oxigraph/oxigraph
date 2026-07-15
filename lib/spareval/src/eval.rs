@@ -18,12 +18,13 @@ use oxrdf::NamedOrBlankNode;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, OxString, Term, Triple, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
-use spargebra::algebra::{AggregateFunction, PropertyPathExpression};
+use spargebra::algebra::PropertyPathExpression;
 #[cfg(feature = "sparql-12")]
 use spargebra::term::GroundTriple;
 use spargebra::term::{
     GroundTerm, GroundTermPattern, NamedNodePattern, TermPattern, TriplePattern,
 };
+use spargebra::vocab::sparql;
 use sparopt::algebra::{
     AggregateExpression, Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm,
     MinusAlgorithm, OrderExpression,
@@ -1663,8 +1664,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 name,
                 distinct,
                 expr,
-            } => match name {
-                AggregateFunction::Count => {
+                scalarvals,
+            } => {
+                if *name == sparql::AGG_COUNT {
                     if let Some(evaluator) =
                         self.internal_expression_evaluator(expr, encoded_variables, stat_children)?
                     {
@@ -1695,8 +1697,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(CountAccumulator::default())),
                         })
                     }
-                }
-                AggregateFunction::Sum => {
+                } else if *name == sparql::AGG_SUM {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
@@ -1711,8 +1712,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(SumAccumulator::default())),
                         })
                     }
-                }
-                AggregateFunction::Min => {
+                } else if *name == sparql::AGG_MIN {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
@@ -1727,8 +1727,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(MinAccumulator::default())),
                         })
                     }
-                }
-                AggregateFunction::Max => {
+                } else if *name == sparql::AGG_MAX {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
@@ -1743,8 +1742,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(MaxAccumulator::default())),
                         })
                     }
-                }
-                AggregateFunction::Avg => {
+                } else if *name == sparql::AGG_AVG {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
@@ -1759,17 +1757,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(AvgAccumulator::default())),
                         })
                     }
-                }
-                AggregateFunction::Sample => {
+                } else if *name == sparql::AGG_SAMPLE {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     Box::new(move || AccumulatorWrapper::Sample {
                         evaluator: Rc::clone(&evaluator),
                         value: None,
                     })
-                }
-                AggregateFunction::GroupConcat { separator } => {
-                    let separator = Rc::from(separator.as_deref().unwrap_or(" "));
+                } else if *name == sparql::AGG_GROUP_CONCAT {
+                    let separator =
+                        Rc::from(scalarvals.get("separator").map_or(" ", OxString::as_str));
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
@@ -1788,13 +1785,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             )))),
                         })
                     }
-                }
-                AggregateFunction::Custom(function_name) => {
-                    let Some(function) = self.custom_aggregate_functions.get(function_name) else {
-                        return Err(QueryEvaluationError::UnsupportedCustomFunction(
-                            function_name.clone(),
-                        ));
-                    };
+                } else if let Some(function) = self.custom_aggregate_functions.get(name) {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     let function = Arc::clone(function);
@@ -1810,8 +1801,10 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             accumulator: Some(Box::new(CustomAccumulator(function()))),
                         })
                     }
+                } else {
+                    return Err(QueryEvaluationError::UnsupportedFunction(name.clone()));
                 }
-            },
+            }
         })
     }
 
