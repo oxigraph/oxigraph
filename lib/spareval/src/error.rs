@@ -1,6 +1,7 @@
 use crate::expression::ExpressionEvaluationError;
 use oxrdf::{NamedNode, Term, Variable};
 use spargebra::SparqlSyntaxError;
+use spargebra::algebra::Function;
 use std::convert::Infallible;
 use std::error::Error;
 use std::ops::RangeInclusive;
@@ -24,10 +25,10 @@ pub enum QueryEvaluationError {
     /// The given custom function is not supported
     #[error("The custom function {0} is not supported")]
     UnsupportedCustomFunction(NamedNode),
-    /// The given custom function arity is not supported
-    #[error("The custom function {name} requires between {} and {} arguments, but {actual} were given", .expected.start(), .expected.end())]
-    UnsupportedCustomFunctionArity {
-        name: NamedNode,
+    /// The given function arity is not supported
+    #[error("The function {name} requires between {} and {} arguments, but {actual} were given", .expected.start(), .expected.end())]
+    UnsupportedFunctionArity {
+        name: Function,
         expected: RangeInclusive<usize>,
         actual: usize,
     },
@@ -74,11 +75,11 @@ impl From<ExpressionEvaluationError<Self>> for QueryEvaluationError {
             ExpressionEvaluationError::UnsupportedCustomFunction(name) => {
                 Self::UnsupportedCustomFunction(name)
             }
-            ExpressionEvaluationError::UnsupportedCustomFunctionArity {
+            ExpressionEvaluationError::UnsupportedFunctionArity {
                 name,
                 expected,
                 actual,
-            } => Self::UnsupportedCustomFunctionArity {
+            } => Self::UnsupportedFunctionArity {
                 name,
                 expected,
                 actual,
