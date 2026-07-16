@@ -610,7 +610,9 @@ impl Dataset {
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<InternedBlankNode, BlankNode> {
         let hash_algorithm = match algorithm {
-            CanonicalizationAlgorithm::Unstable => None,
+            CanonicalizationAlgorithm::Unstable | CanonicalizationAlgorithm::UnstableHashedIds => {
+                None
+            }
             #[cfg(feature = "rdfc-10")]
             CanonicalizationAlgorithm::Rdfc10 { hash_algorithm } => Some(hash_algorithm),
         };
@@ -668,7 +670,7 @@ impl Dataset {
         canonicalization_state.hash_to_blank_nodes_map = canonicalization_state
             .hash_to_blank_nodes_map
             .into_iter()
-            .filter(|(_, identifier_list)| {
+            .filter(|(hash, identifier_list)| {
                 match identifier_list.len() {
                     0 => unreachable!(),
                     // 4.1)
@@ -678,6 +680,8 @@ impl Dataset {
                         Self::issue_identifier(
                             &mut canonicalization_state.canonical_issuer,
                             identifier_list[0],
+                            algorithm,
+                            hash,
                         );
                         // 4.3)
                         false
@@ -686,7 +690,7 @@ impl Dataset {
             })
             .collect::<BTreeMap<_, _>>();
         // 5)
-        for (_, identifier_list) in take(&mut canonicalization_state.hash_to_blank_nodes_map) {
+        for (hash, identifier_list) in take(&mut canonicalization_state.hash_to_blank_nodes_map) {
             // 5.1)
             let mut hash_path_list = Vec::new();
             // 5.2)
@@ -702,12 +706,13 @@ impl Dataset {
                 // 5.2.2)
                 let mut temporary_issuer = IdentifierIssuer::new("b");
                 // 5.2.3)
-                Self::issue_identifier(&mut temporary_issuer, n);
+                Self::issue_identifier(&mut temporary_issuer, n, algorithm, &hash);
                 // 5.2.4)
                 hash_path_list.push(self.hash_n_degree_quads(
                     &canonicalization_state,
                     n,
                     &temporary_issuer,
+                    algorithm,
                     hash_algorithm,
                 ))
             }
@@ -719,6 +724,8 @@ impl Dataset {
                     Self::issue_identifier(
                         &mut canonicalization_state.canonical_issuer,
                         existing_identifier,
+                        algorithm,
+                        &hash,
                     );
                 }
             }
@@ -779,23 +786,43 @@ impl Dataset {
     }
 
     /// RDFC [Issue Identifier Algorithm](https://www.w3.org/TR/rdf-canon/#issue-identifier)
-    fn issue_identifier(issuer: &mut IdentifierIssuer, blank_node: InternedBlankNode) -> BlankNode {
+    fn issue_identifier(
+        issuer: &mut IdentifierIssuer,
+        blank_node: InternedBlankNode,
+        algorithm: CanonicalizationAlgorithm,
+        hash: &str,
+    ) -> BlankNode {
         match issuer.issued_identifier_map.entry(blank_node) {
             // 1)
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                // 2)
-                let issued_identifier = BlankNode::new_unchecked(OxString::new_owned(&format!(
-                    "{}{}",
-                    issuer.identifier_prefix, issuer.identifier_counter
-                )));
-                // 3)
-                entry.insert(issued_identifier.clone());
-                issuer.issued_identifier_order.push(blank_node);
-                // 4)
-                issuer.identifier_counter += 1;
-                // 5)
-                issued_identifier
+                if algorithm == CanonicalizationAlgorithm::UnstableHashedIds {
+                    let mut issued_identifier = BlankNode::new_unchecked(OxString::new_owned(hash));
+                    let mut i = 0;
+                    while !issuer
+                        .already_issued_identifiers
+                        .insert(issued_identifier.clone())
+                    {
+                        i += 1;
+                        issued_identifier =
+                            BlankNode::new_unchecked(OxString::new_owned(&format!("{hash}{i}")));
+                    }
+                    entry.insert(issued_identifier.clone());
+                    issuer.issued_identifier_order.push(blank_node);
+                    issued_identifier
+                } else {
+                    // 2)
+                    let issued_identifier = BlankNode::new_unchecked(OxString::new_owned(
+                        &format!("{}{}", issuer.identifier_prefix, issuer.identifier_counter),
+                    ));
+                    // 3)
+                    entry.insert(issued_identifier.clone());
+                    issuer.issued_identifier_order.push(blank_node);
+                    // 4)
+                    issuer.identifier_counter += 1;
+                    // 5)
+                    issued_identifier
+                }
             }
         }
     }
@@ -957,6 +984,7 @@ impl Dataset {
         canonicalization_state: &CanonicalizationState<'_>,
         identifier: InternedBlankNode,
         issuer: &IdentifierIssuer,
+        algorithm: CanonicalizationAlgorithm,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
     ) -> (IdentifierIssuer, String) {
         let mut issuer = issuer.clone();
@@ -1051,7 +1079,12 @@ impl Dataset {
                             recursion_list.push(related);
                         }
                         // 5.4.4.2.2)
-                        let id = Self::issue_identifier(&mut issuer_copy, related);
+                        let id = Self::issue_identifier(
+                            &mut issuer_copy,
+                            related,
+                            algorithm,
+                            &related_hash,
+                        );
                         path.push_str("_:");
                         path.push_str(id.as_str());
                     }
@@ -1070,10 +1103,12 @@ impl Dataset {
                         canonicalization_state,
                         related,
                         &issuer_copy,
+                        algorithm,
                         hash_algorithm,
                     );
                     // 5.4.5.2)
-                    let id = Self::issue_identifier(&mut issuer_copy, related);
+                    let id =
+                        Self::issue_identifier(&mut issuer_copy, related, algorithm, &result_hash);
                     path.push_str("_:");
                     path.push_str(id.as_str());
                     // 5.4.5.3)
@@ -1959,6 +1994,12 @@ pub enum CanonicalizationAlgorithm {
     /// <div class="warning">The canonicalization algorithm is not stable and canonical blank node ids might change between versions.</div>
     #[default]
     Unstable,
+    /// The algorithm preferred by OxRDF but outputting ids based on hashes.
+    ///
+    /// This enables to use the blank node ids for diffing, additions or deletions of triples affect less blank node ids.
+    ///
+    /// <div class="warning">The canonicalization algorithm is not stable and canonical blank node ids might change between versions.</div>
+    UnstableHashedIds,
     /// The [RDF Canonicalization algorithm version 1.0](https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0) parametrized with its used [`CanonicalizationHashAlgorithm`](hash algorithm).
     ///
     /// <div class="warning">Note that the algorithm does not support RDF 1.2, this implementation behavior on triple terms is not part of the standard and might change.</div>
@@ -1994,6 +2035,7 @@ struct IdentifierIssuer {
     identifier_counter: u32,
     issued_identifier_map: HashMap<InternedBlankNode, BlankNode>,
     issued_identifier_order: Vec<InternedBlankNode>, /* hack to know the insertion order in the hash map */
+    already_issued_identifiers: HashSet<BlankNode>,
 }
 
 impl IdentifierIssuer {
@@ -2003,6 +2045,7 @@ impl IdentifierIssuer {
             identifier_counter: 0,
             issued_identifier_map: HashMap::new(),
             issued_identifier_order: Vec::new(),
+            already_issued_identifiers: HashSet::new(),
         }
     }
 }
