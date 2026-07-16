@@ -1,8 +1,11 @@
-use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef};
+use crate::model::{
+    PyBlankNode, PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef,
+};
 use oxigraph::model::Quad;
 use oxigraph::model::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm, Dataset};
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
+use std::collections::HashMap;
 use std::fmt;
 
 /// An in-memory `RDF dataset <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_.
@@ -214,6 +217,29 @@ impl PyDataset {
         self.inner.canonicalize(algorithm.inner)
     }
 
+    /// Returns a map between the current dataset blank node and the canonicalized blank node
+    /// to create a canonical dataset.
+    ///
+    /// See :py:func:`canonicalize` for more details.
+    ///
+    /// :param algorithm: the canonicalization algorithm to use.
+    /// :type algorithm: CanonicalizationAlgorithm
+    /// :rtype: dict[BlankNode, BlankNode]
+    ///
+    /// >>> d1 = Dataset([Quad(BlankNode('a'), NamedNode('http://example.com/p'), Literal('b'))])
+    /// >>> d1.canonicalize_blank_nodes(CanonicalizationAlgorithm.RDFC_1_0)
+    /// {<BlankNode value=a>: <BlankNode value=c14n0>}
+    fn canonicalize_blank_nodes(
+        &self,
+        algorithm: &PyCanonicalizationAlgorithm,
+    ) -> HashMap<PyBlankNode, PyBlankNode> {
+        self.inner
+            .canonicalize_blank_nodes(algorithm.inner)
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect()
+    }
+
     fn __bool__(&self) -> bool {
         self.inner.is_empty()
     }
@@ -285,6 +311,16 @@ impl PyCanonicalizationAlgorithm {
         inner: CanonicalizationAlgorithm::Unstable,
     };
 
+    /// The algorithm preferred by PyOxigraph but outputting ids based on hashes.
+    ///
+    /// This enables to use the blank node ids for diffing, additions or deletions of triples affect less blank node ids.
+    ///
+    /// Warning: Might change between Oxigraph versions. No stability guaranties.
+    #[classattr]
+    const UNSTABLE_HASHED_IDS: Self = Self {
+        inner: CanonicalizationAlgorithm::UnstableHashedIds,
+    };
+
     /// The `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_hash .
     #[classattr]
     const RDFC_1_0: Self = Self::RDFC_1_0_SHA_256;
@@ -310,6 +346,7 @@ impl PyCanonicalizationAlgorithm {
             "<CanonicalizationAlgorithm {}>",
             match self.inner {
                 CanonicalizationAlgorithm::Unstable => "unstable",
+                CanonicalizationAlgorithm::UnstableHashedIds => "unstable with ids based on hashes",
                 CanonicalizationAlgorithm::Rdfc10 {
                     hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
                 } => "RDFC-1.0 (SHA-256)",
