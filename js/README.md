@@ -52,7 +52,7 @@ const oxigraph = require('oxigraph');
 const store = new oxigraph.Store();
 const ex = oxigraph.namedNode("http://example/");
 const schemaName = oxigraph.namedNode("http://schema.org/name");
-store.add(oxigraph.triple(ex, schemaName, oxigraph.literal("example")));
+store.add(oxigraph.quad(ex, schemaName, oxigraph.literal("example")));
 for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
