@@ -37,7 +37,7 @@ import dataModel from "@rdfjs/data-model";
 const store = new Store();
 const ex = dataModel.namedNode("http://example/");
 const schemaName = dataModel.namedNode("http://schema.org/name");
-store.add(dataModel.triple(ex, schemaName, dataModel.literal("example")));
+store.add(dataModel.quad(ex, schemaName, dataModel.literal("example")));
 for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
     console.log(binding.get("name").value);
 }
