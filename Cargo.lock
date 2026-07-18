@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.5.7"
+version = "0.6.0-dev"
 dependencies = [
  "bzip2",
  "codspeed-criterion-compat",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.5.7"
+version = "0.6.0-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.5.7"
+version = "0.6.0-dev"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1760,7 +1760,7 @@ checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
 name = "oxjsonld"
-version = "0.2.5"
+version = "0.3.0-dev"
 dependencies = [
  "json-event-parser",
  "oxiri",
@@ -1772,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdf"
-version = "0.3.3"
+version = "0.4.0-dev"
 dependencies = [
  "hex",
  "oxilangtag",
@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.2.5"
+version = "0.3.0-dev"
 dependencies = [
  "oxjsonld",
  "oxrdf",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.2.3"
+version = "0.3.0-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1812,7 +1812,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.5.7"
+version = "0.6.0-dev"
 dependencies = [
  "bindgen",
  "cc",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "oxsdatatypes"
-version = "0.2.2"
+version = "0.3.0-dev"
 dependencies = [
  "js-sys",
  "thiserror 2.0.18",
@@ -1829,7 +1829,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.2.3"
+version = "0.3.0-dev"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -2045,7 +2045,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.5.7"
+version = "0.6.0-dev"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -2556,7 +2556,7 @@ dependencies = [
 
 [[package]]
 name = "sparesults"
-version = "0.3.3"
+version = "0.4.0-dev"
 dependencies = [
  "json-event-parser",
  "memchr",
@@ -2568,7 +2568,7 @@ dependencies = [
 
 [[package]]
 name = "spareval"
-version = "0.2.6"
+version = "0.3.0-dev"
 dependencies = [
  "hex",
  "json-event-parser",
@@ -2590,7 +2590,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.4.6"
+version = "0.5.0-dev"
 dependencies = [
  "chumsky",
  "logos",
@@ -2602,7 +2602,7 @@ dependencies = [
 
 [[package]]
 name = "spargeo"
-version = "0.5.4"
+version = "0.6.0-dev"
 dependencies = [
  "geo",
  "geojson",
@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "sparopt"
-version = "0.3.6"
+version = "0.4.0-dev"
 dependencies = [
  "oxrdf",
  "rand",
@@ -2621,7 +2621,7 @@ dependencies = [
 
 [[package]]
 name = "sparql-smith"
-version = "0.1.0-alpha.12"
+version = "0.1.0-alpha.13"
 dependencies = [
  "arbitrary",
 ]
