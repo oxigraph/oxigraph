@@ -110,32 +110,8 @@ pub enum Expression {
     Or(Box<Self>, Box<Self>),
     /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and).
     And(Box<Self>, Box<Self>),
-    /// [RDFterm-equal](https://www.w3.org/TR/sparql11-query/#func-RDFterm-equal) and all the XSD equalities.
-    Equal(Box<Self>, Box<Self>),
-    /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm).
-    SameTerm(Box<Self>, Box<Self>),
-    /// [op:numeric-greater-than](https://www.w3.org/TR/xpath-functions-31/#func-numeric-greater-than) and other XSD greater than operators.
-    Greater(Box<Self>, Box<Self>),
-    GreaterOrEqual(Box<Self>, Box<Self>),
-    /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions-31/#func-numeric-less-than) and other XSD greater than operators.
-    Less(Box<Self>, Box<Self>),
-    LessOrEqual(Box<Self>, Box<Self>),
     /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
     In(Box<Self>, Vec<Self>),
-    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add) and other XSD additions.
-    Add(Box<Self>, Box<Self>),
-    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract) and other XSD subtractions.
-    Subtract(Box<Self>, Box<Self>),
-    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply) and other XSD multiplications.
-    Multiply(Box<Self>, Box<Self>),
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide) and other XSD divides.
-    Divide(Box<Self>, Box<Self>),
-    /// [op:numeric-unary-plus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-plus) and other XSD unary plus.
-    UnaryPlus(Box<Self>),
-    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus) and other XSD unary minus.
-    UnaryMinus(Box<Self>),
-    /// [fn:not](https://www.w3.org/TR/xpath-functions-31/#func-not).
-    Not(Box<Self>),
     /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists).
     Exists(Box<GraphPattern>),
     /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound).
@@ -157,12 +133,6 @@ impl Expression {
             Self::Variable(var) => write!(f, "{var}"),
             Self::Or(a, b) => fmt_sse_binary_expression(f, "||", a, b),
             Self::And(a, b) => fmt_sse_binary_expression(f, "&&", a, b),
-            Self::Equal(a, b) => fmt_sse_binary_expression(f, "=", a, b),
-            Self::SameTerm(a, b) => fmt_sse_binary_expression(f, "sameTerm", a, b),
-            Self::Greater(a, b) => fmt_sse_binary_expression(f, ">", a, b),
-            Self::GreaterOrEqual(a, b) => fmt_sse_binary_expression(f, ">=", a, b),
-            Self::Less(a, b) => fmt_sse_binary_expression(f, "<", a, b),
-            Self::LessOrEqual(a, b) => fmt_sse_binary_expression(f, "<=", a, b),
             Self::In(a, b) => {
                 f.write_str("(in ")?;
                 a.fmt_sse(f)?;
@@ -172,13 +142,6 @@ impl Expression {
                 }
                 f.write_str(")")
             }
-            Self::Add(a, b) => fmt_sse_binary_expression(f, "+", a, b),
-            Self::Subtract(a, b) => fmt_sse_binary_expression(f, "-", a, b),
-            Self::Multiply(a, b) => fmt_sse_binary_expression(f, "*", a, b),
-            Self::Divide(a, b) => fmt_sse_binary_expression(f, "/", a, b),
-            Self::UnaryPlus(e) => fmt_sse_unary_expression(f, "+", e),
-            Self::UnaryMinus(e) => fmt_sse_unary_expression(f, "-", e),
-            Self::Not(e) => fmt_sse_unary_expression(f, "!", e),
             Self::FunctionCall(function, parameters) => {
                 f.write_str("(")?;
                 write!(f, "{function}")?;
@@ -224,19 +187,7 @@ impl Expression {
             | Self::NamedNode(_)
             | Self::Literal(_)
             | Self::Exists(_) => (),
-            Self::UnaryPlus(i) | Self::UnaryMinus(i) | Self::Not(i) => i.walk(callback),
-            Self::Or(l, r)
-            | Self::And(l, r)
-            | Self::Equal(l, r)
-            | Self::SameTerm(l, r)
-            | Self::Greater(l, r)
-            | Self::GreaterOrEqual(l, r)
-            | Self::Less(l, r)
-            | Self::LessOrEqual(l, r)
-            | Self::Add(l, r)
-            | Self::Subtract(l, r)
-            | Self::Multiply(l, r)
-            | Self::Divide(l, r) => {
+            Self::Or(l, r) | Self::And(l, r) => {
                 l.walk(callback);
                 r.walk(callback);
             }
@@ -278,43 +229,84 @@ impl fmt::Display for Expression {
             Self::Variable(var) => var.fmt(f),
             Self::Or(a, b) => write!(f, "({a} || {b})"),
             Self::And(a, b) => write!(f, "({a} && {b})"),
-            Self::Equal(a, b) => {
-                write!(f, "({a} = {b})")
-            }
-            Self::SameTerm(a, b) => {
-                write!(f, "sameTerm({a}, {b})")
-            }
-            Self::Greater(a, b) => {
-                write!(f, "({a} > {b})")
-            }
-            Self::GreaterOrEqual(a, b) => write!(f, "({a} >= {b})"),
-            Self::Less(a, b) => {
-                write!(f, "({a} < {b})")
-            }
-            Self::LessOrEqual(a, b) => write!(f, "({a} <= {b})"),
             Self::In(a, b) => {
                 write!(f, "({a} IN ")?;
                 write_arg_list(b, f)?;
                 f.write_str(")")
             }
-            Self::Add(a, b) => {
-                write!(f, "({a} + {b})")
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::EQUALS && parameters.len() == 2 =>
+            {
+                write!(f, "({} = {})", parameters[0], parameters[1])
             }
-            Self::Subtract(a, b) => {
-                write!(f, "({a} - {b})")
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::NOT_EQUALS && parameters.len() == 2 =>
+            {
+                write!(f, "({} != {})", parameters[0], parameters[1])
             }
-            Self::Multiply(a, b) => {
-                write!(f, "({a} * {b})")
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::GREATER_THAN && parameters.len() == 2 =>
+            {
+                write!(f, "({} > {})", parameters[0], parameters[1])
             }
-            Self::Divide(a, b) => {
-                write!(f, "({a} / {b})")
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::GREATER_THAN_OR_EQUAL && parameters.len() == 2 =>
+            {
+                write!(f, "({} >= {})", parameters[0], parameters[1])
             }
-            Self::UnaryPlus(e) => write!(f, "+({e})"),
-            Self::UnaryMinus(e) => write!(f, "-({e})"),
-            Self::Not(e) => match &**e {
-                Self::Exists(p) => write!(f, "NOT EXISTS {{ {p} }}"),
-                _ => write!(f, "!({e})"),
-            },
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::LESS_THAN && parameters.len() == 2 =>
+            {
+                write!(f, "({} < {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::LESS_THAN_OR_EQUAL && parameters.len() == 2 =>
+            {
+                write!(f, "({} <= {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::ADD && parameters.len() == 2 =>
+            {
+                write!(f, "({} + {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::SUBTRACT && parameters.len() == 2 =>
+            {
+                write!(f, "({} - {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::MULTIPLY && parameters.len() == 2 =>
+            {
+                write!(f, "({} * {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::DIVIDE && parameters.len() == 2 =>
+            {
+                write!(f, "({} / {})", parameters[0], parameters[1])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::UNARY_PLUS && parameters.len() == 1 =>
+            {
+                write!(f, "+({})", parameters[0])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::UNARY_MINUS && parameters.len() == 1 =>
+            {
+                write!(f, "-({})", parameters[0])
+            }
+            Self::FunctionCall(function, parameters)
+                if *function == sparql::LOGICAL_NOT && parameters.len() == 1 =>
+            {
+                match &parameters[0] {
+                    Expression::Exists(p) => write!(f, "NOT EXISTS {{ {p} }}"),
+                    Expression::In(a, b) => {
+                        write!(f, "({a} NOT IN ")?;
+                        write_arg_list(b, f)?;
+                        f.write_str(")")
+                    }
+                    p => write!(f, "!({p})"),
+                }
+            }
             Self::FunctionCall(function, parameters) => {
                 if let Some(name) = function_name(function) {
                     f.write_str(name)?;
@@ -379,74 +371,75 @@ fn write_arg_list(
 
 fn function_name(function: &NamedNode) -> Option<&'static str> {
     Some(match function.as_str() {
-        "http://www.w3.org/ns/sparql#str" => "STR",
-        "http://www.w3.org/ns/sparql#lang" => "LANG",
-        "http://www.w3.org/ns/sparql#langMatches" => "LANGMATCHES",
-        "http://www.w3.org/ns/sparql#datatype" => "DATATYPE",
-        "http://www.w3.org/ns/sparql#iri" => "IRI",
-        "http://www.w3.org/ns/sparql#uri" => "URI",
-        "http://www.w3.org/ns/sparql#bnode" => "BNODE",
-        "http://www.w3.org/ns/sparql#rand" => "RAND",
         "http://www.w3.org/ns/sparql#abs" => "ABS",
+        #[cfg(feature = "sep-0002")]
+        "http://www.w3.org/ns/sparql#adjust" => "ADJUST",
+        "http://www.w3.org/ns/sparql#bnode" => "BNODE",
         "http://www.w3.org/ns/sparql#ceil" => "CEIL",
-        "http://www.w3.org/ns/sparql#floor" => "FLOOR",
-        "http://www.w3.org/ns/sparql#round" => "ROUND",
         "http://www.w3.org/ns/sparql#concat" => "CONCAT",
-        "http://www.w3.org/ns/sparql#substr" => "SUBSTR",
-        "http://www.w3.org/ns/sparql#strlen" => "STRLEN",
-        "http://www.w3.org/ns/sparql#replace" => "REPLACE",
-        "http://www.w3.org/ns/sparql#ucase" => "UCASE",
-        "http://www.w3.org/ns/sparql#lcase" => "LCASE",
-        "http://www.w3.org/ns/sparql#encode" => "ENCODE_FOR_URI",
         "http://www.w3.org/ns/sparql#contains" => "CONTAINS",
-        "http://www.w3.org/ns/sparql#strstarts" => "STRSTARTS",
-        "http://www.w3.org/ns/sparql#strends" => "STRENDS",
-        "http://www.w3.org/ns/sparql#strbefore" => "STRBEFORE",
-        "http://www.w3.org/ns/sparql#strafter" => "STRAFTER",
-        "http://www.w3.org/ns/sparql#year" => "YEAR",
-        "http://www.w3.org/ns/sparql#month" => "MONTH",
+        "http://www.w3.org/ns/sparql#datatype" => "DATATYPE",
         "http://www.w3.org/ns/sparql#day" => "DAY",
-        "http://www.w3.org/ns/sparql#hours" => "HOURS",
-        "http://www.w3.org/ns/sparql#minutes" => "MINUTES",
-        "http://www.w3.org/ns/sparql#seconds" => "SECONDS",
-        "http://www.w3.org/ns/sparql#timezone" => "TIMEZONE",
-        "http://www.w3.org/ns/sparql#tz" => "TZ",
-        "http://www.w3.org/ns/sparql#now" => "NOW",
-        "http://www.w3.org/ns/sparql#uuid" => "UUID",
-        "http://www.w3.org/ns/sparql#struuid" => "STRUUID",
-        "http://www.w3.org/ns/sparql#md5" => "MD5",
-        "http://www.w3.org/ns/sparql#sha1" => "SHA1",
-        "http://www.w3.org/ns/sparql#sha256" => "SHA256",
-        "http://www.w3.org/ns/sparql#sha384" => "SHA384",
-        "http://www.w3.org/ns/sparql#sha512" => "SHA512",
-        "http://www.w3.org/ns/sparql#strlang" => "STRLANG",
-        "http://www.w3.org/ns/sparql#strdt" => "STRDT",
-        "http://www.w3.org/ns/sparql#isIRI" => "isIRI",
-        "http://www.w3.org/ns/sparql#isURI" => "isURI",
-        "http://www.w3.org/ns/sparql#isBlank" => "isBLANK",
-        "http://www.w3.org/ns/sparql#isLiteral" => "isLITERAL",
-        "http://www.w3.org/ns/sparql#isNumeric" => "isNUMERIC",
-        "http://www.w3.org/ns/sparql#regex" => "REGEX",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#triple" => "TRIPLE",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#subject" => "SUBJECT",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#predicate" => "PREDICATE",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#object" => "OBJECT",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#isTriple" => "isTRIPLE",
-        #[cfg(feature = "sparql-12")]
-        "http://www.w3.org/ns/sparql#langdir" => "LANGDIR",
+        "http://www.w3.org/ns/sparql#encode" => "ENCODE_FOR_URI",
+        "http://www.w3.org/ns/sparql#floor" => "FLOOR",
         #[cfg(feature = "sparql-12")]
         "http://www.w3.org/ns/sparql#hasLang" => "hasLANG",
         #[cfg(feature = "sparql-12")]
         "http://www.w3.org/ns/sparql#hasLangdir" => "hasLANGDIR",
+        "http://www.w3.org/ns/sparql#hours" => "HOURS",
+        "http://www.w3.org/ns/sparql#iri" => "IRI",
+        "http://www.w3.org/ns/sparql#isBlank" => "isBLANK",
+        "http://www.w3.org/ns/sparql#isIRI" => "isIRI",
+        "http://www.w3.org/ns/sparql#isLiteral" => "isLITERAL",
+        "http://www.w3.org/ns/sparql#isNumeric" => "isNUMERIC",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#isTriple" => "isTRIPLE",
+        "http://www.w3.org/ns/sparql#isURI" => "isURI",
+        "http://www.w3.org/ns/sparql#lang" => "LANG",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#langdir" => "LANGDIR",
+        "http://www.w3.org/ns/sparql#langMatches" => "LANGMATCHES",
+        "http://www.w3.org/ns/sparql#lcase" => "LCASE",
+        "http://www.w3.org/ns/sparql#md5" => "MD5",
+        "http://www.w3.org/ns/sparql#minutes" => "MINUTES",
+        "http://www.w3.org/ns/sparql#month" => "MONTH",
+        "http://www.w3.org/ns/sparql#now" => "NOW",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#object" => "OBJECT",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#predicate" => "PREDICATE",
+        "http://www.w3.org/ns/sparql#rand" => "RAND",
+        "http://www.w3.org/ns/sparql#regex" => "REGEX",
+        "http://www.w3.org/ns/sparql#replace" => "REPLACE",
+        "http://www.w3.org/ns/sparql#round" => "ROUND",
+        "http://www.w3.org/ns/sparql#sameTerm" => "sameTerm",
+        "http://www.w3.org/ns/sparql#seconds" => "SECONDS",
+        "http://www.w3.org/ns/sparql#sha1" => "SHA1",
+        "http://www.w3.org/ns/sparql#sha256" => "SHA256",
+        "http://www.w3.org/ns/sparql#sha384" => "SHA384",
+        "http://www.w3.org/ns/sparql#sha512" => "SHA512",
+        "http://www.w3.org/ns/sparql#str" => "STR",
+        "http://www.w3.org/ns/sparql#strafter" => "STRAFTER",
+        "http://www.w3.org/ns/sparql#strbefore" => "STRBEFORE",
+        "http://www.w3.org/ns/sparql#strdt" => "STRDT",
+        "http://www.w3.org/ns/sparql#strends" => "STRENDS",
+        "http://www.w3.org/ns/sparql#strlang" => "STRLANG",
         #[cfg(feature = "sparql-12")]
         "http://www.w3.org/ns/sparql#strlangdir" => "STRLANGDIR",
-        #[cfg(feature = "sep-0002")]
-        "http://www.w3.org/ns/sparql#adjust" => "ADJUST",
+        "http://www.w3.org/ns/sparql#strlen" => "STRLEN",
+        "http://www.w3.org/ns/sparql#strstarts" => "STRSTARTS",
+        "http://www.w3.org/ns/sparql#struuid" => "STRUUID",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#subject" => "SUBJECT",
+        "http://www.w3.org/ns/sparql#substr" => "SUBSTR",
+        "http://www.w3.org/ns/sparql#timezone" => "TIMEZONE",
+        #[cfg(feature = "sparql-12")]
+        "http://www.w3.org/ns/sparql#triple" => "TRIPLE",
+        "http://www.w3.org/ns/sparql#tz" => "TZ",
+        "http://www.w3.org/ns/sparql#ucase" => "UCASE",
+        "http://www.w3.org/ns/sparql#uri" => "URI",
+        "http://www.w3.org/ns/sparql#uuid" => "UUID",
+        "http://www.w3.org/ns/sparql#year" => "YEAR",
         _ => return None,
     })
 }
@@ -1579,13 +1572,6 @@ impl From<GraphName> for GraphTarget {
             GraphName::DefaultGraph => Self::DefaultGraph,
         }
     }
-}
-
-#[inline]
-fn fmt_sse_unary_expression(f: &mut impl fmt::Write, name: &str, e: &Expression) -> fmt::Result {
-    write!(f, "({name} ")?;
-    e.fmt_sse(f)?;
-    f.write_str(")")
 }
 
 #[inline]

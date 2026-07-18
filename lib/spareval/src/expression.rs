@@ -157,388 +157,6 @@ where
                 Ok(if error { None } else { Some(true.into()) })
             })
         }
-        Expression::Equal(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(equals(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)).map(Into::into))
-            })
-        }
-        Expression::SameTerm(a, b) => {
-            match (
-                try_build_internal_expression_evaluator(a, context)?,
-                try_build_internal_expression_evaluator(b, context)?,
-            ) {
-                (Some(a), Some(b)) => Rc::new(move |tuple| {
-                    Ok(Some(
-                        (try_or_ok!(a(tuple)?) == try_or_ok!(b(tuple)?)).into(),
-                    ))
-                }),
-                (Some(a), None) => {
-                    let b = build_expression_evaluator(b, context)?;
-                    let internalize = context.build_internalize_expression_term();
-                    Rc::new(move |tuple| {
-                        Ok(Some(
-                            (try_or_ok!(a(tuple)?) == internalize(try_or_ok!(b(tuple)?))?).into(),
-                        ))
-                    })
-                }
-                (None, Some(b)) => {
-                    let a = build_expression_evaluator(a, context)?;
-                    let internalize = context.build_internalize_expression_term();
-                    Rc::new(move |tuple| {
-                        Ok(Some(
-                            (internalize(try_or_ok!(a(tuple)?))? == try_or_ok!(b(tuple)?)).into(),
-                        ))
-                    })
-                }
-                (None, None) => {
-                    let a = build_expression_evaluator(a, context)?;
-                    let b = build_expression_evaluator(b, context)?;
-                    Rc::new(move |tuple| {
-                        Ok(Some(
-                            (try_or_ok!(a(tuple)?) == try_or_ok!(b(tuple)?)).into(),
-                        ))
-                    })
-                }
-            }
-        }
-        Expression::Greater(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
-                        == Ordering::Greater)
-                        .into(),
-                ))
-            })
-        }
-        Expression::GreaterOrEqual(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?))) {
-                        Ordering::Greater | Ordering::Equal => true,
-                        Ordering::Less => false,
-                    }
-                    .into(),
-                ))
-            })
-        }
-        Expression::Less(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
-                        == Ordering::Less)
-                        .into(),
-                ))
-            })
-        }
-        Expression::LessOrEqual(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?))) {
-                        Ordering::Less | Ordering::Equal => true,
-                        Ordering::Greater => false,
-                    }
-                    .into(),
-                ))
-            })
-        }
-        Expression::Add(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(NumericBinaryOperands::new(
-                        try_or_ok!(a(tuple)?),
-                        try_or_ok!(b(tuple)?),
-                    )) {
-                        NumericBinaryOperands::Float(v1, v2) => {
-                            ExpressionTerm::FloatLiteral(v1 + v2)
-                        }
-                        NumericBinaryOperands::Double(v1, v2) => {
-                            ExpressionTerm::DoubleLiteral(v1 + v2)
-                        }
-                        NumericBinaryOperands::Integer(v1, v2) => {
-                            ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_add(v2)))
-                        }
-                        NumericBinaryOperands::Decimal(v1, v2) => {
-                            ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_add(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::Duration(v1, v2) => {
-                            ExpressionTerm::DurationLiteral(try_or_ok!(v1.checked_add(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::YearMonthDuration(v1, v2) => {
-                            ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(v1.checked_add(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(v1.checked_add(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(v1.checked_add_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(
-                                v1.checked_add_year_month_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(
-                                v1.checked_add_day_time_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(v1.checked_add_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(
-                                v1.checked_add_year_month_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(
-                                v1.checked_add_day_time_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::TimeDuration(v1, v2) => {
-                            ExpressionTerm::TimeLiteral(try_or_ok!(v1.checked_add_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::TimeLiteral(try_or_ok!(
-                                v1.checked_add_day_time_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTime(_, _)
-                        | NumericBinaryOperands::Time(_, _)
-                        | NumericBinaryOperands::Date(_, _) => return Ok(None),
-                    },
-                ))
-            })
-        }
-        Expression::Subtract(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(NumericBinaryOperands::new(
-                        try_or_ok!(a(tuple)?),
-                        try_or_ok!(b(tuple)?),
-                    )) {
-                        NumericBinaryOperands::Float(v1, v2) => {
-                            ExpressionTerm::FloatLiteral(v1 - v2)
-                        }
-                        NumericBinaryOperands::Double(v1, v2) => {
-                            ExpressionTerm::DoubleLiteral(v1 - v2)
-                        }
-                        NumericBinaryOperands::Integer(v1, v2) => {
-                            ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        NumericBinaryOperands::Decimal(v1, v2) => {
-                            ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTime(v1, v2) => {
-                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::Date(v1, v2) => {
-                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::Time(v1, v2) => {
-                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::Duration(v1, v2) => {
-                            ExpressionTerm::DurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::YearMonthDuration(v1, v2) => {
-                            ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(v1.checked_sub(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(v1.checked_sub_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(
-                                v1.checked_sub_year_month_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateTimeLiteral(try_or_ok!(
-                                v1.checked_sub_day_time_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(v1.checked_sub_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(
-                                v1.checked_sub_year_month_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::DateLiteral(try_or_ok!(
-                                v1.checked_sub_day_time_duration(v2)
-                            ))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::TimeDuration(v1, v2) => {
-                            ExpressionTerm::TimeLiteral(try_or_ok!(v1.checked_sub_duration(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
-                            ExpressionTerm::TimeLiteral(try_or_ok!(
-                                v1.checked_sub_day_time_duration(v2)
-                            ))
-                        }
-                    },
-                ))
-            })
-        }
-        Expression::Multiply(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(NumericBinaryOperands::new(
-                        try_or_ok!(a(tuple)?),
-                        try_or_ok!(b(tuple)?),
-                    )) {
-                        NumericBinaryOperands::Float(v1, v2) => {
-                            ExpressionTerm::FloatLiteral(v1 * v2)
-                        }
-                        NumericBinaryOperands::Double(v1, v2) => {
-                            ExpressionTerm::DoubleLiteral(v1 * v2)
-                        }
-                        NumericBinaryOperands::Integer(v1, v2) => {
-                            ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_mul(v2)))
-                        }
-                        NumericBinaryOperands::Decimal(v1, v2) => {
-                            ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_mul(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        _ => return Ok(None),
-                    },
-                ))
-            })
-        }
-        Expression::Divide(a, b) => {
-            let a = build_expression_evaluator(a, context)?;
-            let b = build_expression_evaluator(b, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    match try_or_ok!(NumericBinaryOperands::new(
-                        try_or_ok!(a(tuple)?),
-                        try_or_ok!(b(tuple)?),
-                    )) {
-                        NumericBinaryOperands::Float(v1, v2) => {
-                            ExpressionTerm::FloatLiteral(v1 / v2)
-                        }
-                        NumericBinaryOperands::Double(v1, v2) => {
-                            ExpressionTerm::DoubleLiteral(v1 / v2)
-                        }
-                        NumericBinaryOperands::Integer(v1, v2) => ExpressionTerm::DecimalLiteral(
-                            try_or_ok!(Decimal::from(v1).checked_div(v2)),
-                        ),
-                        NumericBinaryOperands::Decimal(v1, v2) => {
-                            ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_div(v2)))
-                        }
-                        #[cfg(feature = "sep-0002")]
-                        _ => return Ok(None),
-                    },
-                ))
-            })
-        }
-        Expression::UnaryPlus(e) => {
-            let e = build_expression_evaluator(e, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(match try_or_ok!(e(tuple)?) {
-                    ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),
-                    ExpressionTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(value),
-                    ExpressionTerm::IntegerLiteral(value) => ExpressionTerm::IntegerLiteral(value),
-                    ExpressionTerm::DecimalLiteral(value) => ExpressionTerm::DecimalLiteral(value),
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::DurationLiteral(value) => {
-                        ExpressionTerm::DurationLiteral(value)
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::YearMonthDurationLiteral(value) => {
-                        ExpressionTerm::YearMonthDurationLiteral(value)
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::DayTimeDurationLiteral(value) => {
-                        ExpressionTerm::DayTimeDurationLiteral(value)
-                    }
-                    _ => return Ok(None),
-                }))
-            })
-        }
-        Expression::UnaryMinus(e) => {
-            let e = build_expression_evaluator(e, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(match try_or_ok!(e(tuple)?) {
-                    ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(-value),
-                    ExpressionTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(-value),
-                    ExpressionTerm::IntegerLiteral(value) => {
-                        ExpressionTerm::IntegerLiteral(try_or_ok!(value.checked_neg()))
-                    }
-                    ExpressionTerm::DecimalLiteral(value) => {
-                        ExpressionTerm::DecimalLiteral(try_or_ok!(value.checked_neg()))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::DurationLiteral(value) => {
-                        ExpressionTerm::DurationLiteral(try_or_ok!(value.checked_neg()))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::YearMonthDurationLiteral(value) => {
-                        ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(value.checked_neg()))
-                    }
-                    #[cfg(feature = "sep-0002")]
-                    ExpressionTerm::DayTimeDurationLiteral(value) => {
-                        ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(value.checked_neg()))
-                    }
-                    _ => return Ok(None),
-                }))
-            })
-        }
-        Expression::Not(e) => {
-            let e = build_expression_evaluator(e, context)?;
-            Rc::new(move |tuple| {
-                Ok(Some(
-                    (!try_or_ok!(try_or_ok!(e(tuple)?).effective_boolean_value())).into(),
-                ))
-            })
-        }
         Expression::Coalesce(l) => {
             let l = l
                 .iter()
@@ -566,6 +184,449 @@ where
             })
         }
         Expression::FunctionCall(function, parameters) => {
+            if *function == sparql::LOGICAL_NOT {
+                let [e] = extract_parameters(function, parameters)?;
+                let e = build_expression_evaluator(e, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        (!try_or_ok!(try_or_ok!(e(tuple)?).effective_boolean_value())).into(),
+                    ))
+                }));
+            }
+            if *function == sparql::EQUALS {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(equals(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)).map(Into::into))
+                }));
+            }
+            if *function == sparql::NOT_EQUALS {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(equals(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)).map(|v| (!v).into()))
+                }));
+            }
+            if *function == sparql::SAME_TERM {
+                let [a, b] = extract_parameters(function, parameters)?;
+                match (
+                    try_build_internal_expression_evaluator(a, context)?,
+                    try_build_internal_expression_evaluator(b, context)?,
+                ) {
+                    (Some(a), Some(b)) => {
+                        return Ok(Rc::new(move |tuple| {
+                            Ok(Some(
+                                (try_or_ok!(a(tuple)?) == try_or_ok!(b(tuple)?)).into(),
+                            ))
+                        }));
+                    }
+                    (Some(a), None) => {
+                        let b = build_expression_evaluator(b, context)?;
+                        let internalize = context.build_internalize_expression_term();
+                        return Ok(Rc::new(move |tuple| {
+                            Ok(Some(
+                                (try_or_ok!(a(tuple)?) == internalize(try_or_ok!(b(tuple)?))?)
+                                    .into(),
+                            ))
+                        }));
+                    }
+                    (None, Some(b)) => {
+                        let a = build_expression_evaluator(a, context)?;
+                        let internalize = context.build_internalize_expression_term();
+                        return Ok(Rc::new(move |tuple| {
+                            Ok(Some(
+                                (internalize(try_or_ok!(a(tuple)?))? == try_or_ok!(b(tuple)?))
+                                    .into(),
+                            ))
+                        }));
+                    }
+                    (None, None) => {
+                        let a = build_expression_evaluator(a, context)?;
+                        let b = build_expression_evaluator(b, context)?;
+                        return Ok(Rc::new(move |tuple| {
+                            Ok(Some(
+                                (try_or_ok!(a(tuple)?) == try_or_ok!(b(tuple)?)).into(),
+                            ))
+                        }));
+                    }
+                }
+            }
+            if *function == sparql::GREATER_THAN {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
+                            == Ordering::Greater)
+                            .into(),
+                    ))
+                }));
+            }
+            if *function == sparql::GREATER_THAN_OR_EQUAL {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(partial_cmp(
+                            &try_or_ok!(a(tuple)?),
+                            &try_or_ok!(b(tuple)?)
+                        )) {
+                            Ordering::Greater | Ordering::Equal => true,
+                            Ordering::Less => false,
+                        }
+                        .into(),
+                    ))
+                }));
+            }
+            if *function == sparql::LESS_THAN {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
+                            == Ordering::Less)
+                            .into(),
+                    ))
+                }));
+            }
+            if *function == sparql::LESS_THAN_OR_EQUAL {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(partial_cmp(
+                            &try_or_ok!(a(tuple)?),
+                            &try_or_ok!(b(tuple)?)
+                        )) {
+                            Ordering::Less | Ordering::Equal => true,
+                            Ordering::Greater => false,
+                        }
+                        .into(),
+                    ))
+                }));
+            }
+            if *function == sparql::ADD {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(NumericBinaryOperands::new(
+                            try_or_ok!(a(tuple)?),
+                            try_or_ok!(b(tuple)?),
+                        )) {
+                            NumericBinaryOperands::Float(v1, v2) => {
+                                ExpressionTerm::FloatLiteral(v1 + v2)
+                            }
+                            NumericBinaryOperands::Double(v1, v2) => {
+                                ExpressionTerm::DoubleLiteral(v1 + v2)
+                            }
+                            NumericBinaryOperands::Integer(v1, v2) => {
+                                ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_add(v2)))
+                            }
+                            NumericBinaryOperands::Decimal(v1, v2) => {
+                                ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_add(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::Duration(v1, v2) => {
+                                ExpressionTerm::DurationLiteral(try_or_ok!(v1.checked_add(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                                ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(
+                                    v1.checked_add(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(
+                                    v1.checked_add(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_add_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_add_year_month_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_add_day_time_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(v1.checked_add_duration(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(
+                                    v1.checked_add_year_month_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(
+                                    v1.checked_add_day_time_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::TimeDuration(v1, v2) => {
+                                ExpressionTerm::TimeLiteral(try_or_ok!(v1.checked_add_duration(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::TimeLiteral(try_or_ok!(
+                                    v1.checked_add_day_time_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTime(_, _)
+                            | NumericBinaryOperands::Time(_, _)
+                            | NumericBinaryOperands::Date(_, _) => return Ok(None),
+                        },
+                    ))
+                }));
+            }
+            if *function == sparql::SUBTRACT {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(NumericBinaryOperands::new(
+                            try_or_ok!(a(tuple)?),
+                            try_or_ok!(b(tuple)?),
+                        )) {
+                            NumericBinaryOperands::Float(v1, v2) => {
+                                ExpressionTerm::FloatLiteral(v1 - v2)
+                            }
+                            NumericBinaryOperands::Double(v1, v2) => {
+                                ExpressionTerm::DoubleLiteral(v1 - v2)
+                            }
+                            NumericBinaryOperands::Integer(v1, v2) => {
+                                ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_sub(v2)))
+                            }
+                            NumericBinaryOperands::Decimal(v1, v2) => {
+                                ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_sub(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTime(v1, v2) => {
+                                ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(
+                                    v1.checked_sub(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::Date(v1, v2) => {
+                                ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(
+                                    v1.checked_sub(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::Time(v1, v2) => {
+                                ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(
+                                    v1.checked_sub(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::Duration(v1, v2) => {
+                                ExpressionTerm::DurationLiteral(try_or_ok!(v1.checked_sub(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                                ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(
+                                    v1.checked_sub(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(
+                                    v1.checked_sub(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_sub_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeYearMonthDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_sub_year_month_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateTimeDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateTimeLiteral(try_or_ok!(
+                                    v1.checked_sub_day_time_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(v1.checked_sub_duration(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateYearMonthDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(
+                                    v1.checked_sub_year_month_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::DateDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::DateLiteral(try_or_ok!(
+                                    v1.checked_sub_day_time_duration(v2)
+                                ))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::TimeDuration(v1, v2) => {
+                                ExpressionTerm::TimeLiteral(try_or_ok!(v1.checked_sub_duration(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
+                                ExpressionTerm::TimeLiteral(try_or_ok!(
+                                    v1.checked_sub_day_time_duration(v2)
+                                ))
+                            }
+                        },
+                    ))
+                }));
+            }
+            if *function == sparql::MULTIPLY {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(NumericBinaryOperands::new(
+                            try_or_ok!(a(tuple)?),
+                            try_or_ok!(b(tuple)?),
+                        )) {
+                            NumericBinaryOperands::Float(v1, v2) => {
+                                ExpressionTerm::FloatLiteral(v1 * v2)
+                            }
+                            NumericBinaryOperands::Double(v1, v2) => {
+                                ExpressionTerm::DoubleLiteral(v1 * v2)
+                            }
+                            NumericBinaryOperands::Integer(v1, v2) => {
+                                ExpressionTerm::IntegerLiteral(try_or_ok!(v1.checked_mul(v2)))
+                            }
+                            NumericBinaryOperands::Decimal(v1, v2) => {
+                                ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_mul(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            _ => return Ok(None),
+                        },
+                    ))
+                }));
+            }
+            if *function == sparql::DIVIDE {
+                let [a, b] = extract_parameters(function, parameters)?;
+                let a = build_expression_evaluator(a, context)?;
+                let b = build_expression_evaluator(b, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(
+                        match try_or_ok!(NumericBinaryOperands::new(
+                            try_or_ok!(a(tuple)?),
+                            try_or_ok!(b(tuple)?),
+                        )) {
+                            NumericBinaryOperands::Float(v1, v2) => {
+                                ExpressionTerm::FloatLiteral(v1 / v2)
+                            }
+                            NumericBinaryOperands::Double(v1, v2) => {
+                                ExpressionTerm::DoubleLiteral(v1 / v2)
+                            }
+                            NumericBinaryOperands::Integer(v1, v2) => {
+                                ExpressionTerm::DecimalLiteral(try_or_ok!(
+                                    Decimal::from(v1).checked_div(v2)
+                                ))
+                            }
+                            NumericBinaryOperands::Decimal(v1, v2) => {
+                                ExpressionTerm::DecimalLiteral(try_or_ok!(v1.checked_div(v2)))
+                            }
+                            #[cfg(feature = "sep-0002")]
+                            _ => return Ok(None),
+                        },
+                    ))
+                }));
+            }
+            if *function == sparql::UNARY_PLUS {
+                let [e] = extract_parameters(function, parameters)?;
+                let e = build_expression_evaluator(e, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(match try_or_ok!(e(tuple)?) {
+                        ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),
+                        ExpressionTerm::DoubleLiteral(value) => {
+                            ExpressionTerm::DoubleLiteral(value)
+                        }
+                        ExpressionTerm::IntegerLiteral(value) => {
+                            ExpressionTerm::IntegerLiteral(value)
+                        }
+                        ExpressionTerm::DecimalLiteral(value) => {
+                            ExpressionTerm::DecimalLiteral(value)
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DurationLiteral(value) => {
+                            ExpressionTerm::DurationLiteral(value)
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::YearMonthDurationLiteral(value) => {
+                            ExpressionTerm::YearMonthDurationLiteral(value)
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DayTimeDurationLiteral(value) => {
+                            ExpressionTerm::DayTimeDurationLiteral(value)
+                        }
+                        _ => return Ok(None),
+                    }))
+                }));
+            }
+            if *function == sparql::UNARY_MINUS {
+                let [e] = extract_parameters(function, parameters)?;
+                let e = build_expression_evaluator(e, context)?;
+                return Ok(Rc::new(move |tuple| {
+                    Ok(Some(match try_or_ok!(e(tuple)?) {
+                        ExpressionTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(-value),
+                        ExpressionTerm::DoubleLiteral(value) => {
+                            ExpressionTerm::DoubleLiteral(-value)
+                        }
+                        ExpressionTerm::IntegerLiteral(value) => {
+                            ExpressionTerm::IntegerLiteral(try_or_ok!(value.checked_neg()))
+                        }
+                        ExpressionTerm::DecimalLiteral(value) => {
+                            ExpressionTerm::DecimalLiteral(try_or_ok!(value.checked_neg()))
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DurationLiteral(value) => {
+                            ExpressionTerm::DurationLiteral(try_or_ok!(value.checked_neg()))
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::YearMonthDurationLiteral(value) => {
+                            ExpressionTerm::YearMonthDurationLiteral(try_or_ok!(
+                                value.checked_neg()
+                            ))
+                        }
+                        #[cfg(feature = "sep-0002")]
+                        ExpressionTerm::DayTimeDurationLiteral(value) => {
+                            ExpressionTerm::DayTimeDurationLiteral(try_or_ok!(value.checked_neg()))
+                        }
+                        _ => return Ok(None),
+                    }))
+                }));
+            }
             if let Some(function) = context.custom_functions().get(function).cloned() {
                 let args = parameters
                     .iter()
