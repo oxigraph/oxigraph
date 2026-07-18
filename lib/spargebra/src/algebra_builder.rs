@@ -887,29 +887,47 @@ impl<'a> AlgebraBuilder<'a> {
                 Box::new(self.build_expression(*l, aggregates)?),
                 Box::new(self.build_expression(*r, aggregates)?),
             ),
-            ast::Expression::Equal(l, r) => Expression::Equal(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Equal(l, r) => Expression::FunctionCall(
+                sparql::EQUALS,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::NotEqual(l, r) => Expression::Not(Box::new(Expression::Equal(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
-            ))),
-            ast::Expression::Less(l, r) => Expression::Less(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::NotEqual(l, r) => Expression::FunctionCall(
+                sparql::NOT_EQUALS,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::LessOrEqual(l, r) => Expression::LessOrEqual(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Less(l, r) => Expression::FunctionCall(
+                sparql::LESS_THAN,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::Greater(l, r) => Expression::Greater(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::LessOrEqual(l, r) => Expression::FunctionCall(
+                sparql::LESS_THAN_OR_EQUAL,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::GreaterOrEqual(l, r) => Expression::GreaterOrEqual(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Greater(l, r) => Expression::FunctionCall(
+                sparql::GREATER_THAN,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
+            ),
+            ast::Expression::GreaterOrEqual(l, r) => Expression::FunctionCall(
+                sparql::GREATER_THAN_OR_EQUAL,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
             ast::Expression::In(l, r) => Expression::In(
                 Box::new(self.build_expression(*l, aggregates)?),
@@ -917,37 +935,55 @@ impl<'a> AlgebraBuilder<'a> {
                     .map(|e| self.build_expression(e, aggregates))
                     .collect::<Result<_, _>>()?,
             ),
-            ast::Expression::NotIn(l, r) => Expression::Not(Box::new(Expression::In(
-                Box::new(self.build_expression(*l, aggregates)?),
-                r.into_iter()
-                    .map(|e| self.build_expression(e, aggregates))
-                    .collect::<Result<_, _>>()?,
-            ))),
-            ast::Expression::Add(l, r) => Expression::Add(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::NotIn(l, r) => Expression::FunctionCall(
+                sparql::LOGICAL_NOT,
+                vec![Expression::In(
+                    Box::new(self.build_expression(*l, aggregates)?),
+                    r.into_iter()
+                        .map(|e| self.build_expression(e, aggregates))
+                        .collect::<Result<_, _>>()?,
+                )],
             ),
-            ast::Expression::Subtract(l, r) => Expression::Subtract(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Add(l, r) => Expression::FunctionCall(
+                sparql::ADD,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::Multiply(l, r) => Expression::Multiply(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Subtract(l, r) => Expression::FunctionCall(
+                sparql::SUBTRACT,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::Divide(l, r) => Expression::Divide(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+            ast::Expression::Multiply(l, r) => Expression::FunctionCall(
+                sparql::MULTIPLY,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
             ),
-            ast::Expression::UnaryPlus(e) => {
-                Expression::UnaryPlus(Box::new(self.build_expression(*e, aggregates)?))
-            }
-            ast::Expression::UnaryMinus(e) => {
-                Expression::UnaryMinus(Box::new(self.build_expression(*e, aggregates)?))
-            }
-            ast::Expression::Not(e) => {
-                Expression::Not(Box::new(self.build_expression(*e, aggregates)?))
-            }
+            ast::Expression::Divide(l, r) => Expression::FunctionCall(
+                sparql::DIVIDE,
+                vec![
+                    self.build_expression(*l, aggregates)?,
+                    self.build_expression(*r, aggregates)?,
+                ],
+            ),
+            ast::Expression::UnaryPlus(e) => Expression::FunctionCall(
+                sparql::UNARY_PLUS,
+                vec![self.build_expression(*e, aggregates)?],
+            ),
+            ast::Expression::UnaryMinus(e) => Expression::FunctionCall(
+                sparql::UNARY_MINUS,
+                vec![self.build_expression(*e, aggregates)?],
+            ),
+            ast::Expression::Not(e) => Expression::FunctionCall(
+                sparql::LOGICAL_NOT,
+                vec![self.build_expression(*e, aggregates)?],
+            ),
             ast::Expression::Bound(v) => Expression::Bound(Self::build_variable(v)),
             ast::Expression::Aggregate(aggregate) => {
                 let aggregate = self.build_aggregate(expression.span.make_wrapped(aggregate))?;
@@ -977,15 +1013,7 @@ impl<'a> AlgebraBuilder<'a> {
                         })?;
                         return Ok(Expression::If(Box::new(a), Box::new(b), Box::new(c)));
                     }
-                    ast::BuiltInName::SameTerm => {
-                        let [l, r] = args.try_into().map_err(|_| {
-                            AlgebraBuilderError::new(
-                                expression.span,
-                                "The sameTerm function takes exactly 2 parameters",
-                            )
-                        })?;
-                        return Ok(Expression::SameTerm(Box::new(l), Box::new(r)));
-                    }
+                    ast::BuiltInName::SameTerm => sparql::SAME_TERM,
                     ast::BuiltInName::Str => sparql::STR,
                     ast::BuiltInName::Lang => sparql::LANG,
                     ast::BuiltInName::LangMatches => sparql::LANG_MATCHES,
@@ -1122,9 +1150,10 @@ impl<'a> AlgebraBuilder<'a> {
             ast::Expression::Exists(gp) => {
                 Expression::Exists(Box::new(self.build_graph_pattern(*gp)?))
             }
-            ast::Expression::NotExists(gp) => Expression::Not(Box::new(Expression::Exists(
-                Box::new(self.build_graph_pattern(*gp)?),
-            ))),
+            ast::Expression::NotExists(gp) => Expression::FunctionCall(
+                sparql::LOGICAL_NOT,
+                vec![Expression::Exists(Box::new(self.build_graph_pattern(*gp)?))],
+            ),
         })
     }
 
@@ -1996,21 +2025,7 @@ fn find_unbound_variable<'a>(
         | Expression::Coalesce(_)
         | Expression::Exists(_) => None,
         Expression::Variable(var) => (!variables.contains(var)).then_some(var),
-        Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
-            find_unbound_variable(e, variables)
-        }
-        Expression::Or(a, b)
-        | Expression::And(a, b)
-        | Expression::Equal(a, b)
-        | Expression::SameTerm(a, b)
-        | Expression::Greater(a, b)
-        | Expression::GreaterOrEqual(a, b)
-        | Expression::Less(a, b)
-        | Expression::LessOrEqual(a, b)
-        | Expression::Add(a, b)
-        | Expression::Subtract(a, b)
-        | Expression::Multiply(a, b)
-        | Expression::Divide(a, b) => {
+        Expression::Or(a, b) | Expression::And(a, b) => {
             find_unbound_variable(a, variables)?;
             find_unbound_variable(b, variables)
         }

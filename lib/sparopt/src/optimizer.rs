@@ -6,6 +6,7 @@ use oxrdf::Variable;
 use oxrdf::vocab::rdf;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{GroundTermPattern, NamedNodePattern};
+use spargebra::vocab::sparql;
 use std::cmp::{max, min};
 
 pub struct Optimizer;
@@ -174,10 +175,11 @@ impl Optimizer {
                     .into_iter()
                     .map(|e| Self::normalize_expression(e, types)),
             ),
-            Expression::Equal(left, right) => {
-                let left = Self::normalize_expression(*left, types);
+            Expression::FunctionCall(name, args) if name == sparql::EQUALS && args.len() == 2 => {
+                let [left, right] = args.try_into().unwrap(); // TODO: collapse in if after bumping MSRV (and same below)
+                let left = Self::normalize_expression(left, types);
                 let left_types = infer_expression_type(&left, types);
-                let right = Self::normalize_expression(*right, types);
+                let right = Self::normalize_expression(right, types);
                 let right_types = infer_expression_type(&right, types);
                 #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
                 let mut must_use_equal = left_types.literal && right_types.literal;
@@ -191,43 +193,41 @@ impl Optimizer {
                     Expression::same_term(left, right)
                 }
             }
-            Expression::SameTerm(left, right) => Expression::same_term(
-                Self::normalize_expression(*left, types),
-                Self::normalize_expression(*right, types),
-            ),
-            Expression::Greater(left, right) => Expression::greater(
-                Self::normalize_expression(*left, types),
-                Self::normalize_expression(*right, types),
-            ),
-            Expression::GreaterOrEqual(left, right) => Expression::greater_or_equal(
-                Self::normalize_expression(*left, types),
-                Self::normalize_expression(*right, types),
-            ),
-            Expression::Less(left, right) => Expression::less(
-                Self::normalize_expression(*left, types),
-                Self::normalize_expression(*right, types),
-            ),
-            Expression::LessOrEqual(left, right) => Expression::less_or_equal(
-                Self::normalize_expression(*left, types),
-                Self::normalize_expression(*right, types),
-            ),
-            Expression::Add(left, right) => {
-                Self::normalize_expression(*left, types) + Self::normalize_expression(*right, types)
+            Expression::FunctionCall(name, args)
+                if name == sparql::NOT_EQUALS && args.len() == 2 =>
+            {
+                let [left, right] = args.try_into().unwrap();
+                let left = Self::normalize_expression(left, types);
+                let left_types = infer_expression_type(&left, types);
+                let right = Self::normalize_expression(right, types);
+                let right_types = infer_expression_type(&right, types);
+                #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
+                let mut must_use_equal = left_types.literal && right_types.literal;
+                #[cfg(feature = "sparql-12")]
+                {
+                    must_use_equal = must_use_equal || left_types.triple && right_types.triple;
+                }
+                if must_use_equal {
+                    Expression::not_equal(left, right)
+                } else {
+                    !Expression::same_term(left, right)
+                }
             }
-            Expression::Subtract(left, right) => {
-                Self::normalize_expression(*left, types) - Self::normalize_expression(*right, types)
+            Expression::FunctionCall(name, args)
+                if name == sparql::LOGICAL_NOT && args.len() == 1 =>
+            {
+                let [arg] = args.try_into().unwrap();
+                !Self::normalize_expression(arg, types)
             }
-            Expression::Multiply(left, right) => {
-                Self::normalize_expression(*left, types) * Self::normalize_expression(*right, types)
+            Expression::FunctionCall(name, args)
+                if name == sparql::SAME_TERM && args.len() == 2 =>
+            {
+                let [left, right] = args.try_into().unwrap();
+                Expression::same_term(
+                    Self::normalize_expression(left, types),
+                    Self::normalize_expression(right, types),
+                )
             }
-            Expression::Divide(left, right) => {
-                Self::normalize_expression(*left, types) / Self::normalize_expression(*right, types)
-            }
-            Expression::UnaryPlus(inner) => {
-                Expression::unary_plus(Self::normalize_expression(*inner, types))
-            }
-            Expression::UnaryMinus(inner) => -Self::normalize_expression(*inner, types),
-            Expression::Not(inner) => !Self::normalize_expression(*inner, types),
             Expression::Exists(inner) => Expression::exists(Self::normalize_pattern(*inner, types)),
             Expression::Bound(variable) => {
                 let t = types.get(&variable);
@@ -1164,22 +1164,6 @@ fn is_expression_fit_for_for_loop_join(
         | Expression::FunctionCall(_, inner) => inner
             .iter()
             .all(|e| is_expression_fit_for_for_loop_join(e, input_types, entry_types)),
-        Expression::Equal(a, b)
-        | Expression::SameTerm(a, b)
-        | Expression::Greater(a, b)
-        | Expression::GreaterOrEqual(a, b)
-        | Expression::Less(a, b)
-        | Expression::LessOrEqual(a, b)
-        | Expression::Add(a, b)
-        | Expression::Subtract(a, b)
-        | Expression::Multiply(a, b)
-        | Expression::Divide(a, b) => {
-            is_expression_fit_for_for_loop_join(a, input_types, entry_types)
-                && is_expression_fit_for_for_loop_join(b, input_types, entry_types)
-        }
-        Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
-            is_expression_fit_for_for_loop_join(e, input_types, entry_types)
-        }
         Expression::If(a, b, c) => {
             is_expression_fit_for_for_loop_join(a, input_types, entry_types)
                 && is_expression_fit_for_for_loop_join(b, input_types, entry_types)
@@ -1443,19 +1427,6 @@ fn does_contain_exists(expression: &Expression) -> bool {
         | Expression::And(e)
         | Expression::Coalesce(e)
         | Expression::FunctionCall(_, e) => e.iter().any(does_contain_exists),
-        Expression::Equal(l, r)
-        | Expression::SameTerm(l, r)
-        | Expression::Greater(l, r)
-        | Expression::GreaterOrEqual(l, r)
-        | Expression::Less(l, r)
-        | Expression::LessOrEqual(l, r)
-        | Expression::Add(l, r)
-        | Expression::Subtract(l, r)
-        | Expression::Multiply(l, r)
-        | Expression::Divide(l, r) => does_contain_exists(l) || does_contain_exists(r),
-        Expression::UnaryPlus(e) | Expression::UnaryMinus(e) | Expression::Not(e) => {
-            does_contain_exists(e)
-        }
         Expression::If(a, b, c) => {
             does_contain_exists(a) || does_contain_exists(b) || does_contain_exists(c)
         }

@@ -200,23 +200,33 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         {
             VariableType::LITERAL
         }
-        Expression::Or(_)
-        | Expression::And(_)
-        | Expression::Equal(_, _)
-        | Expression::Greater(_, _)
-        | Expression::GreaterOrEqual(_, _)
-        | Expression::Less(_, _)
-        | Expression::LessOrEqual(_, _)
-        | Expression::Add(_, _)
-        | Expression::Subtract(_, _)
-        | Expression::Multiply(_, _)
-        | Expression::Divide(_, _)
-        | Expression::UnaryPlus(_)
-        | Expression::UnaryMinus(_)
-        | Expression::Not(_) => VariableType::LITERAL | VariableType::UNDEF,
+        Expression::Or(_) | Expression::And(_) => VariableType::LITERAL | VariableType::UNDEF,
+        Expression::FunctionCall(name, args) if *name == sparql::SAME_TERM => {
+            if args
+                .iter()
+                .any(|arg| infer_expression_type(arg, types).undef)
+            {
+                VariableType::LITERAL | VariableType::UNDEF
+            } else {
+                VariableType::LITERAL
+            }
+        }
         Expression::FunctionCall(name, _)
             if [
+                sparql::LOGICAL_NOT,
                 sparql::STR,
+                sparql::EQUALS,
+                sparql::NOT_EQUALS,
+                sparql::GREATER_THAN,
+                sparql::GREATER_THAN_OR_EQUAL,
+                sparql::LESS_THAN,
+                sparql::LESS_THAN_OR_EQUAL,
+                sparql::ADD,
+                sparql::SUBTRACT,
+                sparql::MULTIPLY,
+                sparql::DIVIDE,
+                sparql::UNARY_PLUS,
+                sparql::UNARY_MINUS,
                 sparql::LANG,
                 sparql::LANG_MATCHES,
                 sparql::ABS,
@@ -311,14 +321,6 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             .contains(name) =>
         {
             VariableType::LITERAL | VariableType::UNDEF // TODO: add xsd: cast functions
-        }
-        Expression::SameTerm(left, right) => {
-            if infer_expression_type(left, types).undef || infer_expression_type(right, types).undef
-            {
-                VariableType::LITERAL | VariableType::UNDEF
-            } else {
-                VariableType::LITERAL
-            }
         }
         Expression::If(condition, then, els) => {
             let mut t = infer_expression_type(then, types) | infer_expression_type(els, types);

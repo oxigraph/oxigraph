@@ -997,6 +997,7 @@ mod tests {
     use super::*;
     use oxrdf::vocab::xsd;
     use oxrdf::{Literal, Term};
+    use spargebra::vocab::sparql;
     use sparopt::algebra::{Expression, GraphPattern};
 
     #[test]
@@ -1009,9 +1010,9 @@ mod tests {
         assert_eq!(term, Some(Term::from(Literal::from(3_i32))));
 
         // 1 + 2 = 3
-        let add = Expression::Add(
-            Box::new(Expression::from(Literal::from(1_i32))),
-            Box::new(Expression::from(Literal::from(2_i32))),
+        let add = Expression::FunctionCall(
+            sparql::ADD,
+            vec![Literal::from(1_i32).into(), Literal::from(2_i32).into()],
         );
         let term = evaluator.evaluate_expression(&add, std::iter::empty());
         assert_eq!(term, Some(Term::from(Literal::from(3_i32))));
@@ -1023,9 +1024,9 @@ mod tests {
         let x = Variable::new("x").unwrap();
 
         // ?x + 2 with ?x = 1 => 3
-        let expr = Expression::Add(
-            Box::new(Expression::from(x.clone())),
-            Box::new(Expression::from(Literal::from(2_i32))),
+        let expr = Expression::FunctionCall(
+            sparql::ADD,
+            vec![x.clone().into(), Literal::from(2_i32).into()],
         );
         let one: Term = Literal::from(1_i32).into();
         let result = evaluator.evaluate_expression(&expr, [(&x, one)]);
@@ -1171,10 +1172,8 @@ mod tests {
     fn evaluate_expression_arithmetic_with_unbound_variable_is_none() {
         let evaluator = QueryEvaluator::new();
         let x = Variable::new("x").unwrap();
-        let expr = Expression::Add(
-            Box::new(Expression::from(Literal::from(2_i32))),
-            Box::new(Expression::from(x)),
-        );
+        let expr =
+            Expression::FunctionCall(sparql::ADD, vec![Literal::from(2_i32).into(), x.into()]);
         let result = evaluator.evaluate_expression(&expr, std::iter::empty());
         assert!(result.is_none());
     }
