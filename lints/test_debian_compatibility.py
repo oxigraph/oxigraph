@@ -10,6 +10,7 @@ ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
     "oxhttp",
     "geo",
+    "oxiri",
     "wkt",
     "quick-xml",
     "getrandom",

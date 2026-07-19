@@ -6,7 +6,7 @@ use crate::error::JsonLdErrorCode;
 use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 use oxrdf::OxString;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -2745,11 +2745,22 @@ impl JsonLdExpansionConverter {
         }
         // 8)
         if document_relative {
-            if let Some(base_iri) = &active_context.base_iri {
-                if self.lenient {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
-                } else if let Ok(value) = base_iri.resolve(&value) {
-                    return Some(value.into_inner().into());
+            if self.lenient {
+                let Some(base_iri) = &active_context.base_iri else {
+                    return Some(value);
+                };
+                let iri = IriRef::parse_unchecked(value);
+                return Some(OxString::new_owned(
+                    &base_iri.resolve_unchecked(&iri).into_inner(),
+                ));
+            } else if let Ok(iri) = IriRef::parse(value.clone()) {
+                if iri.is_absolute() {
+                    return Some(iri.into_inner());
+                }
+                if let Some(base_iri) = &active_context.base_iri {
+                    if let Ok(iri) = base_iri.resolve(&iri) {
+                        return Some(OxString::new_owned(&iri.into_inner()));
+                    }
                 }
             }
         }

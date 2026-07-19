@@ -1,7 +1,7 @@
 use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use crate::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 use oxrdf::{OxStr, OxString};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -264,7 +264,9 @@ impl JsonLdContextProcessor {
                 };
                 // 5.6.3)
                 let import = match if let Some(base_url) = base_url {
-                    base_url.resolve(&import).map(|url| url.into_inner().into())
+                    IriRef::parse(import.as_str())
+                        .and_then(|import| base_url.resolve(&import))
+                        .map(|url| url.into_inner().into())
                 } else {
                     Iri::parse(import.clone()).map(Iri::into_inner)
                 } {
@@ -1424,13 +1426,18 @@ impl JsonLdContextProcessor {
         error_code: JsonLdErrorCode,
     ) -> Result<Iri<OxStr<'a>>, JsonLdSyntaxError> {
         if self.lenient {
-            Ok(Iri::parse_unchecked(if let Some(base_iri) = &base_iri {
-                OxString::new_owned(&base_iri.resolve_unchecked(&iri))
+            Ok(if let Some(base_iri) = base_iri {
+                let iri = IriRef::parse_unchecked(iri);
+                let iri = base_iri.resolve_unchecked(&iri);
+                Iri::parse_unchecked(OxString::new_owned(&iri.into_inner()))
             } else {
-                iri
-            }))
+                Iri::parse_unchecked(iri)
+            })
         } else {
-            if let Some(base_iri) = &base_iri {
+            if let Some(base_iri) = base_iri {
+                let iri = IriRef::parse(iri.clone()).map_err(|e| {
+                    JsonLdSyntaxError::msg_and_code(format!("Invalid URL '{iri}': {e}"), error_code)
+                })?;
                 base_iri
                     .resolve(&iri)
                     .map(|iri| Iri::parse_unchecked(OxString::new_owned(&iri.into_inner())))

@@ -1,7 +1,7 @@
 use crate::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::utils::*;
 use oxilangtag::LanguageTag;
-use oxiri::{Iri, IriParseError};
+use oxiri::{Iri, IriParseError, IriRef};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
@@ -2001,19 +2001,44 @@ impl<R> InternalRdfXmlParser<R> {
         base_iri: Option<&Iri<OxString>>,
         relative_iri: &str,
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
-        if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
+        if self.lenient {
+            let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) else {
+                return Ok(NamedNode::new_unchecked(OxString::new_owned(relative_iri)));
+            };
+            let relative_iri = IriRef::parse_unchecked(relative_iri);
+            let mut buffer = String::new();
             Ok(NamedNode::new_unchecked(OxString::new_owned(
-                &if self.lenient {
-                    base_iri.resolve_unchecked(relative_iri)
+                if relative_iri.is_absolute() {
+                    relative_iri.into_inner()
                 } else {
-                    base_iri.resolve(relative_iri).map_err(|error| {
-                        RdfXmlSyntaxError::invalid_iri(OxString::new_owned(relative_iri), error)
-                    })?
-                }
-                .into_inner(),
+                    base_iri.resolve_into_unchecked(&relative_iri, &mut buffer);
+                    &buffer
+                },
             )))
         } else {
-            self.parse_iri(OxString::new_owned(relative_iri))
+            let relative_iri = IriRef::parse(relative_iri).map_err(|error| {
+                RdfXmlSyntaxError::invalid_iri(OxString::new_owned(relative_iri), error)
+            })?;
+            let mut buffer = String::new();
+            Ok(NamedNode::new_unchecked(OxString::new_owned(
+                if relative_iri.is_absolute() {
+                    relative_iri.into_inner()
+                } else if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
+                    base_iri
+                        .resolve_into(&relative_iri, &mut buffer)
+                        .map_err(|error| {
+                            RdfXmlSyntaxError::invalid_iri(
+                                OxString::new_owned(relative_iri.into_inner()),
+                                error,
+                            )
+                        })?;
+                    &buffer
+                } else {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "{relative_iri} is a relative IRI but no xml:base is set"
+                    )));
+                },
+            )))
         }
     }
 

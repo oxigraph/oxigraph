@@ -2,7 +2,7 @@
 use crate::ExpressionTriple;
 use crate::dataset::ExpressionTerm;
 use md5::{Digest, Md5};
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
@@ -803,12 +803,15 @@ where
                         match try_or_ok!(e(tuple)?) {
                             ExpressionTerm::NamedNode(iri) => iri,
                             ExpressionTerm::StringLiteral(iri) => {
-                                NamedNode::new_unchecked(if let Some(base_iri) = &base_iri {
+                                let iri = try_or_ok!(IriRef::parse(iri).ok());
+                                NamedNode::new_unchecked(if iri.is_absolute() {
+                                    iri.into_inner()
+                                } else if let Some(base_iri) = &base_iri {
                                     OxString::new_owned(
                                         &try_or_ok!(base_iri.resolve(&iri).ok()).into_inner(),
                                     )
                                 } else {
-                                    try_or_ok!(Iri::parse(iri).ok()).into_inner()
+                                    return Ok(None);
                                 })
                             }
                             _ => return Ok(None),
