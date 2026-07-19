@@ -17,7 +17,7 @@ use crate::update::{
 };
 use crate::vocab::sparql;
 use chumsky::span::{SimpleSpan, Span, Spanned, WrappingSpan};
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
@@ -1688,21 +1688,25 @@ impl<'a> AlgebraBuilder<'a> {
         iri: Spanned<ast::IriRef<'a>>,
     ) -> Result<OxString, AlgebraBuilderError> {
         let iri_value = unescape_iriref(iri.inner.0, iri.span)?;
-        Ok(if let Some(base_iri) = &self.base_iri {
+        let iri_ref = IriRef::parse(iri_value.clone()).map_err(|e| {
+            AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
+        })?;
+        if iri_ref.is_absolute() {
+            Ok(OxString::new_owned(&iri_ref.into_inner()))
+        } else if let Some(base_iri) = &self.base_iri {
             self.buffer.clear();
             base_iri
-                .resolve_into(&iri_value, &mut self.buffer)
+                .resolve_into(&iri_ref, &mut self.buffer)
                 .map_err(|e| {
                     AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
                 })?;
-            OxString::new_owned(&self.buffer)
+            Ok(OxString::new_owned(&self.buffer))
         } else {
-            Iri::parse(iri_value.clone())
-                .map_err(|e| {
-                    AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
-                })?
-                .into_inner()
-        })
+            Err(AlgebraBuilderError::new(
+                iri.span,
+                format!("Found a relative IRI '{iri_value}' but no BASE is provided"),
+            ))
+        }
     }
 
     pub fn build_update(mut self, update: ast::Update<'a>) -> Result<Update, AlgebraBuilderError> {
@@ -2254,7 +2258,7 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
     }
 }
 
-fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<OxString, AlgebraBuilderError> {
+fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<Cow<'_, str>, AlgebraBuilderError> {
     let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
         let output: &mut String = output.get_or_insert_default();
@@ -2277,9 +2281,9 @@ fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<OxString, Algebr
     }
     Ok(if let Some(mut output) = output {
         output.push_str(input);
-        OxString::new_owned(&output)
+        output.into()
     } else {
-        OxString::new_owned(input)
+        input.into()
     })
 }
 

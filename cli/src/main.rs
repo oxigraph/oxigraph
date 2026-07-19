@@ -18,7 +18,7 @@ use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxS
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
-use oxiri::Iri;
+use oxiri::{Iri, IriRef};
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
 use std::cell::RefCell;
@@ -1245,13 +1245,18 @@ fn base_url(request: &Request<Body>) -> String {
 }
 
 fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, HttpError> {
-    Ok(NamedNode::new_unchecked(
-        Iri::parse(base_url(request))
-            .map_err(bad_request)?
-            .resolve(url)
-            .map_err(bad_request)?
-            .into_inner(),
-    ))
+    let iri = IriRef::parse(url).map_err(bad_request)?;
+    Ok(if iri.is_absolute() {
+        NamedNode::new_unchecked(OxString::new_owned(iri.into_inner()))
+    } else {
+        NamedNode::new_unchecked(
+            Iri::parse(base_url(request))
+                .map_err(bad_request)?
+                .resolve(&iri)
+                .map_err(bad_request)?
+                .into_inner(),
+        )
+    })
 }
 
 fn url_has_query_parameter(request: &Request<Body>, param: &str) -> bool {
