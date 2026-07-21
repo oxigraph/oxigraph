@@ -46,6 +46,8 @@ pub struct ColumnFamilyDefinition {
 pub struct DbOptions {
     pub max_open_files: Option<i32>,
     pub fd_reserve: Option<u32>,
+    pub is_enable_blob: Option<bool>,
+    pub min_blob_size: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -349,6 +351,16 @@ impl Db {
                     })
                     .0,
             );
+            if let Some(is_enable_blob) = db_options.is_enable_blob {
+                if is_enable_blob {
+                    rocksdb_options_set_enable_blob_files(options, 1);
+                } else {
+                    rocksdb_options_set_enable_blob_files(options, 0);
+                }
+            }
+            if let Some(min_blob_size) = db_options.min_blob_size {
+                rocksdb_options_set_min_blob_size(options, min_blob_size);
+            }
             Ok(options)
         }
     }
