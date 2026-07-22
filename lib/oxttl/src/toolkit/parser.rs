@@ -10,15 +10,15 @@ pub trait RuleRecognizer: Sized {
     type Output;
     type Context;
 
-    fn error_recovery_state(self) -> Self;
+    fn set_error_recovery_state(&mut self);
 
     fn recognize_next(
-        self,
+        &mut self,
         token: TokenOrLineJump<<Self::TokenRecognizer as TokenRecognizer>::Token<'_>>,
         context: &mut Self::Context,
         results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
-    ) -> Self;
+    );
 
     fn recognize_end(
         self,
@@ -87,18 +87,20 @@ impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
             if let Some(result) = self.lexer.parse_next(RR::lexer_options(&self.context)) {
                 match result {
                     Ok(token) => {
-                        self.state = self.state.take().map(|state| {
+                        if let Some(state) = &mut self.state {
                             state.recognize_next(
                                 token,
                                 &mut self.context,
                                 &mut self.results,
                                 &mut self.errors,
-                            )
-                        });
+                            );
+                        }
                         continue;
                     }
                     Err(e) => {
-                        self.state = self.state.take().map(RR::error_recovery_state);
+                        if let Some(state) = &mut self.state {
+                            state.set_error_recovery_state();
+                        }
                         return Some(Err(e));
                     }
                 }

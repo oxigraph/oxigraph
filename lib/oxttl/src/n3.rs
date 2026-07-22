@@ -897,23 +897,23 @@ impl RuleRecognizer for N3Recognizer {
     type Output = N3Quad;
     type Context = N3RecognizerContext;
 
-    fn error_recovery_state(mut self) -> Self {
+    fn set_error_recovery_state(&mut self) {
         self.stack.clear();
         self.terms.clear();
         self.predicates.clear();
         self.contexts.clear();
-        self
     }
 
     fn recognize_next(
-        mut self,
+        &mut self,
         token: TokenOrLineJump<N3Token<'_>>,
         context: &mut N3RecognizerContext,
         results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,
-    ) -> Self {
-        let TokenOrLineJump::Token(token) = token else {
-            return self;
+    ) {
+        let token = match token {
+            TokenOrLineJump::Token(token) => token,
+            TokenOrLineJump::LineJump => return,
         };
         while let Some(rule) = self.stack.pop() {
             match rule {
@@ -930,29 +930,29 @@ impl RuleRecognizer for N3Recognizer {
                     match token {
                         N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("base") => {
                             self.stack.push(N3State::BaseExpectIri);
-                            return self;
+                            return;
                         }
                         N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("prefix") => {
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            return self;
+                            return;
                         }
                         N3Token::LangTag {
-                            language: "prefix", #[cfg(
-                            feature = "rdf-12"
-                        )] direction: None
+                            language: "prefix",
+                            #[cfg(feature = "rdf-12")]
+                                direction: None,
                         } => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            return self;
+                            return;
                         }
                         N3Token::LangTag {
-                            language: "base", #[cfg(
-                            feature = "rdf-12"
-                        )] direction: None
+                            language: "base",
+                            #[cfg(feature = "rdf-12")]
+                                direction: None,
                         } => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::BaseExpectIri);
-                            return self;
+                            return;
                         }
                         _ => {
                             self.stack.push(N3State::N3DocExpectDot);
@@ -962,40 +962,51 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::N3DocExpectDot => {
                     if token == N3Token::Punctuation(".") {
-                        return self;
+                        return;
                     }
                     errors.push("A dot is expected at the end of N3 statements".into());
                 }
-                N3State::BaseExpectIri => return if let N3Token::IriRef(iri) = token {
-                    context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
-                    self
-                } else {
-                    self.error(errors, "The BASE keyword should be followed by an IRI")
-                },
-                N3State::PrefixExpectPrefix => return match token {
-                    N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
-                        self.stack.push(N3State::PrefixExpectIri { name: OxString::new_owned(prefix) });
-                        self
+                N3State::BaseExpectIri => {
+                    if let N3Token::IriRef(iri) = token {
+                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                    } else {
+                        self.error(errors, "The BASE keyword should be followed by an IRI")
                     }
-                    _ => {
-                        self.error(errors, "The PREFIX keyword should be followed by a prefix like 'ex:'")
+                    return;
+                }
+                N3State::PrefixExpectPrefix => {
+                    match token {
+                        N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
+                            self.stack.push(N3State::PrefixExpectIri {
+                                name: OxString::new_owned(prefix),
+                            });
+                        }
+                        _ => self.error(
+                            errors,
+                            "The PREFIX keyword should be followed by a prefix like 'ex:'",
+                        ),
                     }
-                },
-                N3State::PrefixExpectIri { name } => return if let N3Token::IriRef(iri) = token {
-                    context.prefixes.insert(name, Iri::parse_unchecked(iri));
-                    self
-                } else {
-                    self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
-                },
+                    return;
+                }
+                N3State::PrefixExpectIri { name } => {
+                    if let N3Token::IriRef(iri) = token {
+                        context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                    } else {
+                        self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
+                    }
+                    return;
+                }
                 // [9]  triples  ::=  subject predicateObjectList?
                 N3State::Triples => {
                     self.stack.push(N3State::TriplesMiddle);
                     self.stack.push(N3State::Path);
                 }
-                N3State::TriplesMiddle => if matches!(token, N3Token::Punctuation("." | "]" | "}" | ")")) {} else {
-                    self.stack.push(N3State::TriplesEnd);
-                    self.stack.push(N3State::PredicateObjectList);
-                },
+                N3State::TriplesMiddle => {
+                    if !matches!(token, N3Token::Punctuation("." | "]" | "}" | ")")) {
+                        self.stack.push(N3State::TriplesEnd);
+                        self.stack.push(N3State::PredicateObjectList);
+                    }
+                }
                 N3State::TriplesEnd => {
                     self.terms.pop();
                 }
@@ -1008,18 +1019,22 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::PredicateObjectListEnd => {
                     self.predicates.pop();
                     if token == N3Token::Punctuation(";") {
-                        self.stack.push(N3State::PredicateObjectListPossibleContinuation);
-                        return self;
+                        self.stack
+                            .push(N3State::PredicateObjectListPossibleContinuation);
+                        return;
                     }
                 }
-                N3State::PredicateObjectListPossibleContinuation => if token == N3Token::Punctuation(";") {
-                    self.stack.push(N3State::PredicateObjectListPossibleContinuation);
-                    return self;
-                } else if matches!(token, N3Token::Punctuation(";" | "." | "}" | "]" | ")")) {} else {
-                    self.stack.push(N3State::PredicateObjectListEnd);
-                    self.stack.push(N3State::ObjectsList);
-                    self.stack.push(N3State::Verb);
-                },
+                N3State::PredicateObjectListPossibleContinuation => {
+                    if token == N3Token::Punctuation(";") {
+                        self.stack
+                            .push(N3State::PredicateObjectListPossibleContinuation);
+                        return;
+                    } else if !matches!(token, N3Token::Punctuation(";" | "." | "}" | "]" | ")")) {
+                        self.stack.push(N3State::PredicateObjectListEnd);
+                        self.stack.push(N3State::ObjectsList);
+                        self.stack.push(N3State::Verb);
+                    }
+                }
                 // [11]  objectList  ::=  object ( "," object) *
                 N3State::ObjectsList => {
                     self.stack.push(N3State::ObjectsListEnd);
@@ -1029,21 +1044,13 @@ impl RuleRecognizer for N3Recognizer {
                     let object = self.terms.pop().unwrap();
                     let subject = self.terms.last().unwrap().clone();
                     results.push(match self.predicates.last().unwrap().clone() {
-                        Predicate::Regular(predicate) => self.quad(
-                            subject,
-                            predicate,
-                            object,
-                        ),
-                        Predicate::Inverted(predicate) => self.quad(
-                            object,
-                            predicate,
-                            subject,
-                        )
+                        Predicate::Regular(predicate) => self.quad(subject, predicate, object),
+                        Predicate::Inverted(predicate) => self.quad(object, predicate, subject),
                     });
                     if token == N3Token::Punctuation(",") {
                         self.stack.push(N3State::ObjectsListEnd);
                         self.stack.push(N3State::Path);
-                        return self;
+                        return;
                     }
                 }
                 // [12]  verb       ::=  predicate | "a" | ( "has" expression) | ( "is" expression "of") | "=" | "<=" | "=>"
@@ -1051,55 +1058,66 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::Verb => match token {
                     N3Token::PlainKeyword("a") => {
                         self.predicates.push(Predicate::Regular(rdf::TYPE.into()));
-                        return self;
+                        return;
                     }
                     N3Token::PlainKeyword("has") => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
-                        return self;
+                        return;
                     }
                     N3Token::PlainKeyword("is") => {
                         self.stack.push(N3State::AfterVerbIs);
                         self.stack.push(N3State::Path);
-                        return self;
+                        return;
                     }
                     N3Token::Punctuation("=") => {
-                        self.predicates.push(Predicate::Regular(NamedNode::new_unchecked("http://www.w3.org/2002/07/owl#sameAs").into()));
-                        return self;
+                        self.predicates.push(Predicate::Regular(
+                            NamedNode::new_unchecked("http://www.w3.org/2002/07/owl#sameAs").into(),
+                        ));
+                        return;
                     }
                     N3Token::Punctuation("=>") => {
-                        self.predicates.push(Predicate::Regular(NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies").into()));
-                        return self;
+                        self.predicates.push(Predicate::Regular(
+                            NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies")
+                                .into(),
+                        ));
+                        return;
                     }
                     N3Token::Punctuation("<=") => {
-                        self.predicates.push(Predicate::Inverted(NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies").into()));
-                        return self;
+                        self.predicates.push(Predicate::Inverted(
+                            NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies")
+                                .into(),
+                        ));
+                        return;
                     }
                     N3Token::Punctuation("<-") => {
                         self.stack.push(N3State::AfterInvertedVerb);
                         self.stack.push(N3State::Path);
-                        return self;
+                        return;
                     }
                     _ => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
                     }
-                }
+                },
                 N3State::AfterRegularVerb => {
-                    self.predicates.push(Predicate::Regular(self.terms.pop().unwrap()));
+                    self.predicates
+                        .push(Predicate::Regular(self.terms.pop().unwrap()));
                 }
                 N3State::AfterInvertedVerb => {
-                    self.predicates.push(Predicate::Inverted(self.terms.pop().unwrap()));
+                    self.predicates
+                        .push(Predicate::Inverted(self.terms.pop().unwrap()));
                 }
-                N3State::AfterVerbIs => return match token {
-                    N3Token::PlainKeyword("of") => {
-                        self.predicates.push(Predicate::Inverted(self.terms.pop().unwrap()));
-                        self
+                N3State::AfterVerbIs => {
+                    match token {
+                        N3Token::PlainKeyword("of") => {
+                            self.predicates
+                                .push(Predicate::Inverted(self.terms.pop().unwrap()));
+                        }
+                        _ => self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'"),
                     }
-                    _ => {
-                        self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'")
-                    }
-                },
+                    return;
+                }
                 // [13]  subject     ::=  expression
                 // [15]  object      ::=  expression
                 // [16]  expression  ::=  path
@@ -1110,22 +1128,28 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::PathFollowUp => match token {
                     N3Token::Punctuation("!") => {
-                        self.stack.push(N3State::PathAfterIndicator { is_inverse: false });
+                        self.stack
+                            .push(N3State::PathAfterIndicator { is_inverse: false });
                         self.stack.push(N3State::PathItem);
-                        return self;
+                        return;
                     }
                     N3Token::Punctuation("^") => {
-                        self.stack.push(N3State::PathAfterIndicator { is_inverse: true });
+                        self.stack
+                            .push(N3State::PathAfterIndicator { is_inverse: true });
                         self.stack.push(N3State::PathItem);
-                        return self;
+                        return;
                     }
-                    _ => ()
+                    _ => {}
                 },
                 N3State::PathAfterIndicator { is_inverse } => {
                     let predicate = self.terms.pop().unwrap();
                     let previous = self.terms.pop().unwrap();
                     let current = BlankNode::default();
-                    results.push(if is_inverse { self.quad(current.clone(), predicate, previous) } else { self.quad(previous, predicate, current.clone()) });
+                    results.push(if is_inverse {
+                        self.quad(current.clone(), predicate, previous)
+                    } else {
+                        self.quad(previous, predicate, current.clone())
+                    });
                     self.terms.push(current.into());
                     self.stack.push(N3State::PathFollowUp);
                 }
@@ -1142,250 +1166,271 @@ impl RuleRecognizer for N3Recognizer {
                 // [29]  blankNode              ::=  BLANK_NODE_LABEL | ANON
                 // [30]  quickVar               ::=  QUICK_VAR_NAME
                 N3State::PathItem => {
-                    return match token {
+                    match token {
                         N3Token::IriRef(iri) => {
                             self.terms.push(NamedNode::new_unchecked(iri).into());
-                            self
                         }
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                        N3Token::PrefixedName {
+                            prefix,
+                            local,
+                            might_be_invalid_iri,
+                        } => match resolve_local_name(
+                            prefix,
+                            &local,
+                            might_be_invalid_iri,
+                            &context.prefixes,
+                        ) {
                             Ok(t) => {
                                 self.terms.push(t.into());
-                                self
                             }
-                            Err(e) => self.error(errors, e)
-                        }
+                            Err(e) => self.error(errors, e),
+                        },
                         N3Token::BlankNodeLabel(bnode) => {
-                            self.terms.push(BlankNode::new_unchecked(OxString::new_owned(bnode)).into());
-                            self
+                            self.terms
+                                .push(BlankNode::new_unchecked(OxString::new_owned(bnode)).into());
                         }
                         N3Token::Variable(name) => {
                             self.terms.push(Variable::new_unchecked(name).into());
-                            self
                         }
                         N3Token::Punctuation("[") => {
                             self.stack.push(N3State::PropertyListMiddle);
-                            self
                         }
                         N3Token::Punctuation("(") => {
                             self.stack.push(N3State::CollectionBeginning);
-                            self
                         }
                         N3Token::String(value) | N3Token::LongString(value) => {
                             self.stack.push(N3State::LiteralPossibleSuffix { value });
-                            self
                         }
                         N3Token::Integer(v) => {
-                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into());
-                            self
+                            self.terms.push(
+                                Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER)
+                                    .into(),
+                            );
                         }
                         N3Token::Decimal(v) => {
-                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into());
-                            self
+                            self.terms.push(
+                                Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL)
+                                    .into(),
+                            );
                         }
                         N3Token::Double(v) => {
-                            self.terms.push(Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into());
-                            self
+                            self.terms.push(
+                                Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE)
+                                    .into(),
+                            );
                         }
                         N3Token::PlainKeyword("true") => {
-                            self.terms.push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
-                            self
+                            self.terms
+                                .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
                         }
                         N3Token::PlainKeyword("false") => {
-                            self.terms.push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
-                            self
+                            self.terms
+                                .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
                         }
                         N3Token::Punctuation("{") => {
                             self.contexts.push(BlankNode::default());
                             self.stack.push(N3State::FormulaContent);
-                            self
                         }
-                        _ =>
-                            self.error(errors, "TOKEN is not a valid RDF value")
+                        _ => self.error(errors, "TOKEN is not a valid RDF value"),
                     }
+                    return;
                 }
                 N3State::PropertyListMiddle => match token {
                     N3Token::Punctuation("]") => {
                         self.terms.push(BlankNode::default().into());
-                        return self;
+                        return;
                     }
                     N3Token::PlainKeyword("id") => {
                         self.stack.push(N3State::IriPropertyList);
-                        return self;
+                        return;
                     }
                     _ => {
                         self.terms.push(BlankNode::default().into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
                     }
-                }
-                N3State::PropertyListEnd => if token == N3Token::Punctuation("]") {
-                    return self;
-                } else {
+                },
+                N3State::PropertyListEnd => {
+                    if token == N3Token::Punctuation("]") {
+                        return;
+                    }
                     errors.push("blank node property lists should end with a ']'".into());
                 }
-                N3State::IriPropertyList => return match token {
-                    N3Token::IriRef(id) => {
-                        self.terms.push(NamedNode::new_unchecked(id).into());
-                        self.stack.push(N3State::PropertyListEnd);
-                        self.stack.push(N3State::PredicateObjectList);
-                        self
-                    }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
-                        Ok(t) => {
-                            self.terms.push(t.into());
+                N3State::IriPropertyList => {
+                    match token {
+                        N3Token::IriRef(id) => {
+                            self.terms.push(NamedNode::new_unchecked(id).into());
                             self.stack.push(N3State::PropertyListEnd);
                             self.stack.push(N3State::PredicateObjectList);
-                            self
                         }
-                        Err(e) => {
-                            self.error(errors, e)
-                        }
+                        N3Token::PrefixedName {
+                            prefix,
+                            local,
+                            might_be_invalid_iri,
+                        } => match resolve_local_name(
+                            prefix,
+                            &local,
+                            might_be_invalid_iri,
+                            &context.prefixes,
+                        ) {
+                            Ok(t) => {
+                                self.terms.push(t.into());
+                                self.stack.push(N3State::PropertyListEnd);
+                                self.stack.push(N3State::PredicateObjectList);
+                            }
+                            Err(e) => self.error(errors, e),
+                        },
+                        _ => self.error(
+                            errors,
+                            "The '[ id' construction should be followed by an IRI",
+                        ),
                     }
-                    _ => {
-                        self.error(errors, "The '[ id' construction should be followed by an IRI")
+                    return;
+                }
+                N3State::CollectionBeginning => {
+                    if let N3Token::Punctuation(")") = token {
+                        self.terms.push(rdf::NIL.into());
+                        return;
                     }
-                },
-                N3State::CollectionBeginning => if let N3Token::Punctuation(")") = token {
-                    self.terms.push(rdf::NIL.into());
-                    return self;
-                } else {
                     let root = BlankNode::default();
                     self.terms.push(root.clone().into());
                     self.terms.push(root.into());
                     self.stack.push(N3State::CollectionPossibleEnd);
                     self.stack.push(N3State::Path);
-                },
+                }
                 N3State::CollectionPossibleEnd => {
                     let value = self.terms.pop().unwrap();
                     let old = self.terms.pop().unwrap();
-                    results.push(self.quad(
-                        old.clone(),
-                        rdf::FIRST,
-                        value,
-                    ));
+                    results.push(self.quad(old.clone(), rdf::FIRST, value));
                     if let N3Token::Punctuation(")") = token {
-                        results.push(self.quad(
-                            old,
-                            rdf::REST,
-                            rdf::NIL,
-                        ));
-                        return self;
+                        results.push(self.quad(old, rdf::REST, rdf::NIL));
+                        return;
                     }
                     let new = BlankNode::default();
-                    results.push(self.quad(
-                        old,
-                        rdf::REST,
-                        new.clone(),
-                    ));
+                    results.push(self.quad(old, rdf::REST, new.clone()));
                     self.terms.push(new.into());
                     self.stack.push(N3State::CollectionPossibleEnd);
                     self.stack.push(N3State::Path);
                 }
-                N3State::LiteralPossibleSuffix { value } => {
-                    match token {
-                        N3Token::LangTag { language, #[cfg(feature = "rdf-12")]direction } => {
-                            #[cfg(feature = "rdf-12")]
-                            if direction.is_some() {
-                                return self.error(errors, "rdf:dirLangString is not supported in N3");
-                            }
-                            self.terms.push(Literal::new_language_tagged_literal_unchecked(value, to_lowercase(language)).into());
-                            return self;
+                N3State::LiteralPossibleSuffix { value } => match token {
+                    N3Token::LangTag {
+                        language,
+                        #[cfg(feature = "rdf-12")]
+                        direction,
+                    } => {
+                        #[cfg(feature = "rdf-12")]
+                        if direction.is_some() {
+                            self.error(errors, "rdf:dirLangString is not supported in N3");
+                            return;
                         }
-                        N3Token::Punctuation("^^") => {
-                            self.stack.push(N3State::LiteralExpectDatatype { value });
-                            return self;
-                        }
-                        _ => {
-                            self.terms.push(Literal::new_simple_literal(value).into());
-                        }
+                        self.terms.push(
+                            Literal::new_language_tagged_literal_unchecked(
+                                value,
+                                to_lowercase(language),
+                            )
+                            .into(),
+                        );
+                        return;
                     }
-                }
-                N3State::LiteralExpectDatatype { value } => {
-                    match token {
-                        N3Token::IriRef(datatype) => {
-                            self.terms.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype)).into());
-                            return self;
-                        }
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
-                            Ok(datatype) => {
-                                self.terms.push(Literal::new_typed_literal(value, datatype).into());
-                                return self;
-                            }
-                            Err(e) => {
-                                return self.error(errors, e);
-                            }
-                        }
-                        _ => {
-                            errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
-                            self.stack.clear();
-                        }
+                    N3Token::Punctuation("^^") => {
+                        self.stack.push(N3State::LiteralExpectDatatype { value });
+                        return;
                     }
-                }
+                    _ => {
+                        self.terms.push(Literal::new_simple_literal(value).into());
+                    }
+                },
+                N3State::LiteralExpectDatatype { value } => match token {
+                    N3Token::IriRef(datatype) => {
+                        self.terms.push(
+                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
+                                .into(),
+                        );
+                        return;
+                    }
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
+                        Ok(datatype) => {
+                            self.terms
+                                .push(Literal::new_typed_literal(value, datatype).into());
+                            return;
+                        }
+                        Err(e) => {
+                            self.error(errors, e);
+                            return;
+                        }
+                    },
+                    _ => {
+                        errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
+                        self.stack.clear();
+                    }
+                },
                 // [24]  formulaContent  ::=  ( n3Statement ( "." formulaContent? ) ? ) | ( sparqlDirective formulaContent? )
-                N3State::FormulaContent => {
-                    match token {
-                        N3Token::Punctuation("}") => {
-                            self.terms.push(self.contexts.pop().unwrap().into());
-                            return self;
-                        }
-                        N3Token::PlainKeyword(k)if k.eq_ignore_ascii_case("base") => {
-                            self.stack.push(N3State::FormulaContent);
-                            self.stack.push(N3State::BaseExpectIri);
-                            return self;
-                        }
-                        N3Token::PlainKeyword(k)if k.eq_ignore_ascii_case("prefix") => {
-                            self.stack.push(N3State::FormulaContent);
-                            self.stack.push(N3State::PrefixExpectPrefix);
-                            return self;
-                        }
-                        N3Token::LangTag {
-                            language: "prefix", #[cfg(
-                            feature = "rdf-12"
-                        )] direction: None
-                        } => {
-                            self.stack.push(N3State::FormulaContentExpectDot);
-                            self.stack.push(N3State::PrefixExpectPrefix);
-                            return self;
-                        }
-                        N3Token::LangTag {
-                            language: "base", #[cfg(
-                            feature = "rdf-12"
-                        )] direction: None
-                        } => {
-                            self.stack.push(N3State::FormulaContentExpectDot);
-                            self.stack.push(N3State::BaseExpectIri);
-                            return self;
-                        }
-                        _ => {
-                            self.stack.push(N3State::FormulaContentExpectDot);
-                            self.stack.push(N3State::Triples);
-                        }
+                N3State::FormulaContent => match token {
+                    N3Token::Punctuation("}") => {
+                        self.terms.push(self.contexts.pop().unwrap().into());
+                        return;
                     }
-                }
-                N3State::FormulaContentExpectDot => {
-                    match token {
-                        N3Token::Punctuation("}") => {
-                            self.terms.push(self.contexts.pop().unwrap().into());
-                            return self;
-                        }
-                        N3Token::Punctuation(".") => {
-                            self.stack.push(N3State::FormulaContent);
-                            return self;
-                        }
-                        _ => {
-                            errors.push("A dot is expected at the end of N3 statements".into());
-                            self.stack.push(N3State::FormulaContent);
-                        }
+                    N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("base") => {
+                        self.stack.push(N3State::FormulaContent);
+                        self.stack.push(N3State::BaseExpectIri);
+                        return;
                     }
-                }
+                    N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("prefix") => {
+                        self.stack.push(N3State::FormulaContent);
+                        self.stack.push(N3State::PrefixExpectPrefix);
+                        return;
+                    }
+                    N3Token::LangTag {
+                        language: "prefix",
+                        #[cfg(feature = "rdf-12")]
+                            direction: None,
+                    } => {
+                        self.stack.push(N3State::FormulaContentExpectDot);
+                        self.stack.push(N3State::PrefixExpectPrefix);
+                        return;
+                    }
+                    N3Token::LangTag {
+                        language: "base",
+                        #[cfg(feature = "rdf-12")]
+                            direction: None,
+                    } => {
+                        self.stack.push(N3State::FormulaContentExpectDot);
+                        self.stack.push(N3State::BaseExpectIri);
+                        return;
+                    }
+                    _ => {
+                        self.stack.push(N3State::FormulaContentExpectDot);
+                        self.stack.push(N3State::Triples);
+                    }
+                },
+                N3State::FormulaContentExpectDot => match token {
+                    N3Token::Punctuation("}") => {
+                        self.terms.push(self.contexts.pop().unwrap().into());
+                        return;
+                    }
+                    N3Token::Punctuation(".") => {
+                        self.stack.push(N3State::FormulaContent);
+                        return;
+                    }
+                    _ => {
+                        errors.push("A dot is expected at the end of N3 statements".into());
+                        self.stack.push(N3State::FormulaContent);
+                    }
+                },
             }
         }
         // Empty stack
         if token == N3Token::Punctuation(".") {
             self.stack.push(N3State::N3Doc);
-            self
-        } else {
-            self
         }
     }
 
@@ -1396,7 +1441,7 @@ impl RuleRecognizer for N3Recognizer {
         errors: &mut Vec<RuleRecognizerError>,
     ) {
         match &*self.stack {
-            [] | [N3State::N3Doc] => (),
+            [] | [N3State::N3Doc] => {}
             _ => errors.push("Unexpected end".into()), // TODO
         }
     }
@@ -1437,15 +1482,13 @@ impl N3Recognizer {
         )
     }
 
-    #[must_use]
     fn error(
-        mut self,
+        &mut self,
         errors: &mut Vec<RuleRecognizerError>,
         msg: impl Into<RuleRecognizerError>,
-    ) -> Self {
+    ) {
         errors.push(msg.into());
         self.stack.clear();
-        self
     }
 
     fn quad(
