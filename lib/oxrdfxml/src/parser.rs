@@ -967,29 +967,6 @@ impl<R> InternalRdfXmlParser<R> {
             for attr in event.attributes() {
                 clean_event.push_attribute(attr.map_err(Error::InvalidAttr)?);
             }
-            if self.in_literal_depth == 0 {
-                for (prefix, namespace) in self.reader.resolver().bindings() {
-                    let namespace = self.reader.decoder().decode(namespace.into_inner())?;
-                    if let Err(error) = Iri::parse(namespace.as_ref()) {
-                        return Err(RdfXmlSyntaxError::invalid_iri(
-                            OxString::new_owned(&namespace),
-                            error,
-                        )
-                        .into());
-                    }
-                    match prefix {
-                        PrefixDeclaration::Default => {
-                            clean_event.push_attribute(("xmlns".as_bytes(), namespace.as_bytes()))
-                        }
-                        PrefixDeclaration::Named(name) => {
-                            let mut attr = Vec::with_capacity(6 + name.len());
-                            attr.extend_from_slice(b"xmlns:");
-                            attr.extend_from_slice(name);
-                            clean_event.push_attribute((attr.as_slice(), namespace.as_bytes()))
-                        }
-                    }
-                }
-            }
             writer.write_event(Event::Start(clean_event))?;
             self.in_literal_depth += 1;
             return Ok(());
