@@ -1,5 +1,5 @@
-import datetime
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pyoxigraph
@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
 # -- Project information -----------------------------------------------------
 
 project = "pyoxigraph"
-copyright = f"{datetime.date.today().year}, Oxigraph contributors"
+copyright = f"{datetime.now(tz=UTC).year}, Oxigraph contributors"
 version = pyoxigraph.__version__
 release = pyoxigraph.__version__
 

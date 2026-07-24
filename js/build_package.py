@@ -1,11 +1,12 @@
 import argparse
 import json
 import os
+import sys
 import tarfile
 from io import BytesIO
 from pathlib import Path
-from subprocess import check_output, check_call
 from shutil import copy
+from subprocess import check_call, check_output
 from urllib.request import urlopen
 
 parser = argparse.ArgumentParser()
@@ -50,7 +51,7 @@ target_map = {
 uname_key = (uname.sysname.lower(), uname.machine)
 if uname_key not in target_map:
     print(f"Platform {uname} is not supported for builds")
-    exit(1)
+    sys.exit(1)
 wasm_bindgen_dir_name = f"wasm-bindgen-{wasm_bindgen_version}-{target_map[uname_key]}"
 wasm_bindgen_path = target_dir / wasm_bindgen_dir_name / "wasm-bindgen"
 if wasm_bindgen_path.exists():

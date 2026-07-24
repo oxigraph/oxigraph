@@ -44,39 +44,15 @@ Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
 [dependency-groups]
-build = ["maturin~=1.0", "ruff~=0.15.0"]
+build = ["maturin~=1.0", "ruff~=0.16.0"]
 dev = [
   { include-group = "build" },
   "furo",
-  "mypy~=1.0",
-  "ty~=0.0.17",
+  "mypy>=1.0,<3.0", # TODO: 1.0 is only for 3.8 compatibility
+  "ty~=0.0.63",
   "sphinx>=7.0,<10.0",
   "sphinx-lint~=1.0",
-  "regex<2026.2.0",            # TODO: fixes an installation bug with pypy
 ]
 
 [tool.ruff]
 line-length = 120
-
-[tool.ruff.lint]
-select = [
-  "ARG",
-  "B",
-  "C40",
-  "E",
-  "F",
-  "FBT",
-  "I",
-  "ICN",
-  "N",
-  "PIE",
-  "PTH",
-  "RET",
-  "RUF",
-  "SIM",
-  "T10",
-  "TID",
-  "UP",
-  "W",
-  "YTT",
-]

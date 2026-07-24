@@ -28,7 +28,7 @@ def match_works(test: unittest.TestCase, matched_value: str, constraint: str) ->
     if sys.version_info < (3, 10):
         return test.skipTest("match has been introduced by Python 3.10")
     found = True
-    exec(
+    exec(  # noqa: S102
         f"""
 match {matched_value}:
     case {constraint}:
@@ -112,8 +112,8 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).value, "foo")
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).datatype, XSD_INTEGER)
 
-        self.assertEqual(Literal(True), Literal("true", datatype=XSD_BOOLEAN))  # noqa: FBT003
-        self.assertEqual(Literal(False), Literal("false", datatype=XSD_BOOLEAN))  # noqa: FBT003
+        self.assertEqual(Literal(True), Literal("true", datatype=XSD_BOOLEAN))
+        self.assertEqual(Literal(False), Literal("false", datatype=XSD_BOOLEAN))
 
         self.assertEqual(Literal(0), Literal("0", datatype=XSD_INTEGER))
         self.assertEqual(Literal(1), Literal("1", datatype=XSD_INTEGER))

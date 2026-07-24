@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import inspect
 from doctest import DocTest, DocTestFinder, DocTestSuite
-from typing import Any, Dict, List, Optional
+from typing import Any
 from unittest import TestLoader, TestSuite
 
 import pyoxigraph
@@ -13,13 +15,13 @@ class ExtendedDocTestFinder(DocTestFinder):
 
     def _find(
         self,
-        tests: List[DocTest],
+        tests: list[DocTest],
         obj: Any,
         name: Any,
         module: Any,
         source_lines: Any,
         globs: Any,
-        seen: Dict[int, Any],
+        seen: dict[int, Any],
     ) -> None:
         # If we've already processed this object, then ignore it.
         if id(obj) in seen:
@@ -42,6 +44,6 @@ class ExtendedDocTestFinder(DocTestFinder):
                 self._find(tests, val, f"{name}.{valname}", module, source_lines, globs, seen)
 
 
-def load_tests(_loader: TestLoader, tests: TestSuite, _pattern: Optional[str] = None) -> TestSuite:
+def load_tests(_loader: TestLoader, tests: TestSuite, _pattern: str | None = None) -> TestSuite:
     tests.addTests(DocTestSuite(pyoxigraph, test_finder=ExtendedDocTestFinder()))
     return tests

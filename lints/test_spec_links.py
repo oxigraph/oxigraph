@@ -56,4 +56,4 @@ if errors:
     print()
     for error in sorted(errors):
         print(error, file=sys.stderr)
-    exit(1)
+    sys.exit(1)
