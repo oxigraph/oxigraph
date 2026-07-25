@@ -153,11 +153,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-api/tests/toRdf-manifest.jsonld",
         &[
-            // relative IRI resolution discrepancies
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0122",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0123",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0124",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0125",
             // Weird @base IRI support
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli12",
             // expandContext
@@ -203,11 +198,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv017",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv019",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv021",
-            // relative IRI resolution discrepancies
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0122",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0123",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0124",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0125",
             // expandContext option
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te077",
             // normative option

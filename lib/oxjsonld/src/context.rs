@@ -1425,29 +1425,42 @@ impl JsonLdContextProcessor {
         base_iri: Option<&Iri<OxString>>,
         error_code: JsonLdErrorCode,
     ) -> Result<Iri<OxStr<'a>>, JsonLdSyntaxError> {
-        if self.lenient {
-            Ok(if let Some(base_iri) = base_iri {
-                let iri = IriRef::parse_unchecked(iri);
+        Ok(if self.lenient {
+            let iri = IriRef::parse_unchecked(iri);
+            if let Ok(iri) = iri.clone().try_into() {
+                iri // already absolute
+            } else if let Some(base_iri) = base_iri {
                 let iri = base_iri.resolve_unchecked(&iri);
                 Iri::parse_unchecked(OxString::new_owned(&iri.into_inner()))
             } else {
-                Iri::parse_unchecked(iri)
-            })
-        } else {
-            if let Some(base_iri) = base_iri {
-                let iri = IriRef::parse(iri.clone()).map_err(|e| {
-                    JsonLdSyntaxError::msg_and_code(format!("Invalid URL '{iri}': {e}"), error_code)
-                })?;
-                base_iri
-                    .resolve(&iri)
-                    .map(|iri| Iri::parse_unchecked(OxString::new_owned(&iri.into_inner())))
-            } else {
-                Iri::parse(iri.clone())
+                // hack to not fail
+                Iri::parse_unchecked(iri.into_inner())
             }
-            .map_err(|e| {
+        } else {
+            let iri = IriRef::parse(iri.clone()).map_err(|e| {
                 JsonLdSyntaxError::msg_and_code(format!("Invalid URL '{iri}': {e}"), error_code)
-            })
-        }
+            })?;
+            if let Ok(iri) = iri.clone().try_into() {
+                iri
+            } else if let Some(base_iri) = base_iri {
+                Iri::parse_unchecked(OxString::new_owned(
+                    &base_iri
+                        .resolve(&iri)
+                        .map_err(|e| {
+                            JsonLdSyntaxError::msg_and_code(
+                                format!("Invalid URL '{iri}': {e}"),
+                                error_code,
+                            )
+                        })?
+                        .into_inner(),
+                ))
+            } else {
+                return Err(JsonLdSyntaxError::msg_and_code(
+                    format!("No base found to resolve relative URL '{iri}'"),
+                    error_code,
+                ));
+            }
+        })
     }
 }
 

@@ -1754,9 +1754,9 @@ dependencies = [
 
 [[package]]
 name = "oxiri"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d1e19fc66f59f7e1cf8db8a03e3898383e13bed9dcedd29caf333944f5e1431"
+checksum = "1b6bd0ef560f078e41ce2ebf370cce217e7fb2c3695ffa87541151c9de94e83a"
 dependencies = [
  "memchr",
 ]
