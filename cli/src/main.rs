@@ -26,8 +26,7 @@ use rayon_core::ThreadPoolBuilder;
 use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use std::cell::RefCell;
 use std::cmp::{max, min};
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 #[cfg(target_os = "linux")]
 use std::env;
 use std::ffi::OsStr;
@@ -877,7 +876,7 @@ fn handle_request(
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     None,
                     request,
                     union_default_graph,
@@ -902,7 +901,7 @@ fn handle_request(
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     Some(body),
                     request,
                     union_default_graph,
@@ -912,7 +911,7 @@ fn handle_request(
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    url_query_and_body_parameters(request)?,
+                    RequestParams::from_request_url_and_body(request)?,
                     None,
                     request,
                     union_default_graph,
@@ -945,7 +944,7 @@ fn handle_request(
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     Some(body),
                     request,
                     union_default_graph,
@@ -953,7 +952,7 @@ fn handle_request(
             } else if content_type == "application/x-www-form-urlencoded" {
                 configure_and_evaluate_sparql_update(
                     &store,
-                    url_query_and_body_parameters(request)?,
+                    RequestParams::from_request_url_and_body(request)?,
                     None,
                     request,
                     union_default_graph,
@@ -967,7 +966,7 @@ fn handle_request(
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     None,
                     request,
                     union_default_graph,
@@ -993,7 +992,7 @@ fn handle_request(
                 configure_and_evaluate_sparql_query(
                     &store,
                     sparql_evaluator,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     Some(body),
                     request,
                     union_default_graph,
@@ -1006,14 +1005,14 @@ fn handle_request(
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
-                    url_query_parameters(request),
+                    RequestParams::from_request_url(request),
                     Some(body),
                     request,
                     union_default_graph,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
-                let args = url_query_and_body_parameters(request)?;
-                match (args.contains_key("query"), args.contains_key("update")) {
+                let args = RequestParams::from_request_url_and_body(request)?;
+                match (args.contains("query"), args.contains("update")) {
                     (true, true) => Err(bad_request(
                         "Both 'query' and 'update' cannot be set at the same time",
                     )),
@@ -1278,35 +1277,66 @@ fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, Ht
         .into())
 }
 
-fn url_has_query_parameter(request: &Request<Body>, param: &str) -> bool {
-    form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
-        .any(|(k, _)| k == param)
+struct RequestParams {
+    params: HashMap<String, Vec<String>>,
 }
 
-fn url_query_parameters(request: &Request<Body>) -> HashMap<String, String> {
-    form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
-        .map(|(k, v)| (k.into_owned(), v.into_owned()))
-        .collect()
-}
+impl RequestParams {
+    fn from_request_url(request: &Request<Body>) -> Self {
+        Self::parse(request.uri().query().unwrap_or_default().as_bytes())
+    }
 
-fn url_query_and_body_parameters(
-    request: &mut Request<Body>,
-) -> Result<HashMap<String, String>, HttpError> {
-    let body = limited_body(request)?;
-    let mut args = url_query_parameters(request);
-    for (k, v) in form_urlencoded::parse(&body) {
-        match args.entry(k.to_string()) {
-            Entry::Occupied(_) => {
+    fn from_request_url_and_body(request: &mut Request<Body>) -> Result<Self, HttpError> {
+        let mut params = Self::from_request_url(request).params;
+        let existing_keys = params.keys().cloned().collect::<HashSet<_>>();
+        let body = limited_body(request)?;
+        for (k, v) in form_urlencoded::parse(&body) {
+            if existing_keys.contains(k.as_ref()) {
                 return Err(bad_request(format!(
                     "'{k}' cannot be set both in the body and the URL query"
                 )));
             }
-            Entry::Vacant(e) => {
-                e.insert(v.into_owned());
-            }
+            params
+                .entry(k.into_owned())
+                .or_default()
+                .push(v.into_owned());
         }
+        Ok(Self { params })
     }
-    Ok(args)
+
+    fn parse(data: &[u8]) -> Self {
+        let mut params: HashMap<_, Vec<_>> = HashMap::new();
+        for (k, v) in form_urlencoded::parse(data) {
+            params
+                .entry(k.into_owned())
+                .or_default()
+                .push(v.into_owned());
+        }
+        Self { params }
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        self.params.contains_key(key)
+    }
+
+    fn remove_required_exactly_once(&mut self, key: &str) -> Result<String, HttpError> {
+        self.remove_single(key)?
+            .ok_or_else(|| bad_request(format!("The URL query parameter {key} must be set")))
+    }
+
+    fn remove_single(&mut self, key: &str) -> Result<Option<String>, HttpError> {
+        let values = self.remove_all(key);
+        if values.len() > 1 {
+            return Err(bad_request(format!(
+                "The URL query parameter {key} must be set at most once"
+            )));
+        }
+        Ok(values.into_iter().next())
+    }
+
+    fn remove_all(&mut self, key: &str) -> Vec<String> {
+        self.params.remove(key).unwrap_or_default()
+    }
 }
 
 fn limited_string_body(request: &mut Request<Body>) -> Result<String, HttpError> {
@@ -1352,33 +1382,28 @@ fn limited_body(request: &mut Request<Body>) -> Result<Vec<u8>, HttpError> {
 fn configure_and_evaluate_sparql_query(
     store: &Store,
     evaluator: SparqlEvaluator,
-    args: HashMap<String, String>,
-    mut query: Option<String>,
+    mut args: RequestParams,
+    query: Option<String>,
     request: &Request<Body>,
     default_use_default_graph_as_union: bool,
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut default_graph_uris = Vec::new();
-    let mut named_graph_uris = Vec::new();
-    let mut use_default_graph_as_union = false;
-    for (k, v) in args {
-        match k.as_ref() {
-            "query" => {
-                if query.is_some() {
-                    return Err(bad_request("Multiple query parameters provided"));
-                }
-                query = Some(v)
-            }
-            "default-graph-uri" => default_graph_uris.push(v),
-            "union-default-graph" => use_default_graph_as_union = true,
-            "named-graph-uri" => named_graph_uris.push(v),
-            _ => (),
-        }
-    }
+    let default_graph_uris = args.remove_all("default-graph-uri");
+    let named_graph_uris = args.remove_all("named-graph-uri");
+    let mut use_default_graph_as_union = args.contains("union-default-graph");
     if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
         use_default_graph_as_union |= default_use_default_graph_as_union;
     }
-    let query = query.ok_or_else(|| bad_request("You should set the 'query' parameter"))?;
+    let query = if let Some(query) = query {
+        if args.contains("query") {
+            return Err(bad_request(
+                "The query cannot be set both in the URL query parameters and the request body",
+            ));
+        }
+        query
+    } else {
+        args.remove_required_exactly_once("query")?
+    };
     evaluate_sparql_query(
         store,
         evaluator,
@@ -1512,32 +1537,27 @@ fn default_sparql_evaluator() -> SparqlEvaluator {
 
 fn configure_and_evaluate_sparql_update(
     store: &Store,
-    args: HashMap<String, String>,
-    mut update: Option<String>,
+    mut args: RequestParams,
+    update: Option<String>,
     request: &Request<Body>,
     default_use_default_graph_as_union: bool,
 ) -> Result<Response<Body>, HttpError> {
-    let mut use_default_graph_as_union = false;
-    let mut default_graph_uris = Vec::new();
-    let mut named_graph_uris = Vec::new();
-    for (k, v) in args {
-        match k.as_ref() {
-            "update" => {
-                if update.is_some() {
-                    return Err(bad_request("Multiple update parameters provided"));
-                }
-                update = Some(v)
-            }
-            "using-graph-uri" => default_graph_uris.push(v),
-            "using-union-graph" => use_default_graph_as_union = true,
-            "using-named-graph-uri" => named_graph_uris.push(v),
-            _ => (),
-        }
-    }
+    let default_graph_uris = args.remove_all("using-graph-uri");
+    let named_graph_uris = args.remove_all("using-named-graph-uri");
+    let mut use_default_graph_as_union = args.contains("using-union-graph");
     if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
         use_default_graph_as_union |= default_use_default_graph_as_union;
     }
-    let update = update.ok_or_else(|| bad_request("You should set the 'update' parameter"))?;
+    let update = if let Some(update) = update {
+        if args.contains("update") {
+            return Err(bad_request(
+                "The update cannot be set both in the URL update parameters and the request body",
+            ));
+        }
+        update
+    } else {
+        args.remove_required_exactly_once("update")?
+    };
     evaluate_sparql_update(
         store,
         &update,
@@ -1609,8 +1629,9 @@ fn evaluate_sparql_update(
 
 fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpError> {
     if request.uri().path() == "/store" {
-        if let Some(graph) = url_query_parameters(request).remove("graph") {
-            if url_has_query_parameter(request, "default") {
+        let mut params = RequestParams::from_request_url(request);
+        if let Some(graph) = params.remove_single("graph")? {
+            if params.contains("default") {
                 Err(bad_request(
                     "Both graph and default parameters should not be set at the same time",
                 ))
@@ -1619,7 +1640,7 @@ fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpE
                     request, &graph,
                 )?)))
             }
-        } else if url_has_query_parameter(request, "default") {
+        } else if params.contains("default") {
             Ok(Some(NamedGraphName::DefaultGraph))
         } else {
             Ok(None)
@@ -1799,6 +1820,7 @@ fn web_load_graph(
     to_graph_name: &GraphName,
     transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
+    let args = RequestParams::from_request_url(request);
     let base_iri = if let GraphName::NamedNode(graph_name) = to_graph_name {
         Some(graph_name.as_str())
     } else {
@@ -1807,13 +1829,13 @@ fn web_load_graph(
     let mut parser = RdfParser::from_format(format)
         .without_named_graphs()
         .with_default_graph(to_graph_name.clone());
-    if url_has_query_parameter(request, "lenient") {
+    if args.contains("lenient") {
         parser = parser.lenient();
     }
     if let Some(base_iri) = base_iri {
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
-    if url_has_query_parameter(request, "no_transaction") {
+    if args.contains("no_transaction") {
         if let Some(transaction) = transaction {
             transaction.commit().map_err(internal_server_error)?;
         }
@@ -1840,11 +1862,12 @@ fn web_load_dataset(
     format: RdfFormat,
     transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
+    let args = RequestParams::from_request_url(request);
     let mut parser = RdfParser::from_format(format);
-    if url_has_query_parameter(request, "lenient") {
+    if args.contains("lenient") {
         parser = parser.lenient();
     }
-    if url_has_query_parameter(request, "no_transaction") {
+    if args.contains("no_transaction") {
         if let Some(transaction) = transaction {
             transaction.commit().map_err(internal_server_error)?;
         }
@@ -1876,7 +1899,8 @@ fn web_bulk_loader<'a>(store: &'a Store, request: &Request<Body>) -> BulkLoader<
             ((size as f64) / elapsed.as_secs_f64()).round()
         )
     });
-    if url_has_query_parameter(request, "lenient") {
+    let args = RequestParams::from_request_url(request);
+    if args.contains("lenient") {
         loader = loader.on_parse_error(move |e| {
             eprintln!("Parsing error: {e}");
             Ok(())
@@ -2796,6 +2820,71 @@ mod tests {
         server.test_body(
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
+        )
+    }
+
+    #[test]
+    fn get_query_explicit_default_graphs_and_named_graphs() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/1")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<http://example.com/1> <http://example.com/1> <http://example.com/1> .")?;
+        server.test_status(request, StatusCode::CREATED)?;
+
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/2")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<http://example.com/2> <http://example.com/2> <http://example.com/2> .")?;
+        server.test_status(request, StatusCode::CREATED)?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?default-graph-uri=http://localhost/store/1")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20WHERE%20{%20?s%20?p%20?o%20}%20ORDER%20BY%20?s")?;
+        server.test_body(request, "s\r\nhttp://example.com/1\r\n")?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?default-graph-uri=http://localhost/store/1&default-graph-uri=http://localhost/store/2")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20WHERE%20{%20?s%20?p%20?o%20}%20ORDER%20BY%20?s")?;
+        server.test_body(
+            request,
+            "s\r\nhttp://example.com/1\r\nhttp://example.com/2\r\n",
+        )?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?default-graph-uri=http://localhost/store/1")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20WHERE%20{%20GRAPH%20?g%20{%20?s%20?p%20?o%20}}")?;
+        server.test_body(request, "s\r\n")?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?named-graph-uri=http://localhost/store/1")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20WHERE%20{%20GRAPH%20?g%20{%20?s%20?p%20?o%20}}")?;
+        server.test_body(request, "s\r\nhttp://example.com/1\r\n")?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?named-graph-uri=http://localhost/store/1&named-graph-uri=http://localhost/store/2")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20WHERE%20{%20GRAPH%20?g%20{%20?s%20?p%20?o%20}}")?;
+        server.test_body(
+            request,
+            "s\r\nhttp://example.com/1\r\nhttp://example.com/2\r\n",
         )
     }
 
