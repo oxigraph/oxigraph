@@ -189,6 +189,10 @@ impl TokenRecognizer for N3Lexer {
             _ => self.recognize_pname_or_keyword(data, is_ending),
         }
     }
+
+    fn token_contains_line_jumps(token: &N3Token<'_>) -> bool {
+        matches!(token, N3Token::LongString(_))
+    }
 }
 
 impl N3Lexer {
