@@ -211,13 +211,28 @@ impl N3Lexer {
         let mut i = 1;
         loop {
             let end = memchr2(b'>', b'\\', &data[i..])?;
-            self.raw_buffer.extend_from_slice(&data[i..i + end]);
             i += end;
             match data[i] {
                 b'>' => {
-                    return Some((i + 1, self.parse_iri(0..i + 1, options)));
+                    let iri = if self.raw_buffer.is_empty() {
+                        &data[1..i]
+                    } else {
+                        self.raw_buffer.extend_from_slice(&data[i - end..i]);
+                        &self.raw_buffer
+                    };
+                    return Some((
+                        i + 1,
+                        Self::parse_iri(
+                            self.lenient,
+                            &mut self.string_buffer,
+                            iri,
+                            0..i + 1,
+                            options,
+                        ),
+                    ));
                 }
                 b'\\' => {
+                    self.raw_buffer.extend_from_slice(&data[i - end..i]);
                     let (additional, c) = self.recognize_escape(&data[i..], i, false)?;
                     i += additional + 1;
                     match c {
@@ -235,12 +250,14 @@ impl N3Lexer {
     }
 
     fn parse_iri(
-        &mut self,
+        lenient: bool,
+        string_buffer: &mut String,
+        iri: &[u8],
         position: Range<usize>,
         options: &N3LexerOptions,
     ) -> Result<N3Token<'static>, TokenRecognizerError> {
-        let iri = str_from_utf8(&self.raw_buffer, position.clone())?;
-        if self.lenient {
+        let iri = str_from_utf8(iri, position.clone())?;
+        if lenient {
             let Some(base_iri) = options.base_iri.as_ref() else {
                 return Ok(N3Token::IriRef(OxString::new_owned(iri)));
             };
@@ -248,20 +265,20 @@ impl N3Lexer {
             Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
                 iri.into_inner()
             } else {
-                self.string_buffer.clear();
-                base_iri.resolve_into_unchecked(&iri, &mut self.string_buffer);
-                &self.string_buffer
+                string_buffer.clear();
+                base_iri.resolve_into_unchecked(&iri, string_buffer);
+                string_buffer
             })))
         } else {
             let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
             Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
                 iri.into_inner()
             } else if let Some(base_iri) = options.base_iri.as_ref() {
-                self.string_buffer.clear();
+                string_buffer.clear();
                 base_iri
-                    .resolve_into(&iri, &mut self.string_buffer)
+                    .resolve_into(&iri, string_buffer)
                     .map_err(|e| (position, e.to_string()))?;
-                &self.string_buffer
+                string_buffer
             } else {
                 return Err((
                     position,
