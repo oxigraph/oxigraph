@@ -48,7 +48,7 @@ build = ["maturin~=1.0", "ruff~=0.16.0"]
 dev = [
   { include-group = "build" },
   "furo",
-  "mypy>=1.0,<3.0", # TODO: 1.0 is only for 3.8 compatibility
+  "mypy>=1.0,<3.0",            # TODO: 1.0 is only for 3.8 compatibility
   "ty~=0.0.63",
   "sphinx>=7.0,<10.0",
   "sphinx-lint~=1.0",
