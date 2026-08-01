@@ -20,6 +20,8 @@ pub trait TokenRecognizer {
         is_ending: bool,
         options: &Self::Options,
     ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)>;
+
+    fn token_contains_line_jumps(token: &Self::Token<'_>) -> bool;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -240,10 +242,12 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
             self.data.len() - self.position.buffer_offset
         );
-        let (new_line_jumps, new_line_start) =
-            Self::find_number_of_line_jumps_and_start_of_last_line(
+        let (new_line_jumps, new_line_start) = match &result {
+            Ok(token) if !R::token_contains_line_jumps(token) => (0, 0),
+            _ => Self::find_number_of_line_jumps_and_start_of_last_line(
                 &self.data[self.position.buffer_offset..self.position.buffer_offset + consumed],
-            );
+            ),
+        };
         if new_line_jumps > 0 {
             self.position.line_start_buffer_offset = self.position.buffer_offset + new_line_start;
         }
