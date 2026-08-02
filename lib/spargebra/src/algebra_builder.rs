@@ -473,8 +473,26 @@ impl<'a> AlgebraBuilder<'a> {
         {
             m = GraphPattern::Slice {
                 inner: Box::new(m),
-                start: offset,
-                length: limit,
+                start: if let Some(offset) = offset {
+                    offset.inner.parse().map_err(|_| {
+                        AlgebraBuilderError::new(
+                            offset.span,
+                            format!("OFFSET must be an integer, found '{}'", offset.inner),
+                        )
+                    })?
+                } else {
+                    0
+                },
+                length: if let Some(limit) = limit {
+                    Some(limit.inner.parse().map_err(|_| {
+                        AlgebraBuilderError::new(
+                            limit.span,
+                            format!("LIMIT must be an integer, found '{}'", limit.inner),
+                        )
+                    })?)
+                } else {
+                    None
+                },
             }
         }
         Ok(m)

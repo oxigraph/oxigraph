@@ -1,16 +1,36 @@
 use crate::ast::*;
 use crate::lexer::Token;
-use chumsky::input::{MappedInput, ValueInput};
+use chumsky::error::{Error, LabelError};
+use chumsky::input::MappedInput;
 use chumsky::pratt::{infix, left, postfix, prefix};
 use chumsky::prelude::*;
 use chumsky::span::WrappingSpan;
-use std::str::FromStr;
+
+type ParserInput<'src> = MappedInput<'src, Token<'src>, SimpleSpan, &'src [Spanned<Token<'src>>]>;
+type RichErr<'src> = Rich<'src, Token<'src>>;
+
+trait CParserError<'src>:
+    Error<'src, ParserInput<'src>> + LabelError<'src, ParserInput<'src>, &'static str> + 'src
+{
+}
+
+impl<
+    'src,
+    E: Error<'src, ParserInput<'src>> + LabelError<'src, ParserInput<'src>, &'static str> + 'src,
+> CParserError<'src> for E
+{
+}
 
 pub fn parse_sparql_query<'a>(
     tokens: &'a [Spanned<Token<'a>>],
     input_len: usize,
 ) -> Result<Query<'a>, Vec<Rich<'a, Token<'a>>>> {
-    query()
+    let input = || tokens.split_spanned((input_len..input_len).into());
+    let result = query::<EmptyErr>().parse(input()).into_result();
+    if let Ok(query) = result {
+        return Ok(query);
+    }
+    query::<RichErr<'a>>()
         .parse(tokens.split_spanned((input_len..input_len).into()))
         .into_result()
 }
@@ -19,9 +39,12 @@ pub fn parse_sparql_update<'a>(
     tokens: &'a [Spanned<Token<'a>>],
     input_len: usize,
 ) -> Result<Update<'a>, Vec<Rich<'a, Token<'a>>>> {
-    update()
-        .parse(tokens.split_spanned((input_len..input_len).into()))
-        .into_result()
+    let input = || tokens.split_spanned((input_len..input_len).into());
+    let result = update::<EmptyErr>().parse(input()).into_result();
+    if let Ok(update) = result {
+        return Ok(update);
+    }
+    update::<RichErr<'a>>().parse(input()).into_result()
 }
 
 macro_rules! select_keyword {
@@ -33,33 +56,23 @@ macro_rules! select_keyword {
 }
 
 // Trait alias for chumsky::Parser with the relevant args
-trait CParser<'src, O>:
-    Parser<
-        'src,
-        MappedInput<'src, Token<'src>, SimpleSpan, &'src [Spanned<Token<'src>>]>,
-        O,
-        extra::Err<Rich<'src, Token<'src>>>,
-    > + Clone
-    + 'src
+trait CParser<'src, O, E>: Parser<'src, ParserInput<'src>, O, extra::Err<E>> + Clone + 'src
+where
+    E: CParserError<'src>,
 {
 }
 
 impl<
     'src,
     O,
-    P: Parser<
-            'src,
-            MappedInput<'src, Token<'src>, SimpleSpan, &'src [Spanned<Token<'src>>]>,
-            O,
-            extra::Err<Rich<'src, Token<'src>>>,
-        > + Clone
-        + 'src,
-> CParser<'src, O> for P
+    E: CParserError<'src>,
+    P: Parser<'src, ParserInput<'src>, O, extra::Err<E>> + Clone + 'src,
+> CParser<'src, O, E> for P
 {
 }
 
 // [2]   	Query 	  ::=   	Prologue ( SelectQuery | ConstructQuery | DescribeQuery | AskQuery ) ValuesClause
-fn query<'src>() -> impl CParser<'src, Query<'src>> {
+fn query<'src, E: CParserError<'src>>() -> impl CParser<'src, Query<'src>, E> {
     let group_graph_pattern = group_graph_pattern(sub_select());
     let expression = expression(group_graph_pattern.clone());
     prologue()
@@ -81,7 +94,7 @@ fn query<'src>() -> impl CParser<'src, Query<'src>> {
 }
 
 // [4]   	Prologue 	  ::=   	( BaseDecl | PrefixDecl | VersionDecl )*
-fn prologue<'src>() -> impl CParser<'src, Vec<PrologueDecl<'src>>> {
+fn prologue<'src, E: CParserError<'src>>() -> impl CParser<'src, Vec<PrologueDecl<'src>>, E> {
     choice((
         base_decl(),
         prefix_decl(),
@@ -94,7 +107,7 @@ fn prologue<'src>() -> impl CParser<'src, Vec<PrologueDecl<'src>>> {
 }
 
 // [5]   	BaseDecl 	  ::=   	'BASE' IRIREF
-fn base_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
+fn base_decl<'src, E: CParserError<'src>>() -> impl CParser<'src, PrologueDecl<'src>, E> {
     keyword("BASE")
         .ignore_then(iriref())
         .map(PrologueDecl::Base)
@@ -102,7 +115,7 @@ fn base_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
 }
 
 // [6]   	PrefixDecl 	  ::=   	'PREFIX' PNAME_NS IRIREF
-fn prefix_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
+fn prefix_decl<'src, E: CParserError<'src>>() -> impl CParser<'src, PrologueDecl<'src>, E> {
     keyword("PREFIX")
         .ignore_then(pname_ns())
         .then(iriref())
@@ -112,7 +125,7 @@ fn prefix_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
 
 // [7]   	VersionDecl 	  ::=   	'VERSION' VersionSpecifier
 #[cfg(feature = "sparql-12")]
-fn version_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
+fn version_decl<'src, E: CParserError<'src>>() -> impl CParser<'src, PrologueDecl<'src>, E> {
     keyword("VERSION")
         .ignore_then(version_specifier())
         .map(PrologueDecl::Version)
@@ -121,7 +134,7 @@ fn version_decl<'src>() -> impl CParser<'src, PrologueDecl<'src>> {
 
 // [8]   	VersionSpecifier 	  ::=   	STRING_LITERAL1 | STRING_LITERAL2
 #[cfg(feature = "sparql-12")]
-fn version_specifier<'src>() -> impl CParser<'src, &'src str> {
+fn version_specifier<'src, E: CParserError<'src>>() -> impl CParser<'src, &'src str, E> {
     select! {
         Token::StringLiteral1(v) | Token::StringLiteral2(v) => &v[1..v.len() -1]
     }
@@ -130,10 +143,10 @@ fn version_specifier<'src>() -> impl CParser<'src, &'src str> {
 }
 
 // [9]   	SelectQuery 	  ::=   	SelectClause DatasetClause* WhereClause SolutionModifier
-fn select_query<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, SelectQuery<'src>> {
+fn select_query<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, SelectQuery<'src>, E> {
     select_clause(expression.clone())
         .then(dataset_clause().repeated().collect())
         .then(where_clause(group_graph_pattern.clone()))
@@ -150,7 +163,7 @@ fn select_query<'src>(
 }
 
 // [10]   	SubSelect 	  ::=   	SelectClause WhereClause SolutionModifier ValuesClause
-fn sub_select<'src>() -> impl CParser<'src, SubSelect<'src>> {
+fn sub_select<'src, E: CParserError<'src>>() -> impl CParser<'src, SubSelect<'src>, E> {
     recursive(|sub_select| {
         let group_graph_pattern = group_graph_pattern(sub_select);
         let expression = expression(group_graph_pattern.clone());
@@ -171,9 +184,9 @@ fn sub_select<'src>() -> impl CParser<'src, SubSelect<'src>> {
 }
 
 // [11]   	SelectClause 	  ::=   	'SELECT' ( 'DISTINCT' | 'REDUCED' )? ( ( Var | ( '(' Expression 'AS' Var ')' ) )+ | '*' )
-fn select_clause<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, SelectClause<'src>> {
+fn select_clause<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, SelectClause<'src>, E> {
     keyword("SELECT")
         .ignore_then(
             keyword("DISTINCT")
@@ -203,10 +216,10 @@ fn select_clause<'src>(
 }
 
 // [12]   	ConstructQuery 	  ::=   	'CONSTRUCT' ( ConstructTemplate DatasetClause* WhereClause SolutionModifier | DatasetClause* 'WHERE' '{' TriplesTemplate? '}' SolutionModifier )
-fn construct_query<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, ConstructQuery<'src>> {
+fn construct_query<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, ConstructQuery<'src>, E> {
     let dataset_clause = dataset_clause();
     let solution_modifier = solution_modifier(expression, group_graph_pattern.clone());
     keyword("CONSTRUCT")
@@ -248,10 +261,10 @@ fn construct_query<'src>(
 }
 
 // [13]   	DescribeQuery 	  ::=   	'DESCRIBE' ( VarOrIri+ | '*' ) DatasetClause* WhereClause? SolutionModifier
-fn describe_query<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, DescribeQuery<'src>> {
+fn describe_query<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, DescribeQuery<'src>, E> {
     keyword("DESCRIBE")
         .ignore_then(
             var_or_iri()
@@ -278,10 +291,10 @@ fn describe_query<'src>(
 }
 
 // [14]   	AskQuery 	  ::=   	'ASK' DatasetClause* WhereClause SolutionModifier
-fn ask_query<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, AskQuery<'src>> {
+fn ask_query<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, AskQuery<'src>, E> {
     keyword("ASK")
         .ignore_then(dataset_clause().repeated().collect())
         .then(where_clause(group_graph_pattern.clone()))
@@ -297,19 +310,19 @@ fn ask_query<'src>(
 }
 
 // [15]   	DatasetClause 	  ::=   	'FROM' ( DefaultGraphClause | NamedGraphClause )
-fn dataset_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
+fn dataset_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphClause<'src>, E> {
     keyword("FROM")
         .ignore_then(default_graph_clause().or(named_graph_clause()))
         .boxed()
 }
 
 // [16]   	DefaultGraphClause 	  ::=   	SourceSelector
-fn default_graph_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
+fn default_graph_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphClause<'src>, E> {
     iri().map(GraphClause::Default).boxed()
 }
 
 // [17]   	NamedGraphClause 	  ::=   	'NAMED' SourceSelector
-fn named_graph_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
+fn named_graph_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphClause<'src>, E> {
     keyword("NAMED")
         .ignore_then(source_selector())
         .map(GraphClause::Named)
@@ -317,14 +330,14 @@ fn named_graph_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
 }
 
 // [18]   	SourceSelector 	  ::=   	iri
-fn source_selector<'src>() -> impl CParser<'src, Iri<'src>> {
+fn source_selector<'src, E: CParserError<'src>>() -> impl CParser<'src, Iri<'src>, E> {
     iri()
 }
 
 // [19]   	WhereClause 	  ::=   	'WHERE'? GroupGraphPattern
-fn where_clause<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPattern<'src>> {
+fn where_clause<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPattern<'src>, E> {
     keyword("WHERE")
         .or_not()
         .ignore_then(group_graph_pattern)
@@ -332,10 +345,10 @@ fn where_clause<'src>(
 }
 
 // [20]   	SolutionModifier 	  ::=   	GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
-fn solution_modifier<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, SolutionModifier<'src>> {
+fn solution_modifier<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, SolutionModifier<'src>, E> {
     group_clause(expression.clone(), group_graph_pattern.clone())
         .or_not()
         .then(having_clause(expression.clone(), group_graph_pattern.clone()).or_not())
@@ -355,10 +368,10 @@ fn solution_modifier<'src>(
 }
 
 // [21]   	GroupClause 	  ::=   	'GROUP' 'BY' GroupCondition+
-fn group_clause<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Vec<(Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>)>> {
+fn group_clause<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Vec<(Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>)>, E> {
     keyword("GROUP")
         .ignore_then(keyword("BY"))
         .ignore_then(
@@ -371,10 +384,10 @@ fn group_clause<'src>(
 }
 
 // [22]   	GroupCondition 	  ::=   	BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
-fn group_condition<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, (Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>)> {
+fn group_condition<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, (Spanned<Expression<'src>>, Option<Spanned<Var<'src>>>), E> {
     choice((
         built_in_call(expression.clone(), group_graph_pattern.clone()).map(|e| (e, None)),
         function_call(expression.clone()).map(|e| (e, None)),
@@ -387,10 +400,10 @@ fn group_condition<'src>(
 }
 
 // [23]   	HavingClause 	  ::=   	'HAVING' HavingCondition+
-fn having_clause<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Vec<Spanned<Expression<'src>>>> {
+fn having_clause<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Vec<Spanned<Expression<'src>>>, E> {
     keyword("HAVING")
         .ignore_then(
             having_condition(expression, group_graph_pattern)
@@ -402,17 +415,17 @@ fn having_clause<'src>(
 }
 
 // [24]   	HavingCondition 	  ::=   	Constraint
-fn having_condition<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn having_condition<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     constraint(expression, group_graph_pattern)
 }
 // [25]   	OrderClause 	  ::=   	'ORDER' 'BY' OrderCondition+
-fn order_clause<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Vec<OrderCondition<'src>>> {
+fn order_clause<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Vec<OrderCondition<'src>>, E> {
     keyword("ORDER")
         .ignore_then(keyword("BY"))
         .ignore_then(
@@ -424,10 +437,10 @@ fn order_clause<'src>(
         .boxed()
 }
 // [26]   	OrderCondition 	  ::=   	( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
-fn order_condition<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, OrderCondition<'src>> {
+fn order_condition<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, OrderCondition<'src>, E> {
     choice((
         keyword("ASC")
             .to(true)
@@ -450,70 +463,61 @@ fn order_condition<'src>(
 }
 
 // [27]   	LimitOffsetClauses 	  ::=   	LimitClause OffsetClause? | OffsetClause LimitClause?
-fn limit_offset_clauses<'src>() -> impl CParser<'src, LimitOffsetClauses> {
+fn limit_offset_clauses<'src, E: CParserError<'src>>()
+-> impl CParser<'src, LimitOffsetClauses<'src>, E> {
     let limit_clause = limit_clause();
     let offset_clause = offset_clause();
     limit_clause
         .clone()
         .then(offset_clause.clone().or_not())
-        .map(|(l, o)| LimitOffsetClauses {
-            offset: o.unwrap_or(0),
-            limit: Some(l),
+        .map(|(limit, offset)| LimitOffsetClauses {
+            offset,
+            limit: Some(limit),
         })
         .or(offset_clause
             .then(limit_clause.or_not())
-            .map(|(offset, limit)| LimitOffsetClauses { offset, limit }))
+            .map(|(offset, limit)| LimitOffsetClauses {
+                offset: Some(offset),
+                limit,
+            }))
         .boxed()
 }
 
 // [28]   	LimitClause 	  ::=   	'LIMIT' INTEGER
-fn limit_clause<'src>() -> impl CParser<'src, u64> {
+fn limit_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<&'src str>, E> {
     keyword("LIMIT")
         .ignore_then(
             select! {
                 Token::Integer(v) => v,
             }
-            .labelled("an integer"),
+            .labelled("an integer")
+            .spanned(),
         )
-        .try_map(|l, span| {
-            u64::from_str(l).map_err(|_| {
-                Rich::custom(
-                    span,
-                    format!("The query limit must be a non negative integer, found {l}"),
-                )
-            })
-        })
         .boxed()
 }
 
 // [29]   	OffsetClause 	  ::=   	'OFFSET' INTEGER
-fn offset_clause<'src>() -> impl CParser<'src, u64> {
+fn offset_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<&'src str>, E> {
     keyword("OFFSET")
         .ignore_then(
             select! {
                 Token::Integer(v) => v,
             }
-            .labelled("an integer"),
+            .labelled("an integer")
+            .spanned(),
         )
-        .try_map(|o, span| {
-            u64::from_str(o).map_err(|_| {
-                Rich::custom(
-                    span,
-                    format!("The query offset must be a non negative integer, found {o}"),
-                )
-            })
-        })
         .boxed()
 }
 
 // [30]   	ValuesClause 	  ::=   	( 'VALUES' DataBlock )?
-fn values_clause<'src>() -> impl CParser<'src, Option<ValuesClause<'src>>> {
+fn values_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, Option<ValuesClause<'src>>, E>
+{
     keyword("VALUES").ignore_then(data_block()).or_not().boxed()
 }
 
 // [31]   	Update 	  ::=   	Prologue ( Update1 ( ';' Update )? )?
 // or Update 	  ::=   	Prologue (Update1 ( ';' Prologue Update1 )* (';' Prologue)?)?
-fn update<'src>() -> impl CParser<'src, Update<'src>> {
+fn update<'src, E: CParserError<'src>>() -> impl CParser<'src, Update<'src>, E> {
     prologue()
         .then(
             update1()
@@ -544,8 +548,10 @@ fn update<'src>() -> impl CParser<'src, Update<'src>> {
 }
 
 // [32]   	Update1 	  ::=   	Load | Clear | Drop | Add | Move | Copy | Create | DeleteWhere | Modify | InsertData | DeleteData
-fn update1<'src>() -> impl CParser<'src, Update1<'src>> {
+fn update1<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     choice((
+        insert_data(),
+        delete_data(),
         load(),
         clear(),
         drop(),
@@ -555,14 +561,12 @@ fn update1<'src>() -> impl CParser<'src, Update1<'src>> {
         create(),
         delete_where(),
         modify(),
-        insert_data(),
-        delete_data(),
     ))
     .boxed()
 }
 
 // [33]   	Load 	  ::=   	'LOAD' 'SILENT'? iri ( 'INTO' GraphRef )?
-fn load<'src>() -> impl CParser<'src, Update1<'src>> {
+fn load<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("LOAD")
         .ignore_then(keyword("SILENT").or_not())
         .then(iri())
@@ -575,7 +579,7 @@ fn load<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [34]   	Clear 	  ::=   	'CLEAR' 'SILENT'? GraphRefAll
-fn clear<'src>() -> impl CParser<'src, Update1<'src>> {
+fn clear<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("CLEAR")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_ref_all())
@@ -586,7 +590,7 @@ fn clear<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [35]   	Drop 	  ::=   	'DROP' 'SILENT'? GraphRefAll
-fn drop<'src>() -> impl CParser<'src, Update1<'src>> {
+fn drop<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("DROP")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_ref_all())
@@ -597,7 +601,7 @@ fn drop<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [36]   	Create 	  ::=   	'CREATE' 'SILENT'? GraphRef
-fn create<'src>() -> impl CParser<'src, Update1<'src>> {
+fn create<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("CREATE")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_ref())
@@ -608,7 +612,7 @@ fn create<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [37]   	Add 	  ::=   	'ADD' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
-fn add<'src>() -> impl CParser<'src, Update1<'src>> {
+fn add<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("ADD")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_or_default())
@@ -622,7 +626,7 @@ fn add<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [38]   	Move 	  ::=   	'MOVE' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
-fn r#move<'src>() -> impl CParser<'src, Update1<'src>> {
+fn r#move<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("MOVE")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_or_default())
@@ -636,7 +640,7 @@ fn r#move<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [39]   	Copy 	  ::=   	'COPY' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
-fn copy<'src>() -> impl CParser<'src, Update1<'src>> {
+fn copy<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("COPY")
         .ignore_then(keyword("SILENT").or_not())
         .then(graph_or_default())
@@ -650,7 +654,7 @@ fn copy<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [40]   	InsertData 	  ::=   	'INSERT DATA' QuadData
-fn insert_data<'src>() -> impl CParser<'src, Update1<'src>> {
+fn insert_data<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("INSERT")
         .ignore_then(keyword("DATA"))
         .ignore_then(quad_data())
@@ -658,7 +662,7 @@ fn insert_data<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [41]   	DeleteData 	  ::=   	'DELETE DATA' QuadData
-fn delete_data<'src>() -> impl CParser<'src, Update1<'src>> {
+fn delete_data<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("DELETE")
         .ignore_then(keyword("DATA"))
         .ignore_then(quad_data())
@@ -666,7 +670,7 @@ fn delete_data<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [42]   	DeleteWhere 	  ::=   	'DELETE WHERE' QuadPattern
-fn delete_where<'src>() -> impl CParser<'src, Update1<'src>> {
+fn delete_where<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     keyword("DELETE")
         .ignore_then(keyword("WHERE"))
         .ignore_then(quad_pattern())
@@ -674,7 +678,7 @@ fn delete_where<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [43]   	Modify 	  ::=   	( 'WITH' iri )? ( DeleteClause InsertClause? | InsertClause ) UsingClause* 'WHERE' GroupGraphPattern
-fn modify<'src>() -> impl CParser<'src, Update1<'src>> {
+fn modify<'src, E: CParserError<'src>>() -> impl CParser<'src, Update1<'src>, E> {
     let insert_clause = insert_clause();
     keyword("WITH")
         .ignore_then(iri())
@@ -701,17 +705,17 @@ fn modify<'src>() -> impl CParser<'src, Update1<'src>> {
 }
 
 // [44]   	DeleteClause 	  ::=   	'DELETE' QuadPattern
-fn delete_clause<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
+fn delete_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, QuadPatterns<'src>, E> {
     keyword("DELETE").ignore_then(quad_pattern())
 }
 
 // [45]   	InsertClause 	  ::=   	'INSERT' QuadPattern
-fn insert_clause<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
+fn insert_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, QuadPatterns<'src>, E> {
     keyword("INSERT").ignore_then(quad_pattern())
 }
 
 // [46]   	UsingClause 	  ::=   	'USING' ( iri | 'NAMED' iri )
-fn using_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
+fn using_clause<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphClause<'src>, E> {
     keyword("USING").ignore_then(
         iri()
             .map(GraphClause::Default)
@@ -720,7 +724,7 @@ fn using_clause<'src>() -> impl CParser<'src, GraphClause<'src>> {
 }
 
 // [47]   	GraphOrDefault 	  ::=   	'DEFAULT' | 'GRAPH'? iri
-fn graph_or_default<'src>() -> impl CParser<'src, GraphOrDefault<'src>> {
+fn graph_or_default<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphOrDefault<'src>, E> {
     keyword("DEFAULT")
         .to(GraphOrDefault::Default)
         .or(keyword("GRAPH")
@@ -730,12 +734,12 @@ fn graph_or_default<'src>() -> impl CParser<'src, GraphOrDefault<'src>> {
 }
 
 // [48]   	GraphRef 	  ::=   	'GRAPH' iri
-fn graph_ref<'src>() -> impl CParser<'src, Iri<'src>> {
+fn graph_ref<'src, E: CParserError<'src>>() -> impl CParser<'src, Iri<'src>, E> {
     keyword("GRAPH").ignore_then(iri())
 }
 
 // [49]   	GraphRefAll 	  ::=   	GraphRef | 'DEFAULT' | 'NAMED' | 'ALL'
-fn graph_ref_all<'src>() -> impl CParser<'src, GraphRefAll<'src>> {
+fn graph_ref_all<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphRefAll<'src>, E> {
     choice((
         graph_ref().map(GraphRefAll::Graph),
         keyword("DEFAULT").to(GraphRefAll::Default),
@@ -746,17 +750,17 @@ fn graph_ref_all<'src>() -> impl CParser<'src, GraphRefAll<'src>> {
 }
 
 // [50]   	QuadPattern 	  ::=   	'{' Quads '}'
-fn quad_pattern<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
+fn quad_pattern<'src, E: CParserError<'src>>() -> impl CParser<'src, QuadPatterns<'src>, E> {
     quads().delimited_by(operator("{"), operator("}"))
 }
 
 // [51]   	QuadData 	  ::=   	'{' Quads '}'
-fn quad_data<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
+fn quad_data<'src, E: CParserError<'src>>() -> impl CParser<'src, QuadPatterns<'src>, E> {
     quad_pattern()
 }
 
 // [52]   	Quads 	  ::=   	TriplesTemplate? ( QuadsNotTriples '.'? TriplesTemplate? )*
-fn quads<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
+fn quads<'src, E: CParserError<'src>>() -> impl CParser<'src, QuadPatterns<'src>, E> {
     let triples_template = triples_template();
     triples_template
         .clone()
@@ -776,12 +780,13 @@ fn quads<'src>() -> impl CParser<'src, QuadPatterns<'src>> {
 }
 
 // [53]   	QuadsNotTriples 	  ::=   	'GRAPH' VarOrIri '{' TriplesTemplate? '}'
-fn quads_not_triples<'src>() -> impl CParser<
+fn quads_not_triples<'src, E: CParserError<'src>>() -> impl CParser<
     'src,
     (
         Option<VarOrIri<'src>>,
         Vec<(GraphNode<'src>, PropertyList<'src>)>,
     ),
+    E,
 > {
     keyword("GRAPH")
         .ignore_then(var_or_iri())
@@ -791,7 +796,8 @@ fn quads_not_triples<'src>() -> impl CParser<
 
 // [54]   	TriplesTemplate 	  ::=   	TriplesSameSubject ( '.' TriplesTemplate? )?
 // TripleTemplate is always optional, we allow it to be empty
-fn triples_template<'src>() -> impl CParser<'src, Vec<(GraphNode<'src>, PropertyList<'src>)>> {
+fn triples_template<'src, E: CParserError<'src>>()
+-> impl CParser<'src, Vec<(GraphNode<'src>, PropertyList<'src>)>, E> {
     triples_same_subject()
         .separated_by(operator("."))
         .allow_trailing()
@@ -800,9 +806,9 @@ fn triples_template<'src>() -> impl CParser<'src, Vec<(GraphNode<'src>, Property
 }
 
 // [55]   	GroupGraphPattern 	  ::=   	'{' ( SubSelect | GroupGraphPatternSub ) '}'
-fn group_graph_pattern<'src>(
-    sub_select: impl CParser<'src, SubSelect<'src>>,
-) -> impl CParser<'src, GraphPattern<'src>> {
+fn group_graph_pattern<'src, E: CParserError<'src>>(
+    sub_select: impl CParser<'src, SubSelect<'src>, E>,
+) -> impl CParser<'src, GraphPattern<'src>, E> {
     recursive(|group_graph_pattern| {
         sub_select
             .map(|p| GraphPattern::SubSelect(Box::new(p)))
@@ -813,9 +819,9 @@ fn group_graph_pattern<'src>(
 }
 
 // [56]   	GroupGraphPatternSub 	  ::=   	TriplesBlock? ( GraphPatternNotTriples '.'? TriplesBlock? )*
-fn group_graph_pattern_sub<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPattern<'src>> {
+fn group_graph_pattern_sub<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPattern<'src>, E> {
     let triples_block = triples_block();
     triples_block
         .clone()
@@ -839,7 +845,8 @@ fn group_graph_pattern_sub<'src>(
 // [57]   	TriplesBlock 	  ::=   	TriplesSameSubjectPath ( '.' TriplesBlock? )?
 // also TriplesSameSubjectPath ( '.' TriplesSameSubjectPath? )*
 // It is always optional, we allow it to be empty
-fn triples_block<'src>() -> impl CParser<'src, Spanned<GraphPatternElement<'src>>> {
+fn triples_block<'src, E: CParserError<'src>>()
+-> impl CParser<'src, Spanned<GraphPatternElement<'src>>, E> {
     triples_same_subject_path()
         .separated_by(operator("."))
         .allow_trailing()
@@ -850,9 +857,9 @@ fn triples_block<'src>() -> impl CParser<'src, Spanned<GraphPatternElement<'src>
 }
 
 #[cfg(feature = "sep-0006")]
-fn lateral_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn lateral_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("LATERAL")
         .ignore_then(group_graph_pattern)
         .map(|p| GraphPatternElement::Lateral(Box::new(p)))
@@ -860,9 +867,9 @@ fn lateral_graph_pattern<'src>(
 
 // [58]   	ReifiedTripleBlock 	  ::=   	ReifiedTriple PropertyList
 #[cfg(feature = "sparql-12")]
-fn reified_triple_block<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>)> {
+fn reified_triple_block<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>), E> {
     reified_triple()
         .map(GraphNode::ReifiedTriple)
         .then(property_list(property_list_not_empty))
@@ -870,18 +877,18 @@ fn reified_triple_block<'src>(
 
 // [59]   	ReifiedTripleBlockPath 	  ::=   	ReifiedTriple PropertyListPath
 #[cfg(feature = "sparql-12")]
-fn reified_triple_block_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, (GraphNodePath<'src>, PropertyListPath<'src>)> {
+fn reified_triple_block_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, (GraphNodePath<'src>, PropertyListPath<'src>), E> {
     reified_triple()
         .map(GraphNodePath::ReifiedTriple)
         .then(property_list_path(property_list_path_not_empty))
 }
 
 // [60]   	GraphPatternNotTriples 	  ::=   	GroupOrUnionGraphPattern | OptionalGraphPattern | MinusGraphPattern | GraphGraphPattern | ServiceGraphPattern | Filter | Bind | InlineData
-fn graph_pattern_not_triples<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn graph_pattern_not_triples<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     choice((
         group_or_union_graph_pattern(group_graph_pattern.clone()),
         optional_graph_pattern(group_graph_pattern.clone()),
@@ -898,9 +905,9 @@ fn graph_pattern_not_triples<'src>(
 }
 
 // [73]   	GroupOrUnionGraphPattern 	  ::=   	GroupGraphPattern ( 'UNION' GroupGraphPattern )*
-fn group_or_union_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn group_or_union_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     group_graph_pattern
         .separated_by(keyword("UNION"))
         .at_least(1)
@@ -909,9 +916,9 @@ fn group_or_union_graph_pattern<'src>(
 }
 
 // [74]   	Filter 	  ::=   	'FILTER' Constraint
-fn filter<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn filter<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("FILTER")
         .ignore_then(constraint(
             expression(group_graph_pattern.clone()),
@@ -921,18 +928,18 @@ fn filter<'src>(
 }
 
 // [61]   	OptionalGraphPattern 	  ::=   	'OPTIONAL' GroupGraphPattern
-fn optional_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn optional_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("OPTIONAL")
         .ignore_then(group_graph_pattern)
         .map(|p| GraphPatternElement::Optional(Box::new(p)))
 }
 
 // [62]   	GraphGraphPattern 	  ::=   	'GRAPH' VarOrIri GroupGraphPattern
-fn graph_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn graph_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("GRAPH")
         .ignore_then(var_or_iri())
         .then(group_graph_pattern)
@@ -943,9 +950,9 @@ fn graph_graph_pattern<'src>(
 }
 
 // [63]   	ServiceGraphPattern 	  ::=   	'SERVICE' 'SILENT'? VarOrIri GroupGraphPattern
-fn service_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn service_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("SERVICE")
         .ignore_then(keyword("SILENT").or_not())
         .then(var_or_iri())
@@ -958,9 +965,9 @@ fn service_graph_pattern<'src>(
 }
 
 // [64]   	Bind 	  ::=   	'BIND' '(' Expression 'AS' Var ')'
-fn bind<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn bind<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("BIND")
         .ignore_then(
             expression(group_graph_pattern)
@@ -972,26 +979,27 @@ fn bind<'src>(
 }
 
 // [65]   	InlineData 	  ::=   	'VALUES' DataBlock
-fn inline_data<'src>() -> impl CParser<'src, GraphPatternElement<'src>> {
+fn inline_data<'src, E: CParserError<'src>>() -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("VALUES")
         .ignore_then(data_block())
         .map(GraphPatternElement::Values)
 }
 
 // [66]   	DataBlock 	  ::=   	InlineDataOneVar | InlineDataFull
-fn data_block<'src>() -> impl CParser<'src, ValuesClause<'src>> {
+fn data_block<'src, E: CParserError<'src>>() -> impl CParser<'src, ValuesClause<'src>, E> {
     inline_data_one_var()
         .or(inline_data_full())
         .map(|(variables, values)| ValuesClause { variables, values })
 }
 
 // [67]   	InlineDataOneVar 	  ::=   	Var '{' DataBlockValue* '}'
-fn inline_data_one_var<'src>() -> impl CParser<
+fn inline_data_one_var<'src, E: CParserError<'src>>() -> impl CParser<
     'src,
     (
         Vec<Spanned<Var<'src>>>,
         Spanned<Vec<Vec<DataBlockValue<'src>>>>,
     ),
+    E,
 > {
     var()
         .map(|v| vec![v])
@@ -1007,12 +1015,13 @@ fn inline_data_one_var<'src>() -> impl CParser<
 }
 
 // [68]   	InlineDataFull 	  ::=   	( NIL | '(' Var* ')' ) '{' ( '(' DataBlockValue* ')' | NIL )* '}'
-fn inline_data_full<'src>() -> impl CParser<
+fn inline_data_full<'src, E: CParserError<'src>>() -> impl CParser<
     'src,
     (
         Vec<Spanned<Var<'src>>>,
         Spanned<Vec<Vec<DataBlockValue<'src>>>>,
     ),
+    E,
 > {
     var()
         .repeated()
@@ -1032,7 +1041,7 @@ fn inline_data_full<'src>() -> impl CParser<
 }
 
 // [69]   	DataBlockValue 	  ::=   	iri | RDFLiteral | NumericLiteral | BooleanLiteral | 'UNDEF' | TripleTermData
-fn data_block_value<'src>() -> impl CParser<'src, DataBlockValue<'src>> {
+fn data_block_value<'src, E: CParserError<'src>>() -> impl CParser<'src, DataBlockValue<'src>, E> {
     choice((
         iri().map(DataBlockValue::Iri),
         rdf_literal().map(DataBlockValue::Literal),
@@ -1047,13 +1056,13 @@ fn data_block_value<'src>() -> impl CParser<'src, DataBlockValue<'src>> {
 
 // [70]   	Reifier 	  ::=   	'~' VarOrReifierId?
 #[cfg(feature = "sparql-12")]
-fn reifier<'src>() -> impl CParser<'src, Option<VarOrReifierId<'src>>> {
+fn reifier<'src, E: CParserError<'src>>() -> impl CParser<'src, Option<VarOrReifierId<'src>>, E> {
     operator("~").ignore_then(var_or_reifier_id().or_not())
 }
 
 // [71]   	VarOrReifierId 	  ::=   	Var | iri | BlankNode
 #[cfg(feature = "sparql-12")]
-fn var_or_reifier_id<'src>() -> impl CParser<'src, VarOrReifierId<'src>> {
+fn var_or_reifier_id<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrReifierId<'src>, E> {
     choice((
         var().map(VarOrReifierId::Var),
         iri().map(VarOrReifierId::Iri),
@@ -1062,9 +1071,9 @@ fn var_or_reifier_id<'src>() -> impl CParser<'src, VarOrReifierId<'src>> {
     .boxed()
 }
 // [72]   	MinusGraphPattern 	  ::=   	'MINUS' GroupGraphPattern
-fn minus_graph_pattern<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, GraphPatternElement<'src>> {
+fn minus_graph_pattern<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, GraphPatternElement<'src>, E> {
     keyword("MINUS")
         .ignore_then(group_graph_pattern)
         .map(|p| GraphPatternElement::Minus(Box::new(p)))
@@ -1072,10 +1081,10 @@ fn minus_graph_pattern<'src>(
 }
 
 // [75]   	Constraint 	  ::=   	BrackettedExpression | BuiltInCall | FunctionCall
-fn constraint<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn constraint<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     choice((
         bracketted_expression(expression.clone()),
         built_in_call(expression.clone(), group_graph_pattern),
@@ -1085,9 +1094,9 @@ fn constraint<'src>(
 }
 
 // [76]   	FunctionCall 	  ::=   	iri ArgList
-fn function_call<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn function_call<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     iri()
         .then(arg_list(expression))
         .map(|(name, args)| Expression::Function(name, args))
@@ -1096,32 +1105,24 @@ fn function_call<'src>(
 }
 
 // [77]   	ArgList 	  ::=   	NIL | '(' 'DISTINCT'? Expression ( ',' Expression )* ')'
-fn arg_list<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, ArgList<'src>> {
+fn arg_list<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, ArgList<'src>, E> {
     keyword("DISTINCT")
         .or_not()
         .then(expression.separated_by(operator(",")).collect::<Vec<_>>())
         .delimited_by(operator("("), operator(")"))
-        .try_map(|(distinct, args), span| {
-            if distinct.is_some() && args.is_empty() {
-                return Err(Rich::custom(
-                    span,
-                    "DISTINCT cannot be used without arguments",
-                ));
-            }
-            Ok(ArgList {
-                distinct: distinct.is_some(),
-                args,
-            })
+        .map(|(distinct, args)| ArgList {
+            distinct: distinct.is_some(),
+            args,
         })
         .boxed()
 }
 
 // [78]   	ExpressionList 	  ::=   	NIL | '(' Expression ( ',' Expression )* ')'
-fn expression_list<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, Vec<Spanned<Expression<'src>>>> {
+fn expression_list<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, Vec<Spanned<Expression<'src>>>, E> {
     expression
         .separated_by(operator(","))
         .collect()
@@ -1132,8 +1133,8 @@ fn expression_list<'src>(
 // [79]   	ConstructTemplate 	  ::=   	'{' ConstructTriples? '}'
 // [80]   	ConstructTriples 	  ::=   	TriplesSameSubject ( '.' ConstructTriples? )?
 // also TriplesSameSubject ("." TriplesSameSubject?)*
-fn construct_template<'src>()
--> impl CParser<'src, Spanned<Vec<(GraphNode<'src>, PropertyList<'src>)>>> {
+fn construct_template<'src, E: CParserError<'src>>()
+-> impl CParser<'src, Spanned<Vec<(GraphNode<'src>, PropertyList<'src>)>>, E> {
     triples_same_subject()
         .separated_by(operator("."))
         .allow_trailing()
@@ -1144,7 +1145,8 @@ fn construct_template<'src>()
 }
 
 // [81]   	TriplesSameSubject 	  ::=   	VarOrTerm PropertyListNotEmpty | TriplesNode PropertyList | ReifiedTripleBlock
-fn triples_same_subject<'src>() -> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>)> {
+fn triples_same_subject<'src, E: CParserError<'src>>()
+-> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>), E> {
     let property_list_not_empty = property_list_not_empty();
     choice((
         var_or_term()
@@ -1159,16 +1161,17 @@ fn triples_same_subject<'src>() -> impl CParser<'src, (GraphNode<'src>, Property
 }
 
 // [82]   	PropertyList 	  ::=   	PropertyListNotEmpty?
-fn property_list<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, PropertyList<'src>> {
+fn property_list<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, PropertyList<'src>, E> {
     property_list_not_empty
         .or_not()
         .map(Option::unwrap_or_default)
 }
 
 // [83]   	PropertyListNotEmpty 	  ::=   	Verb ObjectList ( ';' ( Verb ObjectList )? )*
-fn property_list_not_empty<'src>() -> impl CParser<'src, PropertyList<'src>> {
+fn property_list_not_empty<'src, E: CParserError<'src>>()
+-> impl CParser<'src, PropertyList<'src>, E> {
     recursive(|property_list_not_empty| {
         let verb_object_list = verb().then(object_list(property_list_not_empty));
         verb_object_list.clone().map(|v| vec![v]).foldl(
@@ -1185,7 +1188,7 @@ fn property_list_not_empty<'src>() -> impl CParser<'src, PropertyList<'src>> {
 }
 
 // [84]   	Verb 	  ::=   	VarOrIri | 'a'
-fn verb<'src>() -> impl CParser<'src, Verb<'src>> {
+fn verb<'src, E: CParserError<'src>>() -> impl CParser<'src, Verb<'src>, E> {
     var_or_iri()
         .map(|v| match v {
             VarOrIri::Var(v) => Verb::Var(v),
@@ -1195,9 +1198,9 @@ fn verb<'src>() -> impl CParser<'src, Verb<'src>> {
 }
 
 // [85]   	ObjectList 	  ::=   	Object ( ',' Object )*
-fn object_list<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, Vec<Object<'src>>> {
+fn object_list<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, Vec<Object<'src>>, E> {
     object(property_list_not_empty)
         .separated_by(operator(","))
         .at_least(1)
@@ -1206,9 +1209,9 @@ fn object_list<'src>(
 }
 // [86]   	Object 	  ::=   	GraphNode Annotation
 #[cfg(feature = "sparql-12")]
-fn object<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, Object<'src>> {
+fn object<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, Object<'src>, E> {
     graph_node(triples_node(property_list_not_empty.clone()))
         .then(annotation(property_list_not_empty))
         .map(|(graph_node, annotations)| Object {
@@ -1218,15 +1221,15 @@ fn object<'src>(
 }
 
 #[cfg(not(feature = "sparql-12"))]
-fn object<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, Object<'src>> {
+fn object<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, Object<'src>, E> {
     graph_node(triples_node(property_list_not_empty)).map(|graph_node| Object { graph_node })
 }
 
 // [87]   	TriplesSameSubjectPath 	  ::=   	VarOrTerm PropertyListPathNotEmpty | TriplesNodePath PropertyListPath | ReifiedTripleBlockPath
-fn triples_same_subject_path<'src>()
--> impl CParser<'src, (GraphNodePath<'src>, PropertyListPath<'src>)> {
+fn triples_same_subject_path<'src, E: CParserError<'src>>()
+-> impl CParser<'src, (GraphNodePath<'src>, PropertyListPath<'src>), E> {
     let property_list_path_not_empty = property_list_path_not_empty();
     choice((
         var_or_term()
@@ -1241,16 +1244,17 @@ fn triples_same_subject_path<'src>()
 }
 
 // [88]   	PropertyListPath 	  ::=   	PropertyListPathNotEmpty?
-fn property_list_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, PropertyListPath<'src>> {
+fn property_list_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, PropertyListPath<'src>, E> {
     property_list_path_not_empty
         .or_not()
         .map(Option::unwrap_or_default)
 }
 
 // [89]   	PropertyListPathNotEmpty 	  ::=   	( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectListPath )? )*
-fn property_list_path_not_empty<'src>() -> impl CParser<'src, PropertyListPath<'src>> {
+fn property_list_path_not_empty<'src, E: CParserError<'src>>()
+-> impl CParser<'src, PropertyListPath<'src>, E> {
     recursive(|property_list_path_not_empty| {
         let verb_object_list_path = verb_simple()
             .or(verb_path())
@@ -1269,19 +1273,19 @@ fn property_list_path_not_empty<'src>() -> impl CParser<'src, PropertyListPath<'
 }
 
 // [90]   	VerbPath 	  ::=   	Path
-fn verb_path<'src>() -> impl CParser<'src, VarOrPath<'src>> {
+fn verb_path<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrPath<'src>, E> {
     path().map(VarOrPath::Path)
 }
 
 // [91]   	VerbSimple 	  ::=   	Var
-fn verb_simple<'src>() -> impl CParser<'src, VarOrPath<'src>> {
+fn verb_simple<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrPath<'src>, E> {
     var().map(VarOrPath::Var)
 }
 
 // [92]   	ObjectListPath 	  ::=   	ObjectPath ( ',' ObjectPath )*
-fn object_list_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, Vec<ObjectPath<'src>>> {
+fn object_list_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, Vec<ObjectPath<'src>>, E> {
     object_path(property_list_path_not_empty)
         .separated_by(operator(","))
         .at_least(1)
@@ -1291,9 +1295,9 @@ fn object_list_path<'src>(
 
 // [93]   	ObjectPath 	  ::=   	GraphNodePath AnnotationPath
 #[cfg(feature = "sparql-12")]
-fn object_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, ObjectPath<'src>> {
+fn object_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, ObjectPath<'src>, E> {
     graph_node_path(triples_node_path(property_list_path_not_empty.clone()))
         .then(annotation_path(property_list_path_not_empty))
         .map(|(graph_node, annotations)| ObjectPath {
@@ -1303,9 +1307,9 @@ fn object_path<'src>(
 }
 
 #[cfg(not(feature = "sparql-12"))]
-fn object_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, ObjectPath<'src>> {
+fn object_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, ObjectPath<'src>, E> {
     graph_node_path(triples_node_path(property_list_path_not_empty))
         .map(|graph_node| ObjectPath { graph_node })
 }
@@ -1316,7 +1320,7 @@ fn object_path<'src>(
 // [97]   	PathElt 	  ::=   	PathPrimary PathMod?
 // [98]   	PathEltOrInverse 	  ::=   	PathElt | '^' PathElt
 // [99]   	PathMod 	  ::=   	'?' | '*' | '+'
-fn path<'src>() -> impl CParser<'src, Path<'src>> {
+fn path<'src, E: CParserError<'src>>() -> impl CParser<'src, Path<'src>, E> {
     recursive(|path| {
         path_primary(path).pratt((
             infix(left(1), operator("|"), |l, (), r, _| {
@@ -1335,7 +1339,9 @@ fn path<'src>() -> impl CParser<'src, Path<'src>> {
 }
 
 // [100]   	PathPrimary 	  ::=   	iri | 'a' | '!' PathNegatedPropertySet | '(' Path ')'
-fn path_primary<'src>(path: impl CParser<'src, Path<'src>>) -> impl CParser<'src, Path<'src>> {
+fn path_primary<'src, E: CParserError<'src>>(
+    path: impl CParser<'src, Path<'src>, E>,
+) -> impl CParser<'src, Path<'src>, E> {
     choice((
         iri().map(Path::Iri),
         case_sensitive_keyword("a").to(Path::A),
@@ -1346,7 +1352,7 @@ fn path_primary<'src>(path: impl CParser<'src, Path<'src>>) -> impl CParser<'src
 }
 
 // [101]   	PathNegatedPropertySet 	  ::=   	PathOneInPropertySet | '(' ( PathOneInPropertySet ( '|' PathOneInPropertySet )* )? ')'
-fn path_negated_property_set<'src>() -> impl CParser<'src, Path<'src>> {
+fn path_negated_property_set<'src, E: CParserError<'src>>() -> impl CParser<'src, Path<'src>, E> {
     path_one_in_property_set()
         .map(|p| vec![p])
         .or(path_one_in_property_set()
@@ -1359,7 +1365,8 @@ fn path_negated_property_set<'src>() -> impl CParser<'src, Path<'src>> {
 }
 
 // [102]   	PathOneInPropertySet 	  ::=   	iri | 'a' | '^' ( iri | 'a' )
-fn path_one_in_property_set<'src>() -> impl CParser<'src, PathOneInPropertySet<'src>> {
+fn path_one_in_property_set<'src, E: CParserError<'src>>()
+-> impl CParser<'src, PathOneInPropertySet<'src>, E> {
     choice((
         iri().map(PathOneInPropertySet::Iri),
         case_sensitive_keyword("a").to(PathOneInPropertySet::A),
@@ -1370,9 +1377,9 @@ fn path_one_in_property_set<'src>() -> impl CParser<'src, PathOneInPropertySet<'
 }
 
 // [103]   	TriplesNode 	  ::=   	Collection | BlankNodePropertyList
-fn triples_node<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, GraphNode<'src>> {
+fn triples_node<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, GraphNode<'src>, E> {
     recursive(|triples_node| {
         collection(triples_node).or(blank_node_property_list(property_list_not_empty))
     })
@@ -1380,9 +1387,9 @@ fn triples_node<'src>(
 }
 
 // [104]   	BlankNodePropertyList 	  ::=   	'[' PropertyListNotEmpty ']'
-fn blank_node_property_list<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, GraphNode<'src>> {
+fn blank_node_property_list<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, GraphNode<'src>, E> {
     property_list_not_empty
         .delimited_by(operator("["), operator("]"))
         .spanned()
@@ -1390,9 +1397,9 @@ fn blank_node_property_list<'src>(
 }
 
 // [105]   	TriplesNodePath 	  ::=   	CollectionPath | BlankNodePropertyListPath
-fn triples_node_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, GraphNodePath<'src>> {
+fn triples_node_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, GraphNodePath<'src>, E> {
     recursive(|triples_node_path| {
         collection_path(triples_node_path)
             .or(blank_node_property_list_path(property_list_path_not_empty))
@@ -1400,9 +1407,9 @@ fn triples_node_path<'src>(
     .boxed()
 }
 // [106]   	BlankNodePropertyListPath 	  ::=   	'[' PropertyListPathNotEmpty ']'
-fn blank_node_property_list_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, GraphNodePath<'src>> {
+fn blank_node_property_list_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, GraphNodePath<'src>, E> {
     property_list_path_not_empty
         .delimited_by(operator("["), operator("]"))
         .spanned()
@@ -1410,9 +1417,9 @@ fn blank_node_property_list_path<'src>(
 }
 
 // [107]   	Collection 	  ::=   	'(' GraphNode+ ')'
-fn collection<'src>(
-    triples_node: impl CParser<'src, GraphNode<'src>>,
-) -> impl CParser<'src, GraphNode<'src>> {
+fn collection<'src, E: CParserError<'src>>(
+    triples_node: impl CParser<'src, GraphNode<'src>, E>,
+) -> impl CParser<'src, GraphNode<'src>, E> {
     graph_node(triples_node)
         .repeated()
         .at_least(1)
@@ -1424,9 +1431,9 @@ fn collection<'src>(
 }
 
 // [108]   	CollectionPath 	  ::=   	'(' GraphNodePath+ ')'
-fn collection_path<'src>(
-    triples_node_path: impl CParser<'src, GraphNodePath<'src>>,
-) -> impl CParser<'src, GraphNodePath<'src>> {
+fn collection_path<'src, E: CParserError<'src>>(
+    triples_node_path: impl CParser<'src, GraphNodePath<'src>, E>,
+) -> impl CParser<'src, GraphNodePath<'src>, E> {
     graph_node_path(triples_node_path)
         .repeated()
         .at_least(1)
@@ -1439,9 +1446,9 @@ fn collection_path<'src>(
 
 // [109]   	AnnotationPath 	  ::=   	( Reifier | AnnotationBlockPath )*
 #[cfg(feature = "sparql-12")]
-fn annotation_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, Vec<Spanned<AnnotationPath<'src>>>> {
+fn annotation_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, Vec<Spanned<AnnotationPath<'src>>>, E> {
     reifier()
         .map(AnnotationPath::Reifier)
         .or(annotation_block_path(property_list_path_not_empty)
@@ -1454,17 +1461,17 @@ fn annotation_path<'src>(
 
 // [110]   	AnnotationBlockPath 	  ::=   	'{|' PropertyListPathNotEmpty '|}'
 #[cfg(feature = "sparql-12")]
-fn annotation_block_path<'src>(
-    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>>,
-) -> impl CParser<'src, PropertyListPath<'src>> {
+fn annotation_block_path<'src, E: CParserError<'src>>(
+    property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
+) -> impl CParser<'src, PropertyListPath<'src>, E> {
     property_list_path_not_empty.delimited_by(operator("{|"), operator("|}"))
 }
 
 // [111]   	Annotation 	  ::=   	( Reifier | AnnotationBlock )*
 #[cfg(feature = "sparql-12")]
-fn annotation<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, Vec<Spanned<Annotation<'src>>>> {
+fn annotation<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, Vec<Spanned<Annotation<'src>>>, E> {
     reifier()
         .map(Annotation::Reifier)
         .or(annotation_block(property_list_not_empty).map(Annotation::AnnotationBlock))
@@ -1476,16 +1483,16 @@ fn annotation<'src>(
 
 // [112]   	AnnotationBlock 	  ::=   	'{|' PropertyListNotEmpty '|}'
 #[cfg(feature = "sparql-12")]
-fn annotation_block<'src>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>>,
-) -> impl CParser<'src, PropertyList<'src>> {
+fn annotation_block<'src, E: CParserError<'src>>(
+    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
+) -> impl CParser<'src, PropertyList<'src>, E> {
     property_list_not_empty.delimited_by(operator("{|"), operator("|}"))
 }
 
 // [113]   	GraphNode 	  ::=   	VarOrTerm | TriplesNode | ReifiedTriple
-fn graph_node<'src>(
-    triples_node: impl CParser<'src, GraphNode<'src>>,
-) -> impl CParser<'src, GraphNode<'src>> {
+fn graph_node<'src, E: CParserError<'src>>(
+    triples_node: impl CParser<'src, GraphNode<'src>, E>,
+) -> impl CParser<'src, GraphNode<'src>, E> {
     choice((
         var_or_term().map(GraphNode::VarOrTerm),
         triples_node,
@@ -1496,9 +1503,9 @@ fn graph_node<'src>(
 }
 
 // [114]   	GraphNodePath 	  ::=   	VarOrTerm | TriplesNodePath | ReifiedTriple
-fn graph_node_path<'src>(
-    triples_node_path: impl CParser<'src, GraphNodePath<'src>>,
-) -> impl CParser<'src, GraphNodePath<'src>> {
+fn graph_node_path<'src, E: CParserError<'src>>(
+    triples_node_path: impl CParser<'src, GraphNodePath<'src>, E>,
+) -> impl CParser<'src, GraphNodePath<'src>, E> {
     choice((
         var_or_term().map(GraphNodePath::VarOrTerm),
         triples_node_path,
@@ -1509,7 +1516,7 @@ fn graph_node_path<'src>(
 }
 
 // [115]   	VarOrTerm 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | NIL | TripleTerm
-fn var_or_term<'src>() -> impl CParser<'src, VarOrTerm<'src>> {
+fn var_or_term<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrTerm<'src>, E> {
     choice((
         var().map(VarOrTerm::Var),
         iri().map(VarOrTerm::Iri),
@@ -1526,7 +1533,7 @@ fn var_or_term<'src>() -> impl CParser<'src, VarOrTerm<'src>> {
 
 // [116]   	ReifiedTriple 	  ::=   	'<<' ReifiedTripleSubject Verb ReifiedTripleObject Reifier? '>>'
 #[cfg(feature = "sparql-12")]
-fn reified_triple<'src>() -> impl CParser<'src, ReifiedTriple<'src>> {
+fn reified_triple<'src, E: CParserError<'src>>() -> impl CParser<'src, ReifiedTriple<'src>, E> {
     recursive(|reified_triple| {
         reified_triple_subject_or_object(reified_triple.clone())
             .then(verb())
@@ -1540,15 +1547,14 @@ fn reified_triple<'src>() -> impl CParser<'src, ReifiedTriple<'src>> {
                 reifier: reifier.flatten(),
             })
     })
-    .boxed()
 }
 
 // [117]   	ReifiedTripleSubject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | ReifiedTriple | TripleTerm
 // [118]   	ReifiedTripleObject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | ReifiedTriple | TripleTerm
 #[cfg(feature = "sparql-12")]
-fn reified_triple_subject_or_object<'src>(
-    reified_triple: impl CParser<'src, ReifiedTriple<'src>>,
-) -> impl CParser<'src, ReifiedTripleSubjectOrObject<'src>> {
+fn reified_triple_subject_or_object<'src, E: CParserError<'src>>(
+    reified_triple: impl CParser<'src, ReifiedTriple<'src>, E>,
+) -> impl CParser<'src, ReifiedTripleSubjectOrObject<'src>, E> {
     choice((
         var().map(ReifiedTripleSubjectOrObject::Var),
         iri().map(ReifiedTripleSubjectOrObject::Iri),
@@ -1566,7 +1572,7 @@ fn reified_triple_subject_or_object<'src>(
 
 // [119]   	TripleTerm 	  ::=   	'<<(' TripleTermSubject Verb TripleTermObject ')>>'
 #[cfg(feature = "sparql-12")]
-fn triple_term<'src>() -> impl CParser<'src, TripleTerm<'src>> {
+fn triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, TripleTerm<'src>, E> {
     recursive(|triple_term| {
         triple_term_subject_or_object(triple_term.clone())
             .then(verb())
@@ -1584,9 +1590,9 @@ fn triple_term<'src>() -> impl CParser<'src, TripleTerm<'src>> {
 // [120]   	TripleTermSubject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | TripleTerm
 // [121]   	TripleTermObject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | TripleTerm
 #[cfg(feature = "sparql-12")]
-fn triple_term_subject_or_object<'src>(
-    triple_term: impl CParser<'src, TripleTerm<'src>>,
-) -> impl CParser<'src, VarOrTerm<'src>> {
+fn triple_term_subject_or_object<'src, E: CParserError<'src>>(
+    triple_term: impl CParser<'src, TripleTerm<'src>, E>,
+) -> impl CParser<'src, VarOrTerm<'src>, E> {
     choice((
         var().map(VarOrTerm::Var),
         iri().map(VarOrTerm::Iri),
@@ -1602,7 +1608,7 @@ fn triple_term_subject_or_object<'src>(
 // [122]   	TripleTermData 	  ::=   	'<<(' TripleTermDataSubject ( iri | 'a' ) TripleTermDataObject ')>>'
 // [123]   	TripleTermDataSubject 	  ::=   	iri
 #[cfg(feature = "sparql-12")]
-fn triple_term_data<'src>() -> impl CParser<'src, TripleTermData<'src>> {
+fn triple_term_data<'src, E: CParserError<'src>>() -> impl CParser<'src, TripleTermData<'src>, E> {
     recursive(|triple_term_data| {
         iri()
             .then(
@@ -1623,9 +1629,9 @@ fn triple_term_data<'src>() -> impl CParser<'src, TripleTermData<'src>> {
 
 // [124]   	TripleTermDataObject 	  ::=   	iri | RDFLiteral | NumericLiteral | BooleanLiteral | TripleTermData
 #[cfg(feature = "sparql-12")]
-fn triple_term_data_object<'src>(
-    triple_term_data: impl CParser<'src, TripleTermData<'src>>,
-) -> impl CParser<'src, TripleTermDataObject<'src>> {
+fn triple_term_data_object<'src, E: CParserError<'src>>(
+    triple_term_data: impl CParser<'src, TripleTermData<'src>, E>,
+) -> impl CParser<'src, TripleTermDataObject<'src>, E> {
     choice((
         iri().map(TripleTermDataObject::Iri),
         rdf_literal().map(TripleTermDataObject::Literal),
@@ -1637,12 +1643,12 @@ fn triple_term_data_object<'src>(
 }
 
 // [125]   	VarOrIri 	  ::=   	Var | iri
-fn var_or_iri<'src>() -> impl CParser<'src, VarOrIri<'src>> {
+fn var_or_iri<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrIri<'src>, E> {
     var().map(VarOrIri::Var).or(iri().map(VarOrIri::Iri))
 }
 
 // [126]   	Var 	  ::=   	VAR1 | VAR2
-fn var<'src>() -> impl CParser<'src, Spanned<Var<'src>>> {
+fn var<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<Var<'src>>, E> {
     select! {
         Token::Var1(v) => Var(&v[1..]),
         Token::Var2(v) => Var(&v[1..]),
@@ -1652,9 +1658,9 @@ fn var<'src>() -> impl CParser<'src, Spanned<Var<'src>>> {
 }
 
 // [127]   	Expression 	  ::=   	ConditionalOrExpression
-fn expression<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn expression<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     recursive(|expression| {
         primary_expression(expression.clone(), group_graph_pattern).pratt((
             // [127]   	Expression 	  ::=   	ConditionalOrExpression
@@ -1761,10 +1767,10 @@ fn expression<'src>(
 }
 
 // [136]   	PrimaryExpression 	  ::=   	BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var | ExprTripleTerm
-fn primary_expression<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn primary_expression<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     choice((
         bracketted_expression(expression.clone()),
         iri_or_function(expression.clone()),
@@ -1781,7 +1787,7 @@ fn primary_expression<'src>(
 
 // [137]   	ExprTripleTerm 	  ::=   	'<<(' ExprTripleTermSubject Verb ExprTripleTermObject ')>>'
 #[cfg(feature = "sparql-12")]
-fn expr_triple_term<'src>() -> impl CParser<'src, ExprTripleTerm<'src>> {
+fn expr_triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, ExprTripleTerm<'src>, E> {
     recursive(|expr_triple_term| {
         expr_triple_term_subject()
             .then(verb())
@@ -1798,7 +1804,8 @@ fn expr_triple_term<'src>() -> impl CParser<'src, ExprTripleTerm<'src>> {
 
 // [138]   	ExprTripleTermSubject 	  ::=   	iri | Var
 #[cfg(feature = "sparql-12")]
-fn expr_triple_term_subject<'src>() -> impl CParser<'src, ExprTripleTermSubject<'src>> {
+fn expr_triple_term_subject<'src, E: CParserError<'src>>()
+-> impl CParser<'src, ExprTripleTermSubject<'src>, E> {
     iri()
         .map(ExprTripleTermSubject::Iri)
         .or(var().map(ExprTripleTermSubject::Var))
@@ -1806,9 +1813,9 @@ fn expr_triple_term_subject<'src>() -> impl CParser<'src, ExprTripleTermSubject<
 
 // [139]   	ExprTripleTermObject 	  ::=   	iri | RDFLiteral | NumericLiteral | BooleanLiteral | Var | ExprTripleTerm
 #[cfg(feature = "sparql-12")]
-fn expr_triple_term_object<'src>(
-    expr_triple_term: impl CParser<'src, ExprTripleTerm<'src>>,
-) -> impl CParser<'src, ExprTripleTermObject<'src>> {
+fn expr_triple_term_object<'src, E: CParserError<'src>>(
+    expr_triple_term: impl CParser<'src, ExprTripleTerm<'src>, E>,
+) -> impl CParser<'src, ExprTripleTermObject<'src>, E> {
     choice((
         iri().map(ExprTripleTermObject::Iri),
         rdf_literal().map(ExprTripleTermObject::Literal),
@@ -1821,9 +1828,9 @@ fn expr_triple_term_object<'src>(
 }
 
 // [140]   	BrackettedExpression 	  ::=   	'(' Expression ')'
-fn bracketted_expression<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn bracketted_expression<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     expression.delimited_by(operator("("), operator(")"))
 }
 
@@ -1831,10 +1838,10 @@ fn bracketted_expression<'src>(
 // [142]   	RegexExpression 	  ::=   	'REGEX' '(' Expression ',' Expression ( ',' Expression )? ')'
 // [143]   	SubstringExpression 	  ::=   	'SUBSTR' '(' Expression ',' Expression ( ',' Expression )? ')'
 // [144]   	StrReplaceExpression 	  ::=   	'REPLACE' '(' Expression ',' Expression ',' Expression ( ',' Expression )? ')'
-fn built_in_call<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn built_in_call<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     aggregate(expression.clone())
         .map(Expression::Aggregate)
         .or(keyword("BOUND")
@@ -1923,9 +1930,9 @@ fn built_in_call<'src>(
 
 // [145]   	ExistsFunc 	  ::=   	'EXISTS' GroupGraphPattern
 // [146]   	NotExistsFunc 	  ::=   	'NOT' 'EXISTS' GroupGraphPattern
-fn exists<'src>(
-    group_graph_pattern: impl CParser<'src, GraphPattern<'src>>,
-) -> impl CParser<'src, Expression<'src>> {
+fn exists<'src, E: CParserError<'src>>(
+    group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
+) -> impl CParser<'src, Expression<'src>, E> {
     keyword("NOT")
         .ignored()
         .or_not()
@@ -1942,9 +1949,9 @@ fn exists<'src>(
 }
 
 // [147]   	Aggregate 	  ::=   	  'COUNT' '(' 'DISTINCT'? ( '*' | Expression ) ')' | 'SUM' '(' 'DISTINCT'? Expression ')' | 'MIN' '(' 'DISTINCT'? Expression ')' | 'MAX' '(' 'DISTINCT'? Expression ')' | 'AVG' '(' 'DISTINCT'? Expression ')' | 'SAMPLE' '(' 'DISTINCT'? Expression ')' | 'GROUP_CONCAT' '(' 'DISTINCT'? Expression ( ';' 'SEPARATOR' '=' String )? ')'
-fn aggregate<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, Aggregate<'src>> {
+fn aggregate<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, Aggregate<'src>, E> {
     keyword("COUNT")
         .ignore_then(
             keyword("DISTINCT")
@@ -1997,9 +2004,9 @@ fn aggregate<'src>(
 }
 
 // [148]   	iriOrFunction 	  ::=   	iri ArgList?
-fn iri_or_function<'src>(
-    expression: impl CParser<'src, Spanned<Expression<'src>>>,
-) -> impl CParser<'src, Spanned<Expression<'src>>> {
+fn iri_or_function<'src, E: CParserError<'src>>(
+    expression: impl CParser<'src, Spanned<Expression<'src>>, E>,
+) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     iri()
         .then(arg_list(expression).or_not())
         .map(|(name, args)| {
@@ -2014,7 +2021,7 @@ fn iri_or_function<'src>(
 }
 
 // [149]   	RDFLiteral 	  ::=   	String ( LANG_DIR | '^^' iri )?
-fn rdf_literal<'src>() -> impl CParser<'src, Literal<'src>> {
+fn rdf_literal<'src, E: CParserError<'src>>() -> impl CParser<'src, Literal<'src>, E> {
     string()
         .then(
             select! {
@@ -2049,7 +2056,7 @@ fn rdf_literal<'src>() -> impl CParser<'src, Literal<'src>> {
 // [151]   	NumericLiteralUnsigned 	  ::=   	INTEGER | DECIMAL | DOUBLE
 // [152]   	NumericLiteralPositive 	  ::=   	INTEGER_POSITIVE | DECIMAL_POSITIVE | DOUBLE_POSITIVE
 // [153]   	NumericLiteralNegative 	  ::=   	INTEGER_NEGATIVE | DECIMAL_NEGATIVE | DOUBLE_NEGATIVE
-fn numeric_literal<'src>() -> impl CParser<'src, Literal<'src>> {
+fn numeric_literal<'src, E: CParserError<'src>>() -> impl CParser<'src, Literal<'src>, E> {
     select! {
         Token::Integer(v) | Token::IntegerPositive(v) | Token::IntegerNegative(v) => Literal::Integer(v),
         Token::Decimal(v) | Token::DecimalPositive(v) | Token::DecimalNegative(v) => Literal::Decimal(v),
@@ -2058,7 +2065,8 @@ fn numeric_literal<'src>() -> impl CParser<'src, Literal<'src>> {
         .labelled("a number")
 }
 
-fn numeric_literal_positive_or_negative<'src>() -> impl CParser<'src, Literal<'src>> {
+fn numeric_literal_positive_or_negative<'src, E: CParserError<'src>>()
+-> impl CParser<'src, Literal<'src>, E> {
     select! {
         Token::IntegerPositive(v) | Token::IntegerNegative(v) => Literal::Integer(v),
         Token::DecimalPositive(v) | Token::DecimalNegative(v) => Literal::Decimal(v),
@@ -2068,14 +2076,14 @@ fn numeric_literal_positive_or_negative<'src>() -> impl CParser<'src, Literal<'s
 }
 
 // [154]   	BooleanLiteral 	  ::=   	'true' | 'false'
-fn boolean_literal<'src>() -> impl CParser<'src, Literal<'src>> {
+fn boolean_literal<'src, E: CParserError<'src>>() -> impl CParser<'src, Literal<'src>, E> {
     keyword("true")
         .to(Literal::Boolean(true))
         .or(keyword("false").to(Literal::Boolean(false)))
 }
 
 // [155]   	String 	  ::=   	STRING_LITERAL1 | STRING_LITERAL2 | STRING_LITERAL_LONG1 | STRING_LITERAL_LONG2
-fn string<'src>() -> impl CParser<'src, Spanned<String<'src>>> {
+fn string<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<String<'src>>, E> {
     select! {
         Token::StringLiteral1(s) | Token::StringLiteral2(s) => String(&s[1..s.len() - 1]),
         Token::StringLiteralLong1(s) | Token::StringLiteralLong2(s) => String(&s[3..s.len() - 3]),
@@ -2085,14 +2093,15 @@ fn string<'src>() -> impl CParser<'src, Spanned<String<'src>>> {
 }
 
 // [156]   	iri 	  ::=   	IRIREF | PrefixedName
-fn iri<'src>() -> impl CParser<'src, Iri<'src>> {
+fn iri<'src, E: CParserError<'src>>() -> impl CParser<'src, Iri<'src>, E> {
     iriref()
         .map(Iri::IriRef)
         .or(prefixed_name().map(Iri::PrefixedName))
 }
 
 // [157]   	PrefixedName 	  ::=   	PNAME_LN | PNAME_NS
-fn prefixed_name<'src>() -> impl CParser<'src, Spanned<PrefixedName<'src>>> {
+fn prefixed_name<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<PrefixedName<'src>>, E>
+{
     select! {
         Token::PnameNs(p) => PrefixedName(&p[..p.len() - 1], ""),
         Token::PnameLn(p) => {
@@ -2106,7 +2115,7 @@ fn prefixed_name<'src>() -> impl CParser<'src, Spanned<PrefixedName<'src>>> {
 }
 
 // [158]   	BlankNode 	  ::=   	BLANK_NODE_LABEL | ANON
-fn blank_node<'src>() -> impl CParser<'src, Spanned<BlankNode<'src>>> {
+fn blank_node<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<BlankNode<'src>>, E> {
     select! {
         Token::BlankNodeLabel(id) => BlankNode(Some(&id[2..])),
     }
@@ -2115,42 +2124,42 @@ fn blank_node<'src>() -> impl CParser<'src, Spanned<BlankNode<'src>>> {
     .labelled("a blank node")
 }
 
-fn iriref<'src>() -> impl CParser<'src, Spanned<IriRef<'src>>> {
+fn iriref<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<IriRef<'src>>, E> {
     select! { Token::IriRef(i) => IriRef(&i[1..i.len() - 1]) }
         .spanned()
         .labelled("an iri")
 }
 
-fn pname_ns<'src>() -> impl CParser<'src, &'src str> {
+fn pname_ns<'src, E: CParserError<'src>>() -> impl CParser<'src, &'src str, E> {
     select! { Token::PnameNs(p) => &p[..p.len() - 1] }.labelled("a prefix")
 }
 
-fn nil<'src>() -> impl CParser<'src, ()> {
+fn nil<'src, E: CParserError<'src>>() -> impl CParser<'src, (), E> {
     empty().delimited_by(operator("("), operator(")"))
 }
 
-fn anon<'src>() -> impl CParser<'src, ()> {
+fn anon<'src, E: CParserError<'src>>() -> impl CParser<'src, (), E> {
     empty().delimited_by(operator("["), operator("]"))
 }
 
-fn keyword<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
+fn keyword<'src, E: CParserError<'src>>(
     keyword: &'static str,
-) -> impl Parser<'src, I, (), extra::Err<Rich<'src, Token<'src>>>> + Clone {
+) -> impl Parser<'src, ParserInput<'src>, (), extra::Err<E>> + Clone {
     select! {
         Token::Keyword(v) if v.eq_ignore_ascii_case(keyword) => ()
     }
     .labelled(keyword)
 }
 
-fn case_sensitive_keyword<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
+fn case_sensitive_keyword<'src, E: CParserError<'src>>(
     keyword: &'static str,
-) -> impl Parser<'src, I, (), extra::Err<Rich<'src, Token<'src>>>> + Clone {
+) -> impl Parser<'src, ParserInput<'src>, (), extra::Err<E>> + Clone {
     just(Token::Keyword(keyword)).ignored()
 }
 
-fn operator<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
+fn operator<'src, E: CParserError<'src>>(
     op: &'static str,
-) -> impl Parser<'src, I, (), extra::Err<Rich<'src, Token<'src>>>> + Clone {
+) -> impl Parser<'src, ParserInput<'src>, (), extra::Err<E>> + Clone {
     just(Token::Operator(op)).ignored()
 }
 
