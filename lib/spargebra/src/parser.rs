@@ -7,7 +7,6 @@ use chumsky::prelude::*;
 use chumsky::span::WrappingSpan;
 
 type ParserInput<'src> = MappedInput<'src, Token<'src>, SimpleSpan, &'src [Spanned<Token<'src>>]>;
-type RichErr<'src> = Rich<'src, Token<'src>>;
 
 trait CParserError<'src>:
     Error<'src, ParserInput<'src>> + LabelError<'src, ParserInput<'src>, &'static str> + 'src
@@ -26,11 +25,10 @@ pub fn parse_sparql_query<'a>(
     input_len: usize,
 ) -> Result<Query<'a>, Vec<Rich<'a, Token<'a>>>> {
     let input = || tokens.split_spanned((input_len..input_len).into());
-    let result = query::<EmptyErr>().parse(input()).into_result();
-    if let Ok(query) = result {
+    if let Ok(query) = query::<EmptyErr>().parse(input()).into_result() {
         return Ok(query);
     }
-    query::<RichErr<'a>>()
+    query()
         .parse(tokens.split_spanned((input_len..input_len).into()))
         .into_result()
 }
@@ -40,11 +38,10 @@ pub fn parse_sparql_update<'a>(
     input_len: usize,
 ) -> Result<Update<'a>, Vec<Rich<'a, Token<'a>>>> {
     let input = || tokens.split_spanned((input_len..input_len).into());
-    let result = update::<EmptyErr>().parse(input()).into_result();
-    if let Ok(update) = result {
+    if let Ok(update) = update::<EmptyErr>().parse(input()).into_result() {
         return Ok(update);
     }
-    update::<RichErr<'a>>().parse(input()).into_result()
+    update().parse(input()).into_result()
 }
 
 macro_rules! select_keyword {
