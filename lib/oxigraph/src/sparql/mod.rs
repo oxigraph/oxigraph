@@ -220,6 +220,28 @@ impl SparqlEvaluator {
         self
     }
 
+    /// Returns the list of custom functions currently registered in the evaluator.
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::SparqlEvaluator;
+    ///
+    /// let evaluator = SparqlEvaluator::new().with_custom_function(
+    ///     NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
+    ///     |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    /// );
+    /// assert!(
+    ///     evaluator
+    ///         .custom_functions()
+    ///         .collect::<Vec<_>>()
+    ///         .contains(&&NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?)
+    /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn custom_functions(&self) -> impl Iterator<Item = &NamedNode> {
+        self.inner.custom_functions()
+    }
+
     /// Adds a custom SPARQL evaluation aggregate function.
     ///
     /// Example with a function doing concatenation:
@@ -279,6 +301,11 @@ impl SparqlEvaluator {
         self.parser = self.parser.with_custom_aggregate_function(name.clone());
         self.inner = self.inner.with_custom_aggregate_function(name, evaluator);
         self
+    }
+
+    /// Returns the list of custom aggregate functions currently registered in the evaluator.
+    pub fn custom_aggregate_functions(&self) -> impl Iterator<Item = &NamedNode> {
+        self.inner.custom_aggregate_functions()
     }
 
     #[doc(hidden)]

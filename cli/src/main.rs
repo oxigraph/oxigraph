@@ -305,7 +305,7 @@ pub fn main() -> anyhow::Result<()> {
                 io::read_to_string(stdin().lock())?
             };
             let store = Store::open_read_only(location)?;
-            let mut evaluator = SparqlEvaluator::new();
+            let mut evaluator = sparql_evaluator();
             if let Some(base) = query_base {
                 evaluator = evaluator.with_base_iri(&base)?;
             }
@@ -457,7 +457,7 @@ pub fn main() -> anyhow::Result<()> {
                 io::read_to_string(stdin().lock())?
             };
             let store = Store::open(location)?;
-            let mut evaluator = SparqlEvaluator::new();
+            let mut evaluator = sparql_evaluator();
             if let Some(base) = update_base {
                 evaluator = evaluator.with_base_iri(&base)?;
             }
@@ -752,14 +752,14 @@ fn serve(
     union_default_graph: bool,
     timeout_s: Option<u64>,
 ) -> anyhow::Result<()> {
-    let sparql_evaluator = SparqlEvaluator::new();
+    let sparql_evaluator = sparql_evaluator();
     let timeout = timeout_s.map(Duration::from_secs);
     let mut server = if cors {
         Server::new(cors_middleware(move |request| {
             handle_request(
                 request,
-                store.clone(),
-                sparql_evaluator.clone(),
+                &store,
+                &sparql_evaluator,
                 read_only,
                 union_default_graph,
                 timeout,
@@ -770,8 +770,8 @@ fn serve(
         Server::new(move |request| {
             handle_request(
                 request,
-                store.clone(),
-                sparql_evaluator.clone(),
+                &store,
+                &sparql_evaluator,
                 read_only,
                 union_default_graph,
                 timeout,
@@ -829,8 +829,8 @@ type HttpError = (StatusCode, String);
 
 fn handle_request(
     request: &mut Request<Body>,
-    store: Store,
-    sparql_evaluator: SparqlEvaluator,
+    store: &Store,
+    sparql_evaluator: &SparqlEvaluator,
     read_only: bool,
     union_default_graph: bool,
     timeout: Option<Duration>,
@@ -871,7 +871,7 @@ fn handle_request(
         ("/query", "GET") => {
             if request.uri().query().is_some() {
                 configure_and_evaluate_sparql_query(
-                    &store,
+                    store,
                     sparql_evaluator,
                     RequestParams::from_request_url(request),
                     None,
@@ -887,6 +887,7 @@ fn handle_request(
                         update: false,
                     },
                     union_default_graph,
+                    sparql_evaluator,
                 )
             }
         }
@@ -896,7 +897,7 @@ fn handle_request(
             if content_type == "application/sparql-query" {
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_query(
-                    &store,
+                    store,
                     sparql_evaluator,
                     RequestParams::from_request_url(request),
                     Some(body),
@@ -906,7 +907,7 @@ fn handle_request(
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
                 configure_and_evaluate_sparql_query(
-                    &store,
+                    store,
                     sparql_evaluator,
                     RequestParams::from_request_url_and_body(request)?,
                     None,
@@ -929,6 +930,7 @@ fn handle_request(
                     update: true,
                 },
                 union_default_graph,
+                sparql_evaluator,
             )
         }
         ("/update", "POST") => {
@@ -940,7 +942,7 @@ fn handle_request(
             if content_type == "application/sparql-update" {
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
-                    &store,
+                    store,
                     RequestParams::from_request_url(request),
                     Some(body),
                     request,
@@ -948,7 +950,7 @@ fn handle_request(
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
                 configure_and_evaluate_sparql_update(
-                    &store,
+                    store,
                     RequestParams::from_request_url_and_body(request)?,
                     None,
                     request,
@@ -961,7 +963,7 @@ fn handle_request(
         ("/sparql", "GET") => {
             if request.uri().query().is_some() {
                 configure_and_evaluate_sparql_query(
-                    &store,
+                    store,
                     sparql_evaluator,
                     RequestParams::from_request_url(request),
                     None,
@@ -977,6 +979,7 @@ fn handle_request(
                         update: !read_only,
                     },
                     union_default_graph,
+                    sparql_evaluator,
                 )
             }
         }
@@ -987,7 +990,7 @@ fn handle_request(
             if content_type == "application/sparql-query" {
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_query(
-                    &store,
+                    store,
                     sparql_evaluator,
                     RequestParams::from_request_url(request),
                     Some(body),
@@ -1001,7 +1004,7 @@ fn handle_request(
                 }
                 let body = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
-                    &store,
+                    store,
                     RequestParams::from_request_url(request),
                     Some(body),
                     request,
@@ -1014,7 +1017,7 @@ fn handle_request(
                         "Both 'query' and 'update' cannot be set at the same time",
                     )),
                     (true, false) => configure_and_evaluate_sparql_query(
-                        &store,
+                        store,
                         sparql_evaluator,
                         args,
                         None,
@@ -1032,7 +1035,7 @@ fn handle_request(
                             return Err(the_server_is_read_only());
                         }
                         configure_and_evaluate_sparql_update(
-                            &store,
+                            store,
                             args,
                             None,
                             request,
@@ -1049,7 +1052,7 @@ fn handle_request(
         }
         (path, "GET") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
-                assert_that_graph_exists(&store, &target)?;
+                assert_that_graph_exists(store, &target)?;
                 let format = rdf_content_negotiation(request)?;
 
                 let quads = store.quads_for_pattern(None, None, None, Some(&target.into()));
@@ -1126,7 +1129,7 @@ fn handle_request(
                         true
                     }
                 };
-                web_load_graph(&store, request, format, &GraphName::from(target))?;
+                web_load_graph(store, request, format, &GraphName::from(target))?;
                 Response::builder()
                     .status(if new {
                         StatusCode::CREATED
@@ -1139,7 +1142,7 @@ fn handle_request(
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 store.clear().map_err(internal_server_error)?;
-                web_load_dataset(&store, request, format)?;
+                web_load_dataset(store, request, format)?;
                 Response::builder()
                     .status(StatusCode::NO_CONTENT)
                     .body(Body::empty())
@@ -1188,8 +1191,8 @@ fn handle_request(
             if let Some(target) = store_target(request)? {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
-                let new = assert_that_graph_exists(&store, &target).is_ok();
-                web_load_graph(&store, request, format, &GraphName::from(target))?;
+                let new = assert_that_graph_exists(store, &target).is_ok();
+                web_load_graph(store, request, format, &GraphName::from(target))?;
                 Response::builder()
                     .status(if new {
                         StatusCode::CREATED
@@ -1202,12 +1205,12 @@ fn handle_request(
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 if format.supports_datasets() {
-                    web_load_dataset(&store, request, format)?;
+                    web_load_dataset(store, request, format)?;
                     Response::builder().status(StatusCode::NO_CONTENT)
                 } else {
                     let graph =
                         resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
-                    web_load_graph(&store, request, format, &graph.clone().into())?;
+                    web_load_graph(store, request, format, &graph.clone().into())?;
                     Response::builder()
                         .status(StatusCode::CREATED)
                         .header(LOCATION, graph.as_str())
@@ -1218,7 +1221,7 @@ fn handle_request(
         }
         (path, "HEAD") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
-                assert_that_graph_exists(&store, &target)?;
+                assert_that_graph_exists(store, &target)?;
             }
             Response::builder()
                 .body(Body::empty())
@@ -1370,7 +1373,7 @@ fn limited_body(request: &mut Request<Body>) -> Result<Vec<u8>, HttpError> {
 
 fn configure_and_evaluate_sparql_query(
     store: &Store,
-    evaluator: SparqlEvaluator,
+    evaluator: &SparqlEvaluator,
     mut args: RequestParams,
     query: Option<String>,
     request: &Request<Body>,
@@ -1407,7 +1410,7 @@ fn configure_and_evaluate_sparql_query(
 
 fn evaluate_sparql_query(
     store: &Store,
-    evaluator: SparqlEvaluator,
+    evaluator: &SparqlEvaluator,
     query: &str,
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
@@ -1416,6 +1419,7 @@ fn evaluate_sparql_query(
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
     let mut evaluator = evaluator
+        .clone()
         .with_base_iri(&base_url(request))
         .map_err(bad_request)?;
 
@@ -1774,10 +1778,15 @@ fn content_type(request: &Request<Body>) -> Option<String> {
     )
 }
 
+fn sparql_evaluator() -> SparqlEvaluator {
+    SparqlEvaluator::new()
+}
+
 fn service_description_response(
     request: &Request<Body>,
     kind: EndpointKind,
     union_default_graph: bool,
+    sparql_evaluator: &SparqlEvaluator,
 ) -> Result<Response<Body>, HttpError> {
     let format = rdf_content_negotiation(request)?;
     let description = generate_service_description(
@@ -1785,6 +1794,7 @@ fn service_description_response(
         kind,
         union_default_graph,
         request_original_target_url(request)?.to_string().into(),
+        sparql_evaluator,
     );
     Response::builder()
         .header(CONTENT_TYPE, format.media_type())
@@ -3491,8 +3501,8 @@ mod tests {
         fn exec(&self, request: Request<impl Into<Body>>) -> Response<Body> {
             handle_request(
                 &mut request.map(Into::into),
-                self.store.clone(),
-                SparqlEvaluator::new(),
+                &self.store,
+                &SparqlEvaluator::new(),
                 false,
                 false,
                 None,
@@ -3503,8 +3513,8 @@ mod tests {
         fn exec_read_only(&self, request: Request<impl Into<Body>>) -> Response<Body> {
             handle_request(
                 &mut request.map(Into::into),
-                self.store.clone(),
-                SparqlEvaluator::new(),
+                &self.store,
+                &SparqlEvaluator::new(),
                 true,
                 false,
                 None,
