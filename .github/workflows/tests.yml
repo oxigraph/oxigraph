@@ -507,7 +507,7 @@ jobs:
       - uses: taiki-e/install-action@3d7d7cd5ac7f994c1892ae0c06165095b9139094 # v2.85.1
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
-      - uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4.18.5
+      - uses: CodSpeedHQ/action@0ca9cbbf4623b599a6c3ed4fc8a922942705d9f1 # v5.0.2
         with:
           run: cargo codspeed run
           mode: simulation
@@ -526,7 +526,7 @@ jobs:
       - uses: taiki-e/install-action@3d7d7cd5ac7f994c1892ae0c06165095b9139094 # v2.85.1
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph-testsuite
-      - uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4.18.5
+      - uses: CodSpeedHQ/action@0ca9cbbf4623b599a6c3ed4fc8a922942705d9f1 # v5.0.2
         with:
           run: cargo codspeed run
           mode: simulation
