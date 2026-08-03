@@ -1,9 +1,8 @@
 use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::{BlankNode, NamedNode, OxString, Triple};
+use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::sparql::results::QueryResultsFormat;
-#[cfg(feature = "geosparql")]
-use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 
 mod sd {
     use oxigraph::model::NamedNode;
@@ -16,7 +15,9 @@ mod sd {
     );
     pub const ENDPOINT: NamedNode =
         NamedNode::new_const_unchecked("http://www.w3.org/ns/sparql-service-description#endpoint");
-    #[cfg(feature = "geosparql")]
+    pub const EXTENSION_AGGREGATE: NamedNode = NamedNode::new_const_unchecked(
+        "http://www.w3.org/ns/sparql-service-description#extensionAggregate",
+    );
     pub const EXTENSION_FUNCTION: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/ns/sparql-service-description#extensionFunction",
     );
@@ -65,14 +66,19 @@ pub fn generate_service_description(
     kind: EndpointKind,
     union_default_graph: bool,
     endpoint_base_url: OxString,
+    evaluator: &SparqlEvaluator,
 ) -> Vec<u8> {
     let mut serializer = RdfSerializer::from_format(format)
         .with_prefix("sd", "http://www.w3.org/ns/sparql-service-description#")
         .unwrap()
         .for_writer(Vec::new());
-    for t in
-        generate_service_description_graph(format, kind, union_default_graph, endpoint_base_url)
-    {
+    for t in generate_service_description_graph(
+        format,
+        kind,
+        union_default_graph,
+        endpoint_base_url,
+        evaluator,
+    ) {
         serializer.serialize_triple(&t).unwrap();
     }
     serializer.finish().unwrap()
@@ -83,6 +89,7 @@ fn generate_service_description_graph(
     kind: EndpointKind,
     union_default_graph: bool,
     endpoint_base_url: OxString,
+    evaluator: &SparqlEvaluator,
 ) -> Vec<Triple> {
     let mut graph = Vec::new();
     let root = BlankNode::default();
@@ -177,12 +184,18 @@ fn generate_service_description_graph(
         sd::DEFAULT_ENTAILMENT_REGIME,
         NamedNode::new_const_unchecked("http://www.w3.org/ns/entailment/Simple"),
     ));
-    #[cfg(feature = "geosparql")]
-    for (function_name, _) in GEOSPARQL_EXTENSION_FUNCTIONS {
+    for function_name in evaluator.custom_functions() {
         graph.push(Triple::new(
             root.clone(),
             sd::EXTENSION_FUNCTION,
-            function_name,
+            function_name.clone(),
+        ));
+    }
+    for function_name in evaluator.custom_aggregate_functions() {
+        graph.push(Triple::new(
+            root.clone(),
+            sd::EXTENSION_AGGREGATE,
+            function_name.clone(),
         ));
     }
     graph

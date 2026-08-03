@@ -32,6 +32,8 @@ use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
 use spargebra::algebra::QueryDatasetSpecification as AlQueryDatasetSpecification;
 use spargebra::update::DeleteInsertOperation;
+#[cfg(feature = "geosparql")]
+use spargeo::GEOSPARQL_EXTENSION_FUNCTIONS;
 use sparopt::Optimizer;
 use sparopt::algebra::QueryExpression;
 use std::collections::HashMap;
@@ -77,32 +79,27 @@ pub struct QueryEvaluator {
 
 impl Default for QueryEvaluator {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl QueryEvaluator {
+    #[must_use]
+    pub fn new() -> Self {
+        #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
+        let mut custom_functions = CustomFunctionRegistry::default();
+        #[cfg(feature = "geosparql")]
+        for (name, implementation) in GEOSPARQL_EXTENSION_FUNCTIONS {
+            custom_functions.insert(name, Arc::new(implementation));
+        }
         Self {
             service_handler: ServiceHandlerRegistry::default(),
-            custom_functions: default_custom_functions(),
+            custom_functions,
             custom_aggregate_functions: CustomAggregateFunctionRegistry::default(),
             without_optimizations: false,
             run_stats: false,
             cancellation_token: None,
         }
-    }
-}
-
-fn default_custom_functions() -> CustomFunctionRegistry {
-    #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
-    let mut registry = CustomFunctionRegistry::default();
-    #[cfg(feature = "geosparql")]
-    for (name, implementation) in spargeo::GEOSPARQL_EXTENSION_FUNCTIONS {
-        registry.insert(name, Arc::new(implementation));
-    }
-    registry
-}
-
-impl QueryEvaluator {
-    #[must_use]
-    #[inline]
-    pub fn new() -> Self {
-        Self::default()
     }
 
     /// Prepare the SPARQL query to be executed.
@@ -186,6 +183,28 @@ impl QueryEvaluator {
         self
     }
 
+    /// Returns the list of custom functions currently registered in the evaluator.
+    ///
+    /// ```
+    /// use oxrdf::{Literal, NamedNode};
+    /// use spareval::QueryEvaluator;
+    ///
+    /// let evaluator = QueryEvaluator::new().with_custom_function(
+    ///     NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
+    ///     |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    /// );
+    /// assert!(
+    ///     evaluator
+    ///         .custom_functions()
+    ///         .collect::<Vec<_>>()
+    ///         .contains(&&NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?)
+    /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn custom_functions(&self) -> impl Iterator<Item = &NamedNode> {
+        self.custom_functions.keys()
+    }
+
     /// Adds a custom SPARQL evaluation aggregate function.
     ///
     /// Note that it must also be given to the SPARQL parser using [`SparqlParser::with_custom_aggregate_function`](spargebra::SparqlParser::with_custom_aggregate_function).
@@ -252,6 +271,11 @@ impl QueryEvaluator {
         self.custom_aggregate_functions
             .insert(name, Arc::new(evaluator));
         self
+    }
+
+    /// Returns the list of custom aggregate functions currently registered in the evaluator.
+    pub fn custom_aggregate_functions(&self) -> impl Iterator<Item = &NamedNode> {
+        self.custom_aggregate_functions.keys()
     }
 
     /// Disables query optimizations and runs the query as it is.
