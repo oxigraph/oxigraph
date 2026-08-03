@@ -546,6 +546,8 @@ pub struct PreparedQuery<'a> {
 impl PreparedQuery<'_> {
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
+    /// The variable must be part of the `SELECT` clause to be substituted.
+    ///
     /// Usage example:
     /// ```
     /// use oxrdf::{Dataset, Literal, Variable};

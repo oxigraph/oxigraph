@@ -522,6 +522,8 @@ pub struct PreparedSparqlQuery {
 impl PreparedSparqlQuery {
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
+    /// The variable must be part of the `SELECT` clause to be substituted.
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::{Literal, Variable};
@@ -631,6 +633,8 @@ pub struct BoundPreparedSparqlQuery<'a, D: QueryableDataset<'a> = DatasetView<'a
 
 impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
     /// Substitute a variable with a given RDF term in the SPARQL query.
+    ///
+    /// The variable must be part of the `SELECT` clause to be substituted.
     ///
     /// Usage example:
     /// ```
