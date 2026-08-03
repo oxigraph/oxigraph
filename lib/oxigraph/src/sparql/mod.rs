@@ -531,15 +531,15 @@ impl PreparedSparqlQuery {
     /// use oxigraph::store::Store;
     ///
     /// let prepared_query = SparqlEvaluator::new()
-    ///     .parse_query("SELECT ?v WHERE {}")?
+    ///     .parse_query("SELECT ?x ?v WHERE { BIND(?v+1 AS ?x) }")?
     ///     .substitute_variable(Variable::new("v")?, Literal::from(1));
     ///
     /// if let QueryResults::Solutions(mut solutions) =
     ///     prepared_query.on_store(&Store::new()?).execute()?
     /// {
     ///     assert_eq!(
-    ///         solutions.next().unwrap()?.get("v"),
-    ///         Some(&Literal::from(1).into())
+    ///         solutions.next().unwrap()?.get("x"),
+    ///         Some(&Literal::from(2).into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -643,14 +643,14 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
     /// use oxigraph::store::Store;
     ///
     /// let prepared_query = SparqlEvaluator::new()
-    ///     .parse_query("SELECT ?v WHERE {}")?
+    ///     .parse_query("SELECT ?x ?v WHERE { BIND(?v+1 AS ?x)}")?
     ///     .on_store(&Store::new()?)
     ///     .substitute_variable(Variable::new("v")?, Literal::from(1));
     ///
     /// if let QueryResults::Solutions(mut solutions) = prepared_query.execute()? {
     ///     assert_eq!(
-    ///         solutions.next().unwrap()?.get("v"),
-    ///         Some(&Literal::from(1).into())
+    ///         solutions.next().unwrap()?.get("x"),
+    ///         Some(&Literal::from(2).into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
