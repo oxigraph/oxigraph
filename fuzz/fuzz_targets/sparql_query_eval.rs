@@ -13,7 +13,7 @@ use oxiri::Iri;
 use oxrdf::{GraphName, OxString};
 use spareval::QueryEvaluator;
 use spargebra::SparqlParser;
-use spargebra::algebra::{GraphPattern, QueryDataset};
+use spargebra::algebra::{QueryDataset, QueryExpression};
 use spargebra::query::SelectQuery;
 use std::sync::OnceLock;
 
@@ -125,7 +125,7 @@ impl DefaultServiceHandler for StoreServiceHandler {
     fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        pattern: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if !self
@@ -143,7 +143,7 @@ impl DefaultServiceHandler for StoreServiceHandler {
                         default: vec![service_name.clone()],
                         named: None,
                     }),
-                    pattern: pattern.clone(),
+                    expression: pattern.clone(),
                     base_iri: base_iri.cloned(),
                 }
                 .into(),
@@ -168,7 +168,7 @@ impl DefaultServiceHandler for DatasetServiceHandler {
     fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        pattern: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if self
@@ -207,7 +207,7 @@ impl DefaultServiceHandler for DatasetServiceHandler {
             .prepare(
                 &SelectQuery {
                     dataset: None,
-                    pattern: pattern.clone(),
+                    expression: pattern.clone(),
                     base_iri: base_iri.cloned(),
                 }
                 .into(),

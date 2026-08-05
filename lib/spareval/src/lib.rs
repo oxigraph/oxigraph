@@ -33,7 +33,7 @@ use spargebra::Query;
 use spargebra::algebra::QueryDataset;
 use spargebra::update::DeleteInsertOperation;
 use sparopt::Optimizer;
-use sparopt::algebra::GraphPattern;
+use sparopt::algebra::QueryExpression;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -339,7 +339,7 @@ impl QueryEvaluator {
 
             fn build_exists(
                 &mut self,
-                _: &GraphPattern,
+                _: &QueryExpression,
             ) -> Result<impl Fn(&HashMap<&'a Variable, Term>) -> bool + 'a, QueryEvaluationError>
             {
                 Err::<fn(&HashMap<&'a Variable, Term>) -> bool, _>(
@@ -605,9 +605,9 @@ impl PreparedQuery<'_> {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match self.query {
             Query::Select(query) => {
-                let mut pattern = GraphPattern::from(&query.pattern);
+                let mut pattern = QueryExpression::from(&query.expression);
                 if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_graph_pattern(pattern);
+                    pattern = Optimizer::optimize_query_expression(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
@@ -625,9 +625,9 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Ask(query) => {
-                let mut pattern = GraphPattern::from(&query.pattern);
+                let mut pattern = QueryExpression::from(&query.expression);
                 if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_graph_pattern(pattern);
+                    pattern = Optimizer::optimize_query_expression(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
@@ -645,9 +645,9 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Construct(query) => {
-                let mut pattern = GraphPattern::from(&query.pattern);
+                let mut pattern = QueryExpression::from(&query.expression);
                 if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_graph_pattern(pattern);
+                    pattern = Optimizer::optimize_query_expression(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
@@ -667,9 +667,9 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Describe(query) => {
-                let mut pattern = GraphPattern::from(&query.pattern);
+                let mut pattern = QueryExpression::from(&query.pattern);
                 if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_graph_pattern(pattern);
+                    pattern = Optimizer::optimize_query_expression(pattern);
                 }
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
@@ -769,9 +769,9 @@ impl<'a> PreparedDeleteInsertUpdate<'a> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<DeleteInsertIter<'b, 'a>, QueryEvaluationError> {
-        let mut pattern = GraphPattern::from(&*self.operation.pattern);
+        let mut pattern = QueryExpression::from(&*self.operation.pattern);
         if !self.evaluator.without_optimizations {
-            pattern = Optimizer::optimize_graph_pattern(pattern);
+            pattern = Optimizer::optimize_query_expression(pattern);
         }
         let (solutions, _) = self
             .evaluator
@@ -998,7 +998,7 @@ mod tests {
     use oxrdf::vocab::xsd;
     use oxrdf::{Literal, Term};
     use spargebra::vocab::sparql;
-    use sparopt::algebra::{Expression, GraphPattern};
+    use sparopt::algebra::{Expression, QueryExpression};
 
     #[test]
     fn evaluate_expression_literal_and_arithmetic() {
@@ -1077,7 +1077,7 @@ mod tests {
         let evaluator = QueryEvaluator::new();
 
         // EXISTS {} (empty) -> false
-        let exists_empty = Expression::exists(GraphPattern::empty());
+        let exists_empty = Expression::exists(QueryExpression::empty());
         assert_eq!(
             evaluator
                 .evaluate_effective_boolean_value_expression(&exists_empty, std::iter::empty()),
@@ -1085,7 +1085,7 @@ mod tests {
         );
 
         // EXISTS { VALUES () {} } (empty singleton) -> true
-        let exists_unit = Expression::exists(GraphPattern::empty_singleton());
+        let exists_unit = Expression::exists(QueryExpression::empty_singleton());
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&exists_unit, std::iter::empty()),
             Some(true)

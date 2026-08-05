@@ -1,7 +1,7 @@
 use crate::{QueryEvaluationError, QuerySolutionIter};
 use oxiri::Iri;
 use oxrdf::{NamedNode, OxString};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::QueryExpression;
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ use std::sync::Arc;
 /// use sparesults::QuerySolution;
 /// use spareval::{QueryEvaluator, QueryResults, QuerySolutionIter, ServiceHandler};
 /// use spargebra::SparqlParser;
-/// use spargebra::algebra::GraphPattern;
+/// use spargebra::algebra::QueryExpression;
 /// use std::convert::Infallible;
 /// use std::iter::once;
 /// use std::sync::Arc;
@@ -31,7 +31,7 @@ use std::sync::Arc;
 ///
 ///     fn handle(
 ///         &self,
-///         _pattern: &GraphPattern,
+///         _expression: &QueryExpression,
 ///         _base_iri: Option<&Iri<OxString>>,
 ///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding foo -> 1
@@ -69,7 +69,7 @@ pub trait ServiceHandler: Send + Sync {
     /// Evaluates a [`Query`](spargebra::Query) against the service.
     fn handle(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
@@ -87,7 +87,7 @@ pub trait ServiceHandler: Send + Sync {
 /// use sparesults::QuerySolution;
 /// use spareval::{DefaultServiceHandler, QueryEvaluator, QueryResults, QuerySolutionIter};
 /// use spargebra::SparqlParser;
-/// use spargebra::algebra::GraphPattern;
+/// use spargebra::algebra::QueryExpression;
 /// use std::convert::Infallible;
 /// use std::iter::once;
 /// use std::sync::Arc;
@@ -100,7 +100,7 @@ pub trait ServiceHandler: Send + Sync {
 ///     fn handle(
 ///         &self,
 ///         service_name: &NamedNode,
-///         _pattern: &GraphPattern,
+///         _expression: &QueryExpression,
 ///         _base_iri: Option<&Iri<OxString>>,
 ///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding name -> name of service
@@ -132,11 +132,11 @@ pub trait DefaultServiceHandler: Send + Sync {
     /// The service evaluation error.
     type Error: Error + Send + Sync + 'static;
 
-    /// Evaluates a [`GraphPattern`] against a given service identified by a [`NamedNode`].
+    /// Evaluates a [`QueryExpression`] against a given service identified by a [`NamedNode`].
     fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
@@ -172,14 +172,14 @@ impl ServiceHandlerRegistry {
     pub fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if let Some(handler) = self.handlers.get(service_name) {
-            return handler.handle(pattern, base_iri);
+            return handler.handle(expression, base_iri);
         }
         if let Some(default) = &self.default {
-            return default.handle(service_name, pattern, base_iri);
+            return default.handle(service_name, expression, base_iri);
         }
         Err(QueryEvaluationError::UnsupportedService(
             service_name.clone(),
@@ -194,10 +194,12 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
 
     fn handle(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
-        self.0.handle(pattern, base_iri).map_err(wrap_service_error)
+        self.0
+            .handle(expression, base_iri)
+            .map_err(wrap_service_error)
     }
 }
 
@@ -207,11 +209,11 @@ impl<S: DefaultServiceHandler> DefaultServiceHandler for ErrorConversionServiceH
     fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         self.0
-            .handle(service_name, pattern, base_iri)
+            .handle(service_name, expression, base_iri)
             .map_err(wrap_service_error)
     }
 }
