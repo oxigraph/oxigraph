@@ -4,7 +4,7 @@ use oxhttp::model::{Body, Method, Request};
 use oxiri::Iri;
 use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::QueryExpression;
 use spargebra::query::SelectQuery;
 use std::io::{Error, ErrorKind, Read, Result};
 use std::sync::Arc;
@@ -108,7 +108,7 @@ impl DefaultServiceHandler for HttpServiceHandler {
     fn handle(
         &self,
         service_name: &NamedNode,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         base_iri: Option<&Iri<OxString>>,
     ) -> std::result::Result<QuerySolutionIter<'static>, Self::Error> {
         let (content_type, body) = self
@@ -117,7 +117,7 @@ impl DefaultServiceHandler for HttpServiceHandler {
                 service_name.as_str(),
                 SelectQuery {
                     dataset: None,
-                    pattern: pattern.clone(),
+                    expression: expression.clone(),
                     base_iri: base_iri.cloned(),
                 }
                 .to_string()

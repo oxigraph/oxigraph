@@ -1,6 +1,8 @@
-use crate::algebra::{Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm};
+use crate::algebra::{
+    Expression, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm, QueryExpression,
+};
 use crate::type_inference::{
-    VariableType, VariableTypes, infer_expression_type, infer_graph_pattern_types,
+    VariableType, VariableTypes, infer_expression_type, infer_query_expression_types,
 };
 use oxrdf::Variable;
 use oxrdf::vocab::rdf;
@@ -12,50 +14,53 @@ use std::cmp::{max, min};
 pub struct Optimizer;
 
 impl Optimizer {
-    pub fn optimize_graph_pattern(pattern: GraphPattern) -> GraphPattern {
+    pub fn optimize_query_expression(query_expression: QueryExpression) -> QueryExpression {
         let input_types = VariableTypes::default();
-        let pattern = Self::normalize_pattern(pattern, &input_types);
-        let pattern = Self::push_graph(pattern, None, &input_types);
-        let pattern = Self::reorder_joins(pattern, &input_types);
-        Self::push_filters(pattern, Vec::new(), &input_types)
+        let query_expression = Self::normalize_pattern(query_expression, &input_types);
+        let query_expression = Self::push_graph(query_expression, None, &input_types);
+        let query_expression = Self::reorder_joins(query_expression, &input_types);
+        Self::push_filters(query_expression, Vec::new(), &input_types)
     }
 
     /// Normalize the pattern, discarding any join ordering information
-    fn normalize_pattern(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
-        match pattern {
-            GraphPattern::QuadPattern {
+    fn normalize_pattern(
+        query_expression: QueryExpression,
+        input_types: &VariableTypes,
+    ) -> QueryExpression {
+        match query_expression {
+            QueryExpression::QuadPattern {
                 subject,
                 predicate,
                 object,
                 graph_name,
-            } => GraphPattern::QuadPattern {
+            } => QueryExpression::QuadPattern {
                 subject,
                 predicate,
                 object,
                 graph_name,
             },
-            GraphPattern::Path {
+            QueryExpression::Path {
                 subject,
                 path,
                 object,
-            } => GraphPattern::Path {
+            } => QueryExpression::Path {
                 subject,
                 path,
                 object,
             },
-            GraphPattern::Graph { graph_name, inner } => {
-                GraphPattern::graph(Self::normalize_pattern(*inner, input_types), graph_name)
+            QueryExpression::Graph { graph_name, inner } => {
+                QueryExpression::graph(Self::normalize_pattern(*inner, input_types), graph_name)
             }
-            GraphPattern::Join {
+            QueryExpression::Join {
                 left,
                 right,
                 algorithm,
-            } => GraphPattern::join(
+            } => QueryExpression::join(
                 Self::normalize_pattern(*left, input_types),
                 Self::normalize_pattern(*right, input_types),
                 algorithm,
             ),
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
@@ -63,9 +68,10 @@ impl Optimizer {
             } => {
                 let left = Self::normalize_pattern(*left, input_types);
                 let right = Self::normalize_pattern(*right, input_types);
-                let mut inner_types = infer_graph_pattern_types(&left, input_types.clone());
-                inner_types.intersect_with(infer_graph_pattern_types(&right, input_types.clone()));
-                GraphPattern::left_join(
+                let mut inner_types = infer_query_expression_types(&left, input_types.clone());
+                inner_types
+                    .intersect_with(infer_query_expression_types(&right, input_types.clone()));
+                QueryExpression::left_join(
                     left,
                     right,
                     Self::normalize_expression(expression, &inner_types),
@@ -73,89 +79,91 @@ impl Optimizer {
                 )
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
+            QueryExpression::Lateral { left, right } => {
                 let left = Self::normalize_pattern(*left, input_types);
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+                let left_types = infer_query_expression_types(&left, input_types.clone());
                 let right = Self::normalize_pattern(*right, &left_types);
-                GraphPattern::lateral(left, right)
+                QueryExpression::lateral(left, right)
             }
-            GraphPattern::Filter { inner, expression } => {
+            QueryExpression::Filter { inner, expression } => {
                 let inner = Self::normalize_pattern(*inner, input_types);
-                let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
+                let inner_types = infer_query_expression_types(&inner, input_types.clone());
                 let expression = Self::normalize_expression(expression, &inner_types);
                 let expression_type = infer_expression_type(&expression, &inner_types);
                 if expression_type == VariableType::UNDEF {
-                    GraphPattern::empty()
+                    QueryExpression::empty()
                 } else {
-                    GraphPattern::filter(inner, expression)
+                    QueryExpression::filter(inner, expression)
                 }
             }
-            GraphPattern::Union { inner } => GraphPattern::union_all(
+            QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
                     .map(|e| Self::normalize_pattern(e, input_types)),
             ),
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 variable,
                 expression,
             } => {
                 let inner = Self::normalize_pattern(*inner, input_types);
-                let inner_types = infer_graph_pattern_types(&inner, input_types.clone());
+                let inner_types = infer_query_expression_types(&inner, input_types.clone());
                 let expression = Self::normalize_expression(expression, &inner_types);
                 let expression_type = infer_expression_type(&expression, &inner_types);
                 if expression_type == VariableType::UNDEF {
                     // TODO: valid?
                     inner
                 } else {
-                    GraphPattern::extend(inner, variable, expression)
+                    QueryExpression::extend(inner, variable, expression)
                 }
             }
-            GraphPattern::Minus {
+            QueryExpression::Minus {
                 left,
                 right,
                 algorithm,
-            } => GraphPattern::minus(
+            } => QueryExpression::minus(
                 Self::normalize_pattern(*left, input_types),
                 Self::normalize_pattern(*right, input_types),
                 algorithm,
             ),
-            GraphPattern::Values {
+            QueryExpression::Values {
                 variables,
                 bindings,
-            } => GraphPattern::values(variables, bindings),
-            GraphPattern::OrderBy { inner, expression } => {
-                GraphPattern::order_by(Self::normalize_pattern(*inner, input_types), expression)
+            } => QueryExpression::values(variables, bindings),
+            QueryExpression::OrderBy { inner, expression } => {
+                QueryExpression::order_by(Self::normalize_pattern(*inner, input_types), expression)
             }
-            GraphPattern::Project { inner, variables } => {
-                GraphPattern::project(Self::normalize_pattern(*inner, input_types), variables)
+            QueryExpression::Project { inner, variables } => {
+                QueryExpression::project(Self::normalize_pattern(*inner, input_types), variables)
             }
-            GraphPattern::Distinct { inner } => {
-                GraphPattern::distinct(Self::normalize_pattern(*inner, input_types))
+            QueryExpression::Distinct { inner } => {
+                QueryExpression::distinct(Self::normalize_pattern(*inner, input_types))
             }
-            GraphPattern::Reduced { inner } => {
-                GraphPattern::reduced(Self::normalize_pattern(*inner, input_types))
+            QueryExpression::Reduced { inner } => {
+                QueryExpression::reduced(Self::normalize_pattern(*inner, input_types))
             }
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
-            } => GraphPattern::slice(Self::normalize_pattern(*inner, input_types), offset, limit),
-            GraphPattern::Group {
+            } => {
+                QueryExpression::slice(Self::normalize_pattern(*inner, input_types), offset, limit)
+            }
+            QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
             } => {
                 // TODO: min, max and sample don't care about DISTINCT
-                GraphPattern::group(
+                QueryExpression::group(
                     Self::normalize_pattern(*inner, input_types),
                     variables,
                     aggregates,
                 )
             }
-            GraphPattern::Service { .. } => {
+            QueryExpression::Service { .. } => {
                 // We leave this problem to the remote SPARQL endpoint
-                pattern
+                query_expression
             }
         }
     }
@@ -260,23 +268,23 @@ impl Optimizer {
     }
 
     fn push_filters(
-        pattern: GraphPattern,
+        query_expression: QueryExpression,
         mut filters: Vec<Expression>,
         input_types: &VariableTypes,
-    ) -> GraphPattern {
-        match pattern {
-            GraphPattern::QuadPattern { .. }
-            | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. } => {
-                GraphPattern::filter(pattern, Expression::and_all(filters))
+    ) -> QueryExpression {
+        match query_expression {
+            QueryExpression::QuadPattern { .. }
+            | QueryExpression::Path { .. }
+            | QueryExpression::Values { .. } => {
+                QueryExpression::filter(query_expression, Expression::and_all(filters))
             }
-            GraphPattern::Join {
+            QueryExpression::Join {
                 left,
                 right,
                 algorithm,
             } => {
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
+                let left_types = infer_query_expression_types(&left, input_types.clone());
+                let right_types = infer_query_expression_types(&right, input_types.clone());
                 let mut left_filters = Vec::new();
                 let mut right_filters = Vec::new();
                 let mut final_filters = Vec::new();
@@ -296,8 +304,8 @@ impl Optimizer {
                         final_filters.push(filter);
                     }
                 }
-                GraphPattern::filter(
-                    GraphPattern::join(
+                QueryExpression::filter(
+                    QueryExpression::join(
                         Self::push_filters(*left, left_filters, input_types),
                         Self::push_filters(*right, right_filters, input_types),
                         algorithm,
@@ -306,8 +314,8 @@ impl Optimizer {
                 )
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+            QueryExpression::Lateral { left, right } => {
+                let left_types = infer_query_expression_types(&left, input_types.clone());
                 let mut left_filters = Vec::new();
                 let mut right_filters = Vec::new();
                 for filter in filters {
@@ -320,25 +328,28 @@ impl Optimizer {
                 }
                 let left = Self::push_filters(*left, left_filters, input_types);
                 let right = Self::push_filters(*right, right_filters, &left_types);
-                if let GraphPattern::Filter {
+                if let QueryExpression::Filter {
                     inner: inner_right,
                     expression,
                 } = right
                 {
                     // We prefer to have filter out of the lateral rather than inside the right part
-                    GraphPattern::filter(GraphPattern::lateral(left, *inner_right), expression)
+                    QueryExpression::filter(
+                        QueryExpression::lateral(left, *inner_right),
+                        expression,
+                    )
                 } else {
-                    GraphPattern::lateral(left, right)
+                    QueryExpression::lateral(left, right)
                 }
             }
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
                 algorithm,
             } => {
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
+                let left_types = infer_query_expression_types(&left, input_types.clone());
+                let right_types = infer_query_expression_types(&right, input_types.clone());
                 let mut left_filters = Vec::new();
                 let mut right_filters = Vec::new();
                 let mut final_filters = Vec::new();
@@ -359,8 +370,8 @@ impl Optimizer {
                 } else {
                     expression
                 };
-                GraphPattern::filter(
-                    GraphPattern::left_join(
+                QueryExpression::filter(
+                    QueryExpression::left_join(
                         Self::push_filters(*left, left_filters, input_types),
                         Self::push_filters(*right, right_filters, input_types),
                         expression,
@@ -369,16 +380,16 @@ impl Optimizer {
                     Expression::and_all(final_filters),
                 )
             }
-            GraphPattern::Minus {
+            QueryExpression::Minus {
                 left,
                 right,
                 algorithm,
-            } => GraphPattern::minus(
+            } => QueryExpression::minus(
                 Self::push_filters(*left, filters, input_types),
                 Self::push_filters(*right, Vec::new(), input_types),
                 algorithm,
             ),
-            GraphPattern::Graph { inner, graph_name } => {
+            QueryExpression::Graph { inner, graph_name } => {
                 let mut filter_to_push = Vec::with_capacity(filters.len());
                 let mut filters_to_write = Vec::with_capacity(filters.len());
                 for filter in filters {
@@ -395,16 +406,17 @@ impl Optimizer {
                         filters_to_write.push(filter);
                     }
                 }
-                let mut pattern = GraphPattern::graph(
+                let mut pattern = QueryExpression::graph(
                     Self::push_filters(*inner, filter_to_push, input_types),
                     graph_name,
                 );
                 if !filters_to_write.is_empty() {
-                    pattern = GraphPattern::filter(pattern, Expression::and_all(filters_to_write));
+                    pattern =
+                        QueryExpression::filter(pattern, Expression::and_all(filters_to_write));
                 }
                 pattern
             }
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 expression,
                 variable,
@@ -421,8 +433,8 @@ impl Optimizer {
                         inner_filters.push(filter);
                     }
                 }
-                GraphPattern::filter(
-                    GraphPattern::extend(
+                QueryExpression::filter(
+                    QueryExpression::extend(
                         Self::push_filters(*inner, inner_filters, input_types),
                         variable,
                         expression,
@@ -430,7 +442,7 @@ impl Optimizer {
                     Expression::and_all(final_filters),
                 )
             }
-            GraphPattern::Filter { inner, expression } => {
+            QueryExpression::Filter { inner, expression } => {
                 if let Expression::And(expressions) = expression {
                     filters.extend(expressions)
                 } else {
@@ -438,46 +450,48 @@ impl Optimizer {
                 }
                 Self::push_filters(*inner, filters, input_types)
             }
-            GraphPattern::Union { inner } => GraphPattern::union_all(
+            QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
                     .map(|c| Self::push_filters(c, filters.clone(), input_types)),
             ),
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
-            } => GraphPattern::filter(
-                GraphPattern::slice(
+            } => QueryExpression::filter(
+                QueryExpression::slice(
                     Self::push_filters(*inner, Vec::new(), input_types),
                     offset,
                     limit,
                 ),
                 Expression::and_all(filters),
             ),
-            GraphPattern::Distinct { inner } => {
-                GraphPattern::distinct(Self::push_filters(*inner, filters, input_types))
+            QueryExpression::Distinct { inner } => {
+                QueryExpression::distinct(Self::push_filters(*inner, filters, input_types))
             }
-            GraphPattern::Reduced { inner } => {
-                GraphPattern::reduced(Self::push_filters(*inner, filters, input_types))
+            QueryExpression::Reduced { inner } => {
+                QueryExpression::reduced(Self::push_filters(*inner, filters, input_types))
             }
-            GraphPattern::Project { inner, variables } => {
-                GraphPattern::project(Self::push_filters(*inner, filters, input_types), variables)
-            }
-            GraphPattern::OrderBy { inner, expression } => {
-                GraphPattern::order_by(Self::push_filters(*inner, filters, input_types), expression)
-            }
-            GraphPattern::Service { .. } => {
+            QueryExpression::Project { inner, variables } => QueryExpression::project(
+                Self::push_filters(*inner, filters, input_types),
+                variables,
+            ),
+            QueryExpression::OrderBy { inner, expression } => QueryExpression::order_by(
+                Self::push_filters(*inner, filters, input_types),
+                expression,
+            ),
+            QueryExpression::Service { .. } => {
                 // TODO: we can be smart and push some filters
                 // But we need to check the behavior of SILENT that can transform no results into a singleton
-                GraphPattern::filter(pattern, Expression::and_all(filters))
+                QueryExpression::filter(query_expression, Expression::and_all(filters))
             }
-            GraphPattern::Group {
+            QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
-            } => GraphPattern::filter(
-                GraphPattern::group(
+            } => QueryExpression::filter(
+                QueryExpression::group(
                     Self::push_filters(*inner, Vec::new(), input_types),
                     variables,
                     aggregates,
@@ -488,12 +502,12 @@ impl Optimizer {
     }
 
     fn push_graph(
-        pattern: GraphPattern,
+        query_expression: QueryExpression,
         current_graph: Option<NamedNodePattern>,
         input_types: &VariableTypes,
-    ) -> GraphPattern {
-        match pattern {
-            GraphPattern::QuadPattern {
+    ) -> QueryExpression {
+        match query_expression {
+            QueryExpression::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -502,23 +516,23 @@ impl Optimizer {
                 if graph_name.is_some() {
                     unreachable!("Already set quad pattern graph name")
                 }
-                GraphPattern::QuadPattern {
+                QueryExpression::QuadPattern {
                     subject,
                     predicate,
                     object,
                     graph_name: current_graph,
                 }
             }
-            GraphPattern::Path { .. } | GraphPattern::Values { .. } => {
-                wrap_in_possible_graph(pattern, current_graph)
+            QueryExpression::Path { .. } | QueryExpression::Values { .. } => {
+                wrap_in_possible_graph(query_expression, current_graph)
             }
-            GraphPattern::Graph { graph_name, inner } => {
+            QueryExpression::Graph { graph_name, inner } => {
                 if let Some(current_graph) = current_graph {
                     if current_graph == graph_name {
                         // Same graph name, no need to keep the outer one
                         Self::push_graph(*inner, Some(graph_name), input_types)
                     } else {
-                        GraphPattern::graph(
+                        QueryExpression::graph(
                             Self::push_graph(*inner, Some(graph_name), input_types),
                             current_graph,
                         )
@@ -527,32 +541,32 @@ impl Optimizer {
                     Self::push_graph(*inner, Some(graph_name), input_types)
                 }
             }
-            GraphPattern::Join {
+            QueryExpression::Join {
                 left,
                 right,
                 algorithm,
             } => {
-                if matches!(*left, GraphPattern::Values { .. }) {
-                    GraphPattern::join(
+                if matches!(*left, QueryExpression::Values { .. }) {
+                    QueryExpression::join(
                         *left,
                         Self::push_graph(*right, current_graph, input_types),
                         algorithm,
                     )
-                } else if matches!(*right, GraphPattern::Values { .. }) {
-                    GraphPattern::join(
+                } else if matches!(*right, QueryExpression::Values { .. }) {
+                    QueryExpression::join(
                         Self::push_graph(*left, current_graph, input_types),
                         *right,
                         algorithm,
                     )
                 } else {
-                    GraphPattern::join(
+                    QueryExpression::join(
                         Self::push_graph(*left, current_graph.clone(), input_types),
                         Self::push_graph(*right, current_graph, input_types),
                         algorithm,
                     )
                 }
             }
-            GraphPattern::Filter { inner, expression } => {
+            QueryExpression::Filter { inner, expression } => {
                 if !does_contain_exists(&expression)
                     && current_graph.as_ref().is_none_or(|pattern| {
                         if let NamedNodePattern::Variable(v) = pattern {
@@ -563,13 +577,13 @@ impl Optimizer {
                     })
                 {
                     // The graph variable is not used, we can push the GRAPH operator further
-                    GraphPattern::filter(
+                    QueryExpression::filter(
                         Self::push_graph(*inner, current_graph, input_types),
                         expression,
                     )
                 } else {
                     wrap_in_possible_graph(
-                        GraphPattern::filter(
+                        QueryExpression::filter(
                             Self::push_graph(*inner, None, input_types),
                             expression,
                         ),
@@ -577,12 +591,12 @@ impl Optimizer {
                     )
                 }
             }
-            GraphPattern::Union { inner } => GraphPattern::union_all(
+            QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
                     .map(|c| Self::push_graph(c, current_graph.clone(), input_types)),
             ),
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
@@ -592,7 +606,7 @@ impl Optimizer {
                     && current_graph.as_ref().is_none_or(|pattern| {
                         if let NamedNodePattern::Variable(v) = pattern {
                             !expression.used_variables().contains(v)
-                                && infer_graph_pattern_types(&right, input_types.clone()).get(v)
+                                && infer_query_expression_types(&right, input_types.clone()).get(v)
                                     == VariableType::UNDEF
                         } else {
                             true
@@ -600,7 +614,7 @@ impl Optimizer {
                     })
                 {
                     // Expression is safe and the graph variable is not used in right
-                    GraphPattern::left_join(
+                    QueryExpression::left_join(
                         Self::push_graph(*left, current_graph.clone(), input_types),
                         Self::push_graph(*right, current_graph, input_types),
                         expression,
@@ -608,7 +622,7 @@ impl Optimizer {
                     )
                 } else {
                     wrap_in_possible_graph(
-                        GraphPattern::left_join(
+                        QueryExpression::left_join(
                             Self::push_graph(*left, None, input_types),
                             Self::push_graph(*right, None, input_types),
                             expression,
@@ -619,14 +633,14 @@ impl Optimizer {
                 }
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => wrap_in_possible_graph(
-                GraphPattern::lateral(
+            QueryExpression::Lateral { left, right } => wrap_in_possible_graph(
+                QueryExpression::lateral(
                     Self::push_graph(*left, None, input_types),
                     Self::push_graph(*right, None, input_types),
                 ),
                 current_graph,
             ),
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 variable,
                 expression,
@@ -641,14 +655,14 @@ impl Optimizer {
                     })
                 {
                     // The graph variable is not used, we can push the GRAPH operator further
-                    GraphPattern::extend(
+                    QueryExpression::extend(
                         Self::push_graph(*inner, current_graph, input_types),
                         variable,
                         expression,
                     )
                 } else {
                     wrap_in_possible_graph(
-                        GraphPattern::extend(
+                        QueryExpression::extend(
                             Self::push_graph(*inner, None, input_types),
                             variable,
                             expression,
@@ -657,26 +671,26 @@ impl Optimizer {
                     )
                 }
             }
-            GraphPattern::Minus {
+            QueryExpression::Minus {
                 left,
                 right,
                 algorithm,
             } => {
-                let left_variables = infer_graph_pattern_types(&left, input_types.clone());
-                let right_variables = infer_graph_pattern_types(&right, input_types.clone());
+                let left_variables = infer_query_expression_types(&left, input_types.clone());
+                let right_variables = infer_query_expression_types(&right, input_types.clone());
                 if left_variables
                     .iter()
                     .any(|(v, t)| !t.undef && !right_variables.get(v).undef)
                 {
                     // We know we are not in the disjoint case, we can propagate
-                    GraphPattern::minus(
+                    QueryExpression::minus(
                         Self::push_graph(*left, current_graph.clone(), input_types),
                         Self::push_graph(*right, current_graph, input_types),
                         algorithm,
                     )
                 } else {
                     wrap_in_possible_graph(
-                        GraphPattern::minus(
+                        QueryExpression::minus(
                             Self::push_graph(*left, None, input_types),
                             Self::push_graph(*right, None, input_types),
                             algorithm,
@@ -685,62 +699,65 @@ impl Optimizer {
                     )
                 }
             }
-            GraphPattern::OrderBy { inner, expression } => wrap_in_possible_graph(
-                GraphPattern::order_by(Self::push_graph(*inner, None, input_types), expression),
+            QueryExpression::OrderBy { inner, expression } => wrap_in_possible_graph(
+                QueryExpression::order_by(Self::push_graph(*inner, None, input_types), expression),
                 current_graph,
             ),
-            GraphPattern::Project { inner, variables } => wrap_in_possible_graph(
-                GraphPattern::project(Self::push_graph(*inner, None, input_types), variables),
+            QueryExpression::Project { inner, variables } => wrap_in_possible_graph(
+                QueryExpression::project(Self::push_graph(*inner, None, input_types), variables),
                 current_graph,
             ),
-            GraphPattern::Distinct { inner } => {
-                GraphPattern::distinct(Self::push_graph(*inner, current_graph, input_types))
+            QueryExpression::Distinct { inner } => {
+                QueryExpression::distinct(Self::push_graph(*inner, current_graph, input_types))
             }
-            GraphPattern::Reduced { inner } => {
-                GraphPattern::distinct(Self::push_graph(*inner, current_graph, input_types))
+            QueryExpression::Reduced { inner } => {
+                QueryExpression::distinct(Self::push_graph(*inner, current_graph, input_types))
             }
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
             } => wrap_in_possible_graph(
-                GraphPattern::slice(Self::push_graph(*inner, None, input_types), offset, limit),
+                QueryExpression::slice(Self::push_graph(*inner, None, input_types), offset, limit),
                 current_graph,
             ),
-            GraphPattern::Group {
+            QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
             } => wrap_in_possible_graph(
-                GraphPattern::group(
+                QueryExpression::group(
                     Self::push_graph(*inner, None, input_types),
                     variables,
                     aggregates,
                 ),
                 current_graph,
             ),
-            GraphPattern::Service {
+            QueryExpression::Service {
                 name,
                 inner,
                 silent,
             } => wrap_in_possible_graph(
-                GraphPattern::service(Self::push_graph(*inner, None, input_types), name, silent),
+                QueryExpression::service(Self::push_graph(*inner, None, input_types), name, silent),
                 current_graph,
             ),
         }
     }
 
-    fn reorder_joins(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
-        match pattern {
-            GraphPattern::QuadPattern { .. }
-            | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. } => pattern,
-            GraphPattern::Join { left, right, .. } => {
+    fn reorder_joins(
+        query_expression: QueryExpression,
+        input_types: &VariableTypes,
+    ) -> QueryExpression {
+        match query_expression {
+            QueryExpression::QuadPattern { .. }
+            | QueryExpression::Path { .. }
+            | QueryExpression::Values { .. } => query_expression,
+            QueryExpression::Join { left, right, .. } => {
                 // We flatten the join operation
                 let mut to_reorder = Vec::new();
                 let mut todo = vec![*right, *left];
                 while let Some(e) = todo.pop() {
-                    if let GraphPattern::Join { left, right, .. } = e {
+                    if let QueryExpression::Join { left, right, .. } = e {
                         todo.push(*right);
                         todo.push(*left);
                     } else {
@@ -751,7 +768,7 @@ impl Optimizer {
                 // We do first type inference
                 let to_reorder_types = to_reorder
                     .iter()
-                    .map(|p| infer_graph_pattern_types(p, input_types.clone()))
+                    .map(|p| infer_query_expression_types(p, input_types.clone()))
                     .collect::<Vec<_>>();
 
                 // We do greedy join reordering
@@ -763,7 +780,7 @@ impl Optimizer {
                     .enumerate()
                     .filter(|(_, v)| **v)
                     .map(|(i, _)| i)
-                    .min_by_key(|i| estimate_graph_pattern_size(&to_reorder[*i], input_types))
+                    .min_by_key(|i| estimate_query_expression_size(&to_reorder[*i], input_types))
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
                     let mut output = to_reorder[next_entry_id].clone();
@@ -814,9 +831,9 @@ impl Optimizer {
                         {
                             output = if is_fit_for_for_loop_join(&next, input_types, &output_types)
                             {
-                                GraphPattern::lateral(output, next)
+                                QueryExpression::lateral(output, next)
                             } else {
-                                GraphPattern::join(
+                                QueryExpression::join(
                                     output,
                                     next,
                                     JoinAlgorithm::HashBuildLeftProbeRight {
@@ -831,7 +848,7 @@ impl Optimizer {
                         }
                         #[cfg(not(feature = "sep-0006"))]
                         {
-                            output = GraphPattern::join(
+                            output = QueryExpression::join(
                                 output,
                                 next,
                                 JoinAlgorithm::HashBuildLeftProbeRight {
@@ -851,20 +868,20 @@ impl Optimizer {
                     .into_iter()
                     .reduce(|left, right| {
                         let keys = join_key_variables(
-                            &infer_graph_pattern_types(&left, input_types.clone()),
-                            &infer_graph_pattern_types(&right, input_types.clone()),
+                            &infer_query_expression_types(&left, input_types.clone()),
+                            &infer_query_expression_types(&right, input_types.clone()),
                             input_types,
                         );
-                        if estimate_graph_pattern_size(&left, input_types)
-                            <= estimate_graph_pattern_size(&right, input_types)
+                        if estimate_query_expression_size(&left, input_types)
+                            <= estimate_query_expression_size(&right, input_types)
                         {
-                            GraphPattern::join(
+                            QueryExpression::join(
                                 left,
                                 right,
                                 JoinAlgorithm::HashBuildLeftProbeRight { keys },
                             )
                         } else {
-                            GraphPattern::join(
+                            QueryExpression::join(
                                 right,
                                 left,
                                 JoinAlgorithm::HashBuildLeftProbeRight { keys },
@@ -874,32 +891,32 @@ impl Optimizer {
                     .unwrap()
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                GraphPattern::lateral(
+            QueryExpression::Lateral { left, right } => {
+                let left_types = infer_query_expression_types(&left, input_types.clone());
+                QueryExpression::lateral(
                     Self::reorder_joins(*left, input_types),
                     Self::reorder_joins(*right, &left_types),
                 )
             }
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
                 ..
             } => {
                 let left = Self::reorder_joins(*left, input_types);
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+                let left_types = infer_query_expression_types(&left, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
                     let initial_right_types =
-                        infer_graph_pattern_types(&right, input_types.clone());
+                        infer_query_expression_types(&right, input_types.clone());
                     if has_common_variables(&left_types, &initial_right_types, input_types) {
-                        let lateral_cost = estimate_graph_pattern_size(&left, input_types)
-                            .saturating_mul(estimate_graph_pattern_size(&right, &left_types));
+                        let lateral_cost = estimate_query_expression_size(&left, input_types)
+                            .saturating_mul(estimate_query_expression_size(&right, &left_types));
                         let keys =
                             join_key_variables(&left_types, &initial_right_types, input_types);
-                        let join_cost = estimate_graph_pattern_size(&left, input_types)
-                            .saturating_mul(estimate_graph_pattern_size(&right, input_types))
+                        let join_cost = estimate_query_expression_size(&left, input_types)
+                            .saturating_mul(estimate_query_expression_size(&right, input_types))
                             .saturating_div(
                                 1_000_u64.saturating_pow(keys.len().try_into().unwrap()),
                             );
@@ -912,10 +929,10 @@ impl Optimizer {
                                 input_types,
                                 &left_types,
                             ) {
-                                return GraphPattern::lateral(
+                                return QueryExpression::lateral(
                                     left,
-                                    GraphPattern::left_join(
-                                        GraphPattern::empty_singleton(),
+                                    QueryExpression::left_join(
+                                        QueryExpression::empty_singleton(),
                                         right_for_lateral,
                                         expression,
                                         LeftJoinAlgorithm::HashBuildRightProbeLeft {
@@ -928,8 +945,8 @@ impl Optimizer {
                     }
                 }
                 let right = Self::reorder_joins(*right, input_types);
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
-                GraphPattern::left_join(
+                let right_types = infer_query_expression_types(&right, input_types.clone());
+                QueryExpression::left_join(
                     left,
                     right,
                     expression,
@@ -938,12 +955,12 @@ impl Optimizer {
                     },
                 )
             }
-            GraphPattern::Minus { left, right, .. } => {
+            QueryExpression::Minus { left, right, .. } => {
                 let left = Self::reorder_joins(*left, input_types);
-                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+                let left_types = infer_query_expression_types(&left, input_types.clone());
                 let right = Self::reorder_joins(*right, input_types);
-                let right_types = infer_graph_pattern_types(&right, input_types.clone());
-                GraphPattern::minus(
+                let right_types = infer_query_expression_types(&right, input_types.clone());
+                QueryExpression::minus(
                     left,
                     right,
                     MinusAlgorithm::HashBuildRightProbeLeft {
@@ -951,52 +968,52 @@ impl Optimizer {
                     },
                 )
             }
-            GraphPattern::Graph { graph_name, inner } => {
-                GraphPattern::graph(Self::reorder_joins(*inner, input_types), graph_name)
+            QueryExpression::Graph { graph_name, inner } => {
+                QueryExpression::graph(Self::reorder_joins(*inner, input_types), graph_name)
             }
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 expression,
                 variable,
-            } => GraphPattern::extend(
+            } => QueryExpression::extend(
                 Self::reorder_joins(*inner, input_types),
                 variable,
                 expression,
             ),
-            GraphPattern::Filter { inner, expression } => {
-                GraphPattern::filter(Self::reorder_joins(*inner, input_types), expression)
+            QueryExpression::Filter { inner, expression } => {
+                QueryExpression::filter(Self::reorder_joins(*inner, input_types), expression)
             }
-            GraphPattern::Union { inner } => GraphPattern::union_all(
+            QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
                     .map(|c| Self::reorder_joins(c, input_types)),
             ),
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
-            } => GraphPattern::slice(Self::reorder_joins(*inner, input_types), offset, limit),
-            GraphPattern::Distinct { inner } => {
-                GraphPattern::distinct(Self::reorder_joins(*inner, input_types))
+            } => QueryExpression::slice(Self::reorder_joins(*inner, input_types), offset, limit),
+            QueryExpression::Distinct { inner } => {
+                QueryExpression::distinct(Self::reorder_joins(*inner, input_types))
             }
-            GraphPattern::Reduced { inner } => {
-                GraphPattern::reduced(Self::reorder_joins(*inner, input_types))
+            QueryExpression::Reduced { inner } => {
+                QueryExpression::reduced(Self::reorder_joins(*inner, input_types))
             }
-            GraphPattern::Project { inner, variables } => {
-                GraphPattern::project(Self::reorder_joins(*inner, input_types), variables)
+            QueryExpression::Project { inner, variables } => {
+                QueryExpression::project(Self::reorder_joins(*inner, input_types), variables)
             }
-            GraphPattern::OrderBy { inner, expression } => {
-                GraphPattern::order_by(Self::reorder_joins(*inner, input_types), expression)
+            QueryExpression::OrderBy { inner, expression } => {
+                QueryExpression::order_by(Self::reorder_joins(*inner, input_types), expression)
             }
-            GraphPattern::Service { .. } => {
+            QueryExpression::Service { .. } => {
                 // We don't do join reordering inside of SERVICE calls, we don't know about cardinalities
-                pattern
+                query_expression
             }
-            GraphPattern::Group {
+            QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
-            } => GraphPattern::group(
+            } => QueryExpression::group(
                 Self::reorder_joins(*inner, input_types),
                 variables,
                 aggregates,
@@ -1006,24 +1023,24 @@ impl Optimizer {
 }
 
 fn is_fit_for_for_loop_join(
-    pattern: &GraphPattern,
+    query_expression: &QueryExpression,
     global_input_types: &VariableTypes,
     entry_types: &VariableTypes,
 ) -> bool {
     // TODO: think more about it
-    match pattern {
-        GraphPattern::Values { .. } | GraphPattern::QuadPattern { .. } => true,
-        GraphPattern::Path {
+    match query_expression {
+        QueryExpression::Values { .. } | QueryExpression::QuadPattern { .. } => true,
+        QueryExpression::Path {
             subject,
             path,
             object,
         } => is_path_fit_for_for_loop_join(subject, path, object, entry_types),
         #[cfg(feature = "sep-0006")]
-        GraphPattern::Lateral { left, right } => {
+        QueryExpression::Lateral { left, right } => {
             is_fit_for_for_loop_join(left, global_input_types, entry_types)
                 && is_fit_for_for_loop_join(right, global_input_types, entry_types)
         }
-        GraphPattern::LeftJoin {
+        QueryExpression::LeftJoin {
             left,
             right,
             expression,
@@ -1034,8 +1051,8 @@ fn is_fit_for_for_loop_join(
             }
 
             // It is not ok to transform into for loop join if right binds a variable also bound by the entry part of the for loop join
-            let mut left_types = infer_graph_pattern_types(left, global_input_types.clone());
-            let right_types = infer_graph_pattern_types(right, global_input_types.clone());
+            let mut left_types = infer_query_expression_types(left, global_input_types.clone());
+            let right_types = infer_query_expression_types(right, global_input_types.clone());
             if right_types.iter().any(|(variable, t)| {
                 *t != VariableType::UNDEF
                     && left_types.get(variable).undef
@@ -1048,18 +1065,18 @@ fn is_fit_for_for_loop_join(
             left_types.intersect_with(right_types);
             is_expression_fit_for_for_loop_join(expression, &left_types, entry_types)
         }
-        GraphPattern::Union { inner } => inner
+        QueryExpression::Union { inner } => inner
             .iter()
             .all(|i| is_fit_for_for_loop_join(i, global_input_types, entry_types)),
-        GraphPattern::Filter { inner, expression } => {
+        QueryExpression::Filter { inner, expression } => {
             is_fit_for_for_loop_join(inner, global_input_types, entry_types)
                 && is_expression_fit_for_for_loop_join(
                     expression,
-                    &infer_graph_pattern_types(inner, global_input_types.clone()),
+                    &infer_query_expression_types(inner, global_input_types.clone()),
                     entry_types,
                 )
         }
-        GraphPattern::Extend {
+        QueryExpression::Extend {
             inner,
             expression,
             variable,
@@ -1068,11 +1085,11 @@ fn is_fit_for_for_loop_join(
                 && entry_types.get(variable) == VariableType::UNDEF
                 && is_expression_fit_for_for_loop_join(
                     expression,
-                    &infer_graph_pattern_types(inner, global_input_types.clone()),
+                    &infer_query_expression_types(inner, global_input_types.clone()),
                     entry_types,
                 )
         }
-        GraphPattern::Graph { inner, graph_name } => {
+        QueryExpression::Graph { inner, graph_name } => {
             is_fit_for_for_loop_join(inner, global_input_types, entry_types)
                 && if let NamedNodePattern::Variable(variable) = graph_name {
                     entry_types.get(variable) == VariableType::UNDEF
@@ -1080,15 +1097,15 @@ fn is_fit_for_for_loop_join(
                     true
                 }
         }
-        GraphPattern::Join { .. }
-        | GraphPattern::Minus { .. }
-        | GraphPattern::Service { .. }
-        | GraphPattern::OrderBy { .. }
-        | GraphPattern::Distinct { .. }
-        | GraphPattern::Reduced { .. }
-        | GraphPattern::Slice { .. }
-        | GraphPattern::Project { .. }
-        | GraphPattern::Group { .. } => false,
+        QueryExpression::Join { .. }
+        | QueryExpression::Minus { .. }
+        | QueryExpression::Service { .. }
+        | QueryExpression::OrderBy { .. }
+        | QueryExpression::Distinct { .. }
+        | QueryExpression::Reduced { .. }
+        | QueryExpression::Slice { .. }
+        | QueryExpression::Project { .. }
+        | QueryExpression::Group { .. } => false,
     }
 }
 
@@ -1197,10 +1214,13 @@ fn join_key_variables(
         .collect()
 }
 
-fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTypes) -> u64 {
-    match pattern {
-        GraphPattern::Values { bindings, .. } => bindings.len().try_into().unwrap(),
-        GraphPattern::QuadPattern {
+fn estimate_query_expression_size(
+    expression: &QueryExpression,
+    input_types: &VariableTypes,
+) -> u64 {
+    match expression {
+        QueryExpression::Values { bindings, .. } => bindings.len().try_into().unwrap(),
+        QueryExpression::QuadPattern {
             subject,
             predicate,
             object,
@@ -1218,7 +1238,7 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             }
             size
         }
-        GraphPattern::Path {
+        QueryExpression::Path {
             subject,
             path,
             object,
@@ -1228,64 +1248,66 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             path,
             is_term_pattern_bound(object, input_types),
         ),
-        GraphPattern::Graph { graph_name, inner } => {
+        QueryExpression::Graph { graph_name, inner } => {
             (if is_named_node_pattern_bound(graph_name, input_types) {
                 1_u64
             } else {
                 100
             })
-            .saturating_mul(estimate_graph_pattern_size(inner, input_types))
+            .saturating_mul(estimate_query_expression_size(inner, input_types))
         }
-        GraphPattern::Join {
+        QueryExpression::Join {
             left,
             right,
             algorithm,
         } => estimate_join_cost(left, right, algorithm, input_types),
-        GraphPattern::LeftJoin {
+        QueryExpression::LeftJoin {
             left,
             right,
             algorithm,
             ..
         } => match algorithm {
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
-                let left_size = estimate_graph_pattern_size(left, input_types);
+                let left_size = estimate_query_expression_size(left, input_types);
                 max(
                     left_size,
                     left_size
-                        .saturating_mul(estimate_graph_pattern_size(
+                        .saturating_mul(estimate_query_expression_size(
                             right,
-                            &infer_graph_pattern_types(right, input_types.clone()),
+                            &infer_query_expression_types(right, input_types.clone()),
                         ))
                         .saturating_div(1_000_u64.saturating_pow(keys.len().try_into().unwrap())),
                 )
             }
         },
         #[cfg(feature = "sep-0006")]
-        GraphPattern::Lateral { left, right } => estimate_lateral_cost(
+        QueryExpression::Lateral { left, right } => estimate_lateral_cost(
             left,
-            &infer_graph_pattern_types(left, input_types.clone()),
+            &infer_query_expression_types(left, input_types.clone()),
             right,
             input_types,
         ),
-        GraphPattern::Union { inner } => inner
+        QueryExpression::Union { inner } => inner
             .iter()
-            .map(|inner| estimate_graph_pattern_size(inner, input_types))
+            .map(|inner| estimate_query_expression_size(inner, input_types))
             .fold(0, u64::saturating_add),
-        GraphPattern::Minus { left, .. } => estimate_graph_pattern_size(left, input_types),
-        GraphPattern::Filter { inner, .. }
-        | GraphPattern::Extend { inner, .. }
-        | GraphPattern::OrderBy { inner, .. }
-        | GraphPattern::Project { inner, .. }
-        | GraphPattern::Distinct { inner, .. }
-        | GraphPattern::Reduced { inner, .. }
-        | GraphPattern::Group { inner, .. }
-        | GraphPattern::Service { inner, .. } => estimate_graph_pattern_size(inner, input_types),
-        GraphPattern::Slice {
+        QueryExpression::Minus { left, .. } => estimate_query_expression_size(left, input_types),
+        QueryExpression::Filter { inner, .. }
+        | QueryExpression::Extend { inner, .. }
+        | QueryExpression::OrderBy { inner, .. }
+        | QueryExpression::Project { inner, .. }
+        | QueryExpression::Distinct { inner, .. }
+        | QueryExpression::Reduced { inner, .. }
+        | QueryExpression::Group { inner, .. }
+        | QueryExpression::Service { inner, .. } => {
+            estimate_query_expression_size(inner, input_types)
+        }
+        QueryExpression::Slice {
             inner,
             offset,
             limit,
         } => {
-            let inner = estimate_graph_pattern_size(inner, input_types);
+            let inner = estimate_query_expression_size(inner, input_types);
             if let Some(limit) = limit {
                 min(inner, *limit - *offset)
             } else {
@@ -1296,28 +1318,28 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
 }
 
 fn estimate_join_cost(
-    left: &GraphPattern,
-    right: &GraphPattern,
+    left: &QueryExpression,
+    right: &QueryExpression,
     algorithm: &JoinAlgorithm,
     input_types: &VariableTypes,
 ) -> u64 {
     match algorithm {
         JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
-            estimate_graph_pattern_size(left, input_types)
-                .saturating_mul(estimate_graph_pattern_size(right, input_types))
+            estimate_query_expression_size(left, input_types)
+                .saturating_mul(estimate_query_expression_size(right, input_types))
                 .saturating_div(1_000_u64.saturating_pow(keys.len().try_into().unwrap()))
         }
     }
 }
 
 fn estimate_lateral_cost(
-    left: &GraphPattern,
+    left: &QueryExpression,
     left_types: &VariableTypes,
-    right: &GraphPattern,
+    right: &QueryExpression,
     input_types: &VariableTypes,
 ) -> u64 {
-    estimate_graph_pattern_size(left, input_types)
-        .saturating_mul(estimate_graph_pattern_size(right, left_types))
+    estimate_query_expression_size(left, input_types)
+        .saturating_mul(estimate_query_expression_size(right, left_types))
 }
 
 fn estimate_triple_pattern_size(
@@ -1406,13 +1428,13 @@ fn is_named_node_pattern_bound(pattern: &NamedNodePattern, input_types: &Variabl
 }
 
 fn wrap_in_possible_graph(
-    pattern: GraphPattern,
+    expression: QueryExpression,
     graph_name: Option<NamedNodePattern>,
-) -> GraphPattern {
+) -> QueryExpression {
     if let Some(graph_name) = graph_name {
-        GraphPattern::graph(pattern, graph_name)
+        QueryExpression::graph(expression, graph_name)
     } else {
-        pattern
+        expression
     }
 }
 

@@ -6,7 +6,7 @@ use rand::random;
 pub use spargebra::algebra::PropertyPathExpression;
 use spargebra::algebra::{
     AggregateExpression as AlAggregateExpression, Expression as AlExpression,
-    GraphPattern as AlGraphPattern, OrderExpression as AlOrderExpression,
+    OrderExpression as AlOrderExpression, QueryExpression as AlQueryExpression,
 };
 use spargebra::term::{BlankNode, TermPattern, TriplePattern};
 pub use spargebra::term::{
@@ -31,7 +31,7 @@ pub enum Expression {
     /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and).
     And(Vec<Self>),
     /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists).
-    Exists(Box<GraphPattern>),
+    Exists(Box<QueryExpression>),
     /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound).
     Bound(Variable),
     /// [IF](https://www.w3.org/TR/sparql11-query/#func-if).
@@ -134,7 +134,7 @@ impl Expression {
         }
     }
 
-    pub fn exists(inner: GraphPattern) -> Self {
+    pub fn exists(inner: QueryExpression) -> Self {
         if inner.is_empty() {
             return false.into();
         }
@@ -235,7 +235,7 @@ impl Expression {
                 }
             }
             AlExpression::Exists(inner) => Self::Exists(Box::new(
-                GraphPattern::from_sparql_algebra(inner, &mut HashMap::new()),
+                QueryExpression::from_sparql_algebra(inner, &mut HashMap::new()),
             )),
             AlExpression::Bound(variable) => Self::Bound(variable.clone()),
             AlExpression::If(cond, yes, no) => Self::If(
@@ -431,7 +431,7 @@ impl Not for Expression {
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GraphPattern {
+pub enum QueryExpression {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     QuadPattern {
         subject: GroundTermPattern,
@@ -524,7 +524,7 @@ pub enum GraphPattern {
     },
 }
 
-impl GraphPattern {
+impl QueryExpression {
     pub fn empty() -> Self {
         Self::Values {
             variables: Vec::new(),
@@ -925,7 +925,7 @@ impl GraphPattern {
     ///
     /// For [`Join`](Self::Join) nodes specifically, `left` is always visited
     /// before `right`. This means that after
-    /// [`Optimizer::optimize_graph_pattern`](crate::Optimizer::optimize_graph_pattern)
+    /// [`Optimizer::optimize_query_expression`](crate::Optimizer::optimize_query_expression)
     /// has run its greedy join-reordering pass, the nested (left-deep) `Join`
     /// tree it produces will yield variables here in the same order the
     /// optimizer chose to introduce them -- i.e. this doubles as a view onto
@@ -939,7 +939,7 @@ impl GraphPattern {
     ///
     /// Note this reflects the *structure* of the pattern tree as given; it
     /// is only meaningful as "the optimizer's chosen order" when called on
-    /// the output of [`Optimizer::optimize_graph_pattern`](crate::Optimizer::optimize_graph_pattern).
+    /// the output of [`Optimizer::optimize_query_expression`](crate::Optimizer::optimize_query_expression).
     pub fn join_order_variables(&self) -> Vec<Variable> {
         let mut seen = HashSet::new();
         let mut order = Vec::new();
@@ -952,11 +952,11 @@ impl GraphPattern {
     }
 
     fn from_sparql_algebra(
-        pattern: &AlGraphPattern,
+        query_expression: &AlQueryExpression,
         blank_nodes: &mut HashMap<BlankNode, Variable>,
     ) -> Self {
-        match pattern {
-            AlGraphPattern::Bgp { patterns } => patterns
+        match query_expression {
+            AlQueryExpression::Bgp { patterns } => patterns
                 .iter()
                 .map(|p| {
                     let (subject, predicate, object) =
@@ -974,7 +974,7 @@ impl GraphPattern {
                     algorithm: JoinAlgorithm::default(),
                 })
                 .unwrap_or_else(Self::empty_singleton),
-            AlGraphPattern::Path {
+            AlQueryExpression::Path {
                 subject,
                 path,
                 object,
@@ -983,12 +983,12 @@ impl GraphPattern {
                 path: path.clone(),
                 object: Self::term_pattern_from_algebra(object, blank_nodes),
             },
-            AlGraphPattern::Join { left, right } => Self::Join {
+            AlQueryExpression::Join { left, right } => Self::Join {
                 left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
                 right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
                 algorithm: JoinAlgorithm::default(),
             },
-            AlGraphPattern::LeftJoin {
+            AlQueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
@@ -1001,25 +1001,25 @@ impl GraphPattern {
                 algorithm: LeftJoinAlgorithm::default(),
             },
             #[cfg(feature = "sep-0006")]
-            AlGraphPattern::Lateral { left, right } => Self::Lateral {
+            AlQueryExpression::Lateral { left, right } => Self::Lateral {
                 left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
                 right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
             },
-            AlGraphPattern::Filter { inner, expr } => Self::Filter {
+            AlQueryExpression::Filter { inner, expr } => Self::Filter {
                 inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
                 expression: Expression::from_sparql_algebra(expr),
             },
-            AlGraphPattern::Union { left, right } => Self::Union {
+            AlQueryExpression::Union { left, right } => Self::Union {
                 inner: vec![
                     Self::from_sparql_algebra(left, blank_nodes),
                     Self::from_sparql_algebra(right, blank_nodes),
                 ],
             },
-            AlGraphPattern::Graph { inner, name } => Self::Graph {
+            AlQueryExpression::Graph { inner, name } => Self::Graph {
                 graph_name: name.clone(),
                 inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
             },
-            AlGraphPattern::Extend {
+            AlQueryExpression::Extend {
                 inner,
                 expression,
                 variable,
@@ -1028,19 +1028,19 @@ impl GraphPattern {
                 expression: Expression::from_sparql_algebra(expression),
                 variable: variable.clone(),
             },
-            AlGraphPattern::Minus { left, right } => Self::Minus {
+            AlQueryExpression::Minus { left, right } => Self::Minus {
                 left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
                 right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
                 algorithm: MinusAlgorithm::default(),
             },
-            AlGraphPattern::Values {
+            AlQueryExpression::Values {
                 variables,
                 bindings,
             } => Self::Values {
                 variables: variables.clone(),
                 bindings: bindings.clone(),
             },
-            AlGraphPattern::OrderBy { inner, expression } => {
+            AlQueryExpression::OrderBy { inner, expression } => {
                 let mut inner = Self::from_sparql_algebra(inner, blank_nodes);
                 let mut expressions = Vec::with_capacity(expression.len());
                 for e in expression {
@@ -1062,17 +1062,17 @@ impl GraphPattern {
                     expression: expressions,
                 }
             }
-            AlGraphPattern::Project { inner, variables } => Self::Project {
+            AlQueryExpression::Project { inner, variables } => Self::Project {
                 inner: Box::new(Self::from_sparql_algebra(inner, &mut HashMap::new())),
                 variables: variables.clone(),
             },
-            AlGraphPattern::Distinct { inner } => Self::Distinct {
+            AlQueryExpression::Distinct { inner } => Self::Distinct {
                 inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
             },
-            AlGraphPattern::Reduced { inner } => Self::Distinct {
+            AlQueryExpression::Reduced { inner } => Self::Distinct {
                 inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
             },
-            AlGraphPattern::Slice {
+            AlQueryExpression::Slice {
                 inner,
                 offset,
                 limit,
@@ -1081,7 +1081,7 @@ impl GraphPattern {
                 offset: *offset,
                 limit: *limit,
             },
-            AlGraphPattern::Group {
+            AlQueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
@@ -1095,7 +1095,7 @@ impl GraphPattern {
                     })
                     .collect(),
             },
-            AlGraphPattern::Service {
+            AlQueryExpression::Service {
                 inner,
                 name,
                 silent,
@@ -1148,16 +1148,16 @@ impl GraphPattern {
     /// Makes sure the expression is a variable, use Extend in the other cases
     fn algebra_expression_to_constant_or_variable(
         expression: &AlExpression,
-        graph_pattern: GraphPattern,
-    ) -> (Variable, GraphPattern) {
+        query_expression: QueryExpression,
+    ) -> (Variable, QueryExpression) {
         if let AlExpression::Variable(variable) = expression {
-            (variable.clone(), graph_pattern)
+            (variable.clone(), query_expression)
         } else {
             let variable = new_var();
             (
                 variable.clone(),
-                GraphPattern::Extend {
-                    inner: Box::new(graph_pattern),
+                QueryExpression::Extend {
+                    inner: Box::new(query_expression),
                     variable,
                     expression: Expression::from_sparql_algebra(expression),
                 },
@@ -1166,16 +1166,16 @@ impl GraphPattern {
     }
 }
 
-impl From<&AlGraphPattern> for GraphPattern {
-    fn from(pattern: &AlGraphPattern) -> Self {
-        Self::from_sparql_algebra(pattern, &mut HashMap::new())
+impl From<&AlQueryExpression> for QueryExpression {
+    fn from(query_expression: &AlQueryExpression) -> Self {
+        Self::from_sparql_algebra(query_expression, &mut HashMap::new())
     }
 }
 
-impl From<&GraphPattern> for AlGraphPattern {
-    fn from(pattern: &GraphPattern) -> Self {
-        match pattern {
-            GraphPattern::QuadPattern {
+impl From<&QueryExpression> for AlQueryExpression {
+    fn from(query_expression: &QueryExpression) -> Self {
+        match query_expression {
+            QueryExpression::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -1197,7 +1197,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                     pattern
                 }
             }
-            GraphPattern::Path {
+            QueryExpression::Path {
                 subject,
                 path,
                 object,
@@ -1206,11 +1206,11 @@ impl From<&GraphPattern> for AlGraphPattern {
                 path: path.clone(),
                 object: object.clone().into(),
             },
-            GraphPattern::Graph { graph_name, inner } => Self::Graph {
+            QueryExpression::Graph { graph_name, inner } => Self::Graph {
                 inner: Box::new(inner.as_ref().into()),
                 name: graph_name.clone(),
             },
-            GraphPattern::Join { left, right, .. } => {
+            QueryExpression::Join { left, right, .. } => {
                 match (left.as_ref().into(), right.as_ref().into()) {
                     (Self::Bgp { patterns: mut left }, Self::Bgp { patterns: right }) => {
                         left.extend(right);
@@ -1222,7 +1222,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                     },
                 }
             }
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
@@ -1244,7 +1244,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                 }
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
+            QueryExpression::Lateral { left, right } => {
                 match (left.as_ref().into(), right.as_ref().into()) {
                     (Self::Bgp { patterns: mut left }, Self::Bgp { patterns: right }) => {
                         left.extend(right);
@@ -1256,11 +1256,11 @@ impl From<&GraphPattern> for AlGraphPattern {
                     },
                 }
             }
-            GraphPattern::Filter { inner, expression } => Self::Filter {
+            QueryExpression::Filter { inner, expression } => Self::Filter {
                 inner: Box::new(inner.as_ref().into()),
                 expr: expression.into(),
             },
-            GraphPattern::Union { inner } => inner
+            QueryExpression::Union { inner } => inner
                 .iter()
                 .map(Into::into)
                 .reduce(|a, b| Self::Union {
@@ -1271,7 +1271,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                     variables: Vec::new(),
                     bindings: Vec::new(),
                 }),
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 expression,
                 variable,
@@ -1280,32 +1280,32 @@ impl From<&GraphPattern> for AlGraphPattern {
                 expression: expression.into(),
                 variable: variable.clone(),
             },
-            GraphPattern::Minus { left, right, .. } => Self::Minus {
+            QueryExpression::Minus { left, right, .. } => Self::Minus {
                 left: Box::new(left.as_ref().into()),
                 right: Box::new(right.as_ref().into()),
             },
-            GraphPattern::Values {
+            QueryExpression::Values {
                 variables,
                 bindings,
             } => Self::Values {
                 variables: variables.clone(),
                 bindings: bindings.clone(),
             },
-            GraphPattern::OrderBy { inner, expression } => Self::OrderBy {
+            QueryExpression::OrderBy { inner, expression } => Self::OrderBy {
                 inner: Box::new(inner.as_ref().into()),
                 expression: expression.iter().map(Into::into).collect(),
             },
-            GraphPattern::Project { inner, variables } => Self::Project {
+            QueryExpression::Project { inner, variables } => Self::Project {
                 inner: Box::new(inner.as_ref().into()),
                 variables: variables.clone(),
             },
-            GraphPattern::Distinct { inner } => Self::Distinct {
+            QueryExpression::Distinct { inner } => Self::Distinct {
                 inner: Box::new(inner.as_ref().into()),
             },
-            GraphPattern::Reduced { inner } => Self::Distinct {
+            QueryExpression::Reduced { inner } => Self::Distinct {
                 inner: Box::new(inner.as_ref().into()),
             },
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
@@ -1314,7 +1314,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                 offset: *offset,
                 limit: *limit,
             },
-            GraphPattern::Group {
+            QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
@@ -1326,7 +1326,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                     .map(|(var, expr)| (var.clone(), expr.into()))
                     .collect(),
             },
-            GraphPattern::Service {
+            QueryExpression::Service {
                 inner,
                 name,
                 silent,
@@ -1339,7 +1339,7 @@ impl From<&GraphPattern> for AlGraphPattern {
     }
 }
 
-/// The join algorithm used (c.f. [`GraphPattern::Join`]).
+/// The join algorithm used (c.f. [`QueryExpression::Join`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum JoinAlgorithm {
     HashBuildLeftProbeRight { keys: Vec<Variable> },
@@ -1353,7 +1353,7 @@ impl Default for JoinAlgorithm {
     }
 }
 
-/// The left join algorithm used (c.f. [`GraphPattern::LeftJoin`]).
+/// The left join algorithm used (c.f. [`QueryExpression::LeftJoin`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum LeftJoinAlgorithm {
     HashBuildRightProbeLeft { keys: Vec<Variable> },
@@ -1367,7 +1367,7 @@ impl Default for LeftJoinAlgorithm {
     }
 }
 
-/// The left join algorithm used (c.f. [`GraphPattern::Minus`]).
+/// The left join algorithm used (c.f. [`QueryExpression::Minus`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum MinusAlgorithm {
     HashBuildRightProbeLeft { keys: Vec<Variable> },
@@ -1381,7 +1381,7 @@ impl Default for MinusAlgorithm {
     }
 }
 
-/// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
+/// A set function used in aggregates (c.f. [`QueryExpression::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregateExpression {
     CountSolutions {
@@ -1437,7 +1437,7 @@ impl From<&AggregateExpression> for AlAggregateExpression {
     }
 }
 
-/// An ordering comparator used by [`GraphPattern::OrderBy`].
+/// An ordering comparator used by [`QueryExpression::OrderBy`].
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order
@@ -1499,8 +1499,8 @@ mod tests {
         Variable::new(name.to_owned()).unwrap()
     }
 
-    fn quad_pattern(subject: &str, predicate: &str, object: &str) -> GraphPattern {
-        GraphPattern::QuadPattern {
+    fn quad_pattern(subject: &str, predicate: &str, object: &str) -> QueryExpression {
+        QueryExpression::QuadPattern {
             subject: GroundTermPattern::Variable(var(subject)),
             predicate: NamedNodePattern::Variable(var(predicate)),
             object: GroundTermPattern::Variable(var(object)),
@@ -1516,8 +1516,8 @@ mod tests {
         let a = quad_pattern("s", "p1", "o1");
         let b = quad_pattern("s", "p2", "o2");
         let c = quad_pattern("o1", "p3", "o3");
-        let pattern = GraphPattern::Join {
-            left: Box::new(GraphPattern::Join {
+        let pattern = QueryExpression::Join {
+            left: Box::new(QueryExpression::Join {
                 left: Box::new(a),
                 right: Box::new(b),
                 algorithm: JoinAlgorithm::default(),
@@ -1547,7 +1547,7 @@ mod tests {
         // at the position where it is first encountered (left side).
         let left = quad_pattern("s", "p1", "o1");
         let right = quad_pattern("s", "p2", "o2");
-        let pattern = GraphPattern::Join {
+        let pattern = QueryExpression::Join {
             left: Box::new(left),
             right: Box::new(right),
             algorithm: JoinAlgorithm::default(),
@@ -1562,7 +1562,7 @@ mod tests {
 
     #[test]
     fn join_order_variables_is_empty_for_variable_free_pattern() {
-        let pattern = GraphPattern::empty_singleton();
+        let pattern = QueryExpression::empty_singleton();
         assert!(pattern.join_order_variables().is_empty());
     }
 }

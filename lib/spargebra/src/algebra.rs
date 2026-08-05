@@ -113,7 +113,7 @@ pub enum Expression {
     /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
     In(Box<Self>, Vec<Self>),
     /// [EXISTS](https://www.w3.org/TR/sparql11-query/#func-filter-exists).
-    Exists(Box<GraphPattern>),
+    Exists(Box<QueryExpression>),
     /// [BOUND](https://www.w3.org/TR/sparql11-query/#func-bound).
     Bound(Variable),
     /// [IF](https://www.w3.org/TR/sparql11-query/#func-if).
@@ -446,7 +446,7 @@ fn function_name(function: &NamedNode) -> Option<&'static str> {
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GraphPattern {
+pub enum QueryExpression {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     Bgp { patterns: Vec<TriplePattern> },
     /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate).
@@ -521,7 +521,7 @@ pub enum GraphPattern {
     },
 }
 
-impl fmt::Display for GraphPattern {
+impl fmt::Display for QueryExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bgp { patterns } => {
@@ -677,12 +677,12 @@ impl fmt::Display for GraphPattern {
                 }
                 f.write_str(" }")
             }
-            p => write!(f, "{{ {} }}", SparqlGraphRootPattern::new(p, None)?),
+            p => write!(f, "{{ {} }}", SparqlRootQueryExpression::new(p, None)?),
         }
     }
 }
 
-impl Default for GraphPattern {
+impl Default for QueryExpression {
     fn default() -> Self {
         Self::Bgp {
             patterns: Vec::new(),
@@ -690,7 +690,7 @@ impl Default for GraphPattern {
     }
 }
 
-impl GraphPattern {
+impl QueryExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
@@ -1100,10 +1100,10 @@ fn lookup_triple_pattern_variables<'a>(
     }
 }
 
-pub(crate) struct SparqlGraphRootPattern<'a> {
+pub(crate) struct SparqlRootQueryExpression<'a> {
     option: SelectionOption,
     project: Option<Vec<(&'a Variable, Option<ExpressionOrAggregate<'a>>)>>,
-    pattern: &'a GraphPattern,
+    expression: &'a QueryExpression,
     dataset: Option<&'a QueryDataset>,
     group_by: &'a [Variable],
     order: &'a [OrderExpression],
@@ -1111,9 +1111,9 @@ pub(crate) struct SparqlGraphRootPattern<'a> {
     limit: Option<u64>,
 }
 
-impl<'a> SparqlGraphRootPattern<'a> {
+impl<'a> SparqlRootQueryExpression<'a> {
     pub fn new(
-        mut pattern: &'a GraphPattern,
+        mut expression: &'a QueryExpression,
         dataset: Option<&'a QueryDataset>,
     ) -> Result<Self, fmt::Error> {
         let mut option = SelectionOption::Default;
@@ -1123,38 +1123,38 @@ impl<'a> SparqlGraphRootPattern<'a> {
 
         // Before project
         loop {
-            match pattern {
-                GraphPattern::Distinct { inner } if option == SelectionOption::Default => {
+            match expression {
+                QueryExpression::Distinct { inner } if option == SelectionOption::Default => {
                     option = SelectionOption::Distinct;
-                    pattern = inner;
+                    expression = inner;
                 }
-                GraphPattern::Reduced { inner } if option == SelectionOption::Default => {
+                QueryExpression::Reduced { inner } if option == SelectionOption::Default => {
                     option = SelectionOption::Reduced;
-                    pattern = inner;
+                    expression = inner;
                 }
-                GraphPattern::Slice {
+                QueryExpression::Slice {
                     inner,
                     offset: o,
                     limit: l,
                 } if offset == 0 && limit.is_none() => {
                     offset = *o;
                     limit = *l;
-                    pattern = inner;
+                    expression = inner;
                 }
                 _ => break,
             }
         }
-        let (project, order) = if let GraphPattern::Project { inner, variables } = pattern {
+        let (project, order) = if let QueryExpression::Project { inner, variables } = expression {
             // We have the projection
             let mut project = variables.iter().map(|v| (v, None)).collect::<Vec<_>>();
-            pattern = inner;
+            expression = inner;
 
             // we collect extends
-            while let GraphPattern::Extend {
+            while let QueryExpression::Extend {
                 inner,
-                expression,
+                expression: extend_expression,
                 variable,
-            } = pattern
+            } = expression
             {
                 if !project.iter().any(|(v, _)| *v == variable)
                     || project.iter().any(|(_, expr)| {
@@ -1179,24 +1179,28 @@ impl<'a> SparqlGraphRootPattern<'a> {
                     .iter_mut()
                     .find(|(v, _)| *v == variable)
                     .ok_or(fmt::Error)?
-                    .1 = Some(ExpressionOrAggregate::Expression(expression));
-                pattern = inner
+                    .1 = Some(ExpressionOrAggregate::Expression(extend_expression));
+                expression = inner
             }
 
             // Order by
-            let order = if let GraphPattern::OrderBy { inner, expression } = pattern {
-                pattern = inner;
-                expression
+            let order = if let QueryExpression::OrderBy {
+                inner,
+                expression: ordering_condition,
+            } = expression
+            {
+                expression = inner;
+                ordering_condition
             } else {
                 [].as_slice()
             };
 
             // And aggregates
-            if let GraphPattern::Group {
+            if let QueryExpression::Group {
                 inner,
                 variables,
                 aggregates,
-            } = pattern
+            } = expression
             {
                 // Currently, we only do this simplification if aggregates are directly projected
                 if aggregates.iter().all(|(agg_var, _)| {
@@ -1240,20 +1244,24 @@ impl<'a> SparqlGraphRootPattern<'a> {
                         }
                     }
                     group_by = variables.as_slice();
-                    pattern = inner;
+                    expression = inner;
                 }
             }
             (Some(project), order)
-        } else if let GraphPattern::OrderBy { inner, expression } = pattern {
-            pattern = inner;
-            (None, expression.as_slice())
+        } else if let QueryExpression::OrderBy {
+            inner,
+            expression: ordering_condition,
+        } = expression
+        {
+            expression = inner;
+            (None, ordering_condition.as_slice())
         } else {
             (None, [].as_slice())
         };
         Ok(Self {
             option,
             project,
-            pattern,
+            expression,
             dataset,
             group_by,
             order,
@@ -1263,7 +1271,7 @@ impl<'a> SparqlGraphRootPattern<'a> {
     }
 }
 
-impl fmt::Display for SparqlGraphRootPattern<'_> {
+impl fmt::Display for SparqlRootQueryExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SELECT")?;
         match self.option {
@@ -1275,7 +1283,8 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
             if project.is_empty() {
                 // We make sure there is no in-scope variable, if yes, it's not serializable
                 let mut with_in_scope = false;
-                self.pattern.on_in_scope_variable(|_| with_in_scope = true);
+                self.expression
+                    .on_in_scope_variable(|_| with_in_scope = true);
                 if with_in_scope {
                     return Err(fmt::Error);
                 }
@@ -1302,7 +1311,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
         if let Some(dataset) = self.dataset {
             write!(f, " {dataset}")?;
         }
-        write!(f, " WHERE {{ {} }}", self.pattern)?;
+        write!(f, " WHERE {{ {} }}", self.expression)?;
         if !self.group_by.is_empty() {
             f.write_str(" GROUP BY")?;
             for v in self.group_by {
@@ -1337,7 +1346,7 @@ enum ExpressionOrAggregate<'a> {
     Aggregate(&'a AggregateExpression),
 }
 
-/// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
+/// A set function used in aggregates (c.f. [`QueryExpression::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregateExpression {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
@@ -1441,7 +1450,7 @@ impl fmt::Display for AggregateExpression {
     }
 }
 
-/// An ordering comparator used by [`GraphPattern::OrderBy`].
+/// An ordering comparator used by [`QueryExpression::OrderBy`].
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order

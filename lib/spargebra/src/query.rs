@@ -124,8 +124,8 @@ impl TryFrom<&String> for Query {
 pub struct SelectQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
     pub dataset: Option<QueryDataset>,
-    /// The query selection graph pattern.
-    pub pattern: GraphPattern,
+    /// The query selection expression.
+    pub expression: QueryExpression,
     /// The query base IRI.
     pub base_iri: Option<Iri<OxString>>,
 }
@@ -148,7 +148,7 @@ impl SelectQuery {
             dataset.fmt_sse(f)?;
             f.write_str(" ")?;
         }
-        self.pattern.fmt_sse(f)?;
+        self.expression.fmt_sse(f)?;
         if self.dataset.is_some() {
             f.write_str(")")?;
         }
@@ -164,7 +164,7 @@ impl fmt::Display for SelectQuery {
         if let Some(base_iri) = &self.base_iri {
             writeln!(f, "BASE <{base_iri}>")?;
         }
-        SparqlGraphRootPattern::new(&self.pattern, self.dataset.as_ref())?.fmt(f)
+        SparqlRootQueryExpression::new(&self.expression, self.dataset.as_ref())?.fmt(f)
     }
 }
 
@@ -182,8 +182,8 @@ pub struct ConstructQuery {
     pub template: Vec<TriplePattern>,
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
     pub dataset: Option<QueryDataset>,
-    /// The query selection graph pattern.
-    pub pattern: GraphPattern,
+    /// The query selection expression.
+    pub expression: QueryExpression,
     /// The query base IRI.
     pub base_iri: Option<Iri<OxString>>,
 }
@@ -214,7 +214,7 @@ impl ConstructQuery {
             dataset.fmt_sse(f)?;
             f.write_str(" ")?;
         }
-        self.pattern.fmt_sse(f)?;
+        self.expression.fmt_sse(f)?;
         if self.dataset.is_some() {
             f.write_str(")")?;
         }
@@ -239,9 +239,9 @@ impl fmt::Display for ConstructQuery {
         if let Some(dataset) = &self.dataset {
             write!(f, " {dataset}")?;
         }
-        let mut pattern = &self.pattern;
+        let mut pattern = &self.expression;
         // We ignore the root projection, it's useless
-        if let GraphPattern::Project { inner, .. } = pattern {
+        if let QueryExpression::Project { inner, .. } = pattern {
             pattern = inner;
         }
         write!(f, " WHERE {{ {pattern} }}")
@@ -260,8 +260,8 @@ impl From<ConstructQuery> for Query {
 pub struct DescribeQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
     pub dataset: Option<QueryDataset>,
-    /// The query selection graph pattern.
-    pub pattern: GraphPattern,
+    /// The query selection expression.
+    pub pattern: QueryExpression,
     /// The query base IRI.
     pub base_iri: Option<Iri<OxString>>,
 }
@@ -306,7 +306,7 @@ impl fmt::Display for DescribeQuery {
         // We find the DESCRIBE IRIs
         let mut pattern = &self.pattern;
         let mut iris = Vec::new();
-        while let GraphPattern::Extend {
+        while let QueryExpression::Extend {
             inner,
             expression: Expression::NamedNode(iri),
             ..
@@ -318,7 +318,7 @@ impl fmt::Display for DescribeQuery {
 
         // If there is a projection, we can inline it too
         let mut select_variables = Vec::new();
-        if let GraphPattern::Project { inner, variables } = pattern {
+        if let QueryExpression::Project { inner, variables } = pattern {
             select_variables.extend(variables);
             pattern = inner;
         } else {
@@ -359,8 +359,8 @@ impl From<DescribeQuery> for Query {
 pub struct AskQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
     pub dataset: Option<QueryDataset>,
-    /// The query selection graph pattern.
-    pub pattern: GraphPattern,
+    /// The query selection expression.
+    pub expression: QueryExpression,
     /// The query base IRI.
     pub base_iri: Option<Iri<OxString>>,
 }
@@ -384,7 +384,7 @@ impl AskQuery {
             dataset.fmt_sse(f)?;
             f.write_str(" ")?;
         }
-        self.pattern.fmt_sse(f)?;
+        self.expression.fmt_sse(f)?;
         if self.dataset.is_some() {
             f.write_str(")")?;
         }
@@ -405,9 +405,9 @@ impl fmt::Display for AskQuery {
         if let Some(dataset) = &self.dataset {
             write!(f, " {dataset}")?;
         }
-        let mut pattern = &self.pattern;
+        let mut pattern = &self.expression;
         // We ignore the root projection, it's useless
-        if let GraphPattern::Project { inner, .. } = pattern {
+        if let QueryExpression::Project { inner, .. } = pattern {
             pattern = inner;
         }
         write!(f, " WHERE {{ {pattern} }}")
