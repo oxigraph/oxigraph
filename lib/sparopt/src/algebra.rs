@@ -507,8 +507,8 @@ pub enum GraphPattern {
     /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice).
     Slice {
         inner: Box<Self>,
-        start: u64,
-        length: Option<u64>,
+        offset: u64,
+        limit: Option<u64>,
     },
     /// [Group](https://www.w3.org/TR/sparql11-query/#aggregateAlgebra).
     Group {
@@ -786,17 +786,17 @@ impl GraphPattern {
         }
     }
 
-    pub fn slice(inner: Self, start: u64, length: Option<u64>) -> Self {
+    pub fn slice(inner: Self, offset: u64, limit: Option<u64>) -> Self {
         if inner.is_empty() {
             return Self::empty();
         }
-        if start == 0 && length.is_none() {
+        if offset == 0 && limit.is_none() {
             return inner;
         }
         Self::Slice {
             inner: Box::new(inner),
-            start,
-            length,
+            offset,
+            limit,
         }
     }
 
@@ -1074,12 +1074,12 @@ impl GraphPattern {
             },
             AlGraphPattern::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => Self::Slice {
                 inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
-                start: *start,
-                length: *length,
+                offset: *offset,
+                limit: *limit,
             },
             AlGraphPattern::Group {
                 inner,
@@ -1307,12 +1307,12 @@ impl From<&GraphPattern> for AlGraphPattern {
             },
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => Self::Slice {
                 inner: Box::new(inner.as_ref().into()),
-                start: *start,
-                length: *length,
+                offset: *offset,
+                limit: *limit,
             },
             GraphPattern::Group {
                 inner,

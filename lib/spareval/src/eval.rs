@@ -1427,19 +1427,19 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             }
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => {
                 let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let mut child = child?;
                 #[expect(clippy::unwrap_in_result)]
-                let start = (*start).try_into().unwrap();
-                if start > 0 {
-                    child = Rc::new(move |from| Box::new(child(from).skip(start)));
+                let offset = (*offset).try_into().unwrap();
+                if offset > 0 {
+                    child = Rc::new(move |from| Box::new(child(from).skip(offset)));
                 }
-                if let Some(length) = (*length).map(|l| l.try_into().unwrap()) {
-                    child = Rc::new(move |from| Box::new(child(from).take(length)));
+                if let Some(limit) = (*limit).map(|l| l.try_into().unwrap()) {
+                    child = Rc::new(move |from| Box::new(child(from).take(limit)));
                 }
                 child
             }
@@ -3916,11 +3916,11 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 format!("Service({name})")
             }
         }
-        GraphPattern::Slice { start, length, .. } => {
-            if let Some(length) = length {
-                format!("Slice(start = {start}, length = {length})")
+        GraphPattern::Slice { offset, limit, .. } => {
+            if let Some(limit) = limit {
+                format!("Slice(offset = {offset}, limit = {limit})")
             } else {
-                format!("Slice(start = {start})")
+                format!("Slice(offset = {offset})")
             }
         }
         GraphPattern::Union { .. } => "Union".to_owned(),
