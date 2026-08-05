@@ -79,6 +79,7 @@ impl<'a> AlgebraBuilder<'a> {
                 query.solution_modifier,
                 values_clause,
                 true,
+                &[],
             )?,
             base_iri: self.base_iri,
         })
@@ -127,6 +128,7 @@ impl<'a> AlgebraBuilder<'a> {
                 query.solution_modifier,
                 values_clause,
                 false,
+                &[],
             )?,
             base_iri: self.base_iri,
         })
@@ -162,6 +164,7 @@ impl<'a> AlgebraBuilder<'a> {
             query.solution_modifier,
             values_clause,
             false,
+            &[],
         )?;
         // We add the IRIS
         let mut counter = 0;
@@ -213,6 +216,7 @@ impl<'a> AlgebraBuilder<'a> {
                 query.solution_modifier,
                 values_clause,
                 false,
+                &[],
             )?,
             base_iri: self.base_iri,
         })
@@ -278,9 +282,10 @@ impl<'a> AlgebraBuilder<'a> {
         solution_modifier: ast::SolutionModifier<'a>,
         values_clause: Option<ast::ValuesClause<'a>>,
         is_select_explicit: bool,
+        context_variables: &[&Variable],
     ) -> Result<QueryExpression, AlgebraBuilderError> {
         find_graph_pattern_blank_node_ids_and_validate_syntax_restrictions(&where_clause)?;
-        let mut p = self.build_graph_pattern(where_clause)?;
+        let mut p = self.build_graph_pattern(where_clause, context_variables)?;
 
         // We build some elements to collect aggregates
         let mut aggregates = Vec::new();
@@ -301,13 +306,22 @@ impl<'a> AlgebraBuilder<'a> {
                             {
                                 aggregates.push((
                                     variable.clone(),
-                                    self.build_aggregate(span.make_wrapped(aggregate))?,
+                                    self.build_aggregate(
+                                        span.make_wrapped(aggregate),
+                                        context_variables,
+                                    )?,
                                 ));
                                 (None, variable)
                             } else {
                                 (
                                     expression
-                                        .map(|e| self.build_expression(e, &mut aggregates))
+                                        .map(|e| {
+                                            self.build_expression(
+                                                e,
+                                                &mut aggregates,
+                                                context_variables,
+                                            )
+                                        })
                                         .transpose()?,
                                     variable,
                                 )
@@ -318,16 +332,17 @@ impl<'a> AlgebraBuilder<'a> {
             ),
         };
 
+        // TODO: fix context_variables for order and having: it's the projected variables
         let having_expression = solution_modifier
             .having_clause
             .into_iter()
-            .map(|e| self.build_expression(e, &mut aggregates))
+            .map(|e| self.build_expression(e, &mut aggregates, &[]))
             .reduce(|a, b| Ok(Expression::And(Box::new(a?), Box::new(b?))));
 
         let order_expressions = solution_modifier
             .order_clause
             .into_iter()
-            .map(|e| self.build_order_expression(e, &mut aggregates))
+            .map(|e| self.build_order_expression(e, &mut aggregates, &[]))
             .collect::<Result<Vec<_>, _>>()?;
 
         // GROUP BY
@@ -338,6 +353,7 @@ impl<'a> AlgebraBuilder<'a> {
                 let expression = self.build_expression_without_aggregates(
                     expression,
                     "Aggregation functions cannot be used in GROUP BY",
+                    context_variables,
                 )?;
                 let variable = variable.map(Self::build_variable);
                 if let Some(variable) = variable {
@@ -385,10 +401,10 @@ impl<'a> AlgebraBuilder<'a> {
         // SELECT
         let mut projection_variables = Vec::new();
         if let Some(select_expressions) = select_expressions {
-            let mut visible = HashSet::new();
-            p.on_in_scope_variable(|v| {
-                visible.insert(v.clone());
-            });
+            let visible = extended_variables_context(context_variables, &p)
+                .into_iter()
+                .cloned()
+                .collect::<HashSet<_>>();
             for binding in select_expressions {
                 let (expression, variable) = binding.inner;
                 if let Some(expression) = expression {
@@ -575,6 +591,7 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_graph_pattern(
         &mut self,
         graph_pattern: ast::GraphPattern<'a>,
+        context_variables: &[&Variable],
     ) -> Result<QueryExpression, AlgebraBuilderError> {
         Ok(match graph_pattern {
             ast::GraphPattern::SubSelect(sub_select) => self.build_select(
@@ -583,6 +600,7 @@ impl<'a> AlgebraBuilder<'a> {
                 sub_select.solution_modifier,
                 sub_select.values_clause,
                 true,
+                context_variables,
             )?,
             ast::GraphPattern::Group(elements) => {
                 let mut g = QueryExpression::default();
@@ -611,30 +629,36 @@ impl<'a> AlgebraBuilder<'a> {
                                         .collect(),
                                 );
                             }
+                            let right = self.build_graph_pattern(p, context_variables)?;
+                            let expression = filters
+                                .into_iter()
+                                .map(|expr| {
+                                    self.build_expression_without_aggregates(
+                                        expr,
+                                        "Aggregation functions cannot be used in FILTER",
+                                        &extended_variables_context(
+                                            &extended_variables_context(context_variables, &right),
+                                            &g,
+                                        ),
+                                    )
+                                })
+                                .reduce(|l, r| Ok(Expression::And(Box::new(l?), Box::new(r?))))
+                                .transpose()?;
                             g = QueryExpression::LeftJoin {
                                 left: Box::new(g),
-                                right: Box::new(self.build_graph_pattern(p)?),
-                                expression: filters
-                                    .into_iter()
-                                    .map(|expr| {
-                                        self.build_expression_without_aggregates(
-                                            expr,
-                                            "Aggregation functions cannot be used in FILTER",
-                                        )
-                                    })
-                                    .reduce(|l, r| Ok(Expression::And(Box::new(l?), Box::new(r?))))
-                                    .transpose()?,
+                                right: Box::new(right),
+                                expression,
                             }
                         }
                         ast::GraphPatternElement::Minus(p) => {
                             g = QueryExpression::Minus {
                                 left: Box::new(g),
-                                right: Box::new(self.build_graph_pattern(*p)?),
+                                right: Box::new(self.build_graph_pattern(*p, context_variables)?),
                             }
                         }
                         ast::GraphPatternElement::Bind(expression, var) => {
                             let variable = Self::build_variable(var);
-                            let mut is_variable_overridden = false;
+                            let mut is_variable_overridden = context_variables.contains(&&variable);
                             g.on_in_scope_variable(|v| {
                                 if *v == variable {
                                     is_variable_overridden = true;
@@ -648,19 +672,22 @@ impl<'a> AlgebraBuilder<'a> {
                                     ),
                                 ));
                             }
+                            let expression = self.build_expression_without_aggregates(
+                                expression,
+                                "Aggregation functions cannot be used in BIND",
+                                &extended_variables_context(context_variables, &g),
+                            )?;
                             g = QueryExpression::Extend {
                                 inner: Box::new(g),
                                 variable,
-                                expression: self.build_expression_without_aggregates(
-                                    expression,
-                                    "Aggregation functions cannot be used in BIND",
-                                )?,
+                                expression,
                             };
                         }
                         ast::GraphPatternElement::Filter(expr) => {
                             let expr = self.build_expression_without_aggregates(
                                 expr,
                                 "Aggregation functions cannot be used in FILTER",
+                                &extended_variables_context(context_variables, &g),
                             )?;
                             filter = Some(if let Some(f) = filter {
                                 Expression::And(Box::new(f), Box::new(expr))
@@ -722,7 +749,7 @@ impl<'a> AlgebraBuilder<'a> {
                                 g,
                                 elements
                                     .into_iter()
-                                    .map(|e| self.build_graph_pattern(e))
+                                    .map(|e| self.build_graph_pattern(e, context_variables))
                                     .reduce(|l, r| {
                                         Ok(QueryExpression::Union {
                                             left: Box::new(l?),
@@ -744,7 +771,9 @@ impl<'a> AlgebraBuilder<'a> {
                                 g,
                                 QueryExpression::Service {
                                     name: self.build_named_node_pattern(name)?,
-                                    inner: Box::new(self.build_graph_pattern(*pattern)?),
+                                    inner: Box::new(
+                                        self.build_graph_pattern(*pattern, context_variables)?,
+                                    ),
                                     silent,
                                 },
                             )
@@ -754,29 +783,18 @@ impl<'a> AlgebraBuilder<'a> {
                                 g,
                                 QueryExpression::Graph {
                                     name: self.build_named_node_pattern(name)?,
-                                    inner: Box::new(self.build_graph_pattern(*pattern)?),
+                                    inner: Box::new(
+                                        self.build_graph_pattern(*pattern, context_variables)?,
+                                    ),
                                 },
                             )
                         }
                         #[cfg(feature = "sep-0006")]
                         ast::GraphPatternElement::Lateral(p) => {
-                            let p = self.build_graph_pattern(*p)?;
-                            let mut defined_variables = HashSet::new();
-                            add_defined_variables(&p, &mut defined_variables);
-                            let mut overridden_variable = None;
-                            g.on_in_scope_variable(|v| {
-                                if defined_variables.contains(v) {
-                                    overridden_variable = Some(v.clone());
-                                }
-                            });
-                            if let Some(overridden_variable) = overridden_variable {
-                                return Err(AlgebraBuilderError::new(
-                                    element.span,
-                                    format!(
-                                        "{overridden_variable} is overridden in the right side of LATERAL"
-                                    ),
-                                ));
-                            }
+                            let p = self.build_graph_pattern(
+                                *p,
+                                &extended_variables_context(context_variables, &g),
+                            )?;
                             g = QueryExpression::Lateral {
                                 left: Box::new(g),
                                 right: Box::new(p),
@@ -801,13 +819,14 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         expression: ast::OrderCondition<'a>,
         aggregates: &mut Vec<(Variable, AggregateExpression)>,
+        context_variables: &[&Variable],
     ) -> Result<OrderExpression, AlgebraBuilderError> {
         Ok(match expression {
             ast::OrderCondition::Asc(e) => {
-                OrderExpression::Asc(self.build_expression(e, aggregates)?)
+                OrderExpression::Asc(self.build_expression(e, aggregates, context_variables)?)
             }
             ast::OrderCondition::Desc(e) => {
-                OrderExpression::Desc(self.build_expression(e, aggregates)?)
+                OrderExpression::Desc(self.build_expression(e, aggregates, context_variables)?)
             }
         })
     }
@@ -815,6 +834,7 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_aggregate(
         &mut self,
         aggregate: Spanned<ast::Aggregate<'a>>,
+        context_variables: &[&Variable],
     ) -> Result<AggregateExpression, AlgebraBuilderError> {
         let (name, expression, distinct, scalarvals) = match aggregate.inner {
             ast::Aggregate::Count(distinct, expression) => {
@@ -850,6 +870,7 @@ impl<'a> AlgebraBuilder<'a> {
         let expr = self.build_expression_without_aggregates(
             *expression,
             "Aggregated expressions cannot be nested",
+            context_variables,
         )?;
         Ok(AggregateExpression::FunctionCall {
             name,
@@ -863,10 +884,11 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         expression: Spanned<ast::Expression<'a>>,
         error_message: &'static str,
+        context_variables: &[&Variable],
     ) -> Result<Expression, AlgebraBuilderError> {
         let mut aggregates = Vec::new();
         let span = expression.span;
-        let expression = self.build_expression(expression, &mut aggregates)?;
+        let expression = self.build_expression(expression, &mut aggregates, context_variables)?;
         if !aggregates.is_empty() {
             return Err(AlgebraBuilderError::new(span, error_message));
         }
@@ -877,116 +899,118 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         expression: Spanned<ast::Expression<'a>>,
         aggregates: &mut Vec<(Variable, AggregateExpression)>,
+        context_variables: &[&Variable],
     ) -> Result<Expression, AlgebraBuilderError> {
         Ok(match expression.inner {
             ast::Expression::Or(l, r) => Expression::Or(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+                Box::new(self.build_expression(*l, aggregates, context_variables)?),
+                Box::new(self.build_expression(*r, aggregates, context_variables)?),
             ),
             ast::Expression::And(l, r) => Expression::And(
-                Box::new(self.build_expression(*l, aggregates)?),
-                Box::new(self.build_expression(*r, aggregates)?),
+                Box::new(self.build_expression(*l, aggregates, context_variables)?),
+                Box::new(self.build_expression(*r, aggregates, context_variables)?),
             ),
             ast::Expression::Equal(l, r) => Expression::FunctionCall(
                 sparql::EQUALS,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::NotEqual(l, r) => Expression::FunctionCall(
                 sparql::NOT_EQUALS,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::Less(l, r) => Expression::FunctionCall(
                 sparql::LESS_THAN,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::LessOrEqual(l, r) => Expression::FunctionCall(
                 sparql::LESS_THAN_OR_EQUAL,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::Greater(l, r) => Expression::FunctionCall(
                 sparql::GREATER_THAN,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::GreaterOrEqual(l, r) => Expression::FunctionCall(
                 sparql::GREATER_THAN_OR_EQUAL,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::In(l, r) => Expression::In(
-                Box::new(self.build_expression(*l, aggregates)?),
+                Box::new(self.build_expression(*l, aggregates, context_variables)?),
                 r.into_iter()
-                    .map(|e| self.build_expression(e, aggregates))
+                    .map(|e| self.build_expression(e, aggregates, context_variables))
                     .collect::<Result<_, _>>()?,
             ),
             ast::Expression::NotIn(l, r) => Expression::FunctionCall(
                 sparql::LOGICAL_NOT,
                 vec![Expression::In(
-                    Box::new(self.build_expression(*l, aggregates)?),
+                    Box::new(self.build_expression(*l, aggregates, context_variables)?),
                     r.into_iter()
-                        .map(|e| self.build_expression(e, aggregates))
+                        .map(|e| self.build_expression(e, aggregates, context_variables))
                         .collect::<Result<_, _>>()?,
                 )],
             ),
             ast::Expression::Add(l, r) => Expression::FunctionCall(
                 sparql::ADD,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::Subtract(l, r) => Expression::FunctionCall(
                 sparql::SUBTRACT,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::Multiply(l, r) => Expression::FunctionCall(
                 sparql::MULTIPLY,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::Divide(l, r) => Expression::FunctionCall(
                 sparql::DIVIDE,
                 vec![
-                    self.build_expression(*l, aggregates)?,
-                    self.build_expression(*r, aggregates)?,
+                    self.build_expression(*l, aggregates, context_variables)?,
+                    self.build_expression(*r, aggregates, context_variables)?,
                 ],
             ),
             ast::Expression::UnaryPlus(e) => Expression::FunctionCall(
                 sparql::UNARY_PLUS,
-                vec![self.build_expression(*e, aggregates)?],
+                vec![self.build_expression(*e, aggregates, context_variables)?],
             ),
             ast::Expression::UnaryMinus(e) => Expression::FunctionCall(
                 sparql::UNARY_MINUS,
-                vec![self.build_expression(*e, aggregates)?],
+                vec![self.build_expression(*e, aggregates, context_variables)?],
             ),
             ast::Expression::Not(e) => Expression::FunctionCall(
                 sparql::LOGICAL_NOT,
-                vec![self.build_expression(*e, aggregates)?],
+                vec![self.build_expression(*e, aggregates, context_variables)?],
             ),
             ast::Expression::Bound(v) => Expression::Bound(Self::build_variable(v)),
             ast::Expression::Aggregate(aggregate) => {
-                let aggregate = self.build_aggregate(expression.span.make_wrapped(aggregate))?;
+                let aggregate = self
+                    .build_aggregate(expression.span.make_wrapped(aggregate), context_variables)?;
                 register_aggregate(aggregate, aggregates).into()
             }
             ast::Expression::Iri(n) => Expression::NamedNode(self.build_named_node(n)?),
@@ -997,7 +1021,7 @@ impl<'a> AlgebraBuilder<'a> {
             ast::Expression::BuiltIn(name, args) => {
                 let args = args
                     .into_iter()
-                    .map(|e| self.build_expression(e, aggregates))
+                    .map(|e| self.build_expression(e, aggregates, context_variables))
                     .collect::<Result<_, _>>()?;
                 let arity = function_arity(name);
                 let name = match name {
@@ -1119,6 +1143,7 @@ impl<'a> AlgebraBuilder<'a> {
                     let expr = self.build_expression_without_aggregates(
                         args.args.into_iter().next().unwrap(),
                         "Aggregated expressions cannot be nested",
+                        context_variables,
                     )?;
                     return Ok(register_aggregate(
                         AggregateExpression::FunctionCall {
@@ -1143,16 +1168,18 @@ impl<'a> AlgebraBuilder<'a> {
                     name,
                     args.args
                         .into_iter()
-                        .map(|e| self.build_expression(e, aggregates))
+                        .map(|e| self.build_expression(e, aggregates, context_variables))
                         .collect::<Result<_, _>>()?,
                 )
             }
             ast::Expression::Exists(gp) => {
-                Expression::Exists(Box::new(self.build_graph_pattern(*gp)?))
+                Expression::Exists(Box::new(self.build_graph_pattern(*gp, context_variables)?))
             }
             ast::Expression::NotExists(gp) => Expression::FunctionCall(
                 sparql::LOGICAL_NOT,
-                vec![Expression::Exists(Box::new(self.build_graph_pattern(*gp)?))],
+                vec![Expression::Exists(Box::new(
+                    self.build_graph_pattern(*gp, context_variables)?,
+                ))],
             ),
         })
     }
@@ -1860,7 +1887,7 @@ impl<'a> AlgebraBuilder<'a> {
                             delete,
                             insert,
                             using,
-                            pattern: Box::new(self.build_graph_pattern(r#where)?),
+                            pattern: Box::new(self.build_graph_pattern(r#where, &[])?),
                         }
                         .into(),
                     );
@@ -2022,7 +2049,6 @@ fn find_unbound_variable<'a>(
         Expression::NamedNode(_)
         | Expression::Literal(_)
         | Expression::Bound(_)
-        | Expression::Coalesce(_)
         | Expression::Exists(_) => None,
         Expression::Variable(var) => (!variables.contains(var)).then_some(var),
         Expression::Or(a, b) | Expression::And(a, b) => {
@@ -2033,7 +2059,7 @@ fn find_unbound_variable<'a>(
             find_unbound_variable(a, variables)?;
             b.iter().find_map(|b| find_unbound_variable(b, variables))
         }
-        Expression::FunctionCall(_, parameters) => parameters
+        Expression::Coalesce(parameters) | Expression::FunctionCall(_, parameters) => parameters
             .iter()
             .find_map(|p| find_unbound_variable(p, variables)),
         Expression::If(a, b, c) => {
@@ -2188,67 +2214,6 @@ fn add_path_to_patterns(
             path,
             object,
         }),
-    }
-}
-
-/// Called on every variable defined using "AS" or "VALUES"
-#[cfg(feature = "sep-0006")]
-fn add_defined_variables<'a>(pattern: &'a QueryExpression, set: &mut HashSet<&'a Variable>) {
-    match pattern {
-        QueryExpression::Bgp { .. } | QueryExpression::Path { .. } => {}
-        QueryExpression::Join { left, right }
-        | QueryExpression::LeftJoin { left, right, .. }
-        | QueryExpression::Lateral { left, right }
-        | QueryExpression::Union { left, right }
-        | QueryExpression::Minus { left, right } => {
-            add_defined_variables(left, set);
-            add_defined_variables(right, set);
-        }
-        QueryExpression::Graph { inner, .. } => {
-            add_defined_variables(inner, set);
-        }
-        QueryExpression::Extend {
-            inner, variable, ..
-        } => {
-            set.insert(variable);
-            add_defined_variables(inner, set);
-        }
-        QueryExpression::Group {
-            variables,
-            aggregates,
-            inner,
-        } => {
-            for (v, _) in aggregates {
-                set.insert(v);
-            }
-            let mut inner_variables = HashSet::new();
-            add_defined_variables(inner, &mut inner_variables);
-            for v in inner_variables {
-                if variables.contains(v) {
-                    set.insert(v);
-                }
-            }
-        }
-        QueryExpression::Values { variables, .. } => {
-            for v in variables {
-                set.insert(v);
-            }
-        }
-        QueryExpression::Project { variables, inner } => {
-            let mut inner_variables = HashSet::new();
-            add_defined_variables(inner, &mut inner_variables);
-            for v in inner_variables {
-                if variables.contains(v) {
-                    set.insert(v);
-                }
-            }
-        }
-        QueryExpression::Service { inner, .. }
-        | QueryExpression::Filter { inner, .. }
-        | QueryExpression::OrderBy { inner, .. }
-        | QueryExpression::Distinct { inner }
-        | QueryExpression::Reduced { inner }
-        | QueryExpression::Slice { inner, .. } => add_defined_variables(inner, set),
     }
 }
 
@@ -2829,4 +2794,17 @@ fn copy_graph(
             GraphName::DefaultGraph => bgp,
         }),
     }
+}
+
+fn extended_variables_context<'a>(
+    context_variables: &[&'a Variable],
+    query_expression: &'a QueryExpression,
+) -> Vec<&'a Variable> {
+    let mut new_context_variables = context_variables.to_vec();
+    query_expression.on_in_scope_variable(|v| {
+        if !new_context_variables.contains(&v) {
+            new_context_variables.push(v);
+        }
+    });
+    new_context_variables
 }
