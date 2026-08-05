@@ -10,56 +10,56 @@ use std::fmt::Write as _;
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum PropertyPathExpression {
-    NamedNode(NamedNode),
-    Reverse(Box<Self>),
-    Sequence(Box<Self>, Box<Self>),
-    Alternative(Box<Self>, Box<Self>),
-    ZeroOrMore(Box<Self>),
-    OneOrMore(Box<Self>),
-    ZeroOrOne(Box<Self>),
-    NegatedPropertySet(Vec<NamedNode>),
+    Link(NamedNode),
+    Inv(Box<Self>),
+    Seq(Box<Self>, Box<Self>),
+    Alt(Box<Self>, Box<Self>),
+    ZeroOrMorePath(Box<Self>),
+    OneOrMorePath(Box<Self>),
+    ZeroOrOnePath(Box<Self>),
+    Nps(Vec<NamedNode>),
 }
 
 impl PropertyPathExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::NamedNode(p) => write!(f, "{p}"),
-            Self::Reverse(p) => {
+            Self::Link(p) => write!(f, "{p}"),
+            Self::Inv(p) => {
                 f.write_str("(reverse ")?;
                 p.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Alternative(a, b) => {
+            Self::Alt(a, b) => {
                 f.write_str("(alt ")?;
                 a.fmt_sse(f)?;
                 f.write_str(" ")?;
                 b.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Sequence(a, b) => {
+            Self::Seq(a, b) => {
                 f.write_str("(seq ")?;
                 a.fmt_sse(f)?;
                 f.write_str(" ")?;
                 b.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::ZeroOrMore(p) => {
+            Self::ZeroOrMorePath(p) => {
                 f.write_str("(path* ")?;
                 p.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::OneOrMore(p) => {
+            Self::OneOrMorePath(p) => {
                 f.write_str("(path+ ")?;
                 p.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::ZeroOrOne(p) => {
+            Self::ZeroOrOnePath(p) => {
                 f.write_str("(path? ")?;
                 p.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::NegatedPropertySet(p) => {
+            Self::Nps(p) => {
                 f.write_str("(notoneof")?;
                 for p in p {
                     write!(f, " {p}")?;
@@ -73,14 +73,14 @@ impl PropertyPathExpression {
 impl fmt::Display for PropertyPathExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NamedNode(p) => p.fmt(f),
-            Self::Reverse(p) => write!(f, "^({p})"),
-            Self::Sequence(a, b) => write!(f, "({a} / {b})"),
-            Self::Alternative(a, b) => write!(f, "({a} | {b})"),
-            Self::ZeroOrMore(p) => write!(f, "({p})*"),
-            Self::OneOrMore(p) => write!(f, "({p})+"),
-            Self::ZeroOrOne(p) => write!(f, "({p})?"),
-            Self::NegatedPropertySet(p) => {
+            Self::Link(p) => p.fmt(f),
+            Self::Inv(p) => write!(f, "^({p})"),
+            Self::Seq(a, b) => write!(f, "({a} / {b})"),
+            Self::Alt(a, b) => write!(f, "({a} | {b})"),
+            Self::ZeroOrMorePath(p) => write!(f, "({p})*"),
+            Self::OneOrMorePath(p) => write!(f, "({p})+"),
+            Self::ZeroOrOnePath(p) => write!(f, "({p})?"),
+            Self::Nps(p) => {
                 f.write_str("!(")?;
                 for (i, c) in p.iter().enumerate() {
                     if i > 0 {
@@ -96,7 +96,7 @@ impl fmt::Display for PropertyPathExpression {
 
 impl From<NamedNode> for PropertyPathExpression {
     fn from(p: NamedNode) -> Self {
-        Self::NamedNode(p)
+        Self::Link(p)
     }
 }
 
