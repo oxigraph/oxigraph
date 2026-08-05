@@ -546,13 +546,15 @@ pub struct PreparedQuery<'a> {
 impl PreparedQuery<'_> {
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
+    /// The variable must be part of the `SELECT` clause to be substituted.
+    ///
     /// Usage example:
     /// ```
     /// use oxrdf::{Dataset, Literal, Variable};
     /// use spareval::{QueryEvaluator, QueryResults};
     /// use spargebra::SparqlParser;
     ///
-    /// let query = SparqlParser::new().parse_query("SELECT ?v WHERE {}")?;
+    /// let query = SparqlParser::new().parse_query("SELECT ?x ?v WHERE { BIND(?v+1 AS ?x) }")?;
     /// let evaluator = QueryEvaluator::new();
     /// let prepared_query = evaluator
     ///     .prepare(&query)
@@ -560,8 +562,8 @@ impl PreparedQuery<'_> {
     ///
     /// if let QueryResults::Solutions(mut solutions) = prepared_query.execute(&Dataset::new())? {
     ///     assert_eq!(
-    ///         solutions.next().unwrap()?.get("v"),
-    ///         Some(&Literal::from(1).into())
+    ///         solutions.next().unwrap()?.get("x"),
+    ///         Some(&Literal::from(2).into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
