@@ -26,8 +26,8 @@ use spargebra::term::{
 };
 use spargebra::vocab::sparql;
 use sparopt::algebra::{
-    AggregateExpression, Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm,
-    MinusAlgorithm, OrderExpression,
+    AggregateExpression, Expression, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm,
+    OrderExpression, QueryExpression,
 };
 use std::cell::Cell;
 use std::cmp::Ordering;
@@ -449,14 +449,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     pub fn evaluate_select(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
         Result<QuerySolutionIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
-        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let (eval, stats) = self.query_expression_evaluator(expression, &mut variables);
         let eval = match eval {
             Ok(e) => e,
             Err(e) => return (Err(e), stats),
@@ -477,11 +477,11 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     pub fn evaluate_ask(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (Result<bool, QueryEvaluationError>, Rc<EvalNodeWithStats>) {
         let mut variables = Vec::new();
-        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let (eval, stats) = self.query_expression_evaluator(expression, &mut variables);
         let eval = match eval {
             Ok(e) => e,
             Err(e) => return (Err(e), stats),
@@ -514,7 +514,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     pub fn evaluate_construct(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         template: &[TriplePattern],
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
@@ -522,7 +522,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
-        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let (eval, stats) = self.query_expression_evaluator(expression, &mut variables);
         let eval = match eval {
             Ok(e) => e,
             Err(e) => return (Err(e), stats),
@@ -568,14 +568,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     pub fn evaluate_describe(
         &self,
-        pattern: &GraphPattern,
+        expression: &QueryExpression,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
         Result<QueryTripleIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
-        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let (eval, stats) = self.query_expression_evaluator(expression, &mut variables);
         let eval = match eval {
             Ok(e) => e,
             Err(e) => return (Err(e), stats),
@@ -596,19 +596,22 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         )
     }
 
-    pub fn graph_pattern_evaluator(
+    pub fn query_expression_evaluator(
         &self,
-        pattern: &GraphPattern,
+        query_expression: &QueryExpression,
         encoded_variables: &mut Vec<Variable>,
     ) -> (
         Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut stat_children = Vec::new();
-        let evaluator =
-            self.build_graph_pattern_evaluator(pattern, encoded_variables, &mut stat_children);
+        let evaluator = self.build_query_expression_evaluator(
+            query_expression,
+            encoded_variables,
+            &mut stat_children,
+        );
         let stats = Rc::new(EvalNodeWithStats {
-            label: eval_node_label(pattern),
+            label: eval_node_label(query_expression),
             children: stat_children,
             exec_count: Cell::new(0),
             exec_duration: Cell::new(self.run_stats.then(DayTimeDuration::default)),
@@ -638,14 +641,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         (Ok(evaluator), stats)
     }
 
-    fn build_graph_pattern_evaluator(
+    fn build_query_expression_evaluator(
         &self,
-        pattern: &GraphPattern,
+        query_expression: &QueryExpression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
-        Ok(match pattern {
-            GraphPattern::Values {
+        Ok(match query_expression {
+            QueryExpression::Values {
                 variables,
                 bindings,
             } => {
@@ -688,7 +691,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     )
                 })
             }
-            GraphPattern::QuadPattern {
+            QueryExpression::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -820,7 +823,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     )
                 })
             }
-            GraphPattern::Path {
+            QueryExpression::Path {
                 subject,
                 path,
                 object,
@@ -955,8 +958,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }
                 })
             }
-            GraphPattern::Graph { graph_name, inner } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+            QueryExpression::Graph { graph_name, inner } => {
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 let graph_name_selector = TupleSelector::from_named_node_pattern(
@@ -1025,14 +1029,15 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }
                 })
             }
-            GraphPattern::Join {
+            QueryExpression::Join {
                 left,
                 right,
                 algorithm,
             } => {
-                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
+                let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
+                let (right, right_stats) =
+                    self.query_expression_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
                 let left = left?;
                 let right = right?;
@@ -1107,12 +1112,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 }
             }
             #[cfg(feature = "sep-0006")]
-            GraphPattern::Lateral { left, right } => {
-                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
+            QueryExpression::Lateral { left, right } => {
+                let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
                 let left = left?;
 
-                if let GraphPattern::LeftJoin {
+                if let QueryExpression::LeftJoin {
                     left: nested_left,
                     right: nested_right,
                     expression,
@@ -1121,10 +1126,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 {
                     if nested_left.is_empty_singleton() {
                         // We are in a ForLoopLeftJoin
-                        let right =
-                            GraphPattern::filter(nested_right.as_ref().clone(), expression.clone());
+                        let right = QueryExpression::filter(
+                            nested_right.as_ref().clone(),
+                            expression.clone(),
+                        );
                         let (right, right_stats) =
-                            self.graph_pattern_evaluator(&right, encoded_variables);
+                            self.query_expression_evaluator(&right, encoded_variables);
                         stat_children.push(right_stats);
                         let right = right?;
                         return Ok(Rc::new(move |from| {
@@ -1137,7 +1144,8 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         }));
                     }
                 }
-                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
+                let (right, right_stats) =
+                    self.query_expression_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
                 let right = right?;
                 Rc::new(move |from| {
@@ -1148,14 +1156,15 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }))
                 })
             }
-            GraphPattern::Minus {
+            QueryExpression::Minus {
                 left,
                 right,
                 algorithm,
             } => {
-                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
+                let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
+                let (right, right_stats) =
+                    self.query_expression_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
                 let left = left?;
                 let right = right?;
@@ -1210,15 +1219,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }
                 }
             }
-            GraphPattern::LeftJoin {
+            QueryExpression::LeftJoin {
                 left,
                 right,
                 expression,
                 algorithm,
             } => {
-                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
+                let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
+                let (right, right_stats) =
+                    self.query_expression_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
                 let left = left?;
                 let right = right?;
@@ -1260,8 +1270,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }
                 }
             }
-            GraphPattern::Filter { inner, expression } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+            QueryExpression::Filter { inner, expression } => {
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 let expression = self.effective_boolean_value_expression_evaluator(
@@ -1281,12 +1292,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }))
                 })
             }
-            GraphPattern::Union { inner } => {
+            QueryExpression::Union { inner } => {
                 let children = inner
                     .iter()
                     .map(|child| {
                         let (child, child_stats) =
-                            self.graph_pattern_evaluator(child, encoded_variables);
+                            self.query_expression_evaluator(child, encoded_variables);
                         stat_children.push(child_stats);
                         child
                     })
@@ -1301,12 +1312,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     })
                 })
             }
-            GraphPattern::Extend {
+            QueryExpression::Extend {
                 inner,
                 variable,
                 expression,
             } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
 
@@ -1343,8 +1355,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }))
                 })
             }
-            GraphPattern::OrderBy { inner, expression } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+            QueryExpression::OrderBy { inner, expression } => {
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 let by = expression
@@ -1408,14 +1421,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
                 })
             }
-            GraphPattern::Distinct { inner } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+            QueryExpression::Distinct { inner } => {
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
-            GraphPattern::Reduced { inner } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+            QueryExpression::Reduced { inner } => {
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 Rc::new(move |from| {
@@ -1425,12 +1440,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     })
                 })
             }
-            GraphPattern::Slice {
+            QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
             } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let mut child = child?;
                 #[expect(clippy::unwrap_in_result)]
@@ -1443,10 +1459,10 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 }
                 child
             }
-            GraphPattern::Project { inner, variables } => {
+            QueryExpression::Project { inner, variables } => {
                 let mut inner_encoded_variables = variables.clone();
                 let (child, child_stats) =
-                    self.graph_pattern_evaluator(inner, &mut inner_encoded_variables);
+                    self.query_expression_evaluator(inner, &mut inner_encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 let mapping = variables
@@ -1488,12 +1504,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     }))
                 })
             }
-            GraphPattern::Group {
+            QueryExpression::Group {
                 inner,
                 aggregates,
                 variables,
             } => {
-                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
+                let (child, child_stats) =
+                    self.query_expression_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 let child = child?;
                 let key_variables = variables
@@ -1578,7 +1595,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     )
                 })
             }
-            GraphPattern::Service {
+            QueryExpression::Service {
                 name,
                 inner,
                 silent,
@@ -1590,13 +1607,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 inner.lookup_used_variables(&mut |v| {
                     encode_variable(encoded_variables, v);
                 }); // We fill "encoded_variables"
-                let graph_pattern = spargebra::algebra::GraphPattern::from(inner.as_ref());
+                let query_expression = spargebra::algebra::QueryExpression::from(inner.as_ref());
                 let variables = Rc::from(encoded_variables.as_slice());
                 let eval = self.clone();
                 Rc::new(move |from| {
                     match eval.evaluate_service(
                         &service_name,
-                        &graph_pattern,
+                        &query_expression,
                         Rc::clone(&variables),
                         &from,
                     ) {
@@ -1621,7 +1638,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     fn evaluate_service(
         &self,
         service_name: &TupleSelector<D::InternalTerm>,
-        graph_pattern: &spargebra::algebra::GraphPattern,
+        query_expression: &spargebra::algebra::QueryExpression,
         variables: Rc<[Variable]>,
         from: &InternalTuple<D::InternalTerm>,
     ) -> Result<InternalTuplesIterator<'a, D::InternalTerm>, QueryEvaluationError> {
@@ -1638,7 +1655,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         };
         let iter =
             self.service_handler
-                .handle(&service_name, graph_pattern, self.base_iri.as_ref())?;
+                .handle(&service_name, query_expression, self.base_iri.as_ref())?;
         Ok(encode_bindings(self.dataset.clone(), variables, iter))
     }
 
@@ -1983,11 +2000,11 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
 
     fn build_exists(
         &mut self,
-        plan: &GraphPattern,
+        plan: &QueryExpression,
     ) -> Result<impl Fn(&InternalTuple<D::InternalTerm>) -> bool + 'a, QueryEvaluationError> {
         let (eval, stats) = self
             .evaluator
-            .graph_pattern_evaluator(plan, self.encoded_variables);
+            .query_expression_evaluator(plan, self.encoded_variables);
         self.stat_children.push(stats);
         let eval = eval?;
         Ok(move |tuple: &InternalTuple<D::InternalTerm>| eval(tuple.clone()).next().is_some())
@@ -3807,10 +3824,10 @@ impl fmt::Debug for EvalNodeWithStats {
     }
 }
 
-fn eval_node_label(node: &GraphPattern) -> String {
+fn eval_node_label(node: &QueryExpression) -> String {
     match node {
-        GraphPattern::Distinct { .. } => "Distinct(Hash)".to_owned(),
-        GraphPattern::Extend {
+        QueryExpression::Distinct { .. } => "Distinct(Hash)".to_owned(),
+        QueryExpression::Extend {
             expression,
             variable,
             ..
@@ -3818,11 +3835,11 @@ fn eval_node_label(node: &GraphPattern) -> String {
             "Extend({} -> {variable})",
             FormattableExpression(expression)
         ),
-        GraphPattern::Filter { expression, .. } => {
+        QueryExpression::Filter { expression, .. } => {
             format!("Filter({})", FormattableExpression(expression))
         }
-        GraphPattern::Graph { graph_name, .. } => format!("Graph({graph_name})"),
-        GraphPattern::Group {
+        QueryExpression::Graph { graph_name, .. } => format!("Graph({graph_name})"),
+        QueryExpression::Group {
             variables,
             aggregates,
             ..
@@ -3837,15 +3854,15 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 ))
             )
         }
-        GraphPattern::Join { algorithm, .. } => match algorithm {
+        QueryExpression::Join { algorithm, .. } => match algorithm {
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => format!(
                 "LeftJoin(HashBuildLeftProbeRight, keys = {})",
                 format_list(keys)
             ),
         },
         #[cfg(feature = "sep-0006")]
-        GraphPattern::Lateral { right, .. } => {
-            if let GraphPattern::LeftJoin {
+        QueryExpression::Lateral { right, .. } => {
+            if let QueryExpression::LeftJoin {
                 left: nested_left,
                 expression,
                 ..
@@ -3861,7 +3878,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             }
             "Lateral".to_owned()
         }
-        GraphPattern::LeftJoin {
+        QueryExpression::LeftJoin {
             algorithm,
             expression,
             ..
@@ -3872,13 +3889,13 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 FormattableExpression(expression)
             ),
         },
-        GraphPattern::Minus { algorithm, .. } => match algorithm {
+        QueryExpression::Minus { algorithm, .. } => match algorithm {
             MinusAlgorithm::HashBuildRightProbeLeft { keys } => format!(
                 "AntiJoin(HashBuildRightProbeLeft, keys = {})",
                 format_list(keys)
             ),
         },
-        GraphPattern::OrderBy { expression, .. } => {
+        QueryExpression::OrderBy { expression, .. } => {
             format!(
                 "Sort({})",
                 format_list(
@@ -3888,13 +3905,15 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 )
             )
         }
-        GraphPattern::Path {
+        QueryExpression::Path {
             subject,
             path,
             object,
         } => format!("Path({subject} {path} {object})"),
-        GraphPattern::Project { variables, .. } => format!("Project({})", format_list(variables)),
-        GraphPattern::QuadPattern {
+        QueryExpression::Project { variables, .. } => {
+            format!("Project({})", format_list(variables))
+        }
+        QueryExpression::QuadPattern {
             subject,
             predicate,
             object,
@@ -3906,23 +3925,23 @@ fn eval_node_label(node: &GraphPattern) -> String {
                 format!("QuadPattern({subject} {predicate} {object})")
             }
         }
-        GraphPattern::Reduced { .. } => "Reduced".to_owned(),
-        GraphPattern::Service { name, silent, .. } => {
+        QueryExpression::Reduced { .. } => "Reduced".to_owned(),
+        QueryExpression::Service { name, silent, .. } => {
             if *silent {
                 format!("Service({name}, Silent)")
             } else {
                 format!("Service({name})")
             }
         }
-        GraphPattern::Slice { offset, limit, .. } => {
+        QueryExpression::Slice { offset, limit, .. } => {
             if let Some(limit) = limit {
                 format!("Slice(offset = {offset}, limit = {limit})")
             } else {
                 format!("Slice(offset = {offset})")
             }
         }
-        GraphPattern::Union { .. } => "Union".to_owned(),
-        GraphPattern::Values {
+        QueryExpression::Union { .. } => "Union".to_owned(),
+        QueryExpression::Values {
             variables,
             bindings,
         } => {

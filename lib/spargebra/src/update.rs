@@ -213,7 +213,7 @@ pub struct DeleteInsertOperation {
     pub delete: Vec<GroundQuadPattern>,
     pub insert: Vec<QuadPattern>,
     pub using: Option<QueryDataset>,
-    pub pattern: Box<GraphPattern>,
+    pub pattern: Box<QueryExpression>,
 }
 
 impl DeleteInsertOperation {
@@ -281,7 +281,7 @@ impl fmt::Display for DeleteInsertOperation {
         }
         let mut pattern = &*self.pattern;
         // We ignore the root projection, it's useless
-        if let GraphPattern::Project { inner, .. } = pattern {
+        if let QueryExpression::Project { inner, .. } = pattern {
             pattern = inner;
         }
         write!(f, " WHERE {{ {pattern} }}")

@@ -1,4 +1,4 @@
-use crate::algebra::{Expression, GraphPattern};
+use crate::algebra::{Expression, QueryExpression};
 use oxrdf::Variable;
 use oxrdf::vocab::xsd;
 use spargebra::term::{GroundTerm, GroundTermPattern, NamedNodePattern};
@@ -6,12 +6,12 @@ use spargebra::vocab::sparql;
 use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr};
 
-pub fn infer_graph_pattern_types(
-    pattern: &GraphPattern,
+pub fn infer_query_expression_types(
+    query_expression: &QueryExpression,
     mut types: VariableTypes,
 ) -> VariableTypes {
-    match pattern {
-        GraphPattern::QuadPattern {
+    match query_expression {
+        QueryExpression::QuadPattern {
             subject,
             predicate,
             object,
@@ -27,79 +27,79 @@ pub fn infer_graph_pattern_types(
             }
             types
         }
-        GraphPattern::Path {
+        QueryExpression::Path {
             subject, object, ..
         } => {
             add_ground_term_pattern_types(subject, &mut types, false);
             add_ground_term_pattern_types(object, &mut types, true);
             types
         }
-        GraphPattern::Graph { graph_name, inner } => {
-            let mut types = infer_graph_pattern_types(inner, types);
+        QueryExpression::Graph { graph_name, inner } => {
+            let mut types = infer_query_expression_types(inner, types);
             if let NamedNodePattern::Variable(v) = graph_name {
                 types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
             }
             types
         }
-        GraphPattern::Join { left, right, .. } => {
-            let mut output_types = infer_graph_pattern_types(left, types.clone());
-            output_types.intersect_with(infer_graph_pattern_types(right, types));
+        QueryExpression::Join { left, right, .. } => {
+            let mut output_types = infer_query_expression_types(left, types.clone());
+            output_types.intersect_with(infer_query_expression_types(right, types));
             output_types
         }
         #[cfg(feature = "sep-0006")]
-        GraphPattern::Lateral { left, right } => {
-            infer_graph_pattern_types(right, infer_graph_pattern_types(left, types))
+        QueryExpression::Lateral { left, right } => {
+            infer_query_expression_types(right, infer_query_expression_types(left, types))
         }
-        GraphPattern::LeftJoin { left, right, .. } => {
-            let mut right_types = infer_graph_pattern_types(right, types.clone()); // TODO: expression
+        QueryExpression::LeftJoin { left, right, .. } => {
+            let mut right_types = infer_query_expression_types(right, types.clone()); // TODO: expression
             for t in right_types.inner.values_mut() {
                 t.undef = true; // Right might be unset
             }
-            let mut output_types = infer_graph_pattern_types(left, types);
+            let mut output_types = infer_query_expression_types(left, types);
             output_types.intersect_with(right_types);
             output_types
         }
-        GraphPattern::Minus { left, .. } => infer_graph_pattern_types(left, types),
-        GraphPattern::Union { inner } => inner
+        QueryExpression::Minus { left, .. } => infer_query_expression_types(left, types),
+        QueryExpression::Union { inner } => inner
             .iter()
-            .map(|inner| infer_graph_pattern_types(inner, types.clone()))
+            .map(|inner| infer_query_expression_types(inner, types.clone()))
             .reduce(|mut a, b| {
                 a.union_with(b);
                 a
             })
             .unwrap_or_default(),
-        GraphPattern::Extend {
+        QueryExpression::Extend {
             inner,
             variable,
             expression,
         } => {
-            let mut types = infer_graph_pattern_types(inner, types);
+            let mut types = infer_query_expression_types(inner, types);
             types.intersect_variable_with(
                 variable.clone(),
                 infer_expression_type(expression, &types),
             );
             types
         }
-        GraphPattern::Filter { inner, .. } => infer_graph_pattern_types(inner, types),
-        GraphPattern::Project { inner, variables } => VariableTypes {
-            inner: infer_graph_pattern_types(inner, types)
+        QueryExpression::Filter { inner, .. } => infer_query_expression_types(inner, types),
+        QueryExpression::Project { inner, variables } => VariableTypes {
+            inner: infer_query_expression_types(inner, types)
                 .inner
                 .into_iter()
                 .filter(|(v, _)| variables.contains(v))
                 .collect(),
         },
-        GraphPattern::Distinct { inner }
-        | GraphPattern::Reduced { inner }
-        | GraphPattern::OrderBy { inner, .. }
-        | GraphPattern::Slice { inner, .. } => infer_graph_pattern_types(inner, types),
-        GraphPattern::Group {
+        QueryExpression::Distinct { inner }
+        | QueryExpression::Reduced { inner }
+        | QueryExpression::OrderBy { inner, .. }
+        | QueryExpression::Slice { inner, .. } => infer_query_expression_types(inner, types),
+        QueryExpression::Group {
             inner,
             variables,
             aggregates,
         } => {
-            let types = infer_graph_pattern_types(inner, types);
+            let types = infer_query_expression_types(inner, types);
             VariableTypes {
-                inner: infer_graph_pattern_types(inner, types)
+                inner: infer_query_expression_types(inner, types)
                     .inner
                     .into_iter()
                     .filter(|(v, _)| variables.contains(v))
@@ -107,7 +107,7 @@ pub fn infer_graph_pattern_types(
                     .collect(),
             }
         }
-        GraphPattern::Values {
+        QueryExpression::Values {
             variables,
             bindings,
         } => {
@@ -126,13 +126,13 @@ pub fn infer_graph_pattern_types(
             }
             types
         }
-        GraphPattern::Service {
+        QueryExpression::Service {
             name,
             inner,
             silent,
         } => {
             let parent_types = types.clone();
-            let mut types = infer_graph_pattern_types(inner, types);
+            let mut types = infer_query_expression_types(inner, types);
             if *silent {
                 // On failure, single empty solution
                 types.union_with(parent_types);

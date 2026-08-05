@@ -15,7 +15,7 @@ use regex::{Regex, RegexBuilder};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use spargebra::vocab::sparql;
-use sparopt::algebra::{Expression, GraphPattern};
+use sparopt::algebra::{Expression, QueryExpression};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ pub trait ExpressionEvaluatorContext<'a> {
     ) -> impl Fn(&Self::Tuple) -> bool + 'a;
     fn build_exists(
         &mut self,
-        plan: &GraphPattern,
+        plan: &QueryExpression,
     ) -> Result<impl Fn(&Self::Tuple) -> bool + 'a, Self::Error>;
     fn internalize_named_node(&mut self, term: &NamedNode) -> Result<Self::Term, Self::Error>;
     fn internalize_literal(&mut self, term: &Literal) -> Result<Self::Term, Self::Error>;
