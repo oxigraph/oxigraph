@@ -1909,29 +1909,27 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         path: &PropertyPathExpression,
     ) -> Result<Rc<PropertyPath<D::InternalTerm>>, QueryEvaluationError> {
         Ok(Rc::new(match path {
-            PropertyPathExpression::NamedNode(node) => {
+            PropertyPathExpression::Link(node) => {
                 PropertyPath::Path(self.encode_term(node.clone())?)
             }
-            PropertyPathExpression::Reverse(p) => {
-                PropertyPath::Reverse(self.encode_property_path(p)?)
-            }
-            PropertyPathExpression::Sequence(a, b) => {
+            PropertyPathExpression::Inv(p) => PropertyPath::Reverse(self.encode_property_path(p)?),
+            PropertyPathExpression::Seq(a, b) => {
                 PropertyPath::Sequence(self.encode_property_path(a)?, self.encode_property_path(b)?)
             }
-            PropertyPathExpression::Alternative(a, b) => PropertyPath::Alternative(
+            PropertyPathExpression::Alt(a, b) => PropertyPath::Alternative(
                 self.encode_property_path(a)?,
                 self.encode_property_path(b)?,
             ),
-            PropertyPathExpression::ZeroOrMore(p) => {
+            PropertyPathExpression::ZeroOrMorePath(p) => {
                 PropertyPath::ZeroOrMore(self.encode_property_path(p)?)
             }
-            PropertyPathExpression::OneOrMore(p) => {
+            PropertyPathExpression::OneOrMorePath(p) => {
                 PropertyPath::OneOrMore(self.encode_property_path(p)?)
             }
-            PropertyPathExpression::ZeroOrOne(p) => {
+            PropertyPathExpression::ZeroOrOnePath(p) => {
                 PropertyPath::ZeroOrOne(self.encode_property_path(p)?)
             }
-            PropertyPathExpression::NegatedPropertySet(ps) => PropertyPath::NegatedPropertySet(
+            PropertyPathExpression::Nps(ps) => PropertyPath::NegatedPropertySet(
                 ps.iter()
                     .map(|p| self.encode_term(p.clone()))
                     .collect::<Result<Rc<[_]>, _>>()?,
