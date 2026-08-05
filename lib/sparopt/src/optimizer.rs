@@ -1099,22 +1099,22 @@ fn is_path_fit_for_for_loop_join(
     entry_types: &VariableTypes,
 ) -> bool {
     match path {
-        PropertyPathExpression::NamedNode(_)
-        | PropertyPathExpression::OneOrMore(_)
-        | PropertyPathExpression::NegatedPropertySet(_) => true,
-        PropertyPathExpression::Reverse(path) => {
+        PropertyPathExpression::Link(_)
+        | PropertyPathExpression::OneOrMorePath(_)
+        | PropertyPathExpression::Nps(_) => true,
+        PropertyPathExpression::Inv(path) => {
             is_path_fit_for_for_loop_join(object, path, subject, entry_types)
         }
-        PropertyPathExpression::Sequence(l, r) => {
+        PropertyPathExpression::Seq(l, r) => {
             let whatever = Variable::new_unchecked("#intermediate#").into();
             is_path_fit_for_for_loop_join(subject, l, &whatever, entry_types)
                 || is_path_fit_for_for_loop_join(&whatever, r, subject, entry_types)
         }
-        PropertyPathExpression::Alternative(l, r) => {
+        PropertyPathExpression::Alt(l, r) => {
             is_path_fit_for_for_loop_join(subject, l, object, entry_types)
                 && is_path_fit_for_for_loop_join(subject, r, object, entry_types)
         }
-        PropertyPathExpression::ZeroOrMore(_) | PropertyPathExpression::ZeroOrOne(_) => {
+        PropertyPathExpression::ZeroOrMorePath(_) | PropertyPathExpression::ZeroOrOnePath(_) => {
             // We don't want to set the left or right side of the zero or ... path because it could be returned in the result set even if it is not supported in the graph
             if let (GroundTermPattern::Variable(subject), GroundTermPattern::Variable(object)) =
                 (subject, object)
@@ -1339,11 +1339,11 @@ fn estimate_triple_pattern_size(
 
 fn estimate_path_size(start_bound: bool, path: &PropertyPathExpression, end_bound: bool) -> u64 {
     match path {
-        PropertyPathExpression::NamedNode(_) => {
+        PropertyPathExpression::Link(_) => {
             estimate_triple_pattern_size(start_bound, true, end_bound)
         }
-        PropertyPathExpression::Reverse(p) => estimate_path_size(end_bound, p, start_bound),
-        PropertyPathExpression::Sequence(a, b) => {
+        PropertyPathExpression::Inv(p) => estimate_path_size(end_bound, p, start_bound),
+        PropertyPathExpression::Seq(a, b) => {
             // We do a for loop join in the best direction
             min(
                 estimate_path_size(start_bound, a, false)
@@ -1352,9 +1352,9 @@ fn estimate_path_size(start_bound: bool, path: &PropertyPathExpression, end_boun
                     .saturating_mul(estimate_path_size(false, b, end_bound)),
             )
         }
-        PropertyPathExpression::Alternative(a, b) => estimate_path_size(start_bound, a, end_bound)
+        PropertyPathExpression::Alt(a, b) => estimate_path_size(start_bound, a, end_bound)
             .saturating_add(estimate_path_size(start_bound, b, end_bound)),
-        PropertyPathExpression::ZeroOrMore(p) => {
+        PropertyPathExpression::ZeroOrMorePath(p) => {
             if start_bound && end_bound {
                 1
             } else if start_bound || end_bound {
@@ -1363,14 +1363,14 @@ fn estimate_path_size(start_bound: bool, path: &PropertyPathExpression, end_boun
                 1_000_000_000
             }
         }
-        PropertyPathExpression::OneOrMore(p) => {
+        PropertyPathExpression::OneOrMorePath(p) => {
             if start_bound && end_bound {
                 1
             } else {
                 estimate_path_size(start_bound, p, end_bound).saturating_mul(1000)
             }
         }
-        PropertyPathExpression::ZeroOrOne(p) => {
+        PropertyPathExpression::ZeroOrOnePath(p) => {
             if start_bound && end_bound {
                 1
             } else if start_bound || end_bound {
@@ -1379,7 +1379,7 @@ fn estimate_path_size(start_bound: bool, path: &PropertyPathExpression, end_boun
                 1_000_000_000
             }
         }
-        PropertyPathExpression::NegatedPropertySet(_) => {
+        PropertyPathExpression::Nps(_) => {
             estimate_triple_pattern_size(start_bound, false, end_bound)
         }
     }

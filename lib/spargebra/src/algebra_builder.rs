@@ -1333,7 +1333,7 @@ impl<'a> AlgebraBuilder<'a> {
                 if let Some(reifier) = reifier_to_emit {
                     let predicate = match predicate {
                         VarOrPath::Var(predicate) => NamedNodePattern::from(predicate.clone()),
-                        VarOrPath::Path(PropertyPathExpression::NamedNode(predicate)) => {
+                        VarOrPath::Path(PropertyPathExpression::Link(predicate)) => {
                             predicate.clone().into()
                         }
                         VarOrPath::Path(_) => {
@@ -1458,28 +1458,26 @@ impl<'a> AlgebraBuilder<'a> {
         path: ast::Path<'a>,
     ) -> Result<PropertyPathExpression, AlgebraBuilderError> {
         Ok(match path {
-            ast::Path::Alternative(l, r) => PropertyPathExpression::Alternative(
+            ast::Path::Alternative(l, r) => PropertyPathExpression::Alt(
                 Box::new(self.build_path(*l)?),
                 Box::new(self.build_path(*r)?),
             ),
-            ast::Path::Sequence(l, r) => PropertyPathExpression::Sequence(
+            ast::Path::Sequence(l, r) => PropertyPathExpression::Seq(
                 Box::new(self.build_path(*l)?),
                 Box::new(self.build_path(*r)?),
             ),
-            ast::Path::Inverse(p) => {
-                PropertyPathExpression::Reverse(Box::new(self.build_path(*p)?))
-            }
+            ast::Path::Inverse(p) => PropertyPathExpression::Inv(Box::new(self.build_path(*p)?)),
             ast::Path::ZeroOrOne(p) => {
-                PropertyPathExpression::ZeroOrOne(Box::new(self.build_path(*p)?))
+                PropertyPathExpression::ZeroOrOnePath(Box::new(self.build_path(*p)?))
             }
             ast::Path::ZeroOrMore(p) => {
-                PropertyPathExpression::ZeroOrMore(Box::new(self.build_path(*p)?))
+                PropertyPathExpression::ZeroOrMorePath(Box::new(self.build_path(*p)?))
             }
             ast::Path::OneOrMore(p) => {
-                PropertyPathExpression::OneOrMore(Box::new(self.build_path(*p)?))
+                PropertyPathExpression::OneOrMorePath(Box::new(self.build_path(*p)?))
             }
-            ast::Path::Iri(p) => PropertyPathExpression::NamedNode(self.build_named_node(p)?),
-            ast::Path::A => PropertyPathExpression::NamedNode(rdf::TYPE),
+            ast::Path::Iri(p) => PropertyPathExpression::Link(self.build_named_node(p)?),
+            ast::Path::A => PropertyPathExpression::Link(rdf::TYPE),
             ast::Path::NegatedPropertySet(nps) => {
                 let mut direct = Vec::new();
                 let mut inverse = Vec::new();
@@ -1494,16 +1492,14 @@ impl<'a> AlgebraBuilder<'a> {
                     }
                 }
                 if inverse.is_empty() {
-                    PropertyPathExpression::NegatedPropertySet(direct)
+                    PropertyPathExpression::Nps(direct)
                 } else if direct.is_empty() {
-                    PropertyPathExpression::Reverse(Box::new(
-                        PropertyPathExpression::NegatedPropertySet(inverse),
-                    ))
+                    PropertyPathExpression::Inv(Box::new(PropertyPathExpression::Nps(inverse)))
                 } else {
-                    PropertyPathExpression::Alternative(
-                        Box::new(PropertyPathExpression::NegatedPropertySet(direct)),
-                        Box::new(PropertyPathExpression::Reverse(Box::new(
-                            PropertyPathExpression::NegatedPropertySet(inverse),
+                    PropertyPathExpression::Alt(
+                        Box::new(PropertyPathExpression::Nps(direct)),
+                        Box::new(PropertyPathExpression::Inv(Box::new(
+                            PropertyPathExpression::Nps(inverse),
                         ))),
                     )
                 }
@@ -2196,13 +2192,11 @@ fn add_path_to_patterns(
     patterns: &mut Vec<TripleOrPathPattern>,
 ) {
     match path {
-        PropertyPathExpression::NamedNode(predicate) => patterns.push(TripleOrPathPattern::Triple(
+        PropertyPathExpression::Link(predicate) => patterns.push(TripleOrPathPattern::Triple(
             TriplePattern::new(subject, predicate, object),
         )),
-        PropertyPathExpression::Reverse(path) => {
-            add_path_to_patterns(object, *path, subject, patterns)
-        }
-        PropertyPathExpression::Sequence(path1, path2) => {
+        PropertyPathExpression::Inv(path) => add_path_to_patterns(object, *path, subject, patterns),
+        PropertyPathExpression::Seq(path1, path2) => {
             let middle = BlankNode::default();
             add_path_to_patterns(subject, *path1, middle.clone().into(), patterns);
             add_path_to_patterns(middle.into(), *path2, object, patterns)
