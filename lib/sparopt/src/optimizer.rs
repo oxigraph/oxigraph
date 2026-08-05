@@ -138,9 +138,9 @@ impl Optimizer {
             }
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
-            } => GraphPattern::slice(Self::normalize_pattern(*inner, input_types), start, length),
+                offset,
+                limit,
+            } => GraphPattern::slice(Self::normalize_pattern(*inner, input_types), offset, limit),
             GraphPattern::Group {
                 inner,
                 variables,
@@ -445,13 +445,13 @@ impl Optimizer {
             ),
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => GraphPattern::filter(
                 GraphPattern::slice(
                     Self::push_filters(*inner, Vec::new(), input_types),
-                    start,
-                    length,
+                    offset,
+                    limit,
                 ),
                 Expression::and_all(filters),
             ),
@@ -701,10 +701,10 @@ impl Optimizer {
             }
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => wrap_in_possible_graph(
-                GraphPattern::slice(Self::push_graph(*inner, None, input_types), start, length),
+                GraphPattern::slice(Self::push_graph(*inner, None, input_types), offset, limit),
                 current_graph,
             ),
             GraphPattern::Group {
@@ -973,9 +973,9 @@ impl Optimizer {
             ),
             GraphPattern::Slice {
                 inner,
-                start,
-                length,
-            } => GraphPattern::slice(Self::reorder_joins(*inner, input_types), start, length),
+                offset,
+                limit,
+            } => GraphPattern::slice(Self::reorder_joins(*inner, input_types), offset, limit),
             GraphPattern::Distinct { inner } => {
                 GraphPattern::distinct(Self::reorder_joins(*inner, input_types))
             }
@@ -1282,12 +1282,12 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
         | GraphPattern::Service { inner, .. } => estimate_graph_pattern_size(inner, input_types),
         GraphPattern::Slice {
             inner,
-            start,
-            length,
+            offset,
+            limit,
         } => {
             let inner = estimate_graph_pattern_size(inner, input_types);
-            if let Some(length) = length {
-                min(inner, *length - *start)
+            if let Some(limit) = limit {
+                min(inner, *limit - *offset)
             } else {
                 inner
             }

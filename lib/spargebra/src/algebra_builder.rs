@@ -473,8 +473,8 @@ impl<'a> AlgebraBuilder<'a> {
         {
             m = GraphPattern::Slice {
                 inner: Box::new(m),
-                start: offset,
-                length: limit,
+                offset,
+                limit,
             }
         }
         Ok(m)
