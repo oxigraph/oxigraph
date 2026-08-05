@@ -504,8 +504,8 @@ pub enum GraphPattern {
     /// [Slice](https://www.w3.org/TR/sparql11-query/#defn_algSlice).
     Slice {
         inner: Box<Self>,
-        start: u64,
-        length: Option<u64>,
+        offset: u64,
+        limit: Option<u64>,
     },
     /// [Group](https://www.w3.org/TR/sparql11-query/#aggregateAlgebra).
     Group {
@@ -879,13 +879,13 @@ impl GraphPattern {
             }
             Self::Slice {
                 inner,
-                start,
-                length,
+                offset,
+                limit,
             } => {
-                if let Some(length) = length {
-                    write!(f, "(slice {start} {length} ")?;
+                if let Some(limit) = limit {
+                    write!(f, "(slice {offset} {limit} ")?;
                 } else {
-                    write!(f, "(slice {start} _ ")?;
+                    write!(f, "(slice {offset} _ ")?;
                 }
                 inner.fmt_sse(f)?;
                 f.write_str(")")
@@ -1107,8 +1107,8 @@ pub(crate) struct SparqlGraphRootPattern<'a> {
     dataset: Option<&'a QueryDataset>,
     group_by: &'a [Variable],
     order: &'a [OrderExpression],
-    start: u64,
-    length: Option<u64>,
+    offset: u64,
+    limit: Option<u64>,
 }
 
 impl<'a> SparqlGraphRootPattern<'a> {
@@ -1117,8 +1117,8 @@ impl<'a> SparqlGraphRootPattern<'a> {
         dataset: Option<&'a QueryDataset>,
     ) -> Result<Self, fmt::Error> {
         let mut option = SelectionOption::Default;
-        let mut start = 0;
-        let mut length = None;
+        let mut offset = 0;
+        let mut limit = None;
         let mut group_by = [].as_slice();
 
         // Before project
@@ -1134,11 +1134,11 @@ impl<'a> SparqlGraphRootPattern<'a> {
                 }
                 GraphPattern::Slice {
                     inner,
-                    start: s,
-                    length: l,
-                } if start == 0 && length.is_none() => {
-                    start = *s;
-                    length = *l;
+                    offset: o,
+                    limit: l,
+                } if offset == 0 && limit.is_none() => {
+                    offset = *o;
+                    limit = *l;
                     pattern = inner;
                 }
                 _ => break,
@@ -1257,8 +1257,8 @@ impl<'a> SparqlGraphRootPattern<'a> {
             dataset,
             group_by,
             order,
-            start,
-            length,
+            offset,
+            limit,
         })
     }
 }
@@ -1315,11 +1315,11 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                 write!(f, " {c}")?;
             }
         }
-        if self.start > 0 {
-            write!(f, " OFFSET {}", self.start)?;
+        if self.offset > 0 {
+            write!(f, " OFFSET {}", self.offset)?;
         }
-        if let Some(length) = self.length {
-            write!(f, " LIMIT {length}")?;
+        if let Some(limit) = self.limit {
+            write!(f, " LIMIT {limit}")?;
         }
         Ok(())
     }
