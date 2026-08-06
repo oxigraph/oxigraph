@@ -1,6 +1,6 @@
 use crate::algebra::{
     AggregateExpression, Expression, GraphTarget, OrderExpression, PropertyPathExpression,
-    QueryDataset, QueryExpression,
+    QueryDatasetSpecification, QueryExpression,
 };
 use crate::ast;
 use crate::error::AlgebraBuilderError;
@@ -249,7 +249,7 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_dataset(
         &mut self,
         clauses: Vec<ast::GraphClause<'a>>,
-    ) -> Result<Option<QueryDataset>, AlgebraBuilderError> {
+    ) -> Result<Option<QueryDatasetSpecification>, AlgebraBuilderError> {
         if clauses.is_empty() {
             return Ok(None);
         }
@@ -265,7 +265,7 @@ impl<'a> AlgebraBuilder<'a> {
                 }
             }
         }
-        Ok(Some(QueryDataset {
+        Ok(Some(QueryDatasetSpecification {
             default,
             named: Some(named),
         }))
@@ -1866,7 +1866,7 @@ impl<'a> AlgebraBuilder<'a> {
                             }
                         }
                         if using.is_none() {
-                            using = Some(QueryDataset {
+                            using = Some(QueryDatasetSpecification {
                                 default: vec![with],
                                 named: None,
                             });

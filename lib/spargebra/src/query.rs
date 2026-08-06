@@ -37,7 +37,7 @@ pub enum Query {
 
 impl Query {
     #[inline]
-    pub fn dataset(&self) -> Option<&QueryDataset> {
+    pub fn dataset(&self) -> Option<&QueryDatasetSpecification> {
         match self {
             Self::Select(query) => query.dataset.as_ref(),
             Self::Construct(query) => query.dataset.as_ref(),
@@ -47,7 +47,7 @@ impl Query {
     }
 
     #[inline]
-    pub fn dataset_mut(&mut self) -> Option<&mut QueryDataset> {
+    pub fn dataset_mut(&mut self) -> Option<&mut QueryDatasetSpecification> {
         match self {
             Self::Select(query) => query.dataset.as_mut(),
             Self::Construct(query) => query.dataset.as_mut(),
@@ -123,7 +123,7 @@ impl TryFrom<&String> for Query {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct SelectQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-    pub dataset: Option<QueryDataset>,
+    pub dataset: Option<QueryDatasetSpecification>,
     /// The query selection expression.
     pub expression: QueryExpression,
     /// The query base IRI.
@@ -181,7 +181,7 @@ pub struct ConstructQuery {
     /// The query construction template.
     pub template: Vec<TriplePattern>,
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-    pub dataset: Option<QueryDataset>,
+    pub dataset: Option<QueryDatasetSpecification>,
     /// The query selection expression.
     pub expression: QueryExpression,
     /// The query base IRI.
@@ -259,7 +259,7 @@ impl From<ConstructQuery> for Query {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct DescribeQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-    pub dataset: Option<QueryDataset>,
+    pub dataset: Option<QueryDatasetSpecification>,
     /// The query selection expression.
     pub pattern: QueryExpression,
     /// The query base IRI.
@@ -358,7 +358,7 @@ impl From<DescribeQuery> for Query {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct AskQuery {
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-    pub dataset: Option<QueryDataset>,
+    pub dataset: Option<QueryDatasetSpecification>,
     /// The query selection expression.
     pub expression: QueryExpression,
     /// The query base IRI.
