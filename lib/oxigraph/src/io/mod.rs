@@ -26,6 +26,9 @@
 //! assert_eq!(serializer.finish().unwrap(), ntriples_file.as_bytes());
 //! ```
 
+mod loader;
+
+pub use loader::DocumentLoader;
 pub use oxrdfio::{
     JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParseError, RdfParser,
     RdfSerializer, RdfSyntaxError, ReaderQuadParser, SliceQuadParser, TextPosition,

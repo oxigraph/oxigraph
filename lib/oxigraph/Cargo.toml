@@ -43,6 +43,7 @@ spareval = { workspace = true, features = [
   "calendar-ext",
 ] }
 thiserror.workspace = true
+url.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc.workspace = true

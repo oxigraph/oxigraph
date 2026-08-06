@@ -13,7 +13,7 @@ use oxhttp::model::header::{
 };
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
-use oxigraph::io::{JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{DocumentLoader, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxString};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
@@ -39,7 +39,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
 use std::{fmt, fs, str, thread};
-use url::{Url, form_urlencoded};
+use url::form_urlencoded;
 
 mod cli;
 mod service_description;
@@ -665,23 +665,9 @@ fn do_convert<R: Read, W: Write>(
     if lenient {
         parser = parser.lenient();
     }
-    let mut parser = parser.for_reader(reader).with_document_loader(|url| {
-        let url = Url::parse(url)?;
-        let Ok(path) = url.to_file_path() else {
-            return Err(Box::new(io::Error::other("The URL is not a file path")));
-        };
-        Ok(LoadedDocument {
-            url: url.to_string(),
-            content: fs::read(&path)?,
-            format: path
-                .extension()
-                .and_then(OsStr::to_str)
-                .and_then(RdfFormat::from_extension)
-                .unwrap_or(RdfFormat::JsonLd {
-                    profile: JsonLdProfileSet::empty(),
-                }), // TODO: is it a good fallback?
-        })
-    });
+    let mut parser = parser
+        .for_reader(reader)
+        .with_document_loader(DocumentLoader::new().with_file_support());
     let first = parser.next(); // We read the first element to get prefixes and the base IRI
     if let Some(base_iri) = to_base.or_else(|| parser.base_iri()) {
         serializer = serializer
@@ -2079,6 +2065,7 @@ mod tests {
     use predicates::prelude::*;
     use std::fs::remove_dir_all;
     use std::io::read_to_string;
+    use url::Url;
 
     fn cli_command() -> Command {
         let mut command = Command::new(env!("CARGO"));
