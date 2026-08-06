@@ -1104,7 +1104,7 @@ pub(crate) struct SparqlRootQueryExpression<'a> {
     option: SelectionOption,
     project: Option<Vec<(&'a Variable, Option<ExpressionOrAggregate<'a>>)>>,
     expression: &'a QueryExpression,
-    dataset: Option<&'a QueryDataset>,
+    dataset: Option<&'a QueryDatasetSpecification>,
     group_by: &'a [Variable],
     order: &'a [OrderExpression],
     offset: u64,
@@ -1114,7 +1114,7 @@ pub(crate) struct SparqlRootQueryExpression<'a> {
 impl<'a> SparqlRootQueryExpression<'a> {
     pub fn new(
         mut expression: &'a QueryExpression,
-        dataset: Option<&'a QueryDataset>,
+        dataset: Option<&'a QueryDatasetSpecification>,
     ) -> Result<Self, fmt::Error> {
         let mut option = SelectionOption::Default;
         let mut offset = 0;
@@ -1493,12 +1493,12 @@ impl fmt::Display for OrderExpression {
 
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct QueryDataset {
+pub struct QueryDatasetSpecification {
     pub default: Vec<NamedNode>,
     pub named: Option<Vec<NamedNode>>,
 }
 
-impl QueryDataset {
+impl QueryDatasetSpecification {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         f.write_str("(")?;
@@ -1520,7 +1520,7 @@ impl QueryDataset {
     }
 }
 
-impl fmt::Display for QueryDataset {
+impl fmt::Display for QueryDatasetSpecification {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for g in &self.default {
             write!(f, " FROM {g}")?;

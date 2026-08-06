@@ -30,7 +30,7 @@ use oxiri::Iri;
 use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Term, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
-use spargebra::algebra::QueryDataset;
+use spargebra::algebra::QueryDatasetSpecification as AlQueryDatasetSpecification;
 use spargebra::update::DeleteInsertOperation;
 use sparopt::Optimizer;
 use sparopt::algebra::QueryExpression;
@@ -943,8 +943,8 @@ impl Default for QueryDatasetSpecification {
     }
 }
 
-impl From<QueryDataset> for QueryDatasetSpecification {
-    fn from(dataset: QueryDataset) -> Self {
+impl From<AlQueryDatasetSpecification> for QueryDatasetSpecification {
+    fn from(dataset: AlQueryDatasetSpecification) -> Self {
         Self {
             default: Some(dataset.default.into_iter().map(Into::into).collect()),
             named: dataset

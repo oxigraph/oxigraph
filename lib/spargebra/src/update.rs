@@ -212,7 +212,7 @@ impl From<DeleteDataOperation> for GraphUpdateOperation {
 pub struct DeleteInsertOperation {
     pub delete: Vec<GroundQuadPattern>,
     pub insert: Vec<QuadPattern>,
-    pub using: Option<QueryDataset>,
+    pub using: Option<QueryDatasetSpecification>,
     pub pattern: Box<QueryExpression>,
 }
 

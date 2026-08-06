@@ -13,7 +13,7 @@ use oxiri::Iri;
 use oxrdf::{GraphName, OxString};
 use spareval::QueryEvaluator;
 use spargebra::SparqlParser;
-use spargebra::algebra::{QueryDataset, QueryExpression};
+use spargebra::algebra::{QueryDatasetSpecification, QueryExpression};
 use spargebra::query::SelectQuery;
 use std::sync::OnceLock;
 
@@ -139,7 +139,7 @@ impl DefaultServiceHandler for StoreServiceHandler {
             .with_default_service_handler(self.clone())
             .for_query(
                 SelectQuery {
-                    dataset: Some(QueryDataset {
+                    dataset: Some(QueryDatasetSpecification {
                         default: vec![service_name.clone()],
                         named: None,
                     }),
