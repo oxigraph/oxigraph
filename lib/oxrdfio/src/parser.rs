@@ -1,5 +1,6 @@
 //! Utilities to read RDF graphs and datasets.
 
+use crate::document::DocumentLoader;
 pub use crate::error::RdfParseError;
 use crate::format::RdfFormat;
 use crate::{LoadedDocument, RdfSyntaxError};
@@ -641,6 +642,7 @@ impl<R: Read> ReaderQuadParser<R> {
     /// use oxrdf::NamedNode;
     /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
+    /// use std::convert::Infallible;
     ///
     /// let file = r#"{
     ///     "@context": "file://context.jsonld",
@@ -655,9 +657,9 @@ impl<R: Read> ReaderQuadParser<R> {
     ///     profile: JsonLdProfileSet::empty(),
     /// })
     /// .for_reader(file.as_bytes())
-    /// .with_document_loader(|url| {
+    /// .with_document_loader(|url: &str, _accepted_formats: &[RdfFormat]| {
     ///     assert_eq!(url, "file://context.jsonld");
-    ///     Ok(LoadedDocument {
+    ///     Ok::<_, Infallible>(LoadedDocument {
     ///         url: "file://context.jsonld".into(),
     ///         content: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
     ///         format: RdfFormat::JsonLd {
@@ -673,19 +675,16 @@ impl<R: Read> ReaderQuadParser<R> {
     /// assert_eq!(1, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn with_document_loader(
-        mut self,
-        loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
-    ) -> Self {
+    pub fn with_document_loader(mut self, loader: impl DocumentLoader) -> Self {
         self.inner = match self.inner {
             ReaderQuadParserKind::JsonLd(p) => {
-                ReaderQuadParserKind::JsonLd(p.with_load_document_callback(move |iri, _| {
-                    let response = loader(iri)?;
+                ReaderQuadParserKind::JsonLd(p.with_load_document_callback(move |iri, options| {
+                    let response = loader.load(
+                        iri,
+                        &[RdfFormat::JsonLd {
+                            profile: options.request_profile,
+                        }],
+                    )?;
                     if !matches!(response.format, RdfFormat::JsonLd { .. }) {
                         return Err(format!(
                             "The JSON-LD context format must be JSON-LD, {} found",

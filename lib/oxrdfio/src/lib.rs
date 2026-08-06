@@ -10,7 +10,7 @@ mod format;
 mod parser;
 mod serializer;
 
-pub use document::LoadedDocument;
+pub use document::{DocumentLoader, LoadedDocument};
 pub use error::{RdfParseError, RdfSyntaxError, TextPosition};
 pub use format::RdfFormat;
 pub use oxjsonld::{JsonLdProfile, JsonLdProfileSet};

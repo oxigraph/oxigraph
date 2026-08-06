@@ -40,11 +40,13 @@ pub fn load_to_graph(
     let parser = RdfParser::from_format(format)
         .with_base_iri(base_iri.unwrap_or(url))?
         .for_reader(read_file(url)?)
-        .with_document_loader(|url| {
-            Ok(LoadedDocument {
-                content: read_file_to_string(url)?.into_bytes(),
+        .with_document_loader(|url: &str, _: &[RdfFormat]| {
+            Ok::<_, std::io::Error>(LoadedDocument {
+                content: read_file_to_string(url)
+                    .map_err(std::io::Error::other)?
+                    .into_bytes(),
                 url: url.into(),
-                format: guess_rdf_format(url)?,
+                format: guess_rdf_format(url).map_err(std::io::Error::other)?,
             })
         });
     for t in parser {
