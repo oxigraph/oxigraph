@@ -365,14 +365,15 @@ impl InnerRdfXmlWriter {
                 if let Term::NamedNode(t) = &triple.object {
                     if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
                         (BytesStart::new("rdf:Description"), false)
-                    } else {
-                        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
+                    } else if let Some((prop_qname, prop_xmlns)) = self.uri_to_qname_and_xmlns(t) {
                         let mut description_start = BytesStart::new(prop_qname.clone());
                         if let Some(prop_xmlns) = prop_xmlns {
                             description_start.push_attribute(prop_xmlns);
                         }
                         self.current_resource_tag = Some(prop_qname.into_owned());
                         (description_start, true)
+                    } else {
+                        (BytesStart::new("rdf:Description"), false)
                     }
                 } else {
                     (BytesStart::new("rdf:Description"), false)
@@ -407,7 +408,15 @@ impl InnerRdfXmlWriter {
             ));
         }
 
-        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(predicate);
+        let Some((prop_qname, prop_xmlns)) = self.uri_to_qname_and_xmlns(predicate) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "The predicate IRI {} cannot be serialized as RDF/XML because it has no valid QName local part",
+                    predicate.as_str()
+                ),
+            ));
+        };
         let mut property_open = BytesStart::new(prop_qname.clone());
         if let Some(prop_xmlns) = prop_xmlns {
             property_open.push_attribute(prop_xmlns);
@@ -504,28 +513,33 @@ impl InnerRdfXmlWriter {
     fn uri_to_qname_and_xmlns<'a>(
         &self,
         uri: &'a NamedNode,
-    ) -> (Cow<'a, str>, Option<(&'a str, &'a str)>) {
+    ) -> Option<(Cow<'a, str>, Option<(&'a str, &'a str)>)> {
         let (prop_prefix, prop_value) = split_iri(uri.as_str());
-        if let Some(prop_prefix) = self.prefixes_by_iri.get(prop_prefix) {
-            (
-                if prop_prefix.is_empty() {
-                    Cow::Borrowed(prop_value)
-                } else {
-                    Cow::Owned(format!("{prop_prefix}:{prop_value}"))
-                },
-                None,
-            )
-        } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
-            (Cow::Owned(format!("xmlns:{prop_value}")), None)
-        } else if !prop_value.is_empty() && !self.custom_default_prefix {
-            (Cow::Borrowed(prop_value), Some(("xmlns", prop_prefix)))
-        } else {
-            // TODO: does not work on recursive elements
-            (
-                Cow::Owned(format!("oxprefix:{prop_value}")),
-                Some(("xmlns:oxprefix", prop_prefix)),
-            )
+        if prop_value.is_empty() {
+            return None;
         }
+        Some(
+            if let Some(prop_prefix) = self.prefixes_by_iri.get(prop_prefix) {
+                (
+                    if prop_prefix.is_empty() {
+                        Cow::Borrowed(prop_value)
+                    } else {
+                        Cow::Owned(format!("{prop_prefix}:{prop_value}"))
+                    },
+                    None,
+                )
+            } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
+                (Cow::Owned(format!("xmlns:{prop_value}")), None)
+            } else if !self.custom_default_prefix {
+                (Cow::Borrowed(prop_value), Some(("xmlns", prop_prefix)))
+            } else {
+                // TODO: does not work on recursive elements
+                (
+                    Cow::Owned(format!("oxprefix:{prop_value}")),
+                    Some(("xmlns:oxprefix", prop_prefix)),
+                )
+            },
+        )
     }
 }
 
@@ -582,6 +596,35 @@ mod tests {
             ("http://schema.org#", "foo")
         );
         assert_eq!(split_iri("urn:isbn:foo"), ("urn:isbn:", "foo"));
+    }
+
+    #[test]
+    fn test_invalid_qname_predicate() -> Result<(), Box<dyn Error>> {
+        let mut serializer = RdfXmlSerializer::new().for_writer(Vec::new());
+        let error = serializer
+            .serialize_triple(&Triple::new(
+                NamedNode::new("http://example.com/s")?,
+                NamedNode::new("http://example.com/123")?,
+                NamedNode::new("http://example.com/o")?,
+            ))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_qname_type() -> Result<(), Box<dyn Error>> {
+        let mut serializer = RdfXmlSerializer::new().for_writer(Vec::new());
+        serializer.serialize_triple(&Triple::new(
+            NamedNode::new("http://example.com/s")?,
+            rdf::TYPE,
+            NamedNode::new("http://example.com/123")?,
+        ))?;
+        assert_eq!(
+            serializer.finish()?,
+            b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<rdf:Description rdf:about=\"http://example.com/s\">\n\t\t<rdf:type rdf:resource=\"http://example.com/123\"/>\n\t</rdf:Description>\n</rdf:RDF>"
+        );
+        Ok(())
     }
 
     #[test]
