@@ -39,6 +39,7 @@ use std::os::unix::net::UnixDatagram;
 use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
 use std::{fmt, fs, str, thread};
@@ -157,6 +158,7 @@ pub fn main() -> anyhow::Result<()> {
                 )?;
                 loader.commit()?;
             } else {
+                let has_error = AtomicBool::new(false);
                 ThreadPoolBuilder::new()
                     .num_threads(max(1, available_parallelism()?.get() / 2))
                     .thread_name(|i| format!("Oxigraph bulk loader thread {i}"))
@@ -166,6 +168,7 @@ pub fn main() -> anyhow::Result<()> {
                             let store = store.clone();
                             let graph = graph.clone();
                             let base = base.clone();
+                            let worker_has_error = &has_error;
                             s.spawn(move |_| {
                                 let f = file.clone();
                                 let start = Instant::now();
@@ -196,6 +199,7 @@ pub fn main() -> anyhow::Result<()> {
                                                     file.display(),
                                                     error
                                                 );
+                                                worker_has_error.store(true, Ordering::Relaxed);
                                                 return;
                                             }
                                         };
@@ -227,14 +231,18 @@ pub fn main() -> anyhow::Result<()> {
                                         "Error while loading file {}: {}",
                                         file.display(),
                                         error
-                                    )
-                                    // TODO: hard fail
+                                    );
+                                    worker_has_error.store(true, Ordering::Relaxed);
                                 } else if let Err(e) = loader.commit() {
-                                    eprintln!("Failed to save triples: {e}")
+                                    eprintln!("Failed to save triples: {e}");
+                                    worker_has_error.store(true, Ordering::Relaxed);
                                 }
                             })
                         }
                     });
+                if has_error.into_inner() {
+                    bail!("One or more files failed to load");
+                }
             }
             eprintln!(
                 "If you plan to run a read-heavy workload, consider running `oxigraph optimize -l {}` before",
@@ -2153,6 +2161,28 @@ mod tests {
             .success();
         output_file
             .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_load_file_errors_fail_the_command() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("invalid.nt")?;
+        input_file.write_str("invalid")?;
+        let missing_file = store_dir.child("missing.nt.gz");
+        cli_command()
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--file")
+            .arg(input_file.path())
+            .arg(missing_file.path())
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains("Error while loading file")
+                    .and(predicate::str::contains("Error while opening file")),
+            );
         Ok(())
     }
 
