@@ -240,12 +240,6 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
                 format!("BSBM business intelligence {data_size} on disk"),
                 |b| b.iter(|| run_operations(&disk_store, &business_operations, true)),
             );
-            for (name, operations) in sparqloscope_operations() {
-                group.bench_function(
-                    format!("Sparqloscope BSBM {data_size} on disk - {name}"),
-                    |b| b.iter(|| run_operations(&disk_store, &operations, true)),
-                );
-            }
         }
     }
 }
