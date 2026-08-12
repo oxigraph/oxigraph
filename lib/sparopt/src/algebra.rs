@@ -102,9 +102,9 @@ impl Expression {
     }
 
     pub fn equal(left: Self, right: Self) -> Self {
+        // TODO: simplify equality when both operands are literal taking care of fun stuff like NaN != NaN
         match (left, right) {
             (Self::NamedNode(left), Self::NamedNode(right)) => (left == right).into(),
-            (Self::Literal(left), Self::Literal(right)) if left == right => true.into(),
             (left, right) => {
                 let (left, right) = order_pair(left, right);
                 Self::FunctionCall(sparql::EQUALS, vec![left, right])
@@ -115,7 +115,6 @@ impl Expression {
     pub fn not_equal(left: Self, right: Self) -> Self {
         match (left, right) {
             (Self::NamedNode(left), Self::NamedNode(right)) => (left != right).into(),
-            (Self::Literal(left), Self::Literal(right)) if left != right => true.into(),
             (left, right) => {
                 let (left, right) = order_pair(left, right);
                 Self::FunctionCall(sparql::NOT_EQUALS, vec![left, right])
