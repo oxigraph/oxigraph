@@ -103,6 +103,7 @@ pub fn main() -> anyhow::Result<()> {
             format,
             base,
             graph,
+            fail_on_named_graphs,
         } => {
             let store = Store::open(&location)?;
             let format = if let Some(format) = format {
@@ -151,6 +152,7 @@ pub fn main() -> anyhow::Result<()> {
                     base.as_deref(),
                     graph,
                     lenient,
+                    fail_on_named_graphs,
                 )?;
                 loader.commit()?;
             } else {
@@ -209,6 +211,7 @@ pub fn main() -> anyhow::Result<()> {
                                             base.as_deref(),
                                             graph,
                                             lenient,
+                                            fail_on_named_graphs,
                                         )
                                     } else {
                                         bulk_load_file(
@@ -220,6 +223,7 @@ pub fn main() -> anyhow::Result<()> {
                                             base.as_deref(),
                                             graph,
                                             lenient,
+                                            fail_on_named_graphs,
                                         )
                                     }
                                 } {
@@ -582,8 +586,12 @@ fn bulk_load_read(
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNode>,
     lenient: bool,
+    fail_on_named_graphs: bool,
 ) -> anyhow::Result<()> {
     let mut parser = RdfParser::from_format(format);
+    if fail_on_named_graphs {
+        parser = parser.without_named_graphs();
+    }
     if let Some(to_graph_name) = to_graph_name {
         parser = parser.with_default_graph(to_graph_name);
     }
@@ -606,8 +614,12 @@ fn bulk_load_file(
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNode>,
     lenient: bool,
+    fail_on_named_graphs: bool,
 ) -> anyhow::Result<()> {
     let mut parser = RdfParser::from_format(format);
+    if fail_on_named_graphs {
+        parser = parser.without_named_graphs();
+    }
     if let Some(to_graph_name) = to_graph_name {
         parser = parser.with_default_graph(to_graph_name);
     }
@@ -2168,6 +2180,60 @@ mod tests {
                 predicate::str::contains("Error while loading file")
                     .and(predicate::str::contains("Error while opening file")),
             );
+        Ok(())
+    }
+
+    #[test]
+    fn cli_load_can_fail_on_named_graphs() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input.nq")?;
+        input_file.write_str(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/original> .",
+        )?;
+        cli_command()
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--file")
+            .arg(input_file.path())
+            .arg("--fail-on-named-graphs")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Named graphs are not allowed"));
+        assert_cli_state(&store_dir, "");
+
+        cli_command()
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .args(["--format", "nq", "--fail-on-named-graphs"])
+            .write_stdin(
+                "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/original> .",
+            )
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Named graphs are not allowed"));
+        assert_cli_state(&store_dir, "");
+
+        let json_ld_file = NamedTempFile::new("input.jsonld")?;
+        json_ld_file.write_str(
+            r#"{"@id":"http://example.com/s","http://example.com/p":{"@id":"http://example.com/o"}}"#,
+        )?;
+        cli_command()
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--file")
+            .arg(json_ld_file.path())
+            .arg("--graph")
+            .arg("http://example.com/target")
+            .arg("--fail-on-named-graphs")
+            .assert()
+            .success();
+        assert_cli_state(
+            &store_dir,
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/target> .\n",
+        );
         Ok(())
     }
 

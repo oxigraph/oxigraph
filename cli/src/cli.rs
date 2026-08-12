@@ -125,9 +125,13 @@ pub enum Command {
         ///
         /// By default, the default graph is used.
         ///
-        /// Only available when loading a graph file (N-Triples, Turtle...) and not a dataset file (N-Quads, TriG...).
+        /// Default graph statements from dataset formats are loaded into this graph.
+        /// Named graph statements keep their original graph names.
         #[arg(long, value_hint = ValueHint::Url)]
         graph: Option<String>,
+        /// Fail if the input contains named graph statements
+        #[arg(long, conflicts_with = "lenient")]
+        fail_on_named_graphs: bool,
     },
     /// Dump the store content into a file
     Dump {
