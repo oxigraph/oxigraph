@@ -1491,20 +1491,28 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             .collect::<Vec<_>>();
         let dataset = self.dataset.clone();
         Ok(Rc::new(move |from| {
-            let mut values = match child(from).collect::<Result<Vec<_>, _>>() {
+            let mut tuples_and_sort_keys = match child(from)
+                .map(|tuple| {
+                    let tuple = tuple?;
+                    let sort_terms = by
+                        .iter()
+                        .map(|(_, variable_key)| {
+                            tuple
+                                .get(*variable_key)
+                                .map(|term| dataset.externalize_expression_term(term.clone()))
+                                .transpose()
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok((tuple, sort_terms))
+                })
+                .collect::<Result<Vec<_>, _>>()
+            {
                 Ok(values) => values,
                 Err(error) => return Box::new(once(Err(error))),
             };
-            values.sort_unstable_by(|a, b| {
-                for (is_asc, variable_key) in &by {
-                    match cmp_terms(
-                        a.get(*variable_key)
-                            .and_then(|term| dataset.externalize_expression_term(term.clone()).ok())
-                            .as_ref(),
-                        b.get(*variable_key)
-                            .and_then(|term| dataset.externalize_expression_term(term.clone()).ok())
-                            .as_ref(),
-                    ) {
+            tuples_and_sort_keys.sort_unstable_by(|(_, a), (_, b)| {
+                for ((is_asc, _), (a, b)) in by.iter().zip(a.iter().zip(b)) {
+                    match cmp_terms(a.as_ref(), b.as_ref()) {
                         Ordering::Greater => {
                             return if *is_asc {
                                 Ordering::Greater
@@ -1524,7 +1532,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 }
                 Ordering::Equal
             });
-            Box::new(values.into_iter().map(Ok))
+            Box::new(tuples_and_sort_keys.into_iter().map(|(tuple, _)| Ok(tuple)))
         }))
     }
 
