@@ -1673,9 +1673,17 @@ fn rdf_content_negotiation(request: &Request<Body>) -> Result<RdfFormat, HttpErr
         RdfFormat::from_media_type,
         RdfFormat::NQuads,
         &[
-            ("application", RdfFormat::NQuads),
-            ("text", RdfFormat::NQuads),
+            RdfFormat::NQuads,
+            RdfFormat::Turtle,
+            RdfFormat::NTriples,
+            RdfFormat::RdfXml,
+            RdfFormat::TriG,
+            RdfFormat::N3,
+            RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            },
         ],
+        RdfFormat::media_type,
         "application/n-quads or text/turtle",
     )
 }
@@ -1688,18 +1696,22 @@ fn query_results_content_negotiation(
         QueryResultsFormat::from_media_type,
         QueryResultsFormat::Json,
         &[
-            ("application", QueryResultsFormat::Json),
-            ("text", QueryResultsFormat::Json),
+            QueryResultsFormat::Json,
+            QueryResultsFormat::Xml,
+            QueryResultsFormat::Csv,
+            QueryResultsFormat::Tsv,
         ],
+        QueryResultsFormat::media_type,
         "application/sparql-results+json or text/tsv",
     )
 }
 
-fn content_negotiation<F: Copy>(
+fn content_negotiation<F: Copy + Eq>(
     request: &Request<Body>,
     parse: impl Fn(&str) -> Option<F>,
     default: F,
-    default_by_base: &[(&str, F)],
+    supported: &[F],
+    media_type: impl Fn(F) -> &'static str,
     example: &str,
 ) -> Result<F, HttpError> {
     let header = request
@@ -1713,8 +1725,7 @@ fn content_negotiation<F: Copy>(
     if header.is_empty() {
         return Ok(default);
     }
-    let mut result = None;
-    let mut result_score = 0_f32;
+    let mut candidates: Vec<_> = supported.iter().map(|format| (*format, None)).collect();
     for mut possible in header.split(',') {
         let mut score = 1.;
         if let Some((possible_type, last_parameter)) = possible.rsplit_once(';') {
@@ -1727,9 +1738,6 @@ fn content_negotiation<F: Copy>(
                 }
             }
         }
-        if score <= result_score {
-            continue;
-        }
         let (possible_base, possible_sub) = possible
             .split_once(';')
             .unwrap_or((possible, ""))
@@ -1739,21 +1747,45 @@ fn content_negotiation<F: Copy>(
         let possible_base = possible_base.trim();
         let possible_sub = possible_sub.trim();
 
-        let mut format = None;
-        if possible_base == "*" && possible_sub == "*" {
-            format = Some(default);
+        let parameter_count = possible.split(';').skip(1).count();
+        let (format, specificity, wildcard) = if possible_base == "*" && possible_sub == "*" {
+            (None, (0, parameter_count), true)
         } else if possible_sub == "*" {
-            for (base, sub_format) in default_by_base {
-                if *base == possible_base {
-                    format = Some(*sub_format);
+            (None, (1, parameter_count), true)
+        } else {
+            (parse(possible), (2, parameter_count), false)
+        };
+        if let Some(format) = format {
+            if !candidates.iter().any(|(candidate, _)| *candidate == format) {
+                candidates.push((format, None));
+            }
+        }
+        for (candidate, candidate_score) in &mut candidates {
+            let candidate_base = media_type(*candidate).split_once('/').unwrap().0;
+            if format == Some(*candidate)
+                || (wildcard && (possible_base == "*" || possible_base == candidate_base))
+            {
+                if candidate_score
+                    .is_none_or(|(_, previous_specificity)| specificity > previous_specificity)
+                {
+                    *candidate_score = Some((score, specificity));
+                } else if let Some((previous_score, previous_specificity)) = candidate_score {
+                    if specificity == *previous_specificity && score > *previous_score {
+                        *previous_score = score;
+                    }
                 }
             }
-        } else {
-            format = parse(possible);
         }
-        if let Some(format) = format {
-            result = Some(format);
-            result_score = score;
+    }
+
+    let mut result = None;
+    let mut result_score = 0_f32;
+    for (format, candidate) in candidates {
+        if let Some((score, _)) = candidate {
+            if score > result_score {
+                result = Some(format);
+                result_score = score;
+            }
         }
     }
 
@@ -2724,10 +2756,83 @@ mod tests {
             )
             .header(ACCEPT, "text/*")
             .body(())?;
-        ServerTest::new()?.test_body(
-            request,
-            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
-        )
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_query_accept_specific_exclusion() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "*/*;q=1, application/sparql-results+json;q=0, text/csv;q=0.5",
+            )
+            .body(())?;
+        assert_eq!(
+            ServerTest::new()?.exec(request).headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("application/sparql-results+xml"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_query_accept_wildcard_exclusion() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/*, text/csv;q=0")
+            .body(())?;
+        ServerTest::new()?.test_body(request, "?s\t?p\t?o\n")
+    }
+
+    #[test]
+    fn get_query_accept_parameter_specificity() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "text/csv;charset=utf-8;q=0, text/csv;q=1, text/tab-separated-values;q=0.5",
+            )
+            .body(())?;
+        ServerTest::new()?.test_body(request, "?s\t?p\t?o\n")
+    }
+
+    #[test]
+    fn get_query_description_accept_json_ld_profile() -> Result<()> {
+        let request = Request::builder()
+            .uri("http://localhost/query")
+            .header(
+                ACCEPT,
+                "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming",
+            )
+            .body(())?;
+        assert_eq!(
+            ServerTest::new()?.exec(request).headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static(
+                "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming"
+            ))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_store_accept_substar() -> Result<()> {
+        let request = Request::builder()
+            .uri("http://localhost/store?default")
+            .header(ACCEPT, "text/*")
+            .body(())?;
+        let mut response = ServerTest::new()?.exec(request);
+        read_to_string(response.body_mut())?;
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("text/turtle"))
+        );
+        Ok(())
     }
 
     #[test]
