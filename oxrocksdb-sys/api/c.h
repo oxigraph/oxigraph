@@ -210,8 +210,11 @@ oxrocksdb_compactionjobinfo_table_properties(
 extern ROCKSDB_LIBRARY_API oxrocksdb_eventlistener_t*
 oxrocksdb_eventlistener_create(
     void* state, void (*destructor)(void*),
+    void (*on_flush_begin)(void*, rocksdb_t*, const rocksdb_flushjobinfo_t*),
     void (*on_flush_completed)(void*, rocksdb_t*,
                                const rocksdb_flushjobinfo_t*),
+    void (*on_compaction_begin)(void*, rocksdb_t*,
+                                const rocksdb_compactionjobinfo_t*),
     void (*on_compaction_completed)(void*, rocksdb_t*,
                                     const rocksdb_compactionjobinfo_t*));
 

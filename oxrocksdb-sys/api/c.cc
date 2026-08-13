@@ -342,25 +342,43 @@ struct oxrocksdb_table_properties_collector_factory_t {
 struct OxEventListener : public EventListener {
   void* state_;
   void (*destructor_)(void*);
+  void (*on_flush_begin_)(void*, rocksdb_t*, const rocksdb_flushjobinfo_t*);
   void (*on_flush_completed_)(void*, rocksdb_t*,
                               const rocksdb_flushjobinfo_t*);
+  void (*on_compaction_begin_)(void*, rocksdb_t*,
+                               const rocksdb_compactionjobinfo_t*);
   void (*on_compaction_completed_)(void*, rocksdb_t*,
                                    const rocksdb_compactionjobinfo_t*);
 
   OxEventListener(void* state, void (*destructor)(void*),
+                  void (*on_flush_begin)(void*, rocksdb_t*,
+                                         const rocksdb_flushjobinfo_t*),
                   void (*on_flush_completed)(void*, rocksdb_t*,
                                              const rocksdb_flushjobinfo_t*),
+                  void (*on_compaction_begin)(void*, rocksdb_t*,
+                                              const rocksdb_compactionjobinfo_t*),
                   void (*on_compaction_completed)(
                       void*, rocksdb_t*, const rocksdb_compactionjobinfo_t*))
       : state_(state),
         destructor_(destructor),
+        on_flush_begin_(on_flush_begin),
         on_flush_completed_(on_flush_completed),
+        on_compaction_begin_(on_compaction_begin),
         on_compaction_completed_(on_compaction_completed) {}
 
   ~OxEventListener() override {
     if (destructor_) {
       destructor_(state_);
     }
+  }
+
+  void OnFlushBegin(DB* db, const FlushJobInfo& info) override {
+    if (!on_flush_begin_) {
+      return;
+    }
+    rocksdb_t c_db = {db};
+    on_flush_begin_(state_, &c_db,
+                    reinterpret_cast<const rocksdb_flushjobinfo_t*>(&info));
   }
 
   void OnFlushCompleted(DB* db, const FlushJobInfo& info) override {
@@ -370,6 +388,16 @@ struct OxEventListener : public EventListener {
     rocksdb_t c_db = {db};
     on_flush_completed_(state_, &c_db,
                         reinterpret_cast<const rocksdb_flushjobinfo_t*>(&info));
+  }
+
+  void OnCompactionBegin(DB* db, const CompactionJobInfo& info) override {
+    if (!on_compaction_begin_) {
+      return;
+    }
+    rocksdb_t c_db = {db};
+    on_compaction_begin_(
+        state_, &c_db,
+        reinterpret_cast<const rocksdb_compactionjobinfo_t*>(&info));
   }
 
   void OnCompactionCompleted(DB* db, const CompactionJobInfo& info) override {
@@ -637,13 +665,22 @@ oxrocksdb_compactionjobinfo_table_properties(
 
 oxrocksdb_eventlistener_t* oxrocksdb_eventlistener_create(
     void* state, void (*destructor)(void*),
+    void (*on_flush_begin)(void*, rocksdb_t*, const rocksdb_flushjobinfo_t*),
     void (*on_flush_completed)(void*, rocksdb_t*,
                                const rocksdb_flushjobinfo_t*),
+    void (*on_compaction_begin)(void*, rocksdb_t*,
+                                const rocksdb_compactionjobinfo_t*),
     void (*on_compaction_completed)(void*, rocksdb_t*,
                                     const rocksdb_compactionjobinfo_t*)) {
   auto t = new oxrocksdb_eventlistener_t;
   t->rep = std::make_shared<OxEventListener>(
-      state, destructor, on_flush_completed, on_compaction_completed);
+      state,
+      destructor,
+      on_flush_begin,
+      on_flush_completed,
+      on_compaction_begin,
+      on_compaction_completed
+    );
   return t;
 }
 
