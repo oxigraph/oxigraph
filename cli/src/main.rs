@@ -13,7 +13,7 @@ use oxhttp::model::header::{
 };
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
-use oxigraph::io::{DocumentLoader, RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{DocumentLoader, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxString};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
@@ -1674,14 +1674,14 @@ fn rdf_content_negotiation(request: &Request<Body>) -> Result<RdfFormat, HttpErr
         RdfFormat::NQuads,
         &[
             RdfFormat::NQuads,
-            RdfFormat::Turtle,
-            RdfFormat::NTriples,
-            RdfFormat::RdfXml,
             RdfFormat::TriG,
-            RdfFormat::N3,
             RdfFormat::JsonLd {
                 profile: JsonLdProfileSet::empty(),
             },
+            RdfFormat::Turtle,
+            RdfFormat::NTriples,
+            RdfFormat::RdfXml,
+            RdfFormat::N3,
         ],
         RdfFormat::media_type,
         "application/n-quads or text/turtle",
@@ -1693,7 +1693,19 @@ fn query_results_content_negotiation(
 ) -> Result<QueryResultsFormat, HttpError> {
     content_negotiation(
         request,
-        QueryResultsFormat::from_media_type,
+        |media_type| {
+            let format = QueryResultsFormat::from_media_type(media_type)?;
+            for parameter in media_type.split(';').skip(1) {
+                if let Some((name, value)) = parameter.split_once('=') {
+                    if name.trim().eq_ignore_ascii_case("charset")
+                        && !value.trim().trim_matches('"').eq_ignore_ascii_case("utf-8")
+                    {
+                        return None;
+                    }
+                }
+            }
+            Some(format)
+        },
         QueryResultsFormat::Json,
         &[
             QueryResultsFormat::Json,
@@ -1725,7 +1737,10 @@ fn content_negotiation<F: Copy + Eq>(
     if header.is_empty() {
         return Ok(default);
     }
-    let mut candidates: Vec<_> = supported.iter().map(|format| (*format, None)).collect();
+    let mut candidates: Vec<_> = supported
+        .iter()
+        .map(|format| (*format, ((0, 0), 0_f32)))
+        .collect();
     for mut possible in header.split(',') {
         let mut score = 1.;
         if let Some((possible_type, last_parameter)) = possible.rsplit_once(';') {
@@ -1747,31 +1762,31 @@ fn content_negotiation<F: Copy + Eq>(
         let possible_base = possible_base.trim();
         let possible_sub = possible_sub.trim();
 
-        let parameter_count = possible.split(';').skip(1).count();
-        let (format, specificity, wildcard) = if possible_base == "*" && possible_sub == "*" {
-            (None, (0, parameter_count), true)
+        let (format, specificity) = if possible_base == "*" && possible_sub == "*" {
+            (None, 0)
         } else if possible_sub == "*" {
-            (None, (1, parameter_count), true)
+            (None, 1)
         } else {
-            (parse(possible), (2, parameter_count), false)
+            (parse(possible), 2)
         };
         if let Some(format) = format {
             if !candidates.iter().any(|(candidate, _)| *candidate == format) {
-                candidates.push((format, None));
+                candidates.push((format, ((0, 0), 0.)));
             }
         }
         for (candidate, candidate_score) in &mut candidates {
-            let candidate_base = media_type(*candidate).split_once('/').unwrap().0;
+            let candidate_media_type = media_type(*candidate);
+            let candidate_base = candidate_media_type.split_once('/').unwrap().0;
             if format == Some(*candidate)
-                || (wildcard && (possible_base == "*" || possible_base == candidate_base))
+                || (possible_sub == "*"
+                    && (possible_base == "*" || possible_base == candidate_base))
             {
-                if candidate_score
-                    .is_none_or(|(_, previous_specificity)| specificity > previous_specificity)
+                if let Some(parameter_count) =
+                    matching_media_type_parameters(possible, candidate_media_type)
                 {
-                    *candidate_score = Some((score, specificity));
-                } else if let Some((previous_score, previous_specificity)) = candidate_score {
-                    if specificity == *previous_specificity && score > *previous_score {
-                        *previous_score = score;
+                    let score = ((specificity, parameter_count), score);
+                    if score > *candidate_score {
+                        *candidate_score = score;
                     }
                 }
             }
@@ -1780,12 +1795,10 @@ fn content_negotiation<F: Copy + Eq>(
 
     let mut result = None;
     let mut result_score = 0_f32;
-    for (format, candidate) in candidates {
-        if let Some((score, _)) = candidate {
-            if score > result_score {
-                result = Some(format);
-                result_score = score;
-            }
+    for (format, (_, score)) in candidates {
+        if score > result_score {
+            result = Some(format);
+            result_score = score;
         }
     }
 
@@ -1795,6 +1808,40 @@ fn content_negotiation<F: Copy + Eq>(
             format!("The accept header does not provide any accepted format like {example}"),
         )
     })
+}
+
+fn matching_media_type_parameters(media_range: &str, candidate: &str) -> Option<usize> {
+    let mut count = 0;
+    for parameter in media_range.split(';').skip(1) {
+        let (name, value) = parameter.split_once('=')?;
+        let name = name.trim();
+        let value = value.trim().trim_matches('"');
+        let candidate_value = candidate.split(';').skip(1).find_map(|parameter| {
+            let (candidate_name, candidate_value) = parameter.split_once('=')?;
+            candidate_name
+                .trim()
+                .eq_ignore_ascii_case(name)
+                .then_some(candidate_value.trim().trim_matches('"'))
+        });
+        let matches = if let Some(candidate_value) = candidate_value {
+            if name.eq_ignore_ascii_case("charset") {
+                value.eq_ignore_ascii_case(candidate_value)
+            } else {
+                value == candidate_value
+            }
+        } else if name.eq_ignore_ascii_case("charset") {
+            ["ascii", "utf8", "utf-8"]
+                .iter()
+                .any(|candidate| value.eq_ignore_ascii_case(candidate))
+        } else {
+            false
+        };
+        if !matches {
+            return None;
+        }
+        count += 1;
+    }
+    Some(count)
 }
 
 fn content_type(request: &Request<Body>) -> Option<String> {
@@ -2800,6 +2847,31 @@ mod tests {
             )
             .body(())?;
         ServerTest::new()?.test_body(request, "?s\t?p\t?o\n")
+    }
+
+    #[test]
+    fn get_query_accept_non_matching_parameter() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/csv;header=absent;q=0, text/csv;q=1")
+            .body(())?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_query_accept_incompatible_charset() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "text/csv;charset=iso-8859-1;q=0, text/csv;q=1, application/sparql-results+json;q=0.5",
+            )
+            .body(())?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
     }
 
     #[test]
