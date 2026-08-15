@@ -13,7 +13,7 @@ use oxhttp::model::header::{
 };
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
-use oxigraph::io::{DocumentLoader, RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{DocumentLoader, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxString};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
@@ -1673,9 +1673,17 @@ fn rdf_content_negotiation(request: &Request<Body>) -> Result<RdfFormat, HttpErr
         RdfFormat::from_media_type,
         RdfFormat::NQuads,
         &[
-            ("application", RdfFormat::NQuads),
-            ("text", RdfFormat::NQuads),
+            RdfFormat::NQuads,
+            RdfFormat::TriG,
+            RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            },
+            RdfFormat::Turtle,
+            RdfFormat::NTriples,
+            RdfFormat::RdfXml,
+            RdfFormat::N3,
         ],
+        RdfFormat::media_type,
         "application/n-quads or text/turtle",
     )
 }
@@ -1685,21 +1693,37 @@ fn query_results_content_negotiation(
 ) -> Result<QueryResultsFormat, HttpError> {
     content_negotiation(
         request,
-        QueryResultsFormat::from_media_type,
+        |media_type| {
+            let format = QueryResultsFormat::from_media_type(media_type)?;
+            for parameter in media_type.split(';').skip(1) {
+                if let Some((name, value)) = parameter.split_once('=') {
+                    if name.trim().eq_ignore_ascii_case("charset")
+                        && !value.trim().trim_matches('"').eq_ignore_ascii_case("utf-8")
+                    {
+                        return None;
+                    }
+                }
+            }
+            Some(format)
+        },
         QueryResultsFormat::Json,
         &[
-            ("application", QueryResultsFormat::Json),
-            ("text", QueryResultsFormat::Json),
+            QueryResultsFormat::Json,
+            QueryResultsFormat::Xml,
+            QueryResultsFormat::Csv,
+            QueryResultsFormat::Tsv,
         ],
+        QueryResultsFormat::media_type,
         "application/sparql-results+json or text/tsv",
     )
 }
 
-fn content_negotiation<F: Copy>(
+fn content_negotiation<F: Copy + Eq>(
     request: &Request<Body>,
     parse: impl Fn(&str) -> Option<F>,
     default: F,
-    default_by_base: &[(&str, F)],
+    supported: &[F],
+    media_type: impl Fn(F) -> &'static str,
     example: &str,
 ) -> Result<F, HttpError> {
     let header = request
@@ -1713,8 +1737,10 @@ fn content_negotiation<F: Copy>(
     if header.is_empty() {
         return Ok(default);
     }
-    let mut result = None;
-    let mut result_score = 0_f32;
+    let mut candidates: Vec<_> = supported
+        .iter()
+        .map(|format| (*format, ((0, 0), 0_f32)))
+        .collect();
     for mut possible in header.split(',') {
         let mut score = 1.;
         if let Some((possible_type, last_parameter)) = possible.rsplit_once(';') {
@@ -1727,9 +1753,6 @@ fn content_negotiation<F: Copy>(
                 }
             }
         }
-        if score <= result_score {
-            continue;
-        }
         let (possible_base, possible_sub) = possible
             .split_once(';')
             .unwrap_or((possible, ""))
@@ -1739,19 +1762,41 @@ fn content_negotiation<F: Copy>(
         let possible_base = possible_base.trim();
         let possible_sub = possible_sub.trim();
 
-        let mut format = None;
-        if possible_base == "*" && possible_sub == "*" {
-            format = Some(default);
+        let (format, specificity) = if possible_base == "*" && possible_sub == "*" {
+            (None, 0)
         } else if possible_sub == "*" {
-            for (base, sub_format) in default_by_base {
-                if *base == possible_base {
-                    format = Some(*sub_format);
+            (None, 1)
+        } else {
+            (parse(possible), 2)
+        };
+        if let Some(format) = format {
+            if !candidates.iter().any(|(candidate, _)| *candidate == format) {
+                candidates.push((format, ((0, 0), 0.)));
+            }
+        }
+        for (candidate, candidate_score) in &mut candidates {
+            let candidate_media_type = media_type(*candidate);
+            let candidate_base = candidate_media_type.split_once('/').unwrap().0;
+            if format == Some(*candidate)
+                || (possible_sub == "*"
+                    && (possible_base == "*" || possible_base == candidate_base))
+            {
+                if let Some(parameter_count) =
+                    matching_media_type_parameters(possible, candidate_media_type)
+                {
+                    let score = ((specificity, parameter_count), score);
+                    if score > *candidate_score {
+                        *candidate_score = score;
+                    }
                 }
             }
-        } else {
-            format = parse(possible);
         }
-        if let Some(format) = format {
+    }
+
+    let mut result = None;
+    let mut result_score = 0_f32;
+    for (format, (_, score)) in candidates {
+        if score > result_score {
             result = Some(format);
             result_score = score;
         }
@@ -1763,6 +1808,40 @@ fn content_negotiation<F: Copy>(
             format!("The accept header does not provide any accepted format like {example}"),
         )
     })
+}
+
+fn matching_media_type_parameters(media_range: &str, candidate: &str) -> Option<usize> {
+    let mut count = 0;
+    for parameter in media_range.split(';').skip(1) {
+        let (name, value) = parameter.split_once('=')?;
+        let name = name.trim();
+        let value = value.trim().trim_matches('"');
+        let candidate_value = candidate.split(';').skip(1).find_map(|parameter| {
+            let (candidate_name, candidate_value) = parameter.split_once('=')?;
+            candidate_name
+                .trim()
+                .eq_ignore_ascii_case(name)
+                .then_some(candidate_value.trim().trim_matches('"'))
+        });
+        let matches = if let Some(candidate_value) = candidate_value {
+            if name.eq_ignore_ascii_case("charset") {
+                value.eq_ignore_ascii_case(candidate_value)
+            } else {
+                value == candidate_value
+            }
+        } else if name.eq_ignore_ascii_case("charset") {
+            ["ascii", "utf8", "utf-8"]
+                .iter()
+                .any(|candidate| value.eq_ignore_ascii_case(candidate))
+        } else {
+            false
+        };
+        if !matches {
+            return None;
+        }
+        count += 1;
+    }
+    Some(count)
 }
 
 fn content_type(request: &Request<Body>) -> Option<String> {
@@ -2724,10 +2803,108 @@ mod tests {
             )
             .header(ACCEPT, "text/*")
             .body(())?;
-        ServerTest::new()?.test_body(
-            request,
-            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
-        )
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_query_accept_specific_exclusion() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "*/*;q=1, application/sparql-results+json;q=0, text/csv;q=0.5",
+            )
+            .body(())?;
+        assert_eq!(
+            ServerTest::new()?.exec(request).headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("application/sparql-results+xml"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_query_accept_wildcard_exclusion() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/*, text/csv;q=0")
+            .body(())?;
+        ServerTest::new()?.test_body(request, "?s\t?p\t?o\n")
+    }
+
+    #[test]
+    fn get_query_accept_parameter_specificity() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "text/csv;charset=utf-8;q=0, text/csv;q=1, text/tab-separated-values;q=0.5",
+            )
+            .body(())?;
+        ServerTest::new()?.test_body(request, "?s\t?p\t?o\n")
+    }
+
+    #[test]
+    fn get_query_accept_non_matching_parameter() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/csv;header=absent;q=0, text/csv;q=1")
+            .body(())?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_query_accept_incompatible_charset() -> Result<()> {
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(
+                ACCEPT,
+                "text/csv;charset=iso-8859-1;q=0, text/csv;q=1, application/sparql-results+json;q=0.5",
+            )
+            .body(())?;
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
+    }
+
+    #[test]
+    fn get_query_description_accept_json_ld_profile() -> Result<()> {
+        let request = Request::builder()
+            .uri("http://localhost/query")
+            .header(
+                ACCEPT,
+                "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming",
+            )
+            .body(())?;
+        assert_eq!(
+            ServerTest::new()?.exec(request).headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static(
+                "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming"
+            ))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_store_accept_substar() -> Result<()> {
+        let request = Request::builder()
+            .uri("http://localhost/store?default")
+            .header(ACCEPT, "text/*")
+            .body(())?;
+        let mut response = ServerTest::new()?.exec(request);
+        read_to_string(response.body_mut())?;
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("text/turtle"))
+        );
+        Ok(())
     }
 
     #[test]
