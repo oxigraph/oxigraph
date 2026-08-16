@@ -242,48 +242,34 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
             return Some(Ok(TokenOrLineJump::LineJump));
         }
         self.previous_position = self.position;
-        let Some((consumed, result)) = self.parser.recognize_next_token(
+        let (consumed, result) = if let Some((consumed, result)) = self.parser.recognize_next_token(
             &self.data[self.position.buffer_offset..],
             self.is_ending,
             options,
-        ) else {
-            return if self.is_ending {
-                if self.position.buffer_offset == self.data.len() {
-                    None // We have finished
-                } else {
-                    let (new_line_jumps, new_line_start) =
-                        Self::find_number_of_line_jumps_and_start_of_last_line(
-                            &self.data[self.position.buffer_offset..],
-                        );
-                    if new_line_jumps > 0 {
-                        self.position.line_start_buffer_offset =
-                            self.position.buffer_offset + new_line_start;
-                    }
-                    self.position.global_offset +=
-                        u64::try_from(self.data.len() - self.position.buffer_offset).unwrap();
-                    self.position.buffer_offset = self.data.len();
-                    self.position.global_line += new_line_jumps;
-                    let error = TurtleSyntaxError::new(
-                        self.last_token_location(),
-                        "Unexpected end of file",
-                    );
-                    Some(Err(error))
-                }
-            } else {
-                None
-            };
+        ) {
+            debug_assert!(
+                consumed > 0,
+                "The lexer must consume at least one byte each time"
+            );
+            (consumed, Some(result))
+        } else if self.is_ending {
+            let remaining_size = self.data.len() - self.position.buffer_offset;
+            (
+                remaining_size,
+                // We fail if there are unrecognized bytes
+                (remaining_size > 0)
+                    .then(|| Err((0..remaining_size, "Unexpected end of file").into())),
+            )
+        } else {
+            (0, None)
         };
-        debug_assert!(
-            consumed > 0,
-            "The lexer must consume at least one byte each time"
-        );
         debug_assert!(
             self.position.buffer_offset + consumed <= self.data.len(),
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
             self.data.len() - self.position.buffer_offset
         );
         let (new_line_jumps, new_line_start) = match &result {
-            Ok(token) if !R::token_contains_line_jumps(token) => (0, 0),
+            Some(Ok(token)) if !R::token_contains_line_jumps(token) => (0, 0),
             _ => Self::find_number_of_line_jumps_and_start_of_last_line(
                 &self.data[self.position.buffer_offset..self.position.buffer_offset + consumed],
             ),
@@ -294,7 +280,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         self.position.buffer_offset += consumed;
         self.position.global_offset += u64::try_from(consumed).unwrap();
         self.position.global_line += new_line_jumps;
-        Some(result.map(TokenOrLineJump::Token).map_err(|e| {
+        Some(result?.map(TokenOrLineJump::Token).map_err(|e| {
             TurtleSyntaxError::new(
                 self.location_from_buffer_offset_range(e.location),
                 e.message,
@@ -302,10 +288,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         }))
     }
 
-    pub fn location_from_buffer_offset_range(
-        &self,
-        offset_range: Range<usize>,
-    ) -> Range<TextPosition> {
+    fn location_from_buffer_offset_range(&self, offset_range: Range<usize>) -> Range<TextPosition> {
         let start_offset = self.previous_position.buffer_offset + offset_range.start;
         let (start_extra_line_jumps, start_line_start) =
             Self::find_number_of_line_jumps_and_start_of_last_line(
