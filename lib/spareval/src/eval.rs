@@ -248,7 +248,6 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
     }
 
     fn internalize_term(&self, term: Term) -> Result<D::InternalTerm, QueryEvaluationError> {
-        self.cancellation_token.ensure_alive()?;
         self.dataset
             .internalize_term(term)
             .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
@@ -1153,17 +1152,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 if keys.is_empty() {
                     // Cartesian product
                     Ok(Rc::new(move |from| {
-                        let mut errors = Vec::default();
-                        let built_values = build(from.clone())
-                            .filter_map(|result| match result {
-                                Ok(result) => Some(result),
-                                Err(error) => {
-                                    errors.push(Err(error));
-                                    None
-                                }
-                            })
-                            .collect::<Vec<_>>();
-                        if built_values.is_empty() && errors.is_empty() {
+                        let built_values = build(from.clone()).collect::<Result<Vec<_>, _>>();
+                        if built_values.as_ref().is_err_and(|e| !e.can_be_silent()) {
+                            // We return non-silent errors proactively to abort execution
+                            return Box::new(built_values.err().into_iter().map(Err));
+                        }
+                        if built_values.as_ref().is_ok_and(Vec::is_empty) {
                             // We don't bother to execute the other side
                             return Box::new(empty());
                         }
@@ -1172,11 +1166,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             // We know it's empty and can discard errors
                             return Box::new(empty());
                         }
-                        Box::new(CartesianProductJoinIterator {
-                            probe_iter,
-                            built: built_values,
-                            buffered_results: errors,
-                        })
+                        match built_values {
+                            Ok(built_values) => Box::new(CartesianProductJoinIterator {
+                                probe_iter,
+                                built: built_values,
+                                buffered_results: Vec::new(),
+                            }),
+                            Err(error) => Box::new(once(Err(error))),
+                        }
                     }))
                 } else {
                     // Real hash join
@@ -1185,18 +1182,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         .map(|v| encode_variable(encoded_variables, v))
                         .collect::<Vec<_>>();
                     Ok(Rc::new(move |from| {
-                        let mut errors = Vec::default();
                         let mut built_values = InternalTupleSet::new(keys.clone());
-                        built_values.extend(build(from.clone()).filter_map(
-                            |result| match result {
-                                Ok(result) => Some(result),
-                                Err(error) => {
-                                    errors.push(Err(error));
-                                    None
-                                }
-                            },
-                        ));
-                        if built_values.is_empty() && errors.is_empty() {
+                        let error = built_values.extend(build(from.clone())).err();
+                        if error.as_ref().is_some_and(|e| !e.can_be_silent()) {
+                            // We return non-silent errors proactively to abort execution
+                            return Box::new(error.into_iter().map(Err));
+                        }
+                        if built_values.is_empty() && error.is_none() {
                             // We don't bother to execute the other side
                             return Box::new(empty());
                         }
@@ -1205,10 +1197,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             // We know it's empty and can discard errors
                             return Box::new(empty());
                         }
+                        if let Some(error) = error {
+                            return Box::new(once(Err(error)));
+                        }
                         Box::new(HashJoinIterator {
                             probe_iter,
                             built: built_values,
-                            buffered_results: errors,
+                            buffered_results: Vec::new(),
                         })
                     }))
                 }
@@ -1305,7 +1300,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         .collect::<Vec<_>>();
                     Ok(Rc::new(move |from| {
                         let mut right_values = InternalTupleSet::new(keys.clone());
-                        right_values.extend(right(from.clone()).filter_map(Result::ok));
+                        if let Err(error) = right_values.extend(right(from.clone())) {
+                            return Box::new(once(Err(error)));
+                        }
                         if right_values.is_empty() {
                             return left(from);
                         }
@@ -1353,22 +1350,17 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     .map(|v| encode_variable(encoded_variables, v))
                     .collect::<Vec<_>>();
                 Ok(Rc::new(move |from| {
-                    let mut errors = Vec::default();
                     let mut right_values = InternalTupleSet::new(keys.clone());
-                    right_values.extend(right(from.clone()).filter_map(|result| match result {
-                        Ok(result) => Some(result),
-                        Err(error) => {
-                            errors.push(Err(error));
-                            None
-                        }
-                    }));
-                    if right_values.is_empty() && errors.is_empty() {
+                    if let Err(error) = right_values.extend(right(from.clone())) {
+                        return Box::new(once(Err(error)));
+                    }
+                    if right_values.is_empty() {
                         return left(from);
                     }
                     Box::new(HashLeftJoinIterator {
                         left_iter: left(from),
                         right: right_values,
-                        buffered_results: errors,
+                        buffered_results: Vec::new(),
                         expression: Rc::clone(&expression),
                     })
                 }))
@@ -1498,16 +1490,10 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             .collect::<Vec<_>>();
         let dataset = self.dataset.clone();
         Ok(Rc::new(move |from| {
-            let mut errors = Vec::default();
-            let mut values = child(from)
-                .filter_map(|result| match result {
-                    Ok(result) => Some(result),
-                    Err(error) => {
-                        errors.push(Err(error));
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
+            let mut values = match child(from).collect::<Result<Vec<_>, _>>() {
+                Ok(values) => values,
+                Err(error) => return Box::new(once(Err(error))),
+            };
             values.sort_unstable_by(|a, b| {
                 for (is_asc, variable_key) in &by {
                     match cmp_terms(
@@ -1537,7 +1523,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 }
                 Ordering::Equal
             });
-            Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
+            Box::new(values.into_iter().map(Ok))
         }))
     }
 
@@ -1672,7 +1658,6 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         Ok(Rc::new(move |from| {
             let tuple_size = from.capacity();
             let key_variables = Rc::clone(&key_variables);
-            let mut errors = Vec::default();
             let mut accumulators_for_group = FxHashMap::<
                 Vec<Option<D::InternalTerm>>,
                 Vec<AccumulatorWrapper<'_, D::InternalTerm>>,
@@ -1685,56 +1670,46 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 );
             }
             for result in child(from) {
-                match result {
-                    Ok(tuple) => {
-                        // TODO avoid copy for key?
-                        let key = key_variables
-                            .iter()
-                            .map(|v| tuple.get(*v).cloned())
-                            .collect();
+                let tuple = match result {
+                    Ok(tuple) => tuple,
+                    Err(error) => return Box::new(once(Err(error))),
+                };
+                // TODO avoid copy for key?
+                let key = key_variables
+                    .iter()
+                    .map(|v| tuple.get(*v).cloned())
+                    .collect();
 
-                        let key_accumulators =
-                            accumulators_for_group.entry(key).or_insert_with(|| {
-                                accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>()
-                            });
-                        for accumulator in key_accumulators {
-                            if let Err(error) = accumulator.accumulate(&tuple) {
-                                errors.push(error);
-                            }
-                        }
+                let key_accumulators = accumulators_for_group.entry(key).or_insert_with(|| {
+                    accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>()
+                });
+                for accumulator in key_accumulators {
+                    if let Err(error) = accumulator.accumulate(&tuple) {
+                        return Box::new(once(Err(error)));
                     }
-                    Err(error) => errors.push(error),
                 }
             }
             let accumulator_variables = accumulator_variables.clone();
             let dataset = dataset.clone();
             Box::new(
-                errors
+                accumulators_for_group
                     .into_iter()
-                    .map(Err)
-                    .chain(
-                        accumulators_for_group
-                            .into_iter()
-                            .map(move |(key, accumulators)| {
-                                let mut result = InternalTuple::with_capacity(tuple_size);
-                                for (variable, value) in key_variables.iter().zip(key) {
-                                    if let Some(value) = value {
-                                        result.set(*variable, value);
-                                    }
-                                }
-                                for (accumulator, variable) in
-                                    accumulators.into_iter().zip(&accumulator_variables)
-                                {
-                                    if let Some(value) = accumulator.finish() {
-                                        result.set(
-                                            *variable,
-                                            dataset.internalize_expression_term(value)?,
-                                        );
-                                    }
-                                }
-                                Ok(result)
-                            }),
-                    ),
+                    .map(move |(key, accumulators)| {
+                        let mut result = InternalTuple::with_capacity(tuple_size);
+                        for (variable, value) in key_variables.iter().zip(key) {
+                            if let Some(value) = value {
+                                result.set(*variable, value);
+                            }
+                        }
+                        for (accumulator, variable) in
+                            accumulators.into_iter().zip(&accumulator_variables)
+                        {
+                            if let Some(value) = accumulator.finish() {
+                                result.set(*variable, dataset.internalize_expression_term(value)?);
+                            }
+                        }
+                        Ok(result)
+                    }),
             )
         }))
     }
@@ -1767,7 +1742,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         .transpose()
                 })),
                 Err(e) => {
-                    if silent {
+                    if silent && e.can_be_silent() {
                         Box::new(once(Ok(from)))
                     } else {
                         Box::new(once(Err(e)))
@@ -1798,7 +1773,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let iter =
             self.service_handler
                 .handle(&service_name, query_expression, self.base_iri.as_ref())?;
-        Ok(encode_bindings(self.dataset.clone(), variables, iter))
+        Ok(self.encode_bindings(variables, iter))
     }
 
     fn accumulator_builder(
@@ -2095,6 +2070,28 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             ),
         }))
     }
+
+    /// Used to encode results from a BindingIterator into an InternalTuplesIterator. This happens when SERVICE clauses are evaluated
+    fn encode_bindings(
+        &self,
+        variables: Rc<[Variable]>,
+        iter: QuerySolutionIter<'a>,
+    ) -> InternalTuplesIterator<'a, D::InternalTerm> {
+        let dataset = self.dataset.clone();
+        Box::new(iter.map(move |solution| {
+            dataset.cancellation_token.ensure_alive()?;
+            let mut encoded_terms = InternalTuple::with_capacity(variables.len());
+            for (variable, term) in &solution? {
+                put_variable_value(
+                    variable,
+                    &variables,
+                    dataset.internalize_term(term.clone())?,
+                    &mut encoded_terms,
+                );
+            }
+            Ok(encoded_terms)
+        }))
+    }
 }
 
 impl<'a, D: QueryableDataset<'a>> Clone for SimpleEvaluator<'a, D> {
@@ -2213,26 +2210,6 @@ fn decode_bindings<'a, D: QueryableDataset<'a>>(
             Ok(result)
         })),
     )
-}
-
-// this is used to encode results from a BindingIterator into an InternalTuplesIterator. This happens when SERVICE clauses are evaluated
-fn encode_bindings<'a, D: QueryableDataset<'a>>(
-    dataset: EvalDataset<'a, D>,
-    variables: Rc<[Variable]>,
-    iter: QuerySolutionIter<'a>,
-) -> InternalTuplesIterator<'a, D::InternalTerm> {
-    Box::new(iter.map(move |solution| {
-        let mut encoded_terms = InternalTuple::with_capacity(variables.len());
-        for (variable, term) in &solution? {
-            put_variable_value(
-                variable,
-                &variables,
-                dataset.internalize_term(term.clone())?,
-                &mut encoded_terms,
-            );
-        }
-        Ok(encoded_terms)
-    }))
 }
 
 fn encode_initial_bindings<'a, D: QueryableDataset<'a>>(
@@ -3007,18 +2984,17 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(Some(Ok(start.clone())), move |e| {
+                transitive_closure(Some(Ok(start.clone())), move |e| {
                     eval.eval_from(&p, &e, graph_name2.as_ref())
-                }))
+                })
             }
             PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(
-                    self.eval_from(&p, start, graph_name),
-                    move |e| eval.eval_from(&p, &e, graph_name2.as_ref()),
-                ))
+                transitive_closure(self.eval_from(&p, start, graph_name), move |e| {
+                    eval.eval_from(&p, &e, graph_name2.as_ref())
+                })
             }
             PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 once(Ok(start.clone())).chain(self.eval_from(p, start, graph_name)),
@@ -3073,18 +3049,17 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(Some(Ok(end.clone())), move |e| {
+                transitive_closure(Some(Ok(end.clone())), move |e| {
                     eval.eval_to(&p, &e, graph_name2.as_ref())
-                }))
+                })
             }
             PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(
-                    self.eval_to(&p, end, graph_name),
-                    move |e| eval.eval_to(&p, &e, graph_name2.as_ref()),
-                ))
+                transitive_closure(self.eval_to(&p, end, graph_name), move |e| {
+                    eval.eval_to(&p, &e, graph_name2.as_ref())
+                })
             }
             PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 once(Ok(end.clone())).chain(self.eval_to(p, end, graph_name)),
@@ -3149,25 +3124,22 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(
+                transitive_closure(
                     self.get_subject_or_object_identity_pairs(graph_name),
                     move |(start, middle)| {
                         eval.eval_from(&p, &middle, graph_name2.as_ref())
                             .map(move |end| Ok((start.clone(), end?)))
                     },
-                ))
+                )
             }
             PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.cloned();
-                Box::new(transitive_closure(
-                    self.eval_open(&p, graph_name),
-                    move |(start, middle)| {
-                        eval.eval_from(&p, &middle, graph_name2.as_ref())
-                            .map(move |end| Ok((start.clone(), end?)))
-                    },
-                ))
+                transitive_closure(self.eval_open(&p, graph_name), move |(start, middle)| {
+                    eval.eval_from(&p, &middle, graph_name2.as_ref())
+                        .map(move |end| Ok((start.clone(), end?)))
+                })
             }
             PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs(graph_name)
@@ -3688,21 +3660,14 @@ impl<'a, D: QueryableDataset<'a>> Iterator for DescribeIterator<'a, D> {
     }
 }
 
-fn transitive_closure<T: Clone + Eq + Hash, E, NI: Iterator<Item = Result<T, E>>>(
+fn transitive_closure<'a, T: Clone + Eq + Hash + 'a, E: 'a, NI: Iterator<Item = Result<T, E>>>(
     start: impl IntoIterator<Item = Result<T, E>>,
     mut next: impl FnMut(T) -> NI,
-) -> impl Iterator<Item = Result<T, E>> {
-    let mut errors = Vec::new();
-    let mut todo = start
-        .into_iter()
-        .filter_map(|e| match e {
-            Ok(e) => Some(e),
-            Err(e) => {
-                errors.push(e);
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+) -> Box<dyn Iterator<Item = Result<T, E>> + 'a> {
+    let mut todo = match start.into_iter().collect::<Result<Vec<_>, _>>() {
+        Ok(values) => values,
+        Err(error) => return Box::new(once(Err(error))),
+    };
     let mut all = todo.iter().cloned().collect::<FxHashSet<_>>();
     while let Some(e) = todo.pop() {
         for e in next(e) {
@@ -3712,11 +3677,11 @@ fn transitive_closure<T: Clone + Eq + Hash, E, NI: Iterator<Item = Result<T, E>>
                         todo.push(e)
                     }
                 }
-                Err(e) => errors.push(e),
+                Err(error) => return Box::new(once(Err(error))),
             }
         }
     }
-    errors.into_iter().map(Err).chain(all.into_iter().map(Ok))
+    Box::new(all.into_iter().map(Ok))
 }
 
 fn look_in_transitive_closure<T: Clone + Eq + Hash, E, NI: Iterator<Item = Result<T, E>>>(
@@ -3866,15 +3831,17 @@ impl<T: Hash> InternalTupleSet<T> {
         }
         hasher.finish()
     }
-}
 
-impl<T: Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
-    fn extend<I: IntoIterator<Item = InternalTuple<T>>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item = Result<InternalTuple<T>, QueryEvaluationError>>>(
+        &mut self,
+        iter: I,
+    ) -> Result<(), QueryEvaluationError> {
         let iter = iter.into_iter();
         self.map.reserve(iter.size_hint().0);
         for tuple in iter {
-            self.insert(tuple);
+            self.insert(tuple?);
         }
+        Ok(())
     }
 }
 
