@@ -1023,8 +1023,60 @@ mod tests {
     use super::*;
     use oxrdf::vocab::xsd;
     use oxrdf::{Literal, Term};
+    use spargebra::SparqlParser;
     use spargebra::vocab::sparql;
     use sparopt::algebra::{Expression, QueryExpression};
+
+    struct FailingExternalizationDataset;
+
+    impl<'a> QueryableDataset<'a> for FailingExternalizationDataset {
+        type InternalTerm = u8;
+        type Error = io::Error;
+
+        fn internal_quads_for_pattern(
+            &self,
+            _subject: Option<&u8>,
+            _predicate: Option<&u8>,
+            _object: Option<&u8>,
+            _graph_name: Option<Option<&u8>>,
+        ) -> impl Iterator<Item = Result<InternalQuad<u8>, io::Error>> + use<'a> {
+            std::iter::once(Ok(InternalQuad {
+                subject: 1,
+                predicate: 2,
+                object: 3,
+                graph_name: None,
+            }))
+        }
+
+        fn internalize_term(&self, _term: Term) -> Result<u8, io::Error> {
+            Ok(2)
+        }
+
+        fn externalize_term(&self, term: u8) -> Result<Term, io::Error> {
+            match term {
+                1 => Ok(NamedNode::new_unchecked("http://example.com/s").into()),
+                2 => Ok(NamedNode::new_unchecked("http://example.com/p").into()),
+                _ => Err(io::Error::other("dictionary read failed")),
+            }
+        }
+    }
+
+    #[test]
+    fn construct_propagates_externalization_errors() {
+        let query = SparqlParser::new()
+            .parse_query("CONSTRUCT { ?s <http://example.com/p> ?o } WHERE { ?s ?p ?o }")
+            .unwrap();
+        let results = QueryEvaluator::new()
+            .prepare(&query)
+            .execute(FailingExternalizationDataset)
+            .unwrap();
+        assert!(matches!(&results, QueryResults::Graph(_)));
+        if let QueryResults::Graph(results) = results {
+            let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
+            assert!(matches!(error, QueryEvaluationError::Dataset(_)));
+            assert_eq!(error.to_string(), "dictionary read failed");
+        }
+    }
 
     #[test]
     fn evaluate_expression_literal_and_arithmetic() {

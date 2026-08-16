@@ -3458,21 +3458,19 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
                     Err(error) => return Some(Err(error)),
                 };
                 for template in &self.template {
-                    if let (Some(subject), Some(predicate), Some(object)) = (
+                    let (subject, predicate, object) = match (
                         get_triple_template_value(
                             &template.subject,
                             &tuple,
                             &mut self.bnodes,
                             &self.eval.dataset,
-                        )
-                        .and_then(|t| t.try_into().ok()),
+                        ),
                         get_triple_template_value(
                             &template.predicate,
                             &tuple,
                             &mut self.bnodes,
                             &self.eval.dataset,
-                        )
-                        .and_then(|t| t.try_into().ok()),
+                        ),
                         get_triple_template_value(
                             &template.object,
                             &tuple,
@@ -3480,6 +3478,17 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
                             &self.eval.dataset,
                         ),
                     ) {
+                        (Ok(Some(subject)), Ok(Some(predicate)), Ok(Some(object))) => {
+                            (subject, predicate, object)
+                        }
+                        (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
+                            self.bnodes.clear();
+                            return Some(Err(error));
+                        }
+                        _ => continue,
+                    };
+                    if let (Ok(subject), Ok(predicate)) = (subject.try_into(), predicate.try_into())
+                    {
                         let triple = Triple {
                             subject,
                             predicate,
@@ -3594,32 +3603,40 @@ fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
     tuple: &InternalTuple<D::InternalTerm>,
     bnodes: &mut Vec<BlankNode>,
     dataset: &EvalDataset<'a, D>,
-) -> Option<Term> {
+) -> Result<Option<Term>, QueryEvaluationError> {
     match selector {
-        TripleTemplateValue::Constant(term) => Some(term.clone()),
-        TripleTemplateValue::Variable(v) => {
-            let t = tuple.get(*v)?;
-            dataset.externalize_term(t.clone()).ok() // TODO: raise error
-        }
+        TripleTemplateValue::Constant(term) => Ok(Some(term.clone())),
+        TripleTemplateValue::Variable(v) => tuple
+            .get(*v)
+            .map(|t| dataset.externalize_term(t.clone()))
+            .transpose(),
         TripleTemplateValue::BlankNode(bnode) => {
             if *bnode >= bnodes.len() {
                 bnodes.resize_with(*bnode + 1, BlankNode::default)
             }
-            Some(bnodes[*bnode].clone().into())
+            Ok(Some(bnodes[*bnode].clone().into()))
         }
         #[cfg(feature = "sparql-12")]
-        TripleTemplateValue::Triple(triple) => Some(
-            Triple {
-                subject: get_triple_template_value(&triple.subject, tuple, bnodes, dataset)?
-                    .try_into()
-                    .ok()?,
-                predicate: get_triple_template_value(&triple.predicate, tuple, bnodes, dataset)?
-                    .try_into()
-                    .ok()?,
-                object: get_triple_template_value(&triple.object, tuple, bnodes, dataset)?,
-            }
-            .into(),
-        ),
+        TripleTemplateValue::Triple(triple) => {
+            let (Some(subject), Some(predicate), Some(object)) = (
+                get_triple_template_value(&triple.subject, tuple, bnodes, dataset)?,
+                get_triple_template_value(&triple.predicate, tuple, bnodes, dataset)?,
+                get_triple_template_value(&triple.object, tuple, bnodes, dataset)?,
+            ) else {
+                return Ok(None);
+            };
+            let (Ok(subject), Ok(predicate)) = (subject.try_into(), predicate.try_into()) else {
+                return Ok(None);
+            };
+            Ok(Some(
+                Triple {
+                    subject,
+                    predicate,
+                    object,
+                }
+                .into(),
+            ))
+        }
     }
 }
 
