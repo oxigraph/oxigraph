@@ -69,10 +69,10 @@ pub struct Lexer<B, R: TokenRecognizer> {
 
 #[derive(Clone, Copy)]
 struct Position {
-    line_start_buffer_offset: usize,
     buffer_offset: usize,
     global_offset: u64,
     global_line: u64,
+    line_offset: u64,
 }
 
 impl<B, R: TokenRecognizer> Lexer<B, R> {
@@ -88,16 +88,16 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
             parser,
             data,
             position: Position {
-                line_start_buffer_offset: 0,
                 buffer_offset: 0,
                 global_offset: 0,
                 global_line: 0,
+                line_offset: 0,
             },
             previous_position: Position {
-                line_start_buffer_offset: 0,
                 buffer_offset: 0,
                 global_offset: 0,
                 global_line: 0,
+                line_offset: 0,
             },
             is_ending,
             min_buffer_size,
@@ -211,9 +211,6 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
     }
 
     fn shrink_data(&mut self) {
-        if self.position.line_start_buffer_offset > 0 {
-            self.shrink_data_by(self.position.line_start_buffer_offset);
-        }
         if self.position.buffer_offset > self.max_buffer_size / 2 {
             // We really need to shrink, let's forget about error quality
             self.shrink_data_by(self.position.buffer_offset);
@@ -224,10 +221,6 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         self.data.copy_within(shift_amount.., 0);
         self.data.truncate(self.data.len() - shift_amount);
         self.position.buffer_offset -= shift_amount;
-        self.position.line_start_buffer_offset = self
-            .position
-            .line_start_buffer_offset
-            .saturating_sub(shift_amount);
         self.previous_position = self.position;
     }
 }
@@ -268,18 +261,22 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
             self.data.len() - self.position.buffer_offset
         );
-        let (new_line_jumps, new_line_start) = match &result {
-            Some(Ok(token)) if !R::token_contains_line_jumps(token) => (0, 0),
-            _ => Self::find_number_of_line_jumps_and_start_of_last_line(
+        let (new_line_jumps, line_offset) = match &result {
+            Some(Ok(token)) if !R::token_contains_line_jumps(token) => {
+                (0, u64::try_from(consumed).unwrap())
+            }
+            _ => Self::find_number_of_line_jumps_and_size_of_last_line(
                 &self.data[self.position.buffer_offset..self.position.buffer_offset + consumed],
             ),
         };
-        if new_line_jumps > 0 {
-            self.position.line_start_buffer_offset = self.position.buffer_offset + new_line_start;
-        }
         self.position.buffer_offset += consumed;
         self.position.global_offset += u64::try_from(consumed).unwrap();
         self.position.global_line += new_line_jumps;
+        if new_line_jumps > 0 {
+            self.position.line_offset = line_offset;
+        } else {
+            self.position.line_offset += line_offset;
+        }
         Some(result?.map(TokenOrLineJump::Token).map_err(|e| {
             TurtleSyntaxError::new(
                 self.location_from_buffer_offset_range(e.location),
@@ -290,48 +287,42 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
 
     fn location_from_buffer_offset_range(&self, offset_range: Range<usize>) -> Range<TextPosition> {
         let start_offset = self.previous_position.buffer_offset + offset_range.start;
-        let (start_extra_line_jumps, start_line_start) =
-            Self::find_number_of_line_jumps_and_start_of_last_line(
+        let (start_extra_line_jumps, mut start_last_line_size) =
+            Self::find_number_of_line_jumps_and_size_of_last_line(
                 &self.data[self.previous_position.buffer_offset..start_offset],
             );
-        let start_line_start = if start_extra_line_jumps > 0 {
-            start_line_start + self.previous_position.buffer_offset
-        } else {
-            self.previous_position.line_start_buffer_offset
-        };
+        if start_extra_line_jumps == 0 {
+            start_last_line_size += self.previous_position.line_offset;
+        }
         let end_offset = self.previous_position.buffer_offset + offset_range.end;
-        let (end_extra_line_jumps, end_line_start) =
-            Self::find_number_of_line_jumps_and_start_of_last_line(
+        let (end_extra_line_jumps, mut end_last_line_size) =
+            Self::find_number_of_line_jumps_and_size_of_last_line(
                 &self.data[self.previous_position.buffer_offset..end_offset],
             );
-        let end_line_start = if end_extra_line_jumps > 0 {
-            end_line_start + self.previous_position.buffer_offset
-        } else {
-            self.previous_position.line_start_buffer_offset
-        };
+        if end_extra_line_jumps == 0 {
+            end_last_line_size += self.previous_position.line_offset;
+        }
         TextPosition {
             line: self.previous_position.global_line + start_extra_line_jumps,
-            column: Self::column_from_bytes(&self.data[start_line_start..start_offset]),
+            column: start_last_line_size,
             offset: self.previous_position.global_offset
                 + u64::try_from(offset_range.start).unwrap(),
         }..TextPosition {
             line: self.previous_position.global_line + end_extra_line_jumps,
-            column: Self::column_from_bytes(&self.data[end_line_start..end_offset]),
+            column: end_last_line_size,
             offset: self.previous_position.global_offset + u64::try_from(offset_range.end).unwrap(),
         }
     }
 
     pub fn last_token_location(&self) -> Range<TextPosition> {
-        self.text_position_from_position(&self.previous_position)
-            ..self.text_position_from_position(&self.position)
+        Self::text_position_from_position(&self.previous_position)
+            ..Self::text_position_from_position(&self.position)
     }
 
-    fn text_position_from_position(&self, position: &Position) -> TextPosition {
+    fn text_position_from_position(position: &Position) -> TextPosition {
         TextPosition {
             line: position.global_line,
-            column: Self::column_from_bytes(
-                &self.data[position.line_start_buffer_offset..position.buffer_offset],
-            ),
+            column: position.line_offset,
             offset: position.global_offset,
         }
     }
@@ -369,9 +360,9 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                     }
                     let comment_size = end_position + 1;
                     self.position.buffer_offset += comment_size;
-                    self.position.line_start_buffer_offset = self.position.buffer_offset;
                     self.position.global_offset += u64::try_from(comment_size).unwrap();
                     self.position.global_line += 1;
+                    self.position.line_offset = 0;
                     return Some(true);
                 }
                 if self.is_ending {
@@ -393,6 +384,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                 b' ' | b'\t' => {
                     self.position.buffer_offset += 1;
                     self.position.global_offset += 1;
+                    self.position.line_offset += 1;
                 }
                 b'\r' => {
                     // We look for \n for Windows line end style
@@ -405,16 +397,16 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                         return None; // We need to read more
                     }
                     self.position.buffer_offset += usize::from(increment);
-                    self.position.line_start_buffer_offset = self.position.buffer_offset;
                     self.position.global_offset += u64::from(increment);
                     self.position.global_line += 1;
+                    self.position.line_offset = 0;
                     return Some(true);
                 }
                 b'\n' => {
                     self.position.buffer_offset += 1;
-                    self.position.line_start_buffer_offset = self.position.buffer_offset;
                     self.position.global_offset += 1;
                     self.position.global_line += 1;
+                    self.position.line_offset = 0;
                     return Some(true);
                 }
                 _ => return Some(false),
@@ -425,7 +417,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         self.is_ending.then_some(false) // We return None if there is not enough data
     }
 
-    fn find_number_of_line_jumps_and_start_of_last_line(bytes: &[u8]) -> (u64, usize) {
+    fn find_number_of_line_jumps_and_size_of_last_line(bytes: &[u8]) -> (u64, u64) {
         let mut num_of_jumps = 0;
         let mut last_jump_pos = 0;
         let mut previous_cr = 0;
@@ -442,20 +434,10 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                 last_jump_pos = pos + 1;
             }
         }
-        (num_of_jumps, last_jump_pos)
-    }
-
-    fn column_from_bytes(bytes: &[u8]) -> u64 {
-        match str::from_utf8(bytes) {
-            Ok(s) => u64::try_from(s.chars().count()).unwrap(),
-            Err(e) => {
-                if e.valid_up_to() == 0 {
-                    0
-                } else {
-                    Self::column_from_bytes(&bytes[..e.valid_up_to()])
-                }
-            }
-        }
+        (
+            num_of_jumps,
+            (bytes.len() - last_jump_pos).try_into().unwrap(),
+        )
     }
 }
 
