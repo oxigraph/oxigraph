@@ -1,10 +1,8 @@
 use crate::toolkit::error::{TextPosition, TurtleSyntaxError};
 use memchr::{memchr2, memchr2_iter};
-use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::io::{self, Read};
-use std::ops::{Deref, Range, RangeInclusive};
-use std::str;
+use std::ops::{Range, RangeInclusive};
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -56,293 +54,148 @@ impl<S: Into<String>> From<(usize, S)> for TokenRecognizerError {
     }
 }
 
-pub struct Lexer<B, R: TokenRecognizer> {
+pub struct Lexer<R: TokenRecognizer> {
     parser: R,
-    data: B,
-    position: Position,
-    previous_position: Position, // Lexer position before the last emitted token
-    is_ending: bool,
-    min_buffer_size: usize,
-    max_buffer_size: usize,
+    position: TextPosition,
     line_comment_start: Option<&'static [u8]>,
 }
 
-#[derive(Clone, Copy)]
-struct Position {
-    buffer_offset: usize,
-    global_offset: u64,
-    global_line: u64,
-    line_offset: u64,
-}
-
-impl<B, R: TokenRecognizer> Lexer<B, R> {
-    pub fn new(
-        parser: R,
-        data: B,
-        is_ending: bool,
-        min_buffer_size: usize,
-        max_buffer_size: usize,
-        line_comment_start: Option<&'static [u8]>,
-    ) -> Self {
+impl<R: TokenRecognizer> Lexer<R> {
+    pub fn new(parser: R, line_comment_start: Option<&'static [u8]>) -> Self {
         Self {
             parser,
-            data,
-            position: Position {
-                buffer_offset: 0,
-                global_offset: 0,
-                global_line: 0,
-                line_offset: 0,
+            position: TextPosition {
+                offset: 0,
+                line: 0,
+                column: 0,
             },
-            previous_position: Position {
-                buffer_offset: 0,
-                global_offset: 0,
-                global_line: 0,
-                line_offset: 0,
-            },
-            is_ending,
-            min_buffer_size,
-            max_buffer_size,
             line_comment_start,
         }
     }
-}
 
-impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
-    pub fn extend_from_slice(&mut self, other: &[u8]) {
-        self.shrink_data();
-        self.data.extend_from_slice(other);
-    }
-
-    #[inline]
-    pub fn end(&mut self) {
-        self.is_ending = true;
-    }
-
-    pub fn extend_from_reader(&mut self, reader: &mut impl Read) -> io::Result<()> {
-        self.shrink_data();
-        if self.data.len() >= self.max_buffer_size {
-            return Err(io::Error::new(
-                io::ErrorKind::OutOfMemory,
-                format!(
-                    "Reached the buffer maximal size of {}. The buffer size can be increased at the cost of higher memory use if large data is required",
-                    self.max_buffer_size
-                ),
-            ));
-        }
-        // The current buffer size is the lower bound
-        let lower_bound = self.data.len();
-
-        let upper_bound = self.resized_buffer_len();
-        // Fill the buffer until the upper bound with 0s
-        self.data.resize(upper_bound, 0);
-
-        // We keep extending to have as much space as available without reallocation
-        if self.data.len() < self.data.capacity() {
-            self.data.resize(upper_bound, 0);
-        }
-        // Read data from the reader into the buffer from the
-        // lower bound until the upper bound
-        let bytes_read = reader.read(&mut self.data[lower_bound..])?;
-        // Shrink the data to the length of the data read
-        // minus any padding 0s present from the previous resize
-        self.data.truncate(lower_bound + bytes_read);
-        self.is_ending = bytes_read == 0;
-        Ok(())
-    }
-
-    #[cfg(feature = "async-tokio")]
-    pub async fn extend_from_tokio_async_read(
+    pub fn parse_next<'a>(
         &mut self,
-        reader: &mut (impl AsyncRead + Unpin),
-    ) -> io::Result<()> {
-        self.shrink_data();
-        if self.data.len() >= self.max_buffer_size {
-            return Err(io::Error::new(
-                io::ErrorKind::OutOfMemory,
-                format!(
-                    "Reached the buffer maximal size of {}",
-                    self.max_buffer_size
-                ),
-            ));
-        }
-        // The current buffer size is the lower bound
-        let lower_bound = self.data.len();
-
-        let upper_bound = self.resized_buffer_len();
-        // Fill the buffer until the upper bound with 0s
-        self.data.resize(upper_bound, 0);
-
-        // We keep extending to have as much space as available without reallocation
-        if self.data.len() < self.data.capacity() {
-            self.data.resize(upper_bound, 0);
-        }
-        // Read data from the reader into the buffer from the
-        // lower bound until the upper bound
-        let bytes_read = reader.read(&mut self.data[lower_bound..]).await?;
-        // Shrink the data to the length of the data read,
-        // minus any padding 0s present from the previous resize
-        self.data.truncate(lower_bound + bytes_read);
-        self.is_ending = bytes_read == 0;
-        Ok(())
-    }
-
-    // Return the new size for a buffer which exponentially
-    // grows in size
-    fn resized_buffer_len(&self) -> usize {
-        // If the buffer is empty, we use the predefined
-        // minimum buffer size to ensure the buffer always has some capacity
-        if self.data.is_empty() {
-            self.min_buffer_size
-        } else {
-            // Each one of these expressions will at least double the
-            // size of the buffer, but in such a way that will not
-            // exceed the maximum buffer size or allocate under the minimum buffer size.
-            min(
-                self.max_buffer_size,
-                // We take the max here to ensure that
-                // the buffer always has at least the size of the
-                // data plus the minimum buffer size
-                max(
-                    self.data.len() + self.min_buffer_size,
-                    self.data.len().saturating_mul(2),
-                ),
-            )
-        }
-    }
-
-    fn shrink_data(&mut self) {
-        if self.position.buffer_offset > self.max_buffer_size / 2 {
-            // We really need to shrink, let's forget about error quality
-            self.shrink_data_by(self.position.buffer_offset);
-        }
-    }
-
-    fn shrink_data_by(&mut self, shift_amount: usize) {
-        self.data.copy_within(shift_amount.., 0);
-        self.data.truncate(self.data.len() - shift_amount);
-        self.position.buffer_offset -= shift_amount;
-        self.previous_position = self.position;
-    }
-}
-
-impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
-    pub fn parse_next(
-        &mut self,
+        data: &'a [u8],
+        is_ending: bool,
         options: &R::Options,
-    ) -> Option<Result<TokenOrLineJump<R::Token<'_>>, TurtleSyntaxError>> {
-        if self.skip_whitespaces_and_comments()? {
-            self.previous_position = self.position;
-            return Some(Ok(TokenOrLineJump::LineJump));
+    ) -> (
+        usize,
+        Option<Result<(TokenOrLineJump<R::Token<'a>>, Range<TextPosition>), TurtleSyntaxError>>,
+    ) {
+        let (read, has_line_jump) = self.skip_whitespaces_and_comments(data, is_ending);
+        let Some(has_line_jump) = has_line_jump else {
+            return (read, None);
+        };
+        if has_line_jump {
+            return (
+                read,
+                Some(Ok((
+                    TokenOrLineJump::LineJump,
+                    self.position..self.position,
+                ))),
+            );
         }
-        self.previous_position = self.position;
-        let (consumed, result) = if let Some((consumed, result)) = self.parser.recognize_next_token(
-            &self.data[self.position.buffer_offset..],
-            self.is_ending,
-            options,
-        ) {
+        let previous_position = self.position;
+        let data = &data[read..];
+        let (consumed, result) = if let Some((consumed, result)) =
+            self.parser.recognize_next_token(data, is_ending, options)
+        {
             debug_assert!(
                 consumed > 0,
                 "The lexer must consume at least one byte each time"
             );
             (consumed, Some(result))
-        } else if self.is_ending {
-            let remaining_size = self.data.len() - self.position.buffer_offset;
+        } else if is_ending {
             (
-                remaining_size,
+                data.len(),
                 // We fail if there are unrecognized bytes
-                (remaining_size > 0)
-                    .then(|| Err((0..remaining_size, "Unexpected end of file").into())),
+                (!data.is_empty()).then(|| Err((0..data.len(), "Unexpected end of file").into())),
             )
         } else {
             (0, None)
         };
         debug_assert!(
-            self.position.buffer_offset + consumed <= self.data.len(),
+            consumed <= data.len(),
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
-            self.data.len() - self.position.buffer_offset
+            data.len()
         );
         let (new_line_jumps, line_offset) = match &result {
             Some(Ok(token)) if !R::token_contains_line_jumps(token) => {
                 (0, u64::try_from(consumed).unwrap())
             }
-            _ => Self::find_number_of_line_jumps_and_size_of_last_line(
-                &self.data[self.position.buffer_offset..self.position.buffer_offset + consumed],
-            ),
+            _ => Self::find_number_of_line_jumps_and_size_of_last_line(&data[..consumed]),
         };
-        self.position.buffer_offset += consumed;
-        self.position.global_offset += u64::try_from(consumed).unwrap();
-        self.position.global_line += new_line_jumps;
+        self.position.offset += u64::try_from(consumed).unwrap();
+        self.position.line += new_line_jumps;
         if new_line_jumps > 0 {
-            self.position.line_offset = line_offset;
+            self.position.column = line_offset;
         } else {
-            self.position.line_offset += line_offset;
+            self.position.column += line_offset;
         }
-        Some(result?.map(TokenOrLineJump::Token).map_err(|e| {
-            TurtleSyntaxError::new(
-                self.location_from_buffer_offset_range(e.location),
-                e.message,
-            )
-        }))
-    }
-
-    fn location_from_buffer_offset_range(&self, offset_range: Range<usize>) -> Range<TextPosition> {
-        let start_offset = self.previous_position.buffer_offset + offset_range.start;
-        let (start_extra_line_jumps, mut start_last_line_size) =
-            Self::find_number_of_line_jumps_and_size_of_last_line(
-                &self.data[self.previous_position.buffer_offset..start_offset],
-            );
-        if start_extra_line_jumps == 0 {
-            start_last_line_size += self.previous_position.line_offset;
-        }
-        let end_offset = self.previous_position.buffer_offset + offset_range.end;
-        let (end_extra_line_jumps, mut end_last_line_size) =
-            Self::find_number_of_line_jumps_and_size_of_last_line(
-                &self.data[self.previous_position.buffer_offset..end_offset],
-            );
-        if end_extra_line_jumps == 0 {
-            end_last_line_size += self.previous_position.line_offset;
-        }
-        TextPosition {
-            line: self.previous_position.global_line + start_extra_line_jumps,
-            column: start_last_line_size,
-            offset: self.previous_position.global_offset
-                + u64::try_from(offset_range.start).unwrap(),
-        }..TextPosition {
-            line: self.previous_position.global_line + end_extra_line_jumps,
-            column: end_last_line_size,
-            offset: self.previous_position.global_offset + u64::try_from(offset_range.end).unwrap(),
-        }
-    }
-
-    pub fn last_token_location(&self) -> Range<TextPosition> {
-        Self::text_position_from_position(&self.previous_position)
-            ..Self::text_position_from_position(&self.position)
-    }
-
-    fn text_position_from_position(position: &Position) -> TextPosition {
-        TextPosition {
-            line: position.global_line,
-            column: position.line_offset,
-            offset: position.global_offset,
-        }
-    }
-
-    pub fn last_token_source(&self) -> Cow<'_, str> {
-        String::from_utf8_lossy(
-            &self.data[self.previous_position.buffer_offset..self.position.buffer_offset],
+        (
+            read + consumed,
+            result.map(|result| {
+                result
+                    .map(|token| {
+                        (
+                            TokenOrLineJump::Token(token),
+                            previous_position..self.position,
+                        )
+                    })
+                    .map_err(|e| {
+                        TurtleSyntaxError::new(
+                            Self::location_from_buffer_offset_range(
+                                &previous_position,
+                                e.location,
+                                data,
+                            ),
+                            e.message,
+                        )
+                    })
+            }),
         )
     }
 
-    pub fn is_end(&self) -> bool {
-        self.is_ending && self.data.len() == self.position.buffer_offset
+    fn location_from_buffer_offset_range(
+        previous_position: &TextPosition,
+        offset_range: Range<usize>,
+        data: &[u8],
+    ) -> Range<TextPosition> {
+        let (start_extra_line_jumps, mut start_last_line_size) =
+            Self::find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.start]);
+        if start_extra_line_jumps == 0 {
+            start_last_line_size += previous_position.column;
+        }
+        let (end_extra_line_jumps, mut end_last_line_size) =
+            Self::find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.end]);
+        if end_extra_line_jumps == 0 {
+            end_last_line_size += previous_position.column;
+        }
+        TextPosition {
+            line: previous_position.line + start_extra_line_jumps,
+            column: start_last_line_size,
+            offset: previous_position.offset + u64::try_from(offset_range.start).unwrap(),
+        }..TextPosition {
+            line: previous_position.line + end_extra_line_jumps,
+            column: end_last_line_size,
+            offset: previous_position.offset + u64::try_from(offset_range.end).unwrap(),
+        }
     }
 
-    fn skip_whitespaces_and_comments(&mut self) -> Option<bool> {
-        if self.skip_whitespaces()? {
-            return Some(true);
+    fn skip_whitespaces_and_comments(
+        &mut self,
+        data: &[u8],
+        is_ending: bool,
+    ) -> (usize, Option<bool>) {
+        let (read, has_line_jump_or_missing) = self.skip_whitespaces(data, is_ending);
+        let Some(has_line_jump_or_missing) = has_line_jump_or_missing else {
+            return (read, None);
+        };
+        if has_line_jump_or_missing {
+            return (read, Some(true));
         }
 
-        let buf = &self.data[self.position.buffer_offset..];
+        let buf = &data[read..];
         if let Some(line_comment_start) = self.line_comment_start {
             if buf.starts_with(line_comment_start) {
                 // Comment
@@ -354,67 +207,63 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                             if *c == b'\n' {
                                 end_position += 1;
                             }
-                        } else if !self.is_ending {
-                            return None; // We need to read more
+                        } else if !is_ending {
+                            return (read, None); // We need to read more
                         }
                     }
                     let comment_size = end_position + 1;
-                    self.position.buffer_offset += comment_size;
-                    self.position.global_offset += u64::try_from(comment_size).unwrap();
-                    self.position.global_line += 1;
-                    self.position.line_offset = 0;
-                    return Some(true);
+                    self.position.offset += u64::try_from(comment_size).unwrap();
+                    self.position.line += 1;
+                    self.position.column = 0;
+                    return (read + comment_size, Some(true));
                 }
-                if self.is_ending {
-                    self.position.buffer_offset = self.data.len(); // EOF
-                    return Some(false);
+                if is_ending {
+                    return (data.len(), Some(false));
                 }
-                return None; // We need more data
-            } else if !self.is_ending && buf.len() < line_comment_start.len() {
-                return None; // We need more data
+                return (read, None); // We need more data
+            } else if !is_ending && buf.len() < line_comment_start.len() {
+                return (read, None); // We need more data
             }
         }
-        Some(false)
+        (read, Some(false))
     }
 
-    fn skip_whitespaces(&mut self) -> Option<bool> {
-        let mut i = self.position.buffer_offset;
-        while let Some(c) = self.data.get(i) {
+    fn skip_whitespaces(&mut self, data: &[u8], is_ending: bool) -> (usize, Option<bool>) {
+        let mut i = 0;
+        while let Some(c) = data.get(i) {
             match c {
                 b' ' | b'\t' => {
-                    self.position.buffer_offset += 1;
-                    self.position.global_offset += 1;
-                    self.position.line_offset += 1;
+                    self.position.offset += 1;
+                    self.position.column += 1;
                 }
                 b'\r' => {
                     // We look for \n for Windows line end style
                     let mut increment: u8 = 1;
-                    if let Some(c) = self.data.get(i + 1) {
+                    if let Some(c) = data.get(i + 1) {
                         if *c == b'\n' {
                             increment += 1;
+                            i += 1;
                         }
-                    } else if !self.is_ending {
-                        return None; // We need to read more
+                    } else if !is_ending {
+                        return (i, None); // We need to read more
                     }
-                    self.position.buffer_offset += usize::from(increment);
-                    self.position.global_offset += u64::from(increment);
-                    self.position.global_line += 1;
-                    self.position.line_offset = 0;
-                    return Some(true);
+                    self.position.offset += u64::from(increment);
+                    self.position.line += 1;
+                    self.position.column = 0;
+                    return (i + 1, Some(true));
                 }
                 b'\n' => {
-                    self.position.buffer_offset += 1;
-                    self.position.global_offset += 1;
-                    self.position.global_line += 1;
-                    self.position.line_offset = 0;
-                    return Some(true);
+                    self.position.offset += 1;
+                    self.position.line += 1;
+                    self.position.column = 0;
+                    return (i + 1, Some(true));
                 }
-                _ => return Some(false),
+                _ => return (i, Some(false)),
             }
             i += 1;
             // TODO: SIMD
         }
-        self.is_ending.then_some(false) // We return None if there is not enough data
+        (i, is_ending.then_some(false)) // We return None if there is not enough data
     }
 
     fn find_number_of_line_jumps_and_size_of_last_line(bytes: &[u8]) -> (u64, u64) {
@@ -441,59 +290,161 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     }
 }
 
+pub struct GrowableBuffer {
+    buffer: Vec<u8>,
+    start_offset: usize,
+    end_offset: usize,
+    is_ending: bool,
+    min_buffer_size: usize,
+    max_buffer_size: usize,
+}
+
+impl GrowableBuffer {
+    pub fn new(min_buffer_size: usize, max_buffer_size: usize) -> Self {
+        Self {
+            buffer: Vec::new(),
+            start_offset: 0,
+            end_offset: 0,
+            is_ending: false,
+            min_buffer_size,
+            max_buffer_size,
+        }
+    }
+
+    pub fn extend_from_reader(&mut self, read: &mut impl Read) -> io::Result<()> {
+        self.prepare_buffer_for_read()?;
+
+        // Read data from the reader into the buffer from the
+        // lower bound until the end
+        let bytes_read = read.read(&mut self.buffer[self.end_offset..])?;
+        // Shrink the data to the length of the data read
+        // minus any padding 0s present from the previous resize
+        self.end_offset += bytes_read;
+        self.is_ending = bytes_read == 0;
+        Ok(())
+    }
+
+    #[cfg(feature = "async-tokio")]
+    pub async fn extend_from_tokio_async_reader(
+        &mut self,
+        read: &mut (impl AsyncRead + Unpin),
+    ) -> io::Result<()> {
+        self.prepare_buffer_for_read()?;
+
+        // Read data from the reader into the buffer from the
+        // lower bound until the end
+        let bytes_read = read.read(&mut self.buffer[self.end_offset..]).await?;
+        // Shrink the data to the length of the data read
+        // minus any padding 0s present from the previous resize
+        self.end_offset += bytes_read;
+        self.is_ending = bytes_read == 0;
+        Ok(())
+    }
+
+    fn prepare_buffer_for_read(&mut self) -> io::Result<()> {
+        self.shift_buffer();
+
+        if self.buffer.len() >= self.max_buffer_size {
+            return Err(io::Error::new(
+                io::ErrorKind::OutOfMemory,
+                format!(
+                    "Reached the buffer maximal size of {}. The buffer size can be increased at the cost of higher memory use if large data is required",
+                    self.max_buffer_size
+                ),
+            ));
+        }
+
+        let upper_bound = self.resized_buffer_len();
+        // Fill the buffer until the upper bound with 0s
+        if self.buffer.len() < upper_bound {
+            self.buffer.resize(upper_bound, 0);
+
+            // We keep extending to have as much space as available without reallocation
+            if self.buffer.len() < self.buffer.capacity() {
+                self.buffer.resize(self.buffer.capacity(), 0);
+            }
+        }
+
+        Ok(())
+    }
+
+    // Return the new size for a buffer which exponentially grows in size
+    fn resized_buffer_len(&self) -> usize {
+        // Each one of these expressions will at least double the
+        // size of the buffer, but in such a way that will not
+        // exceed the maximum buffer size or allocate under the minimum buffer size.
+        min(
+            self.max_buffer_size,
+            // We take the max here to ensure that
+            // the buffer always has at least the size of the
+            // data plus the minimum buffer size
+            max(
+                self.end_offset + self.min_buffer_size,
+                self.end_offset.saturating_mul(2),
+            ),
+        )
+    }
+
+    fn shift_buffer(&mut self) {
+        if self.start_offset == 0 {
+            return; // Nothing to do
+        }
+        self.buffer
+            .copy_within(self.start_offset..self.end_offset, 0);
+        self.end_offset -= self.start_offset;
+        self.start_offset = 0;
+    }
+
+    #[inline]
+    pub fn is_ending(&self) -> bool {
+        self.is_ending
+    }
+
+    #[inline]
+    pub fn consume(&mut self, count: usize) {
+        self.start_offset += count;
+        debug_assert!(
+            self.start_offset <= self.end_offset,
+            "Too large buffer consumption"
+        );
+    }
+}
+
+impl AsRef<[u8]> for GrowableBuffer {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &self.buffer[self.start_offset..self.end_offset]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn buffer_grows_exponentially() {
-        // Ensure that the lexer buffer grows exponentially
-        // by doubling each time
-
-        use std::io::Cursor;
-
-        struct MockParser;
-
-        // Mock parser struct; we don't care about the parse logic
-        // just how the underlying buffer grows
-        impl TokenRecognizer for MockParser {
-            type Token<'a> = ();
-            type Options = ();
-
-            fn recognize_next_token<'a>(
-                &mut self,
-                _data: &'a [u8],
-                _is_ending: bool,
-                _options: &Self::Options,
-            ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)> {
-                None
-            }
-
-            fn token_contains_line_jumps(_token: &Self::Token<'_>) -> bool {
-                false
-            }
-        }
+        // Ensure that the lexer buffer grows exponentially by doubling each time
 
         let data = vec![0_u8; 1024];
-        let mut reader = Cursor::new(data);
+        let mut reader = &*data;
 
-        let mut lexer = Lexer::new(MockParser, vec![0_u8; 8], false, 16, 1024, None);
+        let mut buffer = GrowableBuffer::new(16, 1024);
 
-        let mut previous_len = lexer.data.len();
+        let mut previous_len = buffer.buffer.len();
 
         for _ in 0..7 {
-            lexer.extend_from_reader(&mut reader).unwrap();
+            buffer.extend_from_reader(&mut reader).unwrap();
 
-            let double_previous = (previous_len * 2).min(lexer.max_buffer_size);
+            let double_previous = (previous_len * 2).min(buffer.max_buffer_size);
 
             assert!(
-                lexer.data.len() >= double_previous,
+                buffer.buffer.len() >= double_previous,
                 "buffer should at least  double from {previous_len} to {double_previous}"
             );
 
-            previous_len = lexer.data.len();
+            previous_len = buffer.buffer.len();
 
-            if previous_len == lexer.max_buffer_size {
+            if previous_len == buffer.max_buffer_size {
                 break;
             }
         }
