@@ -5,7 +5,9 @@ use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
-use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    LowLevelIterator, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError,
+};
 use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
 use oxrdf::{Quad, Triple};
 use std::fs::File;
@@ -107,7 +109,8 @@ impl NQuadsParser {
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderNQuadsParser<R> {
         ReaderNQuadsParser {
-            inner: self.low_level().parser.for_reader(reader),
+            inner: NQuadsRecognizer::new_parser(true, self.lenient)
+                .for_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -144,7 +147,8 @@ impl NQuadsParser {
         reader: R,
     ) -> TokioAsyncReaderNQuadsParser<R> {
         TokioAsyncReaderNQuadsParser {
-            inner: self.low_level().parser.for_tokio_async_reader(reader),
+            inner: NQuadsRecognizer::new_parser(true, self.lenient)
+                .for_tokio_async_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -173,14 +177,7 @@ impl NQuadsParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
-            inner: NQuadsRecognizer::new_parser(
-                slice.as_ref(),
-                true,
-                true,
-                self.lenient,
-                self.max_buffer_size,
-            )
-            .into_iter(),
+            inner: NQuadsRecognizer::new_parser(true, self.lenient).for_slice(slice.as_ref()),
         }
     }
 
@@ -326,13 +323,7 @@ impl NQuadsParser {
     /// ```
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
-            parser: NQuadsRecognizer::new_parser(
-                Vec::new(),
-                false,
-                true,
-                self.lenient,
-                self.max_buffer_size,
-            ),
+            parser: NQuadsRecognizer::new_parser(true, self.lenient).low_level(),
         }
     }
 }
@@ -495,7 +486,7 @@ impl Iterator for SliceNQuadsParser<'_> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNQuadsParser {
-    parser: Parser<Vec<u8>, NQuadsRecognizer>,
+    parser: LowLevelIterator<NQuadsRecognizer>,
 }
 
 impl LowLevelNQuadsParser {
@@ -513,7 +504,7 @@ impl LowLevelNQuadsParser {
 
     /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
-        self.parser.is_end()
+        self.parser.parser.is_end()
     }
 
     /// Attempt to parse a new quad from the already provided data.
@@ -521,7 +512,7 @@ impl LowLevelNQuadsParser {
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
     pub fn parse_next(&mut self) -> Option<Result<Quad, TurtleSyntaxError>> {
-        self.parser.parse_next()
+        self.parser.next()
     }
 }
 

@@ -5,7 +5,9 @@ use crate::chunker::get_turtle_slice_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
-use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    LowLevelIterator, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError,
+};
 #[cfg(feature = "async-tokio")]
 use crate::trig::TokioAsyncWriterTriGSerializer;
 use crate::trig::{LowLevelTriGSerializer, TriGSerializer, WriterTriGSerializer};
@@ -141,7 +143,8 @@ impl TurtleParser {
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderTurtleParser<R> {
         ReaderTurtleParser {
-            inner: self.low_level().parser.for_reader(reader),
+            inner: TriGRecognizer::new_parser(false, self.lenient, self.base, self.prefixes)
+                .for_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -181,7 +184,8 @@ impl TurtleParser {
         reader: R,
     ) -> TokioAsyncReaderTurtleParser<R> {
         TokioAsyncReaderTurtleParser {
-            inner: self.low_level().parser.for_tokio_async_reader(reader),
+            inner: TriGRecognizer::new_parser(false, self.lenient, self.base, self.prefixes)
+                .for_tokio_async_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -213,16 +217,8 @@ impl TurtleParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTurtleParser<'_> {
         SliceTurtleParser {
-            inner: TriGRecognizer::new_parser(
-                slice.as_ref(),
-                true,
-                false,
-                self.lenient,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            )
-            .into_iter(),
+            inner: TriGRecognizer::new_parser(false, self.lenient, self.base, self.prefixes)
+                .for_slice(slice.as_ref()),
         }
     }
 
@@ -329,15 +325,8 @@ impl TurtleParser {
     /// ```
     pub fn low_level(self) -> LowLevelTurtleParser {
         LowLevelTurtleParser {
-            parser: TriGRecognizer::new_parser(
-                Vec::new(),
-                false,
-                false,
-                self.lenient,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            ),
+            parser: TriGRecognizer::new_parser(false, self.lenient, self.base, self.prefixes)
+                .low_level(),
         }
     }
 }
@@ -696,7 +685,7 @@ impl Iterator for SliceTurtleParser<'_> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTurtleParser {
-    parser: Parser<Vec<u8>, TriGRecognizer>,
+    parser: LowLevelIterator<TriGRecognizer>,
 }
 
 impl LowLevelTurtleParser {
@@ -714,7 +703,7 @@ impl LowLevelTurtleParser {
 
     /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
-        self.parser.is_end()
+        self.parser.parser.is_end()
     }
 
     /// Attempt to parse a new triple from the already provided data.
@@ -722,7 +711,7 @@ impl LowLevelTurtleParser {
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
     pub fn parse_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
-        Some(self.parser.parse_next()?.map(Into::into))
+        Some(self.parser.next()?.map(Into::into))
     }
 
     /// The list of IRI prefixes considered at the current step of the parsing.
@@ -753,7 +742,7 @@ impl LowLevelTurtleParser {
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
         TurtlePrefixesIter {
-            inner: self.parser.context.prefixes(),
+            inner: self.parser.parser.context.prefixes(),
         }
     }
 
@@ -778,6 +767,7 @@ impl LowLevelTurtleParser {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
+            .parser
             .context
             .lexer_options
             .base_iri

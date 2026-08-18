@@ -6,10 +6,10 @@ use crate::lexer::{
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{
-    Lexer, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
-    TokenOrLineJump, TurtleSyntaxError,
+    Lexer, LowLevelIterator, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError,
+    SliceIterator, TokenOrLineJump, TurtleSyntaxError,
 };
-use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
+use crate::{DEFAULT_MAX_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
@@ -286,7 +286,8 @@ impl N3Parser {
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderN3Parser<R> {
         ReaderN3Parser {
-            inner: self.low_level().parser.for_reader(reader),
+            inner: N3Recognizer::new_parser(self.lenient, self.base, self.prefixes)
+                .for_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -327,7 +328,8 @@ impl N3Parser {
         reader: R,
     ) -> TokioAsyncReaderN3Parser<R> {
         TokioAsyncReaderN3Parser {
-            inner: self.low_level().parser.for_tokio_async_reader(reader),
+            inner: N3Recognizer::new_parser(self.lenient, self.base, self.prefixes)
+                .for_tokio_async_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -360,15 +362,8 @@ impl N3Parser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceN3Parser<'_> {
         SliceN3Parser {
-            inner: N3Recognizer::new_parser(
-                slice.as_ref(),
-                true,
-                false,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            )
-            .into_iter(),
+            inner: N3Recognizer::new_parser(self.lenient, self.base, self.prefixes)
+                .for_slice(slice.as_ref()),
         }
     }
 
@@ -413,14 +408,7 @@ impl N3Parser {
     /// ```
     pub fn low_level(self) -> LowLevelN3Parser {
         LowLevelN3Parser {
-            parser: N3Recognizer::new_parser(
-                Vec::new(),
-                false,
-                self.lenient,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            ),
+            parser: N3Recognizer::new_parser(self.lenient, self.base, self.prefixes).low_level(),
         }
     }
 }
@@ -783,7 +771,7 @@ impl Iterator for SliceN3Parser<'_> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelN3Parser {
-    parser: Parser<Vec<u8>, N3Recognizer>,
+    parser: LowLevelIterator<N3Recognizer>,
 }
 
 impl LowLevelN3Parser {
@@ -801,7 +789,7 @@ impl LowLevelN3Parser {
 
     /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
-        self.parser.is_end()
+        self.parser.parser.is_end()
     }
 
     /// Attempt to parse a new quad from the already provided data.
@@ -809,7 +797,7 @@ impl LowLevelN3Parser {
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
     pub fn parse_next(&mut self) -> Option<Result<N3Quad, TurtleSyntaxError>> {
-        self.parser.parse_next()
+        self.parser.next()
     }
 
     /// The list of IRI prefixes considered at the current step of the parsing.
@@ -840,7 +828,7 @@ impl LowLevelN3Parser {
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
         N3PrefixesIter {
-            inner: self.parser.context.prefixes.iter(),
+            inner: self.parser.parser.context.prefixes.iter(),
         }
     }
 
@@ -865,6 +853,7 @@ impl LowLevelN3Parser {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
+            .parser
             .context
             .lexer_options
             .base_iri
@@ -1451,23 +1440,13 @@ impl RuleRecognizer for N3Recognizer {
 }
 
 impl N3Recognizer {
-    pub fn new_parser<B>(
-        data: B,
-        is_ending: bool,
+    fn new_parser(
         unchecked: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
-        max_buffer_size: usize,
-    ) -> Parser<B, Self> {
+    ) -> Parser<Self> {
         Parser::new(
-            Lexer::new(
-                N3Lexer::new(N3LexerMode::N3, unchecked),
-                data,
-                is_ending,
-                MIN_BUFFER_SIZE,
-                max_buffer_size,
-                Some(b"#"),
-            ),
+            Lexer::new(N3Lexer::new(N3LexerMode::N3, unchecked), Some(b"#")),
             Self {
                 stack: vec![N3State::N3Doc],
                 terms: Vec::new(),
