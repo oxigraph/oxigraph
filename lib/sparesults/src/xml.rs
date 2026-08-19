@@ -723,6 +723,9 @@ impl XmlInnerSolutionsParser {
                         self.state_stack.push(State::BNode);
                         Ok(None)
                     } else if event.local_name().as_ref() == b"literal" {
+                        let value = take(&mut self.text_buffer);
+                        self.text_buffer
+                            .push_str(value.trim_start_matches(['\t', '\n', '\r', ' ']));
                         for attr in event.attributes() {
                             let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
@@ -819,14 +822,17 @@ impl XmlInnerSolutionsParser {
             }
             Event::End(_) => {
                 let value = take(&mut self.text_buffer);
-                let value = OxString::new_owned(
-                    value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' ')),
-                );
-                match self.state_stack.pop().ok_or_else(|| {
+                let state = self.state_stack.pop().ok_or_else(|| {
                     QueryResultsSyntaxError::msg(
                         "Extra XML is not allowed at the end of the document",
                     )
-                })? {
+                })?;
+                let value = OxString::new_owned(if matches!(state, State::Literal) {
+                    &value
+                } else {
+                    value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '))
+                });
+                match state {
                     State::Start => Ok(None),
                     State::Result => Ok(Some(take(&mut self.new_bindings))),
                     State::Binding => {
@@ -1085,5 +1091,30 @@ fn map_xml_error(error: Error) -> io::Error {
             Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
         }
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[expect(clippy::panic_in_result_fn)]
+    fn parse_literal_boundary_whitespace() -> Result<(), QueryResultsSyntaxError> {
+        let SliceXmlQueryResultsParserOutput::Solutions { mut solutions, .. } =
+            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results><result><binding name="x">
+                <literal>&#32;&#9;&#10;&#13;padded&#13;&#10;&#9;&#32;</literal>
+            </binding></result></results></sparql>"#)?
+        else {
+            return Err(QueryResultsSyntaxError::msg("Expected solutions"));
+        };
+        let solution = solutions
+            .parse_next()?
+            .ok_or_else(|| QueryResultsSyntaxError::msg("Expected one solution"))?;
+        assert_eq!(
+            solution,
+            vec![Some(Literal::from(" \t\n\rpadded\r\n\t ").into())]
+        );
+        Ok(())
     }
 }
