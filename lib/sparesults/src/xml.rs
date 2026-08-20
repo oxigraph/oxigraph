@@ -567,6 +567,8 @@ impl XmlInnerQueryResultsParser {
                                 predicate_stack: Vec::new(),
                                 object_stack: Vec::new(),
                                 text_buffer: String::new(),
+                                first_text_event_end: None,
+                                last_text_event_start: None,
                                 xml_version: self.xml_version,
                             },
                         }))
@@ -659,6 +661,8 @@ struct XmlInnerSolutionsParser {
     predicate_stack: Vec<Term>,
     object_stack: Vec<Term>,
     text_buffer: String,
+    first_text_event_end: Option<usize>,
+    last_text_event_start: Option<usize>,
     xml_version: XmlVersion,
 }
 
@@ -723,9 +727,9 @@ impl XmlInnerSolutionsParser {
                         self.state_stack.push(State::BNode);
                         Ok(None)
                     } else if event.local_name().as_ref() == b"literal" {
-                        let value = take(&mut self.text_buffer);
-                        self.text_buffer
-                            .push_str(value.trim_start_matches(['\t', '\n', '\r', ' ']));
+                        self.text_buffer.clear();
+                        self.first_text_event_end = None;
+                        self.last_text_event_start = None;
                         for attr in event.attributes() {
                             let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
@@ -816,19 +820,37 @@ impl XmlInnerSolutionsParser {
                 .into()),
             },
             Event::Text(event) => {
+                let start = self.text_buffer.len();
                 self.text_buffer
                     .push_str(&event.xml_content(self.xml_version)?);
+                if start == 0 {
+                    self.first_text_event_end = Some(self.text_buffer.len());
+                }
+                self.last_text_event_start = Some(start);
                 Ok(None)
             }
             Event::End(_) => {
                 let value = take(&mut self.text_buffer);
+                let first_text_event_end = self.first_text_event_end.take();
+                let last_text_event_start = self.last_text_event_start.take();
                 let state = self.state_stack.pop().ok_or_else(|| {
                     QueryResultsSyntaxError::msg(
                         "Extra XML is not allowed at the end of the document",
                     )
                 })?;
                 let value = OxString::new_owned(if matches!(state, State::Literal) {
-                    &value
+                    let start = first_text_event_end.map_or(0, |end| {
+                        end - value[..end]
+                            .trim_start_matches(['\t', '\n', '\r', ' '])
+                            .len()
+                    });
+                    let end = last_text_event_start.map_or(value.len(), |start| {
+                        start
+                            + value[start..]
+                                .trim_end_matches(['\t', '\n', '\r', ' '])
+                                .len()
+                    });
+                    if start < end { &value[start..end] } else { "" }
                 } else {
                     value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '))
                 });
@@ -971,6 +993,7 @@ impl XmlInnerSolutionsParser {
             Event::Eof | Event::Comment(_) | Event::PI(_) | Event::DocType(_) => Ok(None),
             Event::GeneralRef(event) => {
                 decode_xml_entity(&event, &mut self.text_buffer, self.xml_version)?;
+                self.last_text_event_start = None;
                 Ok(None)
             }
             Event::Empty(_) => unreachable!("Empty events are expended"),
@@ -1102,19 +1125,24 @@ mod tests {
     #[expect(clippy::panic_in_result_fn)]
     fn parse_literal_boundary_whitespace() -> Result<(), QueryResultsSyntaxError> {
         let SliceXmlQueryResultsParserOutput::Solutions { mut solutions, .. } =
-            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results><result><binding name="x">
-                <literal>&#32;&#9;&#10;&#13;padded&#13;&#10;&#9;&#32;</literal>
-            </binding></result></results></sparql>"#)?
+            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results>
+                <result><binding name="x"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean"> true </literal></binding></result>
+                <result><binding name="x"><literal> &#32;&#9;&#10;&#13;padded&#13;&#10;&#9;&#32; </literal></binding></result>
+            </results></sparql>"#)?
         else {
             return Err(QueryResultsSyntaxError::msg("Expected solutions"));
         };
-        let solution = solutions
-            .parse_next()?
-            .ok_or_else(|| QueryResultsSyntaxError::msg("Expected one solution"))?;
         assert_eq!(
-            solution,
-            vec![Some(Literal::from(" \t\n\rpadded\r\n\t ").into())]
+            solutions.parse_next()?,
+            Some(vec![Some(
+                Literal::new_typed_literal("true", xsd::BOOLEAN).into()
+            )])
         );
+        assert_eq!(
+            solutions.parse_next()?,
+            Some(vec![Some(Literal::from(" \t\n\rpadded\r\n\t ").into())])
+        );
+        assert_eq!(solutions.parse_next()?, None);
         Ok(())
     }
 }
