@@ -1169,8 +1169,9 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         match built_values {
                             Ok(built_values) => Box::new(CartesianProductJoinIterator {
                                 probe_iter,
+                                probe_tuple: None,
                                 built: built_values,
-                                buffered_results: Vec::new(),
+                                built_offset: 0,
                             }),
                             Err(error) => Box::new(once(Err(error))),
                         }
@@ -3191,8 +3192,9 @@ impl<'a, D: QueryableDataset<'a>> Clone for PathEvaluator<'a, D> {
 
 struct CartesianProductJoinIterator<'a, T> {
     probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
+    probe_tuple: Option<InternalTuple<T>>,
     built: Vec<InternalTuple<T>>,
-    buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
+    built_offset: usize,
 }
 
 impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
@@ -3200,18 +3202,19 @@ impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(result) = self.buffered_results.pop() {
-                return Some(result);
-            }
-            let probe_tuple = match self.probe_iter.next()? {
-                Ok(probe_tuple) => probe_tuple,
-                Err(error) => return Some(Err(error)),
-            };
-            for built_tuple in &self.built {
+            while let (Some(probe_tuple), Some(built_tuple)) =
+                (&self.probe_tuple, self.built.get(self.built_offset))
+            {
+                self.built_offset += 1;
                 if let Some(result_tuple) = probe_tuple.combine_with(built_tuple) {
-                    self.buffered_results.push(Ok(result_tuple))
+                    return Some(Ok(result_tuple));
                 }
             }
+            self.probe_tuple = match self.probe_iter.next()? {
+                Ok(probe_tuple) => Some(probe_tuple),
+                Err(error) => return Some(Err(error)),
+            };
+            self.built_offset = 0;
         }
     }
 
