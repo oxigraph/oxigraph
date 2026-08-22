@@ -838,22 +838,18 @@ impl XmlInnerSolutionsParser {
                         "Extra XML is not allowed at the end of the document",
                     )
                 })?;
-                let value = OxString::new_owned(if matches!(state, State::Literal) {
-                    let start = first_text_event_end.map_or(0, |end| {
-                        end - value[..end]
-                            .trim_start_matches(['\t', '\n', '\r', ' '])
-                            .len()
-                    });
-                    let end = last_text_event_start.map_or(value.len(), |start| {
-                        start
-                            + value[start..]
-                                .trim_end_matches(['\t', '\n', '\r', ' '])
-                                .len()
-                    });
-                    if start < end { &value[start..end] } else { "" }
-                } else {
-                    value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '))
+                let start = first_text_event_end.map_or(0, |end| {
+                    end - value[..end]
+                        .trim_start_matches(['\t', '\n', '\r', ' '])
+                        .len()
                 });
+                let end = last_text_event_start.map_or(value.len(), |start| {
+                    start
+                        + value[start..]
+                            .trim_end_matches(['\t', '\n', '\r', ' '])
+                            .len()
+                });
+                let value = OxString::new_owned(if start < end { &value[start..end] } else { "" });
                 match state {
                     State::Start => Ok(None),
                     State::Result => Ok(Some(take(&mut self.new_bindings))),
@@ -1143,6 +1139,17 @@ mod tests {
             Some(vec![Some(Literal::from(" \t\n\rpadded\r\n\t ").into())])
         );
         assert_eq!(solutions.parse_next()?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn preserve_uri_boundary_whitespace_references() -> Result<(), QueryResultsSyntaxError> {
+        let SliceXmlQueryResultsParserOutput::Solutions { mut solutions, .. } =
+            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results><result><binding name="x"><uri>&#32;https://example.com/</uri></binding></result></results></sparql>"#)?
+        else {
+            return Err(QueryResultsSyntaxError::msg("Expected solutions"));
+        };
+        solutions.parse_next().unwrap_err();
         Ok(())
     }
 }
