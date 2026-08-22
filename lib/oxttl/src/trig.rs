@@ -6,7 +6,9 @@ use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
-use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    LowLevelIterator, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError,
+};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term, Triple};
@@ -141,7 +143,8 @@ impl TriGParser {
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderTriGParser<R> {
         ReaderTriGParser {
-            inner: self.low_level().parser.for_reader(reader),
+            inner: TriGRecognizer::new_parser(true, self.lenient, self.base, self.prefixes)
+                .for_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -181,7 +184,8 @@ impl TriGParser {
         reader: R,
     ) -> TokioAsyncReaderTriGParser<R> {
         TokioAsyncReaderTriGParser {
-            inner: self.low_level().parser.for_tokio_async_reader(reader),
+            inner: TriGRecognizer::new_parser(true, self.lenient, self.base, self.prefixes)
+                .for_tokio_async_reader(reader, self.max_buffer_size),
         }
     }
 
@@ -213,16 +217,8 @@ impl TriGParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTriGParser<'_> {
         SliceTriGParser {
-            inner: TriGRecognizer::new_parser(
-                slice.as_ref(),
-                true,
-                true,
-                self.lenient,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            )
-            .into_iter(),
+            inner: TriGRecognizer::new_parser(true, self.lenient, self.base, self.prefixes)
+                .for_slice(slice.as_ref()),
         }
     }
 
@@ -266,15 +262,8 @@ impl TriGParser {
     /// ```
     pub fn low_level(self) -> LowLevelTriGParser {
         LowLevelTriGParser {
-            parser: TriGRecognizer::new_parser(
-                Vec::new(),
-                false,
-                true,
-                self.lenient,
-                self.base,
-                self.prefixes,
-                self.max_buffer_size,
-            ),
+            parser: TriGRecognizer::new_parser(true, self.lenient, self.base, self.prefixes)
+                .low_level(),
         }
     }
 }
@@ -633,7 +622,7 @@ impl Iterator for SliceTriGParser<'_> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGParser {
-    parser: Parser<Vec<u8>, TriGRecognizer>,
+    parser: LowLevelIterator<TriGRecognizer>,
 }
 
 impl LowLevelTriGParser {
@@ -651,7 +640,7 @@ impl LowLevelTriGParser {
 
     /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
-        self.parser.is_end()
+        self.parser.parser.is_end()
     }
 
     /// Attempt to parse a new quad from the already provided data.
@@ -659,7 +648,7 @@ impl LowLevelTriGParser {
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
     pub fn parse_next(&mut self) -> Option<Result<Quad, TurtleSyntaxError>> {
-        self.parser.parse_next()
+        self.parser.next()
     }
 
     /// The list of IRI prefixes considered at the current step of the parsing.
@@ -690,7 +679,7 @@ impl LowLevelTriGParser {
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
         TriGPrefixesIter {
-            inner: self.parser.context.prefixes(),
+            inner: self.parser.parser.context.prefixes(),
         }
     }
 
@@ -715,6 +704,7 @@ impl LowLevelTriGParser {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
+            .parser
             .context
             .lexer_options
             .base_iri
