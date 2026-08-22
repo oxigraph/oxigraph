@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?s WHERE {
+    ?s a ex:Resource .
+    FILTER(EXISTS {
+        ?s ex:p ?left .
+        ?s ex:q ?right .
+    })
+}
