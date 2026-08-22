@@ -28,6 +28,7 @@
     :push_optional_filter
     :empty_union
     :bgp_join_reordering
+    :nested_bind_lateral_reordering
     ) .
 
 
@@ -130,3 +131,8 @@
     mf:name "BGP join reordering" ;
     mf:action <bgp_join_reordering_input.rq> ;
     mf:result <bgp_join_reordering_output.rq> .
+
+:nested_bind_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "Nested BGP below BIND is converted to LATERAL" ;
+    mf:action <nested_bind_lateral_reordering_input.rq> ;
+    mf:result <nested_bind_lateral_reordering_output.rq> .

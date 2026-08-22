@@ -1,0 +1,10 @@
+PREFIX : <ex:>
+
+SELECT ?t ?x WHERE {
+    ?t a :T .
+    {
+        ?a :hasT ?t ;
+           a :A .
+        BIND(?a AS ?x)
+    }
+}
