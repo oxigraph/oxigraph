@@ -491,7 +491,7 @@ impl Optimizer {
                         todo.push(*right);
                         todo.push(*left);
                     } else {
-                        to_reorder.push(e);
+                        to_reorder.push(Self::reorder_joins(e, input_types));
                     }
                 }
 
