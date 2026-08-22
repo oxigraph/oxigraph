@@ -4523,7 +4523,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
         }
         GraphPattern::Join { algorithm, .. } => match algorithm {
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => format!(
-                "LeftJoin(HashBuildLeftProbeRight, keys = {})",
+                "Join(HashBuildLeftProbeRight, keys = {})",
                 format_list(keys)
             ),
         },
