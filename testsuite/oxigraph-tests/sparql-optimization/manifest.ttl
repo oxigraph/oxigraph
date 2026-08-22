@@ -24,6 +24,8 @@
     :if_always_true
     :if_always_false
     :exists_always_false
+    :exists_union
+    :exists_cartesian_product
     :push_filter
     :push_optional_filter
     :empty_union
@@ -111,6 +113,16 @@
     mf:name "EXISTS {} always false" ;
     mf:action <exists_always_false_input.rq> ;
     mf:result <exists_always_false_output.rq> .
+
+:exists_union rdf:type ox:QueryOptimizationTest ;
+    mf:name "EXISTS over UNION" ;
+    mf:action <exists_union_input.rq> ;
+    mf:result <exists_union_output.rq> .
+
+:exists_cartesian_product rdf:type ox:QueryOptimizationTest ;
+    mf:name "EXISTS over a cartesian product" ;
+    mf:action <exists_cartesian_product_input.rq> ;
+    mf:result <exists_cartesian_product_output.rq> .
 
 :push_filter rdf:type ox:QueryOptimizationTest ;
     mf:name "push filter down" ;

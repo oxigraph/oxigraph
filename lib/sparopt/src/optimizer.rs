@@ -236,7 +236,9 @@ impl Optimizer {
                     Self::normalize_expression(right, types),
                 )
             }
-            Expression::Exists(inner) => Expression::exists(Self::normalize_pattern(*inner, types)),
+            Expression::Exists(inner) => {
+                Self::optimize_exists(Self::normalize_pattern(*inner, types), types)
+            }
             Expression::Bound(variable) => {
                 let t = types.get(&variable);
                 if !t.undef {
@@ -264,6 +266,46 @@ impl Optimizer {
                     .map(|e| Self::normalize_expression(e, types))
                     .collect(),
             ),
+        }
+    }
+
+    fn optimize_exists(expression: QueryExpression, input_types: &VariableTypes) -> Expression {
+        // We rewrite `EXISTS { A UNION B } into `EXISTS { A } || EXISTS { B }`
+        if let QueryExpression::Union { inner } = expression {
+            Expression::or_all(
+                inner
+                    .into_iter()
+                    .map(|e| Self::optimize_exists(e, input_types)),
+            )
+        } else if let QueryExpression::Join {
+            left,
+            right,
+            algorithm,
+        } = expression
+        {
+            // Check if the join is actually joining anything or is just a cartesian product
+            // If it's a cartesian product we can rewrite it as the && of two EXISTS
+            let mut has_shared_variable_not_set_by_parent = false;
+            left.lookup_used_variables(&mut |left_variable| {
+                right.lookup_used_variables(&mut |right_variable| {
+                    if left_variable == right_variable && input_types.get(left_variable).undef {
+                        has_shared_variable_not_set_by_parent = true;
+                    }
+                });
+            });
+            if !has_shared_variable_not_set_by_parent {
+                return Expression::and_all([
+                    Self::optimize_exists(*left, input_types),
+                    Self::optimize_exists(*right, input_types),
+                ]);
+            }
+            Expression::exists(QueryExpression::Join {
+                left,
+                right,
+                algorithm,
+            })
+        } else {
+            Expression::exists(expression)
         }
     }
 
