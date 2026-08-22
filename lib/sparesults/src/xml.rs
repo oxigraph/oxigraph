@@ -672,7 +672,13 @@ impl XmlInnerSolutionsParser {
         event: Event<'_>,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match event {
-            Event::Start(event) => match self.state_stack.last().ok_or_else(|| {
+            Event::Start(event) => match {
+                self.text_buffer.clear();
+                self.first_text_event_end = None;
+                self.last_text_event_start = None;
+                self.state_stack.last()
+            }
+            .ok_or_else(|| {
                 QueryResultsSyntaxError::msg("Extra XML is not allowed at the end of the document")
             })? {
                 State::Start => {
@@ -727,9 +733,6 @@ impl XmlInnerSolutionsParser {
                         self.state_stack.push(State::BNode);
                         Ok(None)
                     } else if event.local_name().as_ref() == b"literal" {
-                        self.text_buffer.clear();
-                        self.first_text_event_end = None;
-                        self.last_text_event_start = None;
                         for attr in event.attributes() {
                             let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
