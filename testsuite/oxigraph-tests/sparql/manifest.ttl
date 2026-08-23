@@ -46,6 +46,7 @@
     :if_condition_ebv_error
     :arithmetic_left_associative
     :arithmetic_signed_literal
+    :implicit_grouping_on_empty
     ) .
 
 :eq_dirLangString rdf:type mf:QueryEvaluationTest ;
@@ -235,3 +236,8 @@
     mf:name "A signed numeric literal after an operand is added to the result of the following '*' and '/' operations" ;
     mf:action [ qt:query <arithmetic_signed_literal.rq> ] ;
     mf:result  <true.srx> .
+
+:implicit_grouping_on_empty rdf:type mf:QueryEvaluationTest ;
+    mf:name "Implicit aggregation on empty input still produces a row" ;
+    mf:action [ qt:query <implicit_grouping_on_empty.rq> ] ;
+    mf:result <true.srx> .

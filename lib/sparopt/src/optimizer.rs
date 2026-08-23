@@ -475,10 +475,9 @@ impl Optimizer {
                     Expression::and_all(final_filters),
                 )
             }
-            GraphPattern::OrderBy { inner, expression } => GraphPattern::order_by(
-                Self::push_filters(*inner, filters, input_types),
-                expression,
-            ),
+            GraphPattern::OrderBy { inner, expression } => {
+                GraphPattern::order_by(Self::push_filters(*inner, filters, input_types), expression)
+            }
             GraphPattern::Service { .. } => {
                 // TODO: we can be smart and push some filters
                 // But we need to check the behavior of SILENT that can transform no results into a singleton

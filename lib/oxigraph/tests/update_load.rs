@@ -1,3 +1,4 @@
+#![cfg(test)]
 #![cfg(all(feature = "http-client", not(target_family = "wasm")))]
 #![allow(clippy::panic_in_result_fn)]
 
@@ -57,7 +58,7 @@ fn check_load(body: &'static str, silent: bool, valid: bool) -> Result<(), Box<d
         let graph = NamedNode::new("urn:loaded")?;
         let update = SparqlEvaluator::new()
             .with_http_timeout(Duration::from_secs(5))
-            .parse_update(format!(
+            .parse_update(&format!(
                 "LOAD {} <http://{address}/> INTO GRAPH {graph}",
                 if silent { "SILENT" } else { "" }
             ))?;
@@ -70,7 +71,9 @@ fn check_load(body: &'static str, silent: bool, valid: bool) -> Result<(), Box<d
         } else {
             update.on_store(&store).execute()
         };
-        server.join().expect("HTTP server panicked")?;
+        server
+            .join()
+            .map_err(|_| std::io::Error::other("HTTP server panicked"))??;
         assert_eq!(result.is_ok(), valid || silent);
         assert_eq!(store.len()?, 1);
         assert!(store.contains(&existing)?);

@@ -697,10 +697,7 @@ fn eval_load(
 }
 
 #[cfg(not(feature = "http-client"))]
-fn eval_load(
-    _from: &NamedNode,
-    _to: &GraphName,
-) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
+fn eval_load(_from: &NamedNode, _to: &GraphName) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
     Err(UpdateEvaluationError::Unexpected(
         "HTTP client is not available. Enable the feature 'http-client'".into(),
     ))

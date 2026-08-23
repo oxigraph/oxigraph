@@ -8,6 +8,7 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from functools import reduce
+from pathlib import Path
 from typing import Any, Optional, Union
 
 PROTOCOLS = """
@@ -492,14 +493,10 @@ def format_with_ruff(file: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract Python type stub from a python module.")
     parser.add_argument("module_name", help="Name of the Python module for which generate stubs")
-    parser.add_argument(
-        "out",
-        help="Name of the Python stub file to write to",
-        type=argparse.FileType("wt"),
-    )
+    parser.add_argument("out", help="Name of the Python stub file to write to")
     parser.add_argument("--ruff", help="Formats the generated stubs using Ruff", action="store_true")
     args = parser.parse_args()
     stub_content = ast.unparse(module_stubs(importlib.import_module(args.module_name))) + "\n" + PROTOCOLS
-    args.out.write(stub_content)
+    Path(args.out).write_text(stub_content)
     if args.ruff:
-        format_with_ruff(args.out.name)
+        format_with_ruff(args.out)

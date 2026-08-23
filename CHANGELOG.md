@@ -1,8 +1,18 @@
 # Unreleased
 
+### Removed
+- Python 3.8 and 3.13 free-threaded build variant support
+
 ### Changed
-- `spareval`: the explanation labels are only formatted by `explain`, no longer on every evaluation. Formatting them recurses once per `IN` list item and overflowed the stack on long lists.
 - SPARQL: fix arithmetic grouping around signed numeric literals and group operators of equal precedence from left to right.
+- SPARQL Update: apply all deletions before insertions and make `LOAD SILENT` atomic, including creation of empty destination graphs.
+- SPARQL: fix filter scope in nested `OPTIONAL` groups and propagation through subquery projections.
+- SPARQL: fix implicit aggregation over empty inputs, `IF` type inference, and simplification of `LATERAL` joins around `OPTIONAL`.
+- SPARQL: allow nonpositive `SUBSTR` starting positions.
+- SPARQL: avoid panics when explaining expressions that cannot be serialized as SPARQL.
+- SPARQL: fix equality on `rdf:dirLangString` literals.
+- Datatypes: fix rounding, decimal multiplication and formatting, month subtraction, and negative fractional timestamps.
+- RDF terms: fix parsing of numeric literals within triple terms.
 
 
 # [0.5.11] - 2026-09-02
