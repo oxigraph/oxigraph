@@ -8,9 +8,10 @@ import logging
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from functools import reduce
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 PROTOCOLS = """
 @typing.type_check_only
