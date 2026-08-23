@@ -1280,7 +1280,10 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             MinusAlgorithm::HashBuildRightProbeLeft { keys } => {
                 if keys.is_empty() {
                     Ok(Rc::new(move |from| {
-                        let right: Vec<_> = right(from.clone()).filter_map(Result::ok).collect();
+                        let right = match right(from.clone()).collect::<Result<Vec<_>, _>>() {
+                            Ok(right) => right,
+                            Err(error) => return Box::new(once(Err(error))),
+                        };
                         if right.is_empty() {
                             return left(from);
                         }
