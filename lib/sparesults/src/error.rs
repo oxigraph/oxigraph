@@ -1,6 +1,5 @@
 use json_event_parser::{JsonParseError, JsonSyntaxError};
 use oxrdf::TermParseError;
-use quick_xml::encoding::EncodingError;
 use std::io;
 use std::ops::Range;
 use std::sync::Arc;
@@ -153,13 +152,6 @@ impl From<QueryResultsSyntaxError> for io::Error {
 impl From<JsonSyntaxError> for QueryResultsSyntaxError {
     fn from(error: JsonSyntaxError) -> Self {
         Self(SyntaxErrorKind::Json(error))
-    }
-}
-
-#[doc(hidden)]
-impl From<EncodingError> for QueryResultsParseError {
-    fn from(error: EncodingError) -> Self {
-        quick_xml::Error::from(error).into()
     }
 }
 
