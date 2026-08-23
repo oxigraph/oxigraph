@@ -6,8 +6,9 @@ import logging
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from functools import reduce
-from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 PROTOCOLS = """
 @typing.type_check_only

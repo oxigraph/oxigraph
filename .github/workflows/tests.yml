@@ -370,7 +370,7 @@ jobs:
       - run: rustup toolchain install nightly
       - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.8"
+          python-version: "3.9"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: uv run --locked -m unittest
         working-directory: ./python/tests
