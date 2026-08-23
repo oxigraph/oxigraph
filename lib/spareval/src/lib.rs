@@ -1027,29 +1027,38 @@ mod tests {
     use spargebra::vocab::sparql;
     use sparopt::algebra::{Expression, QueryExpression};
 
-    struct FailingExternalizationDataset;
+    struct FailingDataset {
+        fail_reads: bool,
+    }
 
-    impl<'a> QueryableDataset<'a> for FailingExternalizationDataset {
+    impl<'a> QueryableDataset<'a> for FailingDataset {
         type InternalTerm = u8;
         type Error = io::Error;
 
         fn internal_quads_for_pattern(
             &self,
             _subject: Option<&u8>,
-            _predicate: Option<&u8>,
+            predicate: Option<&u8>,
             _object: Option<&u8>,
             _graph_name: Option<Option<&u8>>,
         ) -> impl Iterator<Item = Result<InternalQuad<u8>, io::Error>> + use<'a> {
-            std::iter::once(Ok(InternalQuad {
-                subject: 1,
-                predicate: 2,
-                object: 3,
-                graph_name: None,
-            }))
+            std::iter::once(if self.fail_reads && predicate == Some(&5) {
+                Err(io::Error::other("dataset read failed"))
+            } else {
+                Ok(InternalQuad {
+                    subject: 1,
+                    predicate: 2,
+                    object: 3,
+                    graph_name: None,
+                })
+            })
         }
 
-        fn internalize_term(&self, _term: Term) -> Result<u8, io::Error> {
-            Ok(2)
+        fn internalize_term(&self, term: Term) -> Result<u8, io::Error> {
+            Ok(match term {
+                Term::NamedNode(node) if node.as_str().ends_with("/right") => 5,
+                _ => 2,
+            })
         }
 
         fn externalize_term(&self, term: u8) -> Result<Term, io::Error> {
@@ -1068,13 +1077,35 @@ mod tests {
             .unwrap();
         let results = QueryEvaluator::new()
             .prepare(&query)
-            .execute(FailingExternalizationDataset)
+            .execute(FailingDataset { fail_reads: false })
             .unwrap();
         assert!(matches!(&results, QueryResults::Graph(_)));
         if let QueryResults::Graph(results) = results {
             let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
             assert!(matches!(error, QueryEvaluationError::Dataset(_)));
             assert_eq!(error.to_string(), "dictionary read failed");
+        }
+    }
+
+    #[test]
+    fn minus_propagates_right_side_read_errors() {
+        let query = SparqlParser::new()
+            .parse_query(
+                "SELECT ?s WHERE {
+                    ?s <http://example.com/left> ?o
+                    MINUS { ?x <http://example.com/right> ?y }
+                }",
+            )
+            .unwrap();
+        let results = QueryEvaluator::new()
+            .prepare(&query)
+            .execute(FailingDataset { fail_reads: true })
+            .unwrap();
+        assert!(matches!(&results, QueryResults::Solutions(_)));
+        if let QueryResults::Solutions(results) = results {
+            let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
+            assert!(matches!(error, QueryEvaluationError::Dataset(_)));
+            assert_eq!(error.to_string(), "dataset read failed");
         }
     }
 
