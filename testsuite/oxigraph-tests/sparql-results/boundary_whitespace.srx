@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="x"/>
+  </head>
+  <results>
+    <result>
+      <binding name="x">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean"> true </literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="x">
+        <literal> &#32;&#9;&#10;&#13;padded&#13;&#10;&#9;&#32; </literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="x">
+        <uri>
+          http://example.com
+        </uri>
+      </binding>
+    </result>
+  </results>
+</sparql>
