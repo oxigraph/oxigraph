@@ -457,7 +457,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                 cursor += 1;
             }
             if count_exponent > 0 {
-                Ok((Literal::new_typed_literal(&s[..cursor], xsd::DOUBLE), &s[cursor..]))
+                Ok((
+                    Literal::new_typed_literal(&s[..cursor], xsd::DOUBLE),
+                    &s[cursor..],
+                ))
             } else {
                 Err(TermParseError::msg(
                     "Double serialization with an invalid exponent",
@@ -465,14 +468,20 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
         } else if with_dot {
             if count_after > 0 {
-                Ok((Literal::new_typed_literal(&s[..cursor], xsd::DECIMAL), &s[cursor..]))
+                Ok((
+                    Literal::new_typed_literal(&s[..cursor], xsd::DECIMAL),
+                    &s[cursor..],
+                ))
             } else {
                 Err(TermParseError::msg(
                     "Decimal serialization without floating part",
                 ))
             }
         } else if count_before > 0 {
-            Ok((Literal::new_typed_literal(&s[..cursor], xsd::INTEGER), &s[cursor..]))
+            Ok((
+                Literal::new_typed_literal(&s[..cursor], xsd::INTEGER),
+                &s[cursor..],
+            ))
         } else {
             Err(TermParseError::msg("Empty integer serialization"))
         }
@@ -636,6 +645,7 @@ mod tests {
                 NamedNode::new("http://example.com/p").unwrap(),
                 Literal::new_typed_literal("1.2e3", xsd::DOUBLE),
             )
+            .into()
         );
     }
 }
