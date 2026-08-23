@@ -567,6 +567,8 @@ impl XmlInnerQueryResultsParser {
                                 predicate_stack: Vec::new(),
                                 object_stack: Vec::new(),
                                 text_buffer: String::new(),
+                                first_text_event_end: None,
+                                last_text_event_start: None,
                                 xml_version: self.xml_version,
                             },
                         }))
@@ -659,6 +661,8 @@ struct XmlInnerSolutionsParser {
     predicate_stack: Vec<Term>,
     object_stack: Vec<Term>,
     text_buffer: String,
+    first_text_event_end: Option<usize>,
+    last_text_event_start: Option<usize>,
     xml_version: XmlVersion,
 }
 
@@ -668,7 +672,13 @@ impl XmlInnerSolutionsParser {
         event: Event<'_>,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match event {
-            Event::Start(event) => match self.state_stack.last().ok_or_else(|| {
+            Event::Start(event) => match {
+                self.text_buffer.clear();
+                self.first_text_event_end = None;
+                self.last_text_event_start = None;
+                self.state_stack.last()
+            }
+            .ok_or_else(|| {
                 QueryResultsSyntaxError::msg("Extra XML is not allowed at the end of the document")
             })? {
                 State::Start => {
@@ -813,20 +823,37 @@ impl XmlInnerSolutionsParser {
                 .into()),
             },
             Event::Text(event) => {
+                let start = self.text_buffer.len();
                 self.text_buffer
                     .push_str(&event.xml_content(self.xml_version)?);
+                if start == 0 {
+                    self.first_text_event_end = Some(self.text_buffer.len());
+                }
+                self.last_text_event_start = Some(start);
                 Ok(None)
             }
             Event::End(_) => {
                 let value = take(&mut self.text_buffer);
-                let value = OxString::new_owned(
-                    value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' ')),
-                );
-                match self.state_stack.pop().ok_or_else(|| {
+                let first_text_event_end = self.first_text_event_end.take();
+                let last_text_event_start = self.last_text_event_start.take();
+                let state = self.state_stack.pop().ok_or_else(|| {
                     QueryResultsSyntaxError::msg(
                         "Extra XML is not allowed at the end of the document",
                     )
-                })? {
+                })?;
+                let start = first_text_event_end.map_or(0, |end| {
+                    end - value[..end]
+                        .trim_start_matches(['\t', '\n', '\r', ' '])
+                        .len()
+                });
+                let end = last_text_event_start.map_or(value.len(), |start| {
+                    start
+                        + value[start..]
+                            .trim_end_matches(['\t', '\n', '\r', ' '])
+                            .len()
+                });
+                let value = OxString::new_owned(if start < end { &value[start..end] } else { "" });
+                match state {
                     State::Start => Ok(None),
                     State::Result => Ok(Some(take(&mut self.new_bindings))),
                     State::Binding => {
@@ -965,6 +992,7 @@ impl XmlInnerSolutionsParser {
             Event::Eof | Event::Comment(_) | Event::PI(_) | Event::DocType(_) => Ok(None),
             Event::GeneralRef(event) => {
                 decode_xml_entity(&event, &mut self.text_buffer, self.xml_version)?;
+                self.last_text_event_start = None;
                 Ok(None)
             }
             Event::Empty(_) => unreachable!("Empty events are expended"),
@@ -1085,5 +1113,46 @@ fn map_xml_error(error: Error) -> io::Error {
             Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
         }
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[expect(clippy::panic_in_result_fn)]
+    fn parse_literal_boundary_whitespace() -> Result<(), QueryResultsSyntaxError> {
+        let SliceXmlQueryResultsParserOutput::Solutions { mut solutions, .. } =
+            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results>
+                <result><binding name="x"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean"> true </literal></binding></result>
+                <result><binding name="x"><literal> &#32;&#9;&#10;&#13;padded&#13;&#10;&#9;&#32; </literal></binding></result>
+            </results></sparql>"#)?
+        else {
+            return Err(QueryResultsSyntaxError::msg("Expected solutions"));
+        };
+        assert_eq!(
+            solutions.parse_next()?,
+            Some(vec![Some(
+                Literal::new_typed_literal("true", xsd::BOOLEAN).into()
+            )])
+        );
+        assert_eq!(
+            solutions.parse_next()?,
+            Some(vec![Some(Literal::from(" \t\n\rpadded\r\n\t ").into())])
+        );
+        assert_eq!(solutions.parse_next()?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn preserve_uri_boundary_whitespace_references() -> Result<(), QueryResultsSyntaxError> {
+        let SliceXmlQueryResultsParserOutput::Solutions { mut solutions, .. } =
+            SliceXmlQueryResultsParserOutput::read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="x"/></head><results><result><binding name="x"><uri>&#32;https://example.com/</uri></binding></result></results></sparql>"#)?
+        else {
+            return Err(QueryResultsSyntaxError::msg("Expected solutions"));
+        };
+        solutions.parse_next().unwrap_err();
+        Ok(())
     }
 }
