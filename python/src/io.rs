@@ -368,7 +368,7 @@ impl PyRdfFormat {
         self.inner.supports_datasets()
     }
 
-    /// :return: if the format supports `RDF-star quoted triples <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted>`_.
+    /// :return: if the format supports `RDF-star quoted triples <https://w3c-cg.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted>`_.
     /// :rtype: bool
     ///
     /// >>> RdfFormat.N_TRIPLES.supports_rdf_star

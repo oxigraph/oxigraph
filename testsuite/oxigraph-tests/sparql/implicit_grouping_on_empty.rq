@@ -1,0 +1,4 @@
+ASK {
+    { SELECT (COUNT(*) AS ?c) WHERE { FILTER(false) } }
+    FILTER(?c = 0)
+}
