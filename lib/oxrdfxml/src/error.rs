@@ -1,7 +1,6 @@
 use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
 use oxrdf::OxString;
-use quick_xml::encoding::EncodingError;
 use quick_xml::events::attributes::AttrError;
 use std::io;
 use std::sync::Arc;
@@ -37,13 +36,6 @@ impl From<quick_xml::Error> for RdfXmlParseError {
             }
             _ => Self::Syntax(RdfXmlSyntaxError(SyntaxErrorKind::Xml(error))),
         }
-    }
-}
-
-#[doc(hidden)]
-impl From<EncodingError> for RdfXmlParseError {
-    fn from(error: EncodingError) -> Self {
-        quick_xml::Error::from(error).into()
     }
 }
 
