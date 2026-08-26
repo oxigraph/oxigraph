@@ -1126,19 +1126,13 @@ fn handle_request(
                         false
                     }
                 };
-                if RequestParams::from_request_url(request).contains("no_transaction") {
-                    transaction.commit().map_err(internal_server_error)?;
-                    web_load_graph(store, request, format, &GraphName::from(target), None)?;
-                } else {
-                    web_load_graph(
-                        store,
-                        request,
-                        format,
-                        &GraphName::from(target),
-                        Some(&mut transaction),
-                    )?;
-                    transaction.commit().map_err(internal_server_error)?;
-                }
+                web_load_graph(
+                    store,
+                    request,
+                    format,
+                    &GraphName::from(target),
+                    Some(transaction),
+                )?;
                 Response::builder()
                     .status(if new {
                         StatusCode::CREATED
@@ -1152,13 +1146,7 @@ fn handle_request(
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 let mut transaction = store.start_transaction().map_err(internal_server_error)?;
                 transaction.clear().map_err(internal_server_error)?;
-                if RequestParams::from_request_url(request).contains("no_transaction") {
-                    transaction.commit().map_err(internal_server_error)?;
-                    web_load_dataset(store, request, format, None)?;
-                } else {
-                    web_load_dataset(store, request, format, Some(&mut transaction))?;
-                    transaction.commit().map_err(internal_server_error)?;
-                }
+                web_load_dataset(store, request, format, Some(transaction))?;
                 Response::builder()
                     .status(StatusCode::NO_CONTENT)
                     .body(Body::empty())
@@ -1902,7 +1890,7 @@ fn web_load_graph(
     request: &mut Request<Body>,
     format: RdfFormat,
     to_graph_name: &GraphName,
-    transaction: Option<&mut Transaction<'_>>,
+    transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
     let args = RequestParams::from_request_url(request);
     let base_iri = if let GraphName::NamedNode(graph_name) = to_graph_name {
@@ -1920,15 +1908,19 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if args.contains("no_transaction") {
+        if let Some(transaction) = transaction {
+            transaction.commit().map_err(internal_server_error)?;
+        }
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
         loader.commit().map_err(internal_server_error)
-    } else if let Some(transaction) = transaction {
+    } else if let Some(mut transaction) = transaction {
         transaction
             .load_from_reader(parser, request.body_mut())
-            .map_err(loader_to_http_error)
+            .map_err(loader_to_http_error)?;
+        transaction.commit().map_err(internal_server_error)
     } else {
         store
             .load_from_reader(parser, request.body_mut())
@@ -1940,7 +1932,7 @@ fn web_load_dataset(
     store: &Store,
     request: &mut Request<Body>,
     format: RdfFormat,
-    transaction: Option<&mut Transaction<'_>>,
+    transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
     let args = RequestParams::from_request_url(request);
     let mut parser = RdfParser::from_format(format);
@@ -1948,15 +1940,19 @@ fn web_load_dataset(
         parser = parser.lenient();
     }
     if args.contains("no_transaction") {
+        if let Some(transaction) = transaction {
+            transaction.commit().map_err(internal_server_error)?;
+        }
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
         loader.commit().map_err(internal_server_error)
-    } else if let Some(transaction) = transaction {
+    } else if let Some(mut transaction) = transaction {
         transaction
             .load_from_reader(parser, request.body_mut())
-            .map_err(loader_to_http_error)
+            .map_err(loader_to_http_error)?;
+        transaction.commit().map_err(internal_server_error)
     } else {
         store
             .load_from_reader(parser, request.body_mut())
