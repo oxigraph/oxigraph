@@ -18,7 +18,7 @@ use oxigraph::model::{
 };
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
-use oxigraph::store::{BulkLoader, LoaderError, Store};
+use oxigraph::store::{BulkLoader, LoaderError, Store, Transaction};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
@@ -1103,29 +1103,36 @@ fn handle_request(
             if let Some(target) = store_target(request)? {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
-                let new = !match &target {
+                let mut transaction = store.start_transaction().map_err(internal_server_error)?;
+                let new = match &target {
                     NamedGraphName::NamedNode(target) => {
-                        if store
+                        if transaction
                             .contains_named_graph(target)
                             .map_err(internal_server_error)?
                         {
-                            store.clear_graph(target).map_err(internal_server_error)?;
-                            true
-                        } else {
-                            store
-                                .insert_named_graph(target)
+                            transaction
+                                .clear_graph(target)
                                 .map_err(internal_server_error)?;
                             false
+                        } else {
+                            transaction.insert_named_graph(target);
+                            true
                         }
                     }
                     NamedGraphName::DefaultGraph => {
-                        store
+                        transaction
                             .clear_graph(GraphNameRef::DefaultGraph)
                             .map_err(internal_server_error)?;
-                        true
+                        false
                     }
                 };
-                web_load_graph(&store, request, format, &GraphName::from(target))?;
+                web_load_graph(
+                    &store,
+                    request,
+                    format,
+                    &GraphName::from(target),
+                    Some(transaction),
+                )?;
                 Response::builder()
                     .status(if new {
                         StatusCode::CREATED
@@ -1137,8 +1144,9 @@ fn handle_request(
             } else {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
-                store.clear().map_err(internal_server_error)?;
-                web_load_dataset(&store, request, format)?;
+                let mut transaction = store.start_transaction().map_err(internal_server_error)?;
+                transaction.clear().map_err(internal_server_error)?;
+                web_load_dataset(&store, request, format, Some(transaction))?;
                 Response::builder()
                     .status(StatusCode::NO_CONTENT)
                     .body(Body::empty())
@@ -1192,7 +1200,7 @@ fn handle_request(
                     Err((StatusCode::NOT_FOUND, _)) => true,
                     Err(error) => return Err(error),
                 };
-                web_load_graph(&store, request, format, &GraphName::from(target))?;
+                web_load_graph(&store, request, format, &GraphName::from(target), None)?;
                 Response::builder()
                     .status(if new {
                         StatusCode::CREATED
@@ -1205,12 +1213,12 @@ fn handle_request(
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 if format.supports_datasets() {
-                    web_load_dataset(&store, request, format)?;
+                    web_load_dataset(&store, request, format, None)?;
                     Response::builder().status(StatusCode::NO_CONTENT)
                 } else {
                     let graph =
                         resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
-                    web_load_graph(&store, request, format, &graph.clone().into())?;
+                    web_load_graph(&store, request, format, &graph.clone().into(), None)?;
                     Response::builder()
                         .status(StatusCode::CREATED)
                         .header(LOCATION, graph.into_string())
@@ -1781,6 +1789,7 @@ fn web_load_graph(
     request: &mut Request<Body>,
     format: RdfFormat,
     to_graph_name: &GraphName,
+    transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
     let base_iri = if let GraphName::NamedNode(graph_name) = to_graph_name {
         Some(graph_name.as_str())
@@ -1797,11 +1806,19 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if url_has_query_parameter(request, "no_transaction") {
+        if let Some(transaction) = transaction {
+            transaction.commit().map_err(internal_server_error)?;
+        }
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
         loader.commit().map_err(internal_server_error)
+    } else if let Some(mut transaction) = transaction {
+        transaction
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)?;
+        transaction.commit().map_err(internal_server_error)
     } else {
         store
             .load_from_reader(parser, request.body_mut())
@@ -1813,17 +1830,26 @@ fn web_load_dataset(
     store: &Store,
     request: &mut Request<Body>,
     format: RdfFormat,
+    transaction: Option<Transaction<'_>>,
 ) -> Result<(), HttpError> {
     let mut parser = RdfParser::from_format(format);
     if url_has_query_parameter(request, "lenient") {
         parser = parser.lenient();
     }
     if url_has_query_parameter(request, "no_transaction") {
+        if let Some(transaction) = transaction {
+            transaction.commit().map_err(internal_server_error)?;
+        }
         let mut loader = web_bulk_loader(store, request);
         loader
             .load_from_reader(parser, request.body_mut())
             .map_err(loader_to_http_error)?;
         loader.commit().map_err(internal_server_error)
+    } else if let Some(mut transaction) = transaction {
+        transaction
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)?;
+        transaction.commit().map_err(internal_server_error)
     } else {
         store
             .load_from_reader(parser, request.body_mut())
@@ -3003,6 +3029,61 @@ mod tests {
         server.test_body(
             request,
             "<http://example.com> <http://example.com/p> <http://example.com/o2> .\n",
+        )
+    }
+
+    #[test]
+    fn graph_store_put_parse_error_preserves_existing_data() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        let triple = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+        server.test_status(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/store?default")
+                .header(CONTENT_TYPE, "application/n-triples")
+                .body(triple)?,
+            StatusCode::NO_CONTENT,
+        )?;
+        server.test_status(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/store?default")
+                .header(CONTENT_TYPE, "text/turtle")
+                .body("<http://example.com/s> <http://example.com/p> .")?,
+            StatusCode::BAD_REQUEST,
+        )?;
+        server.test_body(
+            Request::builder()
+                .uri("http://localhost/store?default")
+                .header(ACCEPT, "application/n-triples")
+                .body(())?,
+            &format!("{triple}\n"),
+        )?;
+
+        let quad = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
+        server.test_status(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/store")
+                .header(CONTENT_TYPE, "application/n-quads")
+                .body(quad)?,
+            StatusCode::NO_CONTENT,
+        )?;
+        server.test_status(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/store")
+                .header(CONTENT_TYPE, "application/n-quads")
+                .body("<http://example.com/s> <http://example.com/p> .")?,
+            StatusCode::BAD_REQUEST,
+        )?;
+        server.test_body(
+            Request::builder()
+                .uri("http://localhost/store")
+                .header(ACCEPT, "application/n-quads")
+                .body(())?,
+            &format!("{quad}\n"),
         )
     }
 
