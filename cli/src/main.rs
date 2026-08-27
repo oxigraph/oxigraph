@@ -1195,7 +1195,11 @@ fn handle_request(
             if let Some(target) = store_target(request)? {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
-                let new = assert_that_graph_exists(store, &target).is_ok();
+                let new = match assert_that_graph_exists(store, &target) {
+                    Ok(()) => false,
+                    Err((StatusCode::NOT_FOUND, _)) => true,
+                    Err(error) => return Err(error),
+                };
                 web_load_graph(store, request, format, &GraphName::from(target), None)?;
                 Response::builder()
                     .status(if new {
@@ -3345,7 +3349,7 @@ mod tests {
             .uri("http://localhost/store?graph=http://example.com")
             .header(CONTENT_TYPE, "text/turtle")
             .body("<> <http://example.com/p> <http://example.com/o1> .")?;
-        server.test_status(request, StatusCode::NO_CONTENT)?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET
         let request = Request::builder()
@@ -3610,7 +3614,7 @@ mod tests {
 
         // POST - existing graph
         let request = Request::builder()
-            .method(Method::PUT)
+            .method(Method::POST)
             .uri("http://localhost/store/person/1.ttl")
             .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
             .body(())?;
@@ -3649,7 +3653,7 @@ mod tests {
 
         // POST - empty graph to existing graph
         let request = Request::builder()
-            .method(Method::PUT)
+            .method(Method::POST)
             .uri(location)
             .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
             .body(())?;
@@ -3678,7 +3682,7 @@ mod tests {
             .uri("http://localhost/store/person/1.ttl?no_transaction&lenient")
             .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
             .body(invalid_data)?;
-        server.test_status(request, StatusCode::NO_CONTENT)?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET of POST
         let request = Request::builder()
@@ -3750,7 +3754,7 @@ mod tests {
             .uri("http://localhost/store?lenient&graph=http://example.com")
             .header(CONTENT_TYPE, "text/turtle")
             .body("< s> < p> \"\\uD83D\\uDC68\" .")?;
-        server.test_status(request, StatusCode::NO_CONTENT)?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET
         let request = Request::builder()
