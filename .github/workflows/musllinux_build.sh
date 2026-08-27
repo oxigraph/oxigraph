@@ -9,3 +9,4 @@ uv run --locked --only-dev maturin develop --release --features abi3
 uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 rm -rf ../target/wheels
 uv run --locked --only-dev maturin build --release --features abi3 --compatibility musllinux_1_2
+uv run --locked --only-dev maturin build --release --interpreter "python3.15" --features abi3t --compatibility musllinux_1_2
