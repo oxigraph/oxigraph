@@ -1446,7 +1446,7 @@ impl N3Recognizer {
         prefixes: HashMap<OxString, Iri<OxString>>,
     ) -> Parser<Self> {
         Parser::new(
-            Lexer::new(N3Lexer::new(N3LexerMode::N3, unchecked), Some(b"#")),
+            Lexer::new(N3Lexer::new(N3LexerMode::N3, unchecked)),
             Self {
                 stack: vec![N3State::N3Doc],
                 terms: Vec::new(),

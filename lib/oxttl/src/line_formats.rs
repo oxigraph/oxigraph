@@ -345,7 +345,7 @@ impl RuleRecognizer for NQuadsRecognizer {
 impl NQuadsRecognizer {
     pub fn new_parser(with_graph_name: bool, lenient: bool) -> Parser<Self> {
         Parser::new(
-            Lexer::new(N3Lexer::new(N3LexerMode::NTriples, lenient), Some(b"#")),
+            Lexer::new(N3Lexer::new(N3LexerMode::NTriples, lenient)),
             Self {
                 stack: vec![NQuadsState::ExpectSubject],
                 subjects: Vec::new(),

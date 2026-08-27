@@ -74,9 +74,15 @@ impl TokenRecognizer for N3Lexer {
                     }
                 }
                 b'=' if self.mode == N3LexerMode::N3 => {
-                    if let Some((consumed, result)) = self.recognize_iri(data, options) {
+                    if let Some((consumed, result)) = recognize_iri(
+                        data,
+                        options.base_iri.as_ref(),
+                        self.lenient,
+                        &mut self.raw_buffer,
+                        &mut self.string_buffer,
+                    ) {
                         Some(if let Ok(result) = result {
-                            (consumed, Ok(result))
+                            (consumed, Ok(N3Token::IriRef(result)))
                         } else {
                             (2, Ok(N3Token::Punctuation("<=")))
                         })
@@ -87,9 +93,15 @@ impl TokenRecognizer for N3Lexer {
                     }
                 }
                 b'-' if self.mode == N3LexerMode::N3 => {
-                    if let Some((consumed, result)) = self.recognize_iri(data, options) {
+                    if let Some((consumed, result)) = recognize_iri(
+                        data,
+                        options.base_iri.as_ref(),
+                        self.lenient,
+                        &mut self.raw_buffer,
+                        &mut self.string_buffer,
+                    ) {
                         Some(if let Ok(result) = result {
-                            (consumed, Ok(result))
+                            (consumed, Ok(N3Token::IriRef(result)))
                         } else {
                             (2, Ok(N3Token::Punctuation("<-")))
                         })
@@ -99,7 +111,16 @@ impl TokenRecognizer for N3Lexer {
                         None
                     }
                 }
-                _ => self.recognize_iri(data, options),
+                _ => map_result(
+                    recognize_iri(
+                        data,
+                        options.base_iri.as_ref(),
+                        self.lenient,
+                        &mut self.raw_buffer,
+                        &mut self.string_buffer,
+                    ),
+                    N3Token::IriRef,
+                ),
             },
             b'>' => {
                 if *data.get(1)? == b'>' {
@@ -109,7 +130,10 @@ impl TokenRecognizer for N3Lexer {
                 }
             }
             b'_' => match data.get(1)? {
-                b':' => Self::recognize_blank_node_label(data, is_ending),
+                b':' => map_result(
+                    recognize_blank_node_label(data, is_ending),
+                    N3Token::BlankNodeLabel,
+                ),
                 c => Some((
                     1,
                     Err((0, format!("Unexpected character '{}'", char::from(*c))).into()),
@@ -120,21 +144,43 @@ impl TokenRecognizer for N3Lexer {
                     && *data.get(1)? == b'"'
                     && *data.get(2)? == b'"'
                 {
-                    self.recognize_long_string(data, b'"')
+                    map_result(
+                        recognize_long_string(data, b'"', self.lenient, &mut self.raw_buffer),
+                        N3Token::LongString,
+                    )
                 } else {
-                    self.recognize_string(data, b'"')
+                    map_result(
+                        recognize_string(data, b'"', self.lenient, &mut self.raw_buffer),
+                        N3Token::String,
+                    )
                 }
             }
             b'\'' if self.mode != N3LexerMode::NTriples => {
                 if *data.get(1)? == b'\'' && *data.get(2)? == b'\'' {
-                    self.recognize_long_string(data, b'\'')
+                    map_result(
+                        recognize_long_string(data, b'\'', self.lenient, &mut self.raw_buffer),
+                        N3Token::LongString,
+                    )
                 } else {
-                    self.recognize_string(data, b'\'')
+                    map_result(
+                        recognize_string(data, b'\'', self.lenient, &mut self.raw_buffer),
+                        N3Token::String,
+                    )
                 }
             }
-            b'@' => self.recognize_lang_tag(data),
+            b'@' => map_result(recognize_lang_tag(data, self.lenient), |lt| {
+                N3Token::LangTag {
+                    language: lt.language,
+                    #[cfg(feature = "rdf-12")]
+                    direction: lt.direction,
+                }
+            }),
             b'.' => match data.get(1) {
-                Some(b'0'..=b'9') => Self::recognize_number(data, is_ending),
+                Some(b'0'..=b'9') => map_result(recognize_number(data, is_ending), |n| match n {
+                    Number::Integer(v) => N3Token::Integer(v),
+                    Number::Decimal(v) => N3Token::Decimal(v),
+                    Number::Double(v) => N3Token::Double(v),
+                }),
                 Some(_) => Some((1, Ok(N3Token::Punctuation(".")))),
                 None => is_ending.then_some((1, Ok(N3Token::Punctuation(".")))),
             },
@@ -181,9 +227,32 @@ impl TokenRecognizer for N3Lexer {
                 }
             }
             b'~' => Some((1, Ok(N3Token::Punctuation("~")))),
-            b'0'..=b'9' | b'+' | b'-' => Self::recognize_number(data, is_ending),
-            b'?' => self.recognize_variable(data, is_ending),
-            _ => self.recognize_pname_or_keyword(data, is_ending),
+            b'0'..=b'9' | b'+' | b'-' => {
+                map_result(recognize_number(data, is_ending), |n| match n {
+                    Number::Integer(v) => N3Token::Integer(v),
+                    Number::Decimal(v) => N3Token::Decimal(v),
+                    Number::Double(v) => N3Token::Double(v),
+                })
+            }
+            b'?' => map_result(
+                recognize_variable(data, is_ending, self.lenient, &mut self.string_buffer),
+                N3Token::Variable,
+            ),
+            _ => map_result(
+                recognize_pname_or_keyword(data, is_ending, self.lenient, &mut self.string_buffer),
+                |p| match p {
+                    PNameOrKeyword::PName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    },
+                    PNameOrKeyword::Keyword(k) => N3Token::PlainKeyword(k),
+                },
+            ),
         }
     }
 
@@ -201,793 +270,817 @@ impl N3Lexer {
             string_buffer: String::new(),
         }
     }
+}
 
-    fn recognize_iri(
-        &mut self,
-        data: &[u8],
-        options: &N3LexerOptions,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
-        self.raw_buffer.clear();
-        let mut i = 1;
-        loop {
-            let end = memchr2(b'>', b'\\', &data[i..])?;
-            i += end;
-            match data[i] {
-                b'>' => {
-                    let iri = if self.raw_buffer.is_empty() {
-                        &data[1..i]
-                    } else {
-                        self.raw_buffer.extend_from_slice(&data[i - end..i]);
-                        &self.raw_buffer
-                    };
-                    return Some((
-                        i + 1,
-                        Self::parse_iri(
-                            self.lenient,
-                            &mut self.string_buffer,
-                            iri,
-                            0..i + 1,
-                            options,
-                        ),
-                    ));
-                }
-                b'\\' => {
-                    self.raw_buffer.extend_from_slice(&data[i - end..i]);
-                    let (additional, c) = self.recognize_escape(&data[i..], i, false)?;
-                    i += additional + 1;
-                    match c {
-                        Ok(c) => {
-                            let mut buf = [0; 4];
-                            self.raw_buffer
-                                .extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
-                        }
-                        Err(e) => return Some((i, Err(e))),
-                    }
-                }
-                _ => unreachable!(),
+fn recognize_iri(
+    data: &[u8],
+    base_iri: Option<&Iri<OxString>>,
+    lenient: bool,
+    raw_buffer: &mut Vec<u8>,
+    string_buffer: &mut String,
+) -> Option<(usize, Result<OxString, TokenRecognizerError>)> {
+    // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
+    raw_buffer.clear();
+    let mut i = 1;
+    loop {
+        let end = memchr2(b'>', b'\\', &data[i..])?;
+        i += end;
+        match data[i] {
+            b'>' => {
+                let iri = if raw_buffer.is_empty() {
+                    &data[1..i]
+                } else {
+                    raw_buffer.extend_from_slice(&data[i - end..i]);
+                    &*raw_buffer
+                };
+                return Some((
+                    i + 1,
+                    parse_iri(iri, 0..i + 1, base_iri, lenient, string_buffer),
+                ));
             }
+            b'\\' => {
+                raw_buffer.extend_from_slice(&data[i - end..i]);
+                let (additional, c) = recognize_escape(&data[i..], i, false, lenient)?;
+                i += additional + 1;
+                match c {
+                    Ok(c) => {
+                        let mut buf = [0; 4];
+                        raw_buffer.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+                    }
+                    Err(e) => return Some((i, Err(e))),
+                }
+            }
+            _ => unreachable!(),
         }
     }
+}
 
-    fn parse_iri(
-        lenient: bool,
-        string_buffer: &mut String,
-        iri: &[u8],
-        position: Range<usize>,
-        options: &N3LexerOptions,
-    ) -> Result<N3Token<'static>, TokenRecognizerError> {
-        let iri = str_from_utf8(iri, position.clone())?;
-        if lenient {
-            let Some(base_iri) = options.base_iri.as_ref() else {
-                return Ok(N3Token::IriRef(OxString::new_owned(iri)));
-            };
-            let iri = IriRef::parse_unchecked(iri);
-            Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
-                iri.into_inner()
-            } else {
-                string_buffer.clear();
-                base_iri.resolve_into_unchecked(&iri, string_buffer);
-                string_buffer
-            })))
+fn parse_iri(
+    iri: &[u8],
+    position: Range<usize>,
+    base_iri: Option<&Iri<OxString>>,
+    lenient: bool,
+    string_buffer: &mut String,
+) -> Result<OxString, TokenRecognizerError> {
+    let iri = str_from_utf8(iri, position.clone())?;
+    if lenient {
+        let Some(base_iri) = base_iri else {
+            return Ok(OxString::new_owned(iri));
+        };
+        let iri = IriRef::parse_unchecked(iri);
+        Ok(OxString::new_owned(if iri.is_absolute() {
+            iri.into_inner()
         } else {
-            let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
-            Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
-                iri.into_inner()
-            } else if let Some(base_iri) = options.base_iri.as_ref() {
-                string_buffer.clear();
-                base_iri
-                    .resolve_into(&iri, string_buffer)
-                    .map_err(|e| (position, e.to_string()))?;
-                string_buffer
-            } else {
-                return Err((
-                    position,
-                    format!("{iri} is a relative IRI even if no @base is set"),
-                )
-                    .into());
-            })))
-        }
+            string_buffer.clear();
+            base_iri.resolve_into_unchecked(&iri, string_buffer);
+            string_buffer
+        }))
+    } else {
+        let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
+        Ok(OxString::new_owned(if iri.is_absolute() {
+            iri.into_inner()
+        } else if let Some(base_iri) = base_iri {
+            string_buffer.clear();
+            base_iri
+                .resolve_into(&iri, string_buffer)
+                .map_err(|e| (position, e.to_string()))?;
+            string_buffer
+        } else {
+            return Err((
+                position,
+                format!("{iri} is a relative IRI even if no @base is set"),
+            )
+                .into());
+        }))
     }
+}
 
-    fn recognize_pname_or_keyword<'a>(
-        &mut self,
-        data: &'a [u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [139s]  PNAME_NS   ::=  PN_PREFIX? ':'
-        // [140s]  PNAME_LN   ::=  PNAME_NS PN_LOCAL
-        // [167s]  PN_PREFIX  ::=  PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
-        let mut i = 0;
-        loop {
-            if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
-                match r {
-                    Ok((c, consumed)) => {
-                        if c == ':' {
-                            i += consumed;
-                            break;
-                        } else if i == 0 {
-                            if !Self::is_possible_pn_chars_base(c) {
-                                return Some((
-                                    consumed,
-                                    Err((
-                                        0..consumed,
-                                        format!(
-                                            "'{c}' is not allowed at the beginning of a prefix name"
-                                        ),
-                                    )
-                                        .into()),
-                                ));
-                            }
-                            i += consumed;
-                        } else if Self::is_possible_pn_chars(c) || c == '.' {
-                            i += consumed;
-                        } else {
-                            while data[..i].ends_with(b".") {
-                                i -= 1;
-                            }
+enum PNameOrKeyword<'a> {
+    PName {
+        prefix: &'a str,
+        local: OxStr<'a>,
+        might_be_invalid_iri: bool,
+    },
+    Keyword(&'a str),
+}
+
+fn recognize_pname_or_keyword<'a>(
+    data: &'a [u8],
+    is_ending: bool,
+    lenient: bool,
+    string_buffer: &mut String,
+) -> Option<(usize, Result<PNameOrKeyword<'a>, TokenRecognizerError>)> {
+    // [139s]  PNAME_NS   ::=  PN_PREFIX? ':'
+    // [140s]  PNAME_LN   ::=  PNAME_NS PN_LOCAL
+    // [167s]  PN_PREFIX  ::=  PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
+    let mut i = 0;
+    loop {
+        if let Some(r) = recognize_unicode_char(&data[i..], i) {
+            match r {
+                Ok((c, consumed)) => {
+                    if c == ':' {
+                        i += consumed;
+                        break;
+                    } else if i == 0 {
+                        if !is_possible_pn_chars_base(c) {
                             return Some((
-                                i,
-                                str_from_utf8(&data[..i], 0..i).map(N3Token::PlainKeyword),
+                                consumed,
+                                Err((
+                                    0..consumed,
+                                    format!(
+                                        "'{c}' is not allowed at the beginning of a prefix name"
+                                    ),
+                                )
+                                    .into()),
                             ));
                         }
-                    }
-                    Err(e) => return Some((e.location.end, Err(e))),
-                }
-            } else if is_ending {
-                while data[..i].ends_with(b".") {
-                    i -= 1;
-                }
-                return Some(if i == 0 {
-                    (
-                        1,
-                        Err((0..1, format!("Unexpected byte {}", data[0])).into()),
-                    )
-                } else {
-                    (
-                        i,
-                        str_from_utf8(&data[..i], 0..i).map(N3Token::PlainKeyword),
-                    )
-                });
-            } else {
-                return None;
-            }
-        }
-        let pn_prefix = match str_from_utf8(&data[..i - 1], 0..i - 1) {
-            Ok(pn_prefix) => pn_prefix,
-            Err(e) => return Some((i, Err(e))),
-        };
-        if pn_prefix.ends_with('.') {
-            return Some((
-                i,
-                Err((
-                    0..i,
-                    format!(
-                        "'{pn_prefix}' is not a valid prefix: prefixes are not allowed to end with '.'"),
-                )
-                    .into()),
-            ));
-        }
-
-        let (consumed, pn_local_result) =
-            self.recognize_optional_pn_local(&data[i..], is_ending)?;
-        Some((
-            consumed + i,
-            pn_local_result.map(|(local, might_be_invalid_iri)| N3Token::PrefixedName {
-                prefix: pn_prefix,
-                local,
-                might_be_invalid_iri,
-            }),
-        ))
-    }
-
-    fn recognize_variable<'a>(
-        &mut self,
-        data: &'a [u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [36]  QUICK_VAR_NAME  ::=  "?" PN_LOCAL
-        let (consumed, result) = self.recognize_optional_pn_local(&data[1..], is_ending)?;
-        Some((
-            consumed + 1,
-            result.and_then(|(name, _)| {
-                if name.is_empty() {
-                    Err((0..consumed, "A variable name is not allowed to be empty").into())
-                } else {
-                    Ok(N3Token::Variable(OxString::new_owned(&name)))
-                }
-            }),
-        ))
-    }
-
-    fn recognize_optional_pn_local<'a>(
-        &mut self,
-        data: &'a [u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<(OxStr<'a>, bool), TokenRecognizerError>)> {
-        // [168s]  PN_LOCAL  ::=  (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
-        let mut i = 0;
-        let mut position_that_is_already_in_buffer = 0;
-        let mut might_be_invalid_iri = false;
-        let mut ends_with_unescaped_dot = 0;
-        self.string_buffer.clear();
-        loop {
-            if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
-                match r {
-                    Ok((c, consumed)) => {
-                        if c == '%' {
-                            i += 1;
-                            let a = char::from(*data.get(i)?);
-                            i += 1;
-                            let b = char::from(*data.get(i)?);
-                            if !a.is_ascii_hexdigit() || !b.is_ascii_hexdigit() {
-                                return Some((i + 1, Err((
-                                    i - 2..=i, format!("escapes in IRIs should be % followed by two hexadecimal characters, found '%{a}{b}'")
-                                ).into())));
-                            }
-                            i += 1;
-                            ends_with_unescaped_dot = 0;
-                        } else if c == '\\' {
-                            i += 1;
-                            let a = char::from(*data.get(i)?);
-                            if self.lenient
-                                || matches!(
-                                    a,
-                                    '_' | '~'
-                                        | '.'
-                                        | '-'
-                                        | '!'
-                                        | '$'
-                                        | '&'
-                                        | '\''
-                                        | '('
-                                        | ')'
-                                        | '*'
-                                        | '+'
-                                        | ','
-                                        | ';'
-                                        | '='
-                                )
-                            {
-                                // ok to escape
-                            } else if matches!(a, '/' | '?' | '#' | '@' | '%') {
-                                // ok to escape but requires IRI validation
-                                might_be_invalid_iri = true;
-                            } else {
-                                return Some((i + 1, Err((
-                                    i..=i, format!("The character that are allowed to be escaped in IRIs are _~.-!$&'()*+,;=/?#@%, found '{a}'")
-                                ).into())));
-                            }
-                            // We add the missing bytes
-                            if i - position_that_is_already_in_buffer > 1 {
-                                self.string_buffer.push_str(
-                                    match str_from_utf8(
-                                        &data[position_that_is_already_in_buffer..i - 1],
-                                        position_that_is_already_in_buffer..i - 1,
-                                    ) {
-                                        Ok(data) => data,
-                                        Err(e) => return Some((i, Err(e))),
-                                    },
-                                )
-                            }
-                            self.string_buffer.push(a);
-                            i += 1;
-                            position_that_is_already_in_buffer = i;
-                            ends_with_unescaped_dot = 0;
-                        } else if i == 0 {
-                            if !(Self::is_possible_pn_chars_u(c) || c == ':' || c.is_ascii_digit())
-                            {
-                                return Some((0, Ok((OxString::default(), false))));
-                            }
-                            if !self.lenient {
-                                might_be_invalid_iri |=
-                                    Self::is_possible_pn_chars_base_but_not_valid_iri(c)
-                                        || c == ':';
-                            }
-                            i += consumed;
-                        } else if Self::is_possible_pn_chars(c) || c == ':' {
-                            if !self.lenient {
-                                might_be_invalid_iri |=
-                                    Self::is_possible_pn_chars_base_but_not_valid_iri(c)
-                                        || c == ':';
-                            }
-                            i += consumed;
-                            ends_with_unescaped_dot = 0;
-                        } else if c == '.' {
-                            i += consumed;
-                            ends_with_unescaped_dot += 1;
-                        } else {
-                            let buffer = if self.string_buffer.is_empty() {
-                                let mut data = match str_from_utf8(&data[..i], 0..i) {
-                                    Ok(data) => data,
-                                    Err(e) => return Some((i, Err(e))),
-                                };
-                                // We do not include the last dots
-                                data = &data[..data.len() - ends_with_unescaped_dot];
-                                i -= ends_with_unescaped_dot;
-                                data.into()
-                            } else {
-                                self.string_buffer.push_str(
-                                    match str_from_utf8(
-                                        &data[position_that_is_already_in_buffer..i],
-                                        position_that_is_already_in_buffer..i,
-                                    ) {
-                                        Ok(data) => data,
-                                        Err(e) => return Some((i, Err(e))),
-                                    },
-                                );
-                                // We do not include the last dots
-                                for _ in 0..ends_with_unescaped_dot {
-                                    self.string_buffer.pop();
-                                }
-                                i -= ends_with_unescaped_dot;
-                                OxString::new_owned(&self.string_buffer)
-                            };
-                            return Some((i, Ok((buffer, might_be_invalid_iri))));
-                        }
-                    }
-                    Err(e) => return Some((e.location.end, Err(e))),
-                }
-            } else if is_ending {
-                let buffer = if self.string_buffer.is_empty() {
-                    let mut data = match str_from_utf8(&data[..i], 0..i) {
-                        Ok(data) => data,
-                        Err(e) => return Some((i, Err(e))),
-                    };
-                    // We do not include the last dot
-                    while let Some(d) = data.strip_suffix('.') {
-                        data = d;
-                        i -= 1;
-                    }
-                    data.into()
-                } else {
-                    // We do not include the last dot
-                    while self.string_buffer.ends_with('.') {
-                        self.string_buffer.pop();
-                        i -= 1;
-                    }
-                    OxString::new_owned(&self.string_buffer)
-                };
-                return Some((i, Ok((buffer, might_be_invalid_iri))));
-            } else {
-                return None;
-            }
-        }
-    }
-
-    fn recognize_blank_node_label(
-        data: &[u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
-        // [141s]  BLANK_NODE_LABEL  ::=  '_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
-        let mut i = 2;
-        while let Some(c) = Self::recognize_unicode_char(&data[i..], i) {
-            match c {
-                Ok((c, consumed)) => {
-                    if (i == 2 && (Self::is_possible_pn_chars_u(c) || c.is_ascii_digit()))
-                        || (i > 2 && (Self::is_possible_pn_chars(c) || c == '.'))
-                    {
-                        // Ok
+                        i += consumed;
+                    } else if is_possible_pn_chars(c) || c == '.' {
+                        i += consumed;
                     } else {
-                        while data[i - 1] == b'.' {
+                        while data[..i].ends_with(b".") {
                             i -= 1;
                         }
                         return Some((
                             i,
-                            if i > 2 {
-                                str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel)
-                            } else {
-                                Err((0..i, "A blank node ID cannot be empty").into())
-                            },
+                            str_from_utf8(&data[..i], 0..i).map(PNameOrKeyword::Keyword),
                         ));
                     }
-                    i += consumed;
                 }
                 Err(e) => return Some((e.location.end, Err(e))),
             }
-        }
-        is_ending.then(|| {
-            while data[i - 1] == b'.' {
+        } else if is_ending {
+            while data[..i].ends_with(b".") {
                 i -= 1;
             }
-            (
-                i,
-                if i > 2 {
-                    str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel)
-                } else {
-                    Err((0..i, "A blank node ID cannot be empty").into())
-                },
-            )
-        })
-    }
-
-    fn recognize_lang_tag<'a>(
-        &self,
-        data: &'a [u8],
-    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [39] 	LANG_DIR 	::= 	'@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)* ('--' [a-zA-Z]+)?
-        let mut is_last_block_empty = true;
-        let mut are_digits_allowed = false;
-        for (i, c) in data[1..].iter().enumerate() {
-            if (are_digits_allowed && c.is_ascii_alphanumeric())
-                || (!are_digits_allowed && c.is_ascii_alphabetic())
-            {
-                is_last_block_empty = false;
-            } else if i == 0 {
-                return Some((
+            return Some(if i == 0 {
+                (
                     1,
-                    Err((1..2, "A language code should always start with a letter").into()),
-                ));
-            } else if is_last_block_empty {
-                if *c != b'-' {
-                    return Some((i, self.parse_lang_tag(&data[1..i], None, 1..i - 1)));
-                }
-                // We start with '--', we are in a direction
-                let after_dir = i
-                    + 2
-                    + data[i + 2..]
-                        .iter()
-                        .take_while(|c| c.is_ascii_alphabetic())
-                        .count();
-                if after_dir == data.len() {
-                    return None; // Read everything
-                }
-                return Some((
-                    after_dir,
-                    self.parse_lang_tag(&data[1..i], Some(&data[i + 2..after_dir]), 1..after_dir),
-                ));
-            } else if *c == b'-' {
-                is_last_block_empty = true;
-                are_digits_allowed = true
+                    Err((0..1, format!("Unexpected byte {}", data[0])).into()),
+                )
             } else {
-                return Some((i + 1, self.parse_lang_tag(&data[1..=i], None, 1..i)));
-            }
+                (
+                    i,
+                    str_from_utf8(&data[..i], 0..i).map(PNameOrKeyword::Keyword),
+                )
+            });
+        } else {
+            return None;
         }
-        None
     }
-
-    fn parse_lang_tag<'a>(
-        &self,
-        lang_tag: &'a [u8],
-        direction: Option<&'a [u8]>,
-        position: Range<usize>,
-    ) -> Result<N3Token<'a>, TokenRecognizerError> {
-        #[cfg(not(feature = "rdf-12"))]
-        if let Some(direction) = direction {
-            return Err((
-                position.end - direction.len()..position.end,
-                "Literal base direction are only allowed in RDF 1.2",
+    let pn_prefix = match str_from_utf8(&data[..i - 1], 0..i - 1) {
+        Ok(pn_prefix) => pn_prefix,
+        Err(e) => return Some((i, Err(e))),
+    };
+    if pn_prefix.ends_with('.') {
+        return Some((
+            i,
+            Err((
+                0..i,
+                format!(
+                    "'{pn_prefix}' is not a valid prefix: prefixes are not allowed to end with '.'"
+                ),
             )
-                .into());
+                .into()),
+        ));
+    }
+
+    let (consumed, pn_local_result) =
+        recognize_optional_pn_local(&data[i..], is_ending, lenient, string_buffer)?;
+    Some((
+        consumed + i,
+        pn_local_result.map(|(local, might_be_invalid_iri)| PNameOrKeyword::PName {
+            prefix: pn_prefix,
+            local,
+            might_be_invalid_iri,
+        }),
+    ))
+}
+
+fn recognize_variable(
+    data: &[u8],
+    is_ending: bool,
+    lenient: bool,
+    string_buffer: &mut String,
+) -> Option<(usize, Result<OxString, TokenRecognizerError>)> {
+    // [36]  QUICK_VAR_NAME  ::=  "?" PN_LOCAL
+    let (consumed, result) =
+        recognize_optional_pn_local(&data[1..], is_ending, lenient, string_buffer)?;
+    Some((
+        consumed + 1,
+        result.and_then(|(name, _)| {
+            if name.is_empty() {
+                Err((0..consumed, "A variable name is not allowed to be empty").into())
+            } else {
+                Ok(name.to_owned()) // TODO: use into_owned
+            }
+        }),
+    ))
+}
+
+fn recognize_optional_pn_local<'a>(
+    data: &'a [u8],
+    is_ending: bool,
+    lenient: bool,
+    string_buffer: &mut String,
+) -> Option<(usize, Result<(OxStr<'a>, bool), TokenRecognizerError>)> {
+    // [168s]  PN_LOCAL  ::=  (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+    let mut i = 0;
+    let mut position_that_is_already_in_buffer = 0;
+    let mut might_be_invalid_iri = false;
+    let mut ends_with_unescaped_dot = 0;
+    string_buffer.clear();
+    loop {
+        if let Some(r) = recognize_unicode_char(&data[i..], i) {
+            match r {
+                Ok((c, consumed)) => {
+                    if c == '%' {
+                        i += 1;
+                        let a = char::from(*data.get(i)?);
+                        i += 1;
+                        let b = char::from(*data.get(i)?);
+                        if !a.is_ascii_hexdigit() || !b.is_ascii_hexdigit() {
+                            return Some((i + 1, Err((
+                                    i - 2..=i, format!("escapes in IRIs should be % followed by two hexadecimal characters, found '%{a}{b}'")
+                                ).into())));
+                        }
+                        i += 1;
+                        ends_with_unescaped_dot = 0;
+                    } else if c == '\\' {
+                        i += 1;
+                        let a = char::from(*data.get(i)?);
+                        if lenient
+                            || matches!(
+                                a,
+                                '_' | '~'
+                                    | '.'
+                                    | '-'
+                                    | '!'
+                                    | '$'
+                                    | '&'
+                                    | '\''
+                                    | '('
+                                    | ')'
+                                    | '*'
+                                    | '+'
+                                    | ','
+                                    | ';'
+                                    | '='
+                            )
+                        {
+                            // ok to escape
+                        } else if matches!(a, '/' | '?' | '#' | '@' | '%') {
+                            // ok to escape but requires IRI validation
+                            might_be_invalid_iri = true;
+                        } else {
+                            return Some((i + 1, Err((
+                                    i..=i, format!("The character that are allowed to be escaped in IRIs are _~.-!$&'()*+,;=/?#@%, found '{a}'")
+                                ).into())));
+                        }
+                        // We add the missing bytes
+                        if i - position_that_is_already_in_buffer > 1 {
+                            string_buffer.push_str(
+                                match str_from_utf8(
+                                    &data[position_that_is_already_in_buffer..i - 1],
+                                    position_that_is_already_in_buffer..i - 1,
+                                ) {
+                                    Ok(data) => data,
+                                    Err(e) => return Some((i, Err(e))),
+                                },
+                            )
+                        }
+                        string_buffer.push(a);
+                        i += 1;
+                        position_that_is_already_in_buffer = i;
+                        ends_with_unescaped_dot = 0;
+                    } else if i == 0 {
+                        if !(is_possible_pn_chars_u(c) || c == ':' || c.is_ascii_digit()) {
+                            return Some((0, Ok((OxString::default(), false))));
+                        }
+                        if !lenient {
+                            might_be_invalid_iri |=
+                                is_possible_pn_chars_base_but_not_valid_iri(c) || c == ':';
+                        }
+                        i += consumed;
+                    } else if is_possible_pn_chars(c) || c == ':' {
+                        if !lenient {
+                            might_be_invalid_iri |=
+                                is_possible_pn_chars_base_but_not_valid_iri(c) || c == ':';
+                        }
+                        i += consumed;
+                        ends_with_unescaped_dot = 0;
+                    } else if c == '.' {
+                        i += consumed;
+                        ends_with_unescaped_dot += 1;
+                    } else {
+                        let buffer = if string_buffer.is_empty() {
+                            let mut data = match str_from_utf8(&data[..i], 0..i) {
+                                Ok(data) => data,
+                                Err(e) => return Some((i, Err(e))),
+                            };
+                            // We do not include the last dots
+                            data = &data[..data.len() - ends_with_unescaped_dot];
+                            i -= ends_with_unescaped_dot;
+                            data.into()
+                        } else {
+                            string_buffer.push_str(
+                                match str_from_utf8(
+                                    &data[position_that_is_already_in_buffer..i],
+                                    position_that_is_already_in_buffer..i,
+                                ) {
+                                    Ok(data) => data,
+                                    Err(e) => return Some((i, Err(e))),
+                                },
+                            );
+                            // We do not include the last dots
+                            for _ in 0..ends_with_unescaped_dot {
+                                string_buffer.pop();
+                            }
+                            i -= ends_with_unescaped_dot;
+                            OxString::new_owned(&*string_buffer)
+                        };
+                        return Some((i, Ok((buffer, might_be_invalid_iri))));
+                    }
+                }
+                Err(e) => return Some((e.location.end, Err(e))),
+            }
+        } else if is_ending {
+            let buffer = if string_buffer.is_empty() {
+                let mut data = match str_from_utf8(&data[..i], 0..i) {
+                    Ok(data) => data,
+                    Err(e) => return Some((i, Err(e))),
+                };
+                // We do not include the last dot
+                while let Some(d) = data.strip_suffix('.') {
+                    data = d;
+                    i -= 1;
+                }
+                data.into()
+            } else {
+                // We do not include the last dot
+                while string_buffer.ends_with('.') {
+                    string_buffer.pop();
+                    i -= 1;
+                }
+                OxString::new_owned(&*string_buffer)
+            };
+            return Some((i, Ok((buffer, might_be_invalid_iri))));
+        } else {
+            return None;
+        }
+    }
+}
+
+fn recognize_blank_node_label(
+    data: &[u8],
+    is_ending: bool,
+) -> Option<(usize, Result<&str, TokenRecognizerError>)> {
+    // [141s]  BLANK_NODE_LABEL  ::=  '_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
+    let mut i = 2;
+    while let Some(c) = recognize_unicode_char(&data[i..], i) {
+        match c {
+            Ok((c, consumed)) => {
+                if (i == 2 && (is_possible_pn_chars_u(c) || c.is_ascii_digit()))
+                    || (i > 2 && (is_possible_pn_chars(c) || c == '.'))
+                {
+                    // Ok
+                } else {
+                    while data[i - 1] == b'.' {
+                        i -= 1;
+                    }
+                    return Some((
+                        i,
+                        if i > 2 {
+                            str_from_utf8(&data[2..i], 2..i)
+                        } else {
+                            Err((0..i, "A blank node ID cannot be empty").into())
+                        },
+                    ));
+                }
+                i += consumed;
+            }
+            Err(e) => return Some((e.location.end, Err(e))),
+        }
+    }
+    is_ending.then(|| {
+        while data[i - 1] == b'.' {
+            i -= 1;
+        }
+        (
+            i,
+            if i > 2 {
+                str_from_utf8(&data[2..i], 2..i)
+            } else {
+                Err((0..i, "A blank node ID cannot be empty").into())
+            },
+        )
+    })
+}
+
+fn recognize_lang_tag(
+    data: &[u8],
+    lenient: bool,
+) -> Option<(usize, Result<LangTag<'_>, TokenRecognizerError>)> {
+    // [39] 	LANG_DIR 	::= 	'@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)* ('--' [a-zA-Z]+)?
+    let mut is_last_block_empty = true;
+    let mut are_digits_allowed = false;
+    for (i, c) in data[1..].iter().enumerate() {
+        if (are_digits_allowed && c.is_ascii_alphanumeric())
+            || (!are_digits_allowed && c.is_ascii_alphabetic())
+        {
+            is_last_block_empty = false;
+        } else if i == 0 {
+            return Some((
+                1,
+                Err((1..2, "A language code should always start with a letter").into()),
+            ));
+        } else if is_last_block_empty {
+            if *c != b'-' {
+                return Some((i, parse_lang_tag(&data[1..i], None, 1..i - 1, lenient)));
+            }
+            // We start with '--', we are in a direction
+            let after_dir = i
+                + 2
+                + data[i + 2..]
+                    .iter()
+                    .take_while(|c| c.is_ascii_alphabetic())
+                    .count();
+            if after_dir == data.len() {
+                return None; // Read everything
+            }
+            return Some((
+                after_dir,
+                parse_lang_tag(
+                    &data[1..i],
+                    Some(&data[i + 2..after_dir]),
+                    1..after_dir,
+                    lenient,
+                ),
+            ));
+        } else if *c == b'-' {
+            is_last_block_empty = true;
+            are_digits_allowed = true
+        } else {
+            return Some((i + 1, parse_lang_tag(&data[1..=i], None, 1..i, lenient)));
+        }
+    }
+    None
+}
+
+struct LangTag<'a> {
+    language: &'a str,
+    #[cfg(feature = "rdf-12")]
+    direction: Option<BaseDirection>,
+}
+
+fn parse_lang_tag<'a>(
+    lang_tag: &'a [u8],
+    direction: Option<&'a [u8]>,
+    position: Range<usize>,
+    lenient: bool,
+) -> Result<LangTag<'a>, TokenRecognizerError> {
+    #[cfg(not(feature = "rdf-12"))]
+    if let Some(direction) = direction {
+        return Err((
+            position.end - direction.len()..position.end,
+            "Literal base direction are only allowed in RDF 1.2",
+        )
+            .into());
+    }
+
+    let lang_tag = str_from_utf8(lang_tag, position.clone())?;
+    Ok(LangTag {
+        language: if lenient {
+            lang_tag
+        } else {
+            LanguageTag::parse(lang_tag)
+                .map_err(|e| (position.clone(), e.to_string()))?
+                .into_inner()
+        },
+        #[cfg(feature = "rdf-12")]
+        direction: direction
+            .map(|direction| {
+                Ok(match direction {
+                    b"ltr" => BaseDirection::Ltr,
+                    b"rtl" => BaseDirection::Rtl,
+                    _ => {
+                        return Err((
+                            position.end - direction.len()..position.end,
+                            format!(
+                                "The allowed base directions are --ltr and --rtl, found --{}",
+                                String::from_utf8_lossy(direction)
+                            ),
+                        ));
+                    }
+                })
+            })
+            .transpose()?,
+    })
+}
+fn recognize_string(
+    data: &[u8],
+    delimiter: u8,
+    lenient: bool,
+    raw_buffer: &mut Vec<u8>,
+) -> Option<(usize, Result<OxString, TokenRecognizerError>)> {
+    // [22]  STRING_LITERAL_QUOTE         ::=  '"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
+    // [23]  STRING_LITERAL_SINGLE_QUOTE  ::=  "'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
+    raw_buffer.clear();
+    let mut i = 1;
+    loop {
+        let mut end = memchr2(delimiter, b'\\', &data[i..])?;
+        if !lenient {
+            // We check also line jumps
+            if let Some(line_jump_end) = memchr2(b'\n', b'\r', &data[i..i + end]) {
+                end = line_jump_end;
+            }
         }
 
-        let lang_tag = str_from_utf8(lang_tag, position.clone())?;
-        Ok(N3Token::LangTag {
-            language: if self.lenient {
-                lang_tag
-            } else {
-                LanguageTag::parse(lang_tag)
-                    .map_err(|e| (position.clone(), e.to_string()))?
-                    .into_inner()
-            },
-            #[cfg(feature = "rdf-12")]
-            direction: direction
-                .map(|direction| {
-                    Ok(match direction {
-                        b"ltr" => BaseDirection::Ltr,
-                        b"rtl" => BaseDirection::Rtl,
-                        _ => {
-                            return Err((
-                                position.end - direction.len()..position.end,
-                                format!(
-                                    "The allowed base directions are --ltr and --rtl, found --{}",
-                                    String::from_utf8_lossy(direction)
-                                ),
-                            ));
-                        }
-                    })
-                })
-                .transpose()?,
-        })
-    }
-    fn recognize_string(
-        &mut self,
-        data: &[u8],
-        delimiter: u8,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [22]  STRING_LITERAL_QUOTE         ::=  '"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
-        // [23]  STRING_LITERAL_SINGLE_QUOTE  ::=  "'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
-        self.raw_buffer.clear();
-        let mut i = 1;
-        loop {
-            let mut end = memchr2(delimiter, b'\\', &data[i..])?;
-            if !self.lenient {
-                // We check also line jumps
-                if let Some(line_jump_end) = memchr2(b'\n', b'\r', &data[i..i + end]) {
-                    end = line_jump_end;
+        let extra_data = &data[i..i + end];
+        i += end;
+        match data[i] {
+            c if c == delimiter => {
+                return Some((
+                    i + 1,
+                    str_from_utf8(
+                        if raw_buffer.is_empty() {
+                            &data[1..i]
+                        } else {
+                            raw_buffer.extend_from_slice(extra_data);
+                            &*raw_buffer
+                        },
+                        1..i,
+                    )
+                    .map(OxString::new_owned),
+                ));
+            }
+            b'\\' => {
+                raw_buffer.extend_from_slice(extra_data);
+                let (additional, c) = recognize_escape(&data[i..], i, true, lenient)?;
+                i += additional + 1;
+                match c {
+                    Ok(c) => {
+                        raw_buffer.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
+                    }
+                    Err(e) => {
+                        // We read until the end of string char
+                        let end = memchr(delimiter, &data[i..])?;
+                        return Some((i + end + 1, Err(e)));
+                    }
                 }
             }
+            b'\n' | b'\r' => {
+                // We read until the end of string char
+                let end = memchr(delimiter, &data[i..])?;
+                return Some((
+                    i + end + 1,
+                    Err((
+                        i..i + 1,
+                        "Line jumps are not allowed in string literals, use \\n",
+                    )
+                        .into()),
+                ));
+            }
+            _ => unreachable!(),
+        }
+    }
+}
 
-            let extra_data = &data[i..i + end];
-            i += end;
-            match data[i] {
-                c if c == delimiter => {
+fn recognize_long_string(
+    data: &[u8],
+    delimiter: u8,
+    lenient: bool,
+    raw_buffer: &mut Vec<u8>,
+) -> Option<(usize, Result<OxString, TokenRecognizerError>)> {
+    // [24]  STRING_LITERAL_LONG_SINGLE_QUOTE  ::=  "'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
+    // [25]  STRING_LITERAL_LONG_QUOTE         ::=  '"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
+    raw_buffer.clear();
+    let mut i = 3;
+    loop {
+        let end = memchr2(delimiter, b'\\', &data[i..])?;
+        let extra_data = &data[i..i + end];
+        i += end;
+        match data[i] {
+            c if c == delimiter => {
+                if *data.get(i + 1)? == delimiter && *data.get(i + 2)? == delimiter {
                     return Some((
-                        i + 1,
+                        i + 3,
                         str_from_utf8(
-                            if self.raw_buffer.is_empty() {
-                                &data[1..i]
+                            if raw_buffer.is_empty() {
+                                &data[3..i]
                             } else {
-                                self.raw_buffer.extend_from_slice(extra_data);
-                                &self.raw_buffer
+                                raw_buffer.extend_from_slice(extra_data);
+                                &*raw_buffer
                             },
                             1..i,
                         )
-                        .map(|s| N3Token::String(OxString::new_owned(s))),
+                        .map(OxString::new_owned),
                     ));
                 }
-                b'\\' => {
-                    self.raw_buffer.extend_from_slice(extra_data);
-                    let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
-                    i += additional + 1;
-                    match c {
-                        Ok(c) => {
-                            self.raw_buffer
-                                .extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
-                        }
-                        Err(e) => {
-                            // We read until the end of string char
-                            let end = memchr(delimiter, &data[i..])?;
-                            return Some((i + end + 1, Err(e)));
-                        }
-                    }
-                }
-                b'\n' | b'\r' => {
-                    // We read until the end of string char
-                    let end = memchr(delimiter, &data[i..])?;
-                    return Some((
-                        i + end + 1,
-                        Err((
-                            i..i + 1,
-                            "Line jumps are not allowed in string literals, use \\n",
-                        )
-                            .into()),
-                    ));
-                }
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    fn recognize_long_string(
-        &mut self,
-        data: &[u8],
-        delimiter: u8,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [24]  STRING_LITERAL_LONG_SINGLE_QUOTE  ::=  "'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
-        // [25]  STRING_LITERAL_LONG_QUOTE         ::=  '"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
-        self.raw_buffer.clear();
-        let mut i = 3;
-        loop {
-            let end = memchr2(delimiter, b'\\', &data[i..])?;
-            let extra_data = &data[i..i + end];
-            i += end;
-            match data[i] {
-                c if c == delimiter => {
-                    if *data.get(i + 1)? == delimiter && *data.get(i + 2)? == delimiter {
-                        return Some((
-                            i + 3,
-                            str_from_utf8(
-                                if self.raw_buffer.is_empty() {
-                                    &data[3..i]
-                                } else {
-                                    self.raw_buffer.extend_from_slice(extra_data);
-                                    &self.raw_buffer
-                                },
-                                1..i,
-                            )
-                            .map(|s| N3Token::LongString(OxString::new_owned(s))),
-                        ));
-                    }
-                    i += 1;
-                    self.raw_buffer.extend_from_slice(extra_data);
-                    self.raw_buffer.push(delimiter);
-                }
-                b'\\' => {
-                    self.raw_buffer.extend_from_slice(extra_data);
-                    let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
-                    i += additional + 1;
-                    match c {
-                        Ok(c) => {
-                            self.raw_buffer
-                                .extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
-                        }
-                        Err(e) => return Some((i, Err(e))),
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    fn recognize_number(
-        data: &[u8],
-        is_ending: bool,
-    ) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
-        // [19]  INTEGER    ::=  [+-]? [0-9]+
-        // [20]  DECIMAL    ::=  [+-]? [0-9]* '.' [0-9]+
-        // [21]  DOUBLE     ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
-        // [154s] EXPONENT  ::=  [eE] [+-]? [0-9]+
-        let mut i = 0;
-        let c = *data.first()?;
-        if matches!(c, b'+' | b'-') {
-            i += 1;
-        }
-        // We read the digits before .
-        let count_before = Self::recognize_digits(&data[i..], is_ending)?;
-        i += count_before;
-
-        // We read the digits after .
-        let c = if let Some(c) = data.get(i) {
-            Some(c)
-        } else if is_ending {
-            None
-        } else {
-            return None;
-        };
-        let count_after = if c == Some(&b'.') {
-            i += 1;
-            let count_after = Self::recognize_digits(&data[i..], is_ending)?;
-            i += count_after;
-            Some(count_after)
-        } else {
-            None
-        };
-
-        // End
-        let c = if let Some(c) = data.get(i) {
-            Some(c)
-        } else if is_ending {
-            None
-        } else {
-            return None;
-        };
-        if matches!(c, Some(b'e' | b'E')) {
-            i += 1;
-
-            let c = if let Some(c) = data.get(i) {
-                Some(c)
-            } else if is_ending {
-                None
-            } else {
-                return None;
-            };
-            if matches!(c, Some(b'+' | b'-')) {
                 i += 1;
+                raw_buffer.extend_from_slice(extra_data);
+                raw_buffer.push(delimiter);
             }
+            b'\\' => {
+                raw_buffer.extend_from_slice(extra_data);
+                let (additional, c) = recognize_escape(&data[i..], i, true, lenient)?;
+                i += additional + 1;
+                match c {
+                    Ok(c) => {
+                        raw_buffer.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes());
+                    }
+                    Err(e) => return Some((i, Err(e))),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+}
 
-            let count_exp = Self::recognize_digits(&data[i..], is_ending)?;
-            i += count_exp;
-            Some((
-                i,
-                if count_exp == 0 {
-                    Err((0..i, "A double exponent cannot be empty").into())
-                } else if count_before == 0 && count_after.unwrap_or(0) == 0 {
-                    Err((0..i, "A double should not be empty").into())
-                } else {
-                    str_from_utf8(&data[..i], 0..i).map(N3Token::Double)
-                },
-            ))
-        } else if let Some(count_after) = count_after {
-            if count_after == 0 {
-                // We do not consume the '.' after all
-                i -= 1;
-                Some((
-                    i,
-                    if count_before == 0 {
-                        Err((0..i, "An integer should not be empty").into())
-                    } else {
-                        str_from_utf8(&data[..i], 0..i).map(N3Token::Integer)
-                    },
-                ))
-            } else {
-                Some((i, str_from_utf8(&data[..i], 0..i).map(N3Token::Decimal)))
-            }
+enum Number<'a> {
+    Integer(&'a str),
+    Decimal(&'a str),
+    Double(&'a str),
+}
+
+fn recognize_number(
+    data: &[u8],
+    is_ending: bool,
+) -> Option<(usize, Result<Number<'_>, TokenRecognizerError>)> {
+    // [19]  INTEGER    ::=  [+-]? [0-9]+
+    // [20]  DECIMAL    ::=  [+-]? [0-9]* '.' [0-9]+
+    // [21]  DOUBLE     ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
+    // [154s] EXPONENT  ::=  [eE] [+-]? [0-9]+
+    let mut i = 0;
+    let c = *data.first()?;
+    if matches!(c, b'+' | b'-') {
+        i += 1;
+    }
+    // We read the digits before .
+    let count_before = recognize_digits(&data[i..], is_ending)?;
+    i += count_before;
+
+    // We read the digits after .
+    let c = if let Some(c) = data.get(i) {
+        Some(c)
+    } else if is_ending {
+        None
+    } else {
+        return None;
+    };
+    let count_after = if c == Some(&b'.') {
+        i += 1;
+        let count_after = recognize_digits(&data[i..], is_ending)?;
+        i += count_after;
+        Some(count_after)
+    } else {
+        None
+    };
+
+    // End
+    let c = if let Some(c) = data.get(i) {
+        Some(c)
+    } else if is_ending {
+        None
+    } else {
+        return None;
+    };
+    if matches!(c, Some(b'e' | b'E')) {
+        i += 1;
+
+        let c = if let Some(c) = data.get(i) {
+            Some(c)
+        } else if is_ending {
+            None
         } else {
+            return None;
+        };
+        if matches!(c, Some(b'+' | b'-')) {
+            i += 1;
+        }
+
+        let count_exp = recognize_digits(&data[i..], is_ending)?;
+        i += count_exp;
+        Some((
+            i,
+            if count_exp == 0 {
+                Err((0..i, "A double exponent cannot be empty").into())
+            } else if count_before == 0 && count_after.unwrap_or(0) == 0 {
+                Err((0..i, "A double should not be empty").into())
+            } else {
+                str_from_utf8(&data[..i], 0..i).map(Number::Double)
+            },
+        ))
+    } else if let Some(count_after) = count_after {
+        if count_after == 0 {
+            // We do not consume the '.' after all
+            i -= 1;
             Some((
                 i,
                 if count_before == 0 {
                     Err((0..i, "An integer should not be empty").into())
                 } else {
-                    str_from_utf8(&data[..i], 0..i).map(N3Token::Integer)
+                    str_from_utf8(&data[..i], 0..i).map(Number::Integer)
                 },
             ))
+        } else {
+            Some((i, str_from_utf8(&data[..i], 0..i).map(Number::Decimal)))
+        }
+    } else {
+        Some((
+            i,
+            if count_before == 0 {
+                Err((0..i, "An integer should not be empty").into())
+            } else {
+                str_from_utf8(&data[..i], 0..i).map(Number::Integer)
+            },
+        ))
+    }
+}
+
+fn recognize_digits(data: &[u8], is_ending: bool) -> Option<usize> {
+    for (i, c) in data.iter().enumerate() {
+        if !c.is_ascii_digit() {
+            return Some(i);
         }
     }
+    is_ending.then_some(data.len())
+}
 
-    fn recognize_digits(data: &[u8], is_ending: bool) -> Option<usize> {
-        for (i, c) in data.iter().enumerate() {
-            if !c.is_ascii_digit() {
-                return Some(i);
-            }
-        }
-        is_ending.then_some(data.len())
-    }
-
-    fn recognize_escape(
-        &self,
-        data: &[u8],
-        position: usize,
-        with_echar: bool,
-    ) -> Option<(usize, Result<char, TokenRecognizerError>)> {
-        // [26]   UCHAR  ::=  '\u' HEX HEX HEX HEX | '\U' HEX HEX HEX HEX HEX HEX HEX HEX
-        // [159s] ECHAR  ::=  '\' [tbnrf"'\]
-        match *data.get(1)? {
-            b'u' => match Self::recognize_hex_char(&data[2..], 4, 'u', position) {
-                Ok(c) => Some((5, Ok(c?))),
-                Err(e) => {
-                    if self.lenient {
-                        match Self::recognize_utf16_surrogate_pair(&data[2..], position) {
-                            Ok(c) => Some((11, Ok(c?))),
-                            Err(e) => Some((5, Err(e))),
-                        }
-                    } else {
-                        Some((5, Err(e)))
+fn recognize_escape(
+    data: &[u8],
+    position: usize,
+    with_echar: bool,
+    lenient: bool,
+) -> Option<(usize, Result<char, TokenRecognizerError>)> {
+    // [26]   UCHAR  ::=  '\u' HEX HEX HEX HEX | '\U' HEX HEX HEX HEX HEX HEX HEX HEX
+    // [159s] ECHAR  ::=  '\' [tbnrf"'\]
+    match *data.get(1)? {
+        b'u' => match recognize_hex_char(&data[2..], 4, 'u', position) {
+            Ok(c) => Some((5, Ok(c?))),
+            Err(e) => {
+                if lenient {
+                    match recognize_utf16_surrogate_pair(&data[2..], position) {
+                        Ok(c) => Some((11, Ok(c?))),
+                        Err(e) => Some((5, Err(e))),
                     }
+                } else {
+                    Some((5, Err(e)))
                 }
-            },
-            b'U' => match Self::recognize_hex_char(&data[2..], 8, 'U', position) {
-                Ok(c) => Some((9, Ok(c?))),
-                Err(e) => Some((9, Err(e))),
-            },
-            b't' if with_echar => Some((1, Ok('\t'))),
-            b'b' if with_echar => Some((1, Ok('\x08'))),
-            b'n' if with_echar => Some((1, Ok('\n'))),
-            b'r' if with_echar => Some((1, Ok('\r'))),
-            b'f' if with_echar => Some((1, Ok('\x0C'))),
-            b'"' if with_echar => Some((1, Ok('"'))),
-            b'\'' if with_echar => Some((1, Ok('\''))),
-            b'\\' if with_echar => Some((1, Ok('\\'))),
-            c => Some((
-                1,
-                Err((
-                    position..position + 2,
-                    format!("Unexpected escape character '\\{}'", char::from(c)),
-                )
-                    .into()),
-            )), // TODO: read until end of string
-        }
+            }
+        },
+        b'U' => match recognize_hex_char(&data[2..], 8, 'U', position) {
+            Ok(c) => Some((9, Ok(c?))),
+            Err(e) => Some((9, Err(e))),
+        },
+        b't' if with_echar => Some((1, Ok('\t'))),
+        b'b' if with_echar => Some((1, Ok('\x08'))),
+        b'n' if with_echar => Some((1, Ok('\n'))),
+        b'r' if with_echar => Some((1, Ok('\r'))),
+        b'f' if with_echar => Some((1, Ok('\x0C'))),
+        b'"' if with_echar => Some((1, Ok('"'))),
+        b'\'' if with_echar => Some((1, Ok('\''))),
+        b'\\' if with_echar => Some((1, Ok('\\'))),
+        c => Some((
+            1,
+            Err((
+                position..position + 2,
+                format!("Unexpected escape character '\\{}'", char::from(c)),
+            )
+                .into()),
+        )), // TODO: read until end of string
     }
+}
 
-    fn recognize_hex_char(
-        data: &[u8],
-        len: usize,
-        escape_char: char,
-        position: usize,
-    ) -> Result<Option<char>, TokenRecognizerError> {
-        if data.len() < len {
-            return Ok(None);
-        }
-        let mut codepoint = 0;
-        for i in 0..len {
-            let c = data[i];
-            codepoint = codepoint * 16
-                + u32::from(match c {
-                    b'0'..=b'9' => c - b'0',
-                    b'a'..=b'f' => c - b'a' + 10,
-                    b'A'..=b'F' => c - b'A' + 10,
-                    _ => {
-                        let val = str::from_utf8(&data[..len]).unwrap_or_default();
-                        return Err((
+fn recognize_hex_char(
+    data: &[u8],
+    len: usize,
+    escape_char: char,
+    position: usize,
+) -> Result<Option<char>, TokenRecognizerError> {
+    if data.len() < len {
+        return Ok(None);
+    }
+    let mut codepoint = 0;
+    for i in 0..len {
+        let c = data[i];
+        codepoint = codepoint * 16
+            + u32::from(match c {
+                b'0'..=b'9' => c - b'0',
+                b'a'..=b'f' => c - b'a' + 10,
+                b'A'..=b'F' => c - b'A' + 10,
+                _ => {
+                    let val = str::from_utf8(&data[..len]).unwrap_or_default();
+                    return Err((
                         position + i + 2..position + i + 3,
                         format!(
                             "The escape sequence '\\{escape_char}{val}' is not a valid hexadecimal string"
                         ),
                     ).into());
-                    }
-                });
-        }
-        let c = char::from_u32(codepoint).ok_or_else(|| {
+                }
+            });
+    }
+    let c = char::from_u32(codepoint).ok_or_else(|| {
             let val = str::from_utf8(&data[..len]).unwrap_or_default();
             (
                 position..position + len +2,
@@ -996,65 +1089,61 @@ impl N3Lexer {
                 ),
             )
         })?;
-        Ok(Some(c))
+    Ok(Some(c))
+}
+
+fn recognize_utf16_surrogate_pair(
+    data: &[u8],
+    position: usize,
+) -> Result<Option<char>, TokenRecognizerError> {
+    let Some(val_high_slice) = data.get(..4) else {
+        return Ok(None);
+    };
+    let val_high = str_from_utf8(val_high_slice, position..position + 6)?;
+    let surrogate_high = u16::from_str_radix(val_high, 16).map_err(|e| {
+        (
+            position..position + 6,
+            format!("The escape sequence '\\u{val_high}' is not a valid hexadecimal string: {e}"),
+        )
+    })?;
+
+    // TODO: replace with [`u16::is_utf16_surrogate`] when #94919 is stable
+    if !matches!(surrogate_high, 0xD800..=0xDFFF) {
+        return Err((
+            position..position + 6,
+            format!("The escape sequence '\\u{val_high}' is not a UTF-16 surrogate"),
+        )
+            .into());
     }
-
-    fn recognize_utf16_surrogate_pair(
-        data: &[u8],
-        position: usize,
-    ) -> Result<Option<char>, TokenRecognizerError> {
-        let Some(val_high_slice) = data.get(..4) else {
-            return Ok(None);
-        };
-        let val_high = str_from_utf8(val_high_slice, position..position + 6)?;
-        let surrogate_high = u16::from_str_radix(val_high, 16).map_err(|e| {
-            (
-                position..position + 6,
-                format!(
-                    "The escape sequence '\\u{val_high}' is not a valid hexadecimal string: {e}"
-                ),
-            )
-        })?;
-
-        // TODO: replace with [`u16::is_utf16_surrogate`] when #94919 is stable
-        if !matches!(surrogate_high, 0xD800..=0xDFFF) {
-            return Err((
-                position..position + 6,
-                format!("The escape sequence '\\u{val_high}' is not a UTF-16 surrogate"),
-            )
-                .into());
-        }
-        let Some(&d4) = data.get(4) else {
-            return Ok(None);
-        };
-        let Some(&d5) = data.get(5) else {
-            return Ok(None);
-        };
-        if d4 != b'\\' || d5 != b'u' {
-            return Err((
+    let Some(&d4) = data.get(4) else {
+        return Ok(None);
+    };
+    let Some(&d5) = data.get(5) else {
+        return Ok(None);
+    };
+    if d4 != b'\\' || d5 != b'u' {
+        return Err((
                 position..position + 6,
                 format!(
                     "UTF-16 surrogate escape sequence '\\u{val_high}' must be followed by another surrogate escape sequence"),
             )
                 .into());
-        }
+    }
 
-        let Some(val_low_slice) = data.get(6..10) else {
-            return Ok(None);
-        };
-        let val_low = str_from_utf8(val_low_slice, position + 6..position + 12)?;
-        let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
-            (
-                position + 6..position + 12,
-                format!(
-                    "The escape sequence '\\u{val_low}' is not a valid hexadecimal string: {e}"
-                ),
-            )
-        })?;
+    let Some(val_low_slice) = data.get(6..10) else {
+        return Ok(None);
+    };
+    let val_low = str_from_utf8(val_low_slice, position + 6..position + 12)?;
+    let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
+        (
+            position + 6..position + 12,
+            format!("The escape sequence '\\u{val_low}' is not a valid hexadecimal string: {e}"),
+        )
+    })?;
 
-        let mut chars = char::decode_utf16([surrogate_high, surrogate_low]);
+    let mut chars = char::decode_utf16([surrogate_high, surrogate_low]);
 
-        let c = chars.next()
+    let c = chars.next()
             .and_then(Result::ok)
             .ok_or_else(|| {
                 (
@@ -1065,90 +1154,90 @@ impl N3Lexer {
                 )
             })?;
 
-        debug_assert_eq!(
-            chars.next(),
-            None,
-            "Surrogate pair should combine to exactly one character"
-        );
+    debug_assert_eq!(
+        chars.next(),
+        None,
+        "Surrogate pair should combine to exactly one character"
+    );
 
-        Ok(Some(c))
+    Ok(Some(c))
+}
+
+fn recognize_unicode_char(
+    data: &[u8],
+    position: usize,
+) -> Option<Result<(char, usize), TokenRecognizerError>> {
+    let mut code_point: u32;
+    let bytes_needed: usize;
+    let mut lower_boundary = 0x80;
+    let mut upper_boundary = 0xBF;
+
+    let byte = *data.first()?;
+    match byte {
+        0x00..=0x7F => return Some(Ok((char::from(byte), 1))),
+        0xC2..=0xDF => {
+            bytes_needed = 1;
+            code_point = u32::from(byte) & 0x1F;
+        }
+        0xE0..=0xEF => {
+            if byte == 0xE0 {
+                lower_boundary = 0xA0;
+            }
+            if byte == 0xED {
+                upper_boundary = 0x9F;
+            }
+            bytes_needed = 2;
+            code_point = u32::from(byte) & 0xF;
+        }
+        0xF0..=0xF4 => {
+            if byte == 0xF0 {
+                lower_boundary = 0x90;
+            }
+            if byte == 0xF4 {
+                upper_boundary = 0x8F;
+            }
+            bytes_needed = 3;
+            code_point = u32::from(byte) & 0x7;
+        }
+        _ => {
+            return Some(Err((
+                position..=position,
+                "Invalid UTF-8 character encoding",
+            )
+                .into()));
+        }
     }
 
-    fn recognize_unicode_char(
-        data: &[u8],
-        position: usize,
-    ) -> Option<Result<(char, usize), TokenRecognizerError>> {
-        let mut code_point: u32;
-        let bytes_needed: usize;
-        let mut lower_boundary = 0x80;
-        let mut upper_boundary = 0xBF;
-
-        let byte = *data.first()?;
-        match byte {
-            0x00..=0x7F => return Some(Ok((char::from(byte), 1))),
-            0xC2..=0xDF => {
-                bytes_needed = 1;
-                code_point = u32::from(byte) & 0x1F;
-            }
-            0xE0..=0xEF => {
-                if byte == 0xE0 {
-                    lower_boundary = 0xA0;
-                }
-                if byte == 0xED {
-                    upper_boundary = 0x9F;
-                }
-                bytes_needed = 2;
-                code_point = u32::from(byte) & 0xF;
-            }
-            0xF0..=0xF4 => {
-                if byte == 0xF0 {
-                    lower_boundary = 0x90;
-                }
-                if byte == 0xF4 {
-                    upper_boundary = 0x8F;
-                }
-                bytes_needed = 3;
-                code_point = u32::from(byte) & 0x7;
-            }
-            _ => {
-                return Some(Err((
-                    position..=position,
-                    "Invalid UTF-8 character encoding",
-                )
-                    .into()));
-            }
+    for i in 1..=bytes_needed {
+        let byte = *data.get(i)?;
+        if byte < lower_boundary || upper_boundary < byte {
+            return Some(Err((
+                position..=position + i,
+                "Invalid UTF-8 character encoding",
+            )
+                .into()));
         }
-
-        for i in 1..=bytes_needed {
-            let byte = *data.get(i)?;
-            if byte < lower_boundary || upper_boundary < byte {
-                return Some(Err((
-                    position..=position + i,
-                    "Invalid UTF-8 character encoding",
-                )
-                    .into()));
-            }
-            lower_boundary = 0x80;
-            upper_boundary = 0xBF;
-            code_point = (code_point << 6) | (u32::from(byte) & 0x3F);
-        }
-
-        Some(
-            char::from_u32(code_point)
-                .map(|c| (c, bytes_needed + 1))
-                .ok_or_else(|| {
-                    (
-                        position..=position + bytes_needed,
-                        format!("The codepoint {code_point:X} is not a valid unicode character"),
-                    )
-                        .into()
-                }),
-        )
+        lower_boundary = 0x80;
+        upper_boundary = 0xBF;
+        code_point = (code_point << 6) | (u32::from(byte) & 0x3F);
     }
 
-    // [157s]  PN_CHARS_BASE  ::=  [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
-    fn is_possible_pn_chars_base(c: char) -> bool {
-        matches!(c,
+    Some(
+        char::from_u32(code_point)
+            .map(|c| (c, bytes_needed + 1))
+            .ok_or_else(|| {
+                (
+                    position..=position + bytes_needed,
+                    format!("The codepoint {code_point:X} is not a valid unicode character"),
+                )
+                    .into()
+            }),
+    )
+}
+
+// [157s]  PN_CHARS_BASE  ::=  [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
+fn is_possible_pn_chars_base(c: char) -> bool {
+    matches!(c,
         'A'..='Z'
         | 'a'..='z'
         | '\u{00C0}'..='\u{00D6}'
@@ -1163,27 +1252,25 @@ impl N3Lexer {
         | '\u{F900}'..='\u{FDCF}'
         | '\u{FDF0}'..='\u{FFFD}'
         | '\u{10000}'..='\u{EFFFF}')
-    }
-
-    // [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_'
-    pub(super) fn is_possible_pn_chars_u(c: char) -> bool {
-        Self::is_possible_pn_chars_base(c) || c == '_'
-    }
-
-    // [160s]  PN_CHARS  ::=  PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
-    pub(crate) fn is_possible_pn_chars(c: char) -> bool {
-        Self::is_possible_pn_chars_u(c)
-            || matches!(c,
-        '-' | '0'..='9' | '\u{00B7}' | '\u{0300}'..='\u{036F}' | '\u{203F}'..='\u{2040}')
-    }
-
-    fn is_possible_pn_chars_base_but_not_valid_iri(c: char) -> bool {
-        matches!(c, '\u{FFF0}'..='\u{FFFD}')
-            || u32::from(c) % u32::from('\u{FFFE}') == 0
-            || u32::from(c) % u32::from('\u{FFFF}') == 0
-    }
 }
 
+// [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_'
+pub(super) fn is_possible_pn_chars_u(c: char) -> bool {
+    is_possible_pn_chars_base(c) || c == '_'
+}
+
+// [160s]  PN_CHARS  ::=  PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
+pub(crate) fn is_possible_pn_chars(c: char) -> bool {
+    is_possible_pn_chars_u(c)
+        || matches!(c,
+        '-' | '0'..='9' | '\u{00B7}' | '\u{0300}'..='\u{036F}' | '\u{203F}'..='\u{2040}')
+}
+
+fn is_possible_pn_chars_base_but_not_valid_iri(c: char) -> bool {
+    matches!(c, '\u{FFF0}'..='\u{FFFD}')
+        || u32::from(c) % u32::from('\u{FFFE}') == 0
+        || u32::from(c) % u32::from('\u{FFFF}') == 0
+}
 pub fn resolve_local_name(
     prefix: &str,
     local: &str,
@@ -1220,4 +1307,11 @@ pub fn to_lowercase(v: &str) -> OxString {
     let mut v = OxString::new_owned(v);
     v.make_mut().make_ascii_lowercase();
     v
+}
+
+fn map_result<I, O>(
+    r: Option<(usize, Result<I, TokenRecognizerError>)>,
+    m: impl FnOnce(I) -> O,
+) -> Option<(usize, Result<O, TokenRecognizerError>)> {
+    r.map(|(consumed, r)| (consumed, r.map(m)))
 }

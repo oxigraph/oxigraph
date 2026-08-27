@@ -57,11 +57,10 @@ impl<S: Into<String>> From<(usize, S)> for TokenRecognizerError {
 pub struct Lexer<R: TokenRecognizer> {
     parser: R,
     position: TextPosition,
-    line_comment_start: Option<&'static [u8]>,
 }
 
 impl<R: TokenRecognizer> Lexer<R> {
-    pub fn new(parser: R, line_comment_start: Option<&'static [u8]>) -> Self {
+    pub fn new(parser: R) -> Self {
         Self {
             parser,
             position: TextPosition {
@@ -69,7 +68,6 @@ impl<R: TokenRecognizer> Lexer<R> {
                 line: 0,
                 column: 0,
             },
-            line_comment_start,
         }
     }
 
@@ -123,7 +121,7 @@ impl<R: TokenRecognizer> Lexer<R> {
             Some(Ok(token)) if !R::token_contains_line_jumps(token) => {
                 (0, u64::try_from(consumed).unwrap())
             }
-            _ => Self::find_number_of_line_jumps_and_size_of_last_line(&data[..consumed]),
+            _ => find_number_of_line_jumps_and_size_of_last_line(&data[..consumed]),
         };
         self.position.offset += u64::try_from(consumed).unwrap();
         self.position.line += new_line_jumps;
@@ -144,42 +142,12 @@ impl<R: TokenRecognizer> Lexer<R> {
                     })
                     .map_err(|e| {
                         TurtleSyntaxError::new(
-                            Self::location_from_buffer_offset_range(
-                                &previous_position,
-                                e.location,
-                                data,
-                            ),
+                            location_from_buffer_offset_range(&previous_position, e.location, data),
                             e.message,
                         )
                     })
             }),
         )
-    }
-
-    fn location_from_buffer_offset_range(
-        previous_position: &TextPosition,
-        offset_range: Range<usize>,
-        data: &[u8],
-    ) -> Range<TextPosition> {
-        let (start_extra_line_jumps, mut start_last_line_size) =
-            Self::find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.start]);
-        if start_extra_line_jumps == 0 {
-            start_last_line_size += previous_position.column;
-        }
-        let (end_extra_line_jumps, mut end_last_line_size) =
-            Self::find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.end]);
-        if end_extra_line_jumps == 0 {
-            end_last_line_size += previous_position.column;
-        }
-        TextPosition {
-            line: previous_position.line + start_extra_line_jumps,
-            column: start_last_line_size,
-            offset: previous_position.offset + u64::try_from(offset_range.start).unwrap(),
-        }..TextPosition {
-            line: previous_position.line + end_extra_line_jumps,
-            column: end_last_line_size,
-            offset: previous_position.offset + u64::try_from(offset_range.end).unwrap(),
-        }
     }
 
     fn skip_whitespaces_and_comments(
@@ -196,34 +164,32 @@ impl<R: TokenRecognizer> Lexer<R> {
         }
 
         let buf = &data[read..];
-        if let Some(line_comment_start) = self.line_comment_start {
-            if buf.starts_with(line_comment_start) {
-                // Comment
-                if let Some(end) = memchr2(b'\r', b'\n', &buf[line_comment_start.len()..]) {
-                    let mut end_position = line_comment_start.len() + end;
-                    if buf.get(end_position).copied() == Some(b'\r') {
-                        // We look for \n for Windows line end style
-                        if let Some(c) = buf.get(end_position + 1) {
-                            if *c == b'\n' {
-                                end_position += 1;
-                            }
-                        } else if !is_ending {
-                            return (read, None); // We need to read more
+        if buf.first().copied() == Some(b'#') {
+            // Comment
+            if let Some(end) = memchr2(b'\r', b'\n', &buf[1..]) {
+                let mut end_position = end + 1;
+                if buf.get(end_position).copied() == Some(b'\r') {
+                    // We look for \n for Windows line end style
+                    if let Some(c) = buf.get(end_position + 1) {
+                        if *c == b'\n' {
+                            end_position += 1;
                         }
+                    } else if !is_ending {
+                        return (read, None); // We need to read more
                     }
-                    let comment_size = end_position + 1;
-                    self.position.offset += u64::try_from(comment_size).unwrap();
-                    self.position.line += 1;
-                    self.position.column = 0;
-                    return (read + comment_size, Some(true));
                 }
-                if is_ending {
-                    return (data.len(), Some(false));
-                }
-                return (read, None); // We need more data
-            } else if !is_ending && buf.len() < line_comment_start.len() {
-                return (read, None); // We need more data
+                let comment_size = end_position + 1;
+                self.position.offset += u64::try_from(comment_size).unwrap();
+                self.position.line += 1;
+                self.position.column = 0;
+                return (read + comment_size, Some(true));
             }
+            if is_ending {
+                return (data.len(), Some(false));
+            }
+            return (read, None); // We need more data
+        } else if !is_ending && buf.is_empty() {
+            return (read, None); // We need more data
         }
         (read, Some(false))
     }
@@ -265,29 +231,55 @@ impl<R: TokenRecognizer> Lexer<R> {
         }
         (i, is_ending.then_some(false)) // We return None if there is not enough data
     }
+}
 
-    fn find_number_of_line_jumps_and_size_of_last_line(bytes: &[u8]) -> (u64, u64) {
-        let mut num_of_jumps = 0;
-        let mut last_jump_pos = 0;
-        let mut previous_cr = 0;
-        for pos in memchr2_iter(b'\r', b'\n', bytes) {
-            if bytes[pos] == b'\r' {
-                previous_cr = pos;
-                num_of_jumps += 1;
-                last_jump_pos = pos + 1;
-            } else {
-                if previous_cr < pos - 1 {
-                    // We count \r\n as a single line jump
-                    num_of_jumps += 1;
-                }
-                last_jump_pos = pos + 1;
-            }
-        }
-        (
-            num_of_jumps,
-            (bytes.len() - last_jump_pos).try_into().unwrap(),
-        )
+fn location_from_buffer_offset_range(
+    previous_position: &TextPosition,
+    offset_range: Range<usize>,
+    data: &[u8],
+) -> Range<TextPosition> {
+    let (start_extra_line_jumps, mut start_last_line_size) =
+        find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.start]);
+    if start_extra_line_jumps == 0 {
+        start_last_line_size += previous_position.column;
     }
+    let (end_extra_line_jumps, mut end_last_line_size) =
+        find_number_of_line_jumps_and_size_of_last_line(&data[..offset_range.end]);
+    if end_extra_line_jumps == 0 {
+        end_last_line_size += previous_position.column;
+    }
+    TextPosition {
+        line: previous_position.line + start_extra_line_jumps,
+        column: start_last_line_size,
+        offset: previous_position.offset + u64::try_from(offset_range.start).unwrap(),
+    }..TextPosition {
+        line: previous_position.line + end_extra_line_jumps,
+        column: end_last_line_size,
+        offset: previous_position.offset + u64::try_from(offset_range.end).unwrap(),
+    }
+}
+
+fn find_number_of_line_jumps_and_size_of_last_line(bytes: &[u8]) -> (u64, u64) {
+    let mut num_of_jumps = 0;
+    let mut last_jump_pos = 0;
+    let mut previous_cr = 0;
+    for pos in memchr2_iter(b'\r', b'\n', bytes) {
+        if bytes[pos] == b'\r' {
+            previous_cr = pos;
+            num_of_jumps += 1;
+            last_jump_pos = pos + 1;
+        } else {
+            if previous_cr < pos - 1 {
+                // We count \r\n as a single line jump
+                num_of_jumps += 1;
+            }
+            last_jump_pos = pos + 1;
+        }
+    }
+    (
+        num_of_jumps,
+        (bytes.len() - last_jump_pos).try_into().unwrap(),
+    )
 }
 
 pub struct GrowableBuffer {

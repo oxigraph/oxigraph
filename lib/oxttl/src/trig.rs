@@ -2,7 +2,7 @@
 //! and a serializer implemented by [`TriGSerializer`].
 
 use crate::DEFAULT_MAX_BUFFER_SIZE;
-use crate::lexer::N3Lexer;
+use crate::lexer::{is_possible_pn_chars, is_possible_pn_chars_u};
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
@@ -1475,7 +1475,7 @@ fn escape_local_name(value: &str) -> Option<String> {
     let mut output = String::with_capacity(value.len());
     let mut chars = value.chars();
     let first = chars.next()?;
-    if N3Lexer::is_possible_pn_chars_u(first) || first == ':' || first.is_ascii_digit() {
+    if is_possible_pn_chars_u(first) || first == ':' || first.is_ascii_digit() {
         output.push(first);
     } else if can_be_escaped_in_local_name(first) {
         output.push('\\');
@@ -1485,8 +1485,7 @@ fn escape_local_name(value: &str) -> Option<String> {
     }
 
     while let Some(c) = chars.next() {
-        if N3Lexer::is_possible_pn_chars(c) || c == ':' || (c == '.' && !chars.as_str().is_empty())
-        {
+        if is_possible_pn_chars(c) || c == ':' || (c == '.' && !chars.as_str().is_empty()) {
             output.push(c);
         } else if can_be_escaped_in_local_name(c) {
             output.push('\\');
