@@ -4,7 +4,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::alloc::{Layout, alloc, dealloc};
 use std::borrow::{Borrow, Cow};
-use std::fmt;
+use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::transmute;
@@ -12,6 +12,7 @@ use std::ops::Deref;
 use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering, fence};
+use std::{fmt, io};
 
 const MAX_REF_COUNTER: usize = isize::MAX as usize;
 const KIND_SHIFT: u32 = usize::BITS - 1;
@@ -94,9 +95,9 @@ impl<'a> OxStr<'a> {
     /// assert_eq!(value.as_str(), "abc");
     /// ```
     #[inline]
-    #[expect(clippy::expect_used)]
+    #[expect(clippy::unwrap_used)]
     pub fn new_owned(value: &str) -> Self {
-        Self::try_new_owned(value).expect("failed to allocate the owned string")
+        Self::try_new_owned(value).unwrap()
     }
 
     /// Creates an owned `OxStr` by copying `value`.
@@ -110,7 +111,7 @@ impl<'a> OxStr<'a> {
     /// assert_eq!(value.as_str(), "abc");
     /// ```
     #[inline]
-    pub fn try_new_owned(value: &str) -> Option<Self> {
+    pub fn try_new_owned(value: &str) -> Result<Self, ReserveError> {
         Self::try_concat([value])
     }
 
@@ -125,9 +126,9 @@ impl<'a> OxStr<'a> {
     /// assert_eq!(value.as_str(), "abcdef");
     /// ```
     #[inline]
-    #[expect(clippy::expect_used)]
+    #[expect(clippy::unwrap_used)]
     pub fn concat<T: AsRef<str>>(values: impl AsRef<[T]>) -> Self {
-        Self::try_concat(values).expect("failed to allocate the owned string")
+        Self::try_concat(values).unwrap()
     }
 
     /// Concatenates all `values` into a new owned `OxStr`.
@@ -142,16 +143,20 @@ impl<'a> OxStr<'a> {
     /// assert_eq!(value.as_str(), "abcdef");
     /// ```
     #[inline]
-    pub fn try_concat<T: AsRef<str>>(values: impl AsRef<[T]>) -> Option<Self> {
+    pub fn try_concat<T: AsRef<str>>(values: impl AsRef<[T]>) -> Result<Self, ReserveError> {
         let values = values.as_ref();
         let len = values.iter().map(|s| s.as_ref().len()).sum();
         if len >> KIND_SHIFT != 0 {
-            return None; // The length is so long that it prevents using the "owned" flag, we fail to create the string
+            return Err(ReserveError::CapacityOverflow); // The length is so long that it prevents using the "owned" flag, we fail to create the string
         }
 
         // SAFETY: we carefully choose the layout. Then we can allocate, check that allocation works and write to the allocation
         unsafe {
-            let data = NonNull::new(alloc(Self::owned_layout_for_len(len)))?;
+            let layout = Self::owned_layout_for_len(len);
+            let data = NonNull::new(alloc(layout)).ok_or(ReserveError::AllocError {
+                layout,
+                non_exhaustive: (),
+            })?;
             data.cast::<AtomicUsize>().write(AtomicUsize::new(1));
             let mut write_ptr = data.cast::<AtomicUsize>().add(1).cast::<u8>();
             for value in values {
@@ -160,7 +165,7 @@ impl<'a> OxStr<'a> {
                     .copy_from_nonoverlapping(NonNull::from(value.as_bytes()).cast(), value.len());
                 write_ptr = write_ptr.add(value.len());
             }
-            Some(Self {
+            Ok(Self {
                 len: len | OWNED_FLAG,
                 data,
                 _marker: PhantomData,
@@ -538,6 +543,7 @@ impl From<String> for OxStr<'_> {
 
 #[cfg(feature = "serde")]
 impl Serialize for OxStr<'_> {
+    #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_str().serialize(serializer)
     }
@@ -545,6 +551,7 @@ impl Serialize for OxStr<'_> {
 
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for OxStr<'_> {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -579,6 +586,41 @@ enum OxStrKind {
     #[expect(unused)]
     Borrowed = 0,
     Owned = 1,
+}
+
+/// Error raised when an allocation fails
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum ReserveError {
+    /// Error due to the computed capacity exceeding the data structure maximum
+    CapacityOverflow,
+    /// The memory allocator returned an error
+    AllocError {
+        /// The layout of allocation request that failed
+        layout: Layout,
+        #[doc(hidden)]
+        non_exhaustive: (),
+    },
+}
+
+impl fmt::Display for ReserveError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.write_str(match self {
+            ReserveError::CapacityOverflow => {
+                "memory allocation failed because the computed capacity exceeded the collection's maximum"
+            }
+            ReserveError::AllocError { .. } => "memory allocation failed because the memory allocator returned an error",
+        })
+    }
+}
+
+impl Error for ReserveError {}
+
+impl From<ReserveError> for io::Error {
+    #[inline]
+    fn from(error: ReserveError) -> Self {
+        io::Error::new(io::ErrorKind::OutOfMemory, error)
+    }
 }
 
 #[cfg(test)]
