@@ -21,6 +21,7 @@ doc = false
 [features]
 default = ["geosparql", "rdf-12"]
 abi3 = ["pyo3/abi3-py39"]
+abi3t = ["pyo3/abi3t-py315"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 geosparql = ["oxigraph/geosparql"]
 rdf-12 = ["oxigraph/rdf-12"]
