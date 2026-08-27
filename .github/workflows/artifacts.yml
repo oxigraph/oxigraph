@@ -140,13 +140,15 @@ jobs:
           target: ${{ matrix.target }}
       - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: uv run --locked --only-dev maturin develop --release --features abi3
         working-directory: ./python
       - run: uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: rm -rf target/wheels
       - run: uv run --locked --only-dev maturin build --release --features abi3 --target ${{ matrix.target }} --compatibility pypi
+        working-directory: ./python
+      - run: uv run --locked --only-dev maturin build --release --features abi3t --target ${{ matrix.target }} --compatibility pypi
         working-directory: ./python
       - run: uvx maturin build --release --target ${{ matrix.target }} --compatibility pypi
         working-directory: ./cli
@@ -191,28 +193,15 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: uv run --locked --only-dev maturin develop --release --features abi3
         working-directory: ./python
       - run: uv run --locked --only-dev python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: uv run --locked --only-dev maturin build --release --features abi3 --compatibility pypi
         working-directory: ./python
-      - run: |
-          $versions = "3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "pypy-3.11"
-          foreach ($version in $versions) {
-            uvx --python $version maturin build --release --compatibility pypi
-          }
+      - run: uv run --locked --only-dev maturin build --release --features abi3t --compatibility pypi
         working-directory: ./python
-        if: matrix.arch == 'x86_64' && github.event_name == 'release'
-      - run: |
-          $versions = "3.12", "3.13", "3.14"
-          foreach ($version in $versions) {
-            uvx --python $version maturin build --release --compatibility pypi
-          }
-        # TODO: 3.14 does not seem to work
-        working-directory: ./python
-        if: matrix.arch == 'aarch64' && github.event_name == 'release'
       - run: uvx maturin build --release --compatibility pypi
         working-directory: ./cli
       - uses: actions/upload-artifact@v7
