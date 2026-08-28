@@ -968,9 +968,9 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             start,
             length,
         } => {
-            let inner = estimate_graph_pattern_size(inner, input_types);
+            let inner = estimate_graph_pattern_size(inner, input_types).saturating_sub(*start);
             if let Some(length) = length {
-                min(inner, *length - *start)
+                min(inner, *length)
             } else {
                 inner
             }
