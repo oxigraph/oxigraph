@@ -1349,9 +1349,9 @@ fn estimate_query_expression_size(
             offset,
             limit,
         } => {
-            let inner = estimate_query_expression_size(inner, input_types);
+            let inner = estimate_query_expression_size(inner, input_types).saturating_sub(*offset);
             if let Some(limit) = limit {
-                min(inner, *limit - *offset)
+                min(inner, *limit)
             } else {
                 inner
             }
@@ -1494,5 +1494,28 @@ fn does_contain_exists(expression: &Expression) -> bool {
         Expression::If(a, b, c) => {
             does_contain_exists(a) || does_contain_exists(b) || does_contain_exists(c)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn estimate_slice_size(offset: u64, limit: Option<u64>) -> u64 {
+        estimate_query_expression_size(
+            &QueryExpression::slice(
+                QueryExpression::values(Vec::new(), vec![Vec::new(); 5]),
+                offset,
+                limit,
+            ),
+            &VariableTypes::default(),
+        )
+    }
+
+    #[test]
+    fn slice_size_applies_offset_before_limit() {
+        assert_eq!(estimate_slice_size(2, Some(1)), 1);
+        assert_eq!(estimate_slice_size(6, Some(1)), 0);
+        assert_eq!(estimate_slice_size(2, None), 3);
     }
 }
