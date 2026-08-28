@@ -86,6 +86,7 @@ pub struct JsonLdLoadDocumentOptions {
 }
 
 /// Returned information about a remote JSON-LD document or context.
+#[derive(Clone)]
 pub struct JsonLdRemoteDocument {
     /// The retrieved document
     pub document: Vec<u8>,
@@ -318,12 +319,17 @@ impl JsonLdContextProcessor {
                         }
                         // 5.7.3) and 5.7.4)
                         JsonNode::String(value) => {
+                            let has_absolute_iri_form =
+                                IriRef::parse_unchecked(value.clone()).is_absolute();
                             match self.resolve_iri(
                                 value,
                                 result.base_iri.as_ref(),
                                 JsonLdErrorCode::InvalidBaseIri,
                             ) {
                                 Ok(base_iri) => result.base_iri = Some(base_iri),
+                                // Invalid IRIs are discarded during RDF conversion. Do not
+                                // fall back to the previous base for relative values.
+                                Err(_) if has_absolute_iri_form => result.base_iri = None,
                                 Err(e) => errors.push(e),
                             }
                         }
@@ -1499,7 +1505,7 @@ pub fn is_keyword(value: &str) -> bool {
     )
 }
 
-fn json_slice_to_node(data: &[u8]) -> Result<JsonNode, JsonSyntaxError> {
+pub(crate) fn json_slice_to_node(data: &[u8]) -> Result<JsonNode, JsonSyntaxError> {
     let mut parser = SliceJsonParser::new(data);
     json_node_from_events(std::iter::from_fn(|| match parser.parse_next() {
         Ok(JsonEvent::Eof) => None,
