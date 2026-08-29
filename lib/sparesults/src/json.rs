@@ -437,6 +437,7 @@ struct JsonInnerReader {
     solutions: Vec<(Vec<OxString>, Vec<Term>)>,
     vars_read: bool,
     solutions_read: bool,
+    boolean: Option<bool>,
 }
 
 #[expect(clippy::allow_attributes)]
@@ -461,6 +462,7 @@ enum JsonInnerReaderState {
     },
     AfterBindings,
     BeforeBoolean,
+    AfterRoot(bool),
     Ignore {
         level: usize,
         after: JsonInnerReaderStateAfterIgnore,
@@ -485,6 +487,7 @@ impl JsonInnerReader {
             solutions: Vec::new(),
             vars_read: false,
             solutions_read: false,
+            boolean: None,
         }
     }
 
@@ -525,9 +528,16 @@ impl JsonInnerReader {
                         Ok(None)
                     }
                 },
-                JsonEvent::EndObject => Err(QueryResultsSyntaxError::msg(
-                    "SPARQL JSON results must contain a 'boolean' or a 'results' key",
-                )),
+                JsonEvent::EndObject => {
+                    if let Some(value) = self.boolean {
+                        self.state = JsonInnerReaderState::AfterRoot(value);
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(
+                            "SPARQL JSON results must contain a 'boolean' or a 'results' key",
+                        ))
+                    }
+                }
                 _ => unreachable!(),
             },
             JsonInnerReaderState::BeforeHead => {
@@ -743,9 +753,20 @@ impl JsonInnerReader {
             }
             JsonInnerReaderState::BeforeBoolean => {
                 if let JsonEvent::Boolean(v) = event {
-                    Ok(Some(JsonInnerQueryResults::Boolean(v)))
+                    self.boolean = Some(v);
+                    self.state = JsonInnerReaderState::InRootObject;
+                    Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Unexpected boolean value"))
+                }
+            }
+            JsonInnerReaderState::AfterRoot(value) => {
+                if event == JsonEvent::Eof {
+                    Ok(Some(JsonInnerQueryResults::Boolean(*value)))
+                } else {
+                    Err(QueryResultsSyntaxError::msg(
+                        "Extra JSON is not allowed at the end of the document",
+                    ))
                 }
             }
             #[expect(clippy::ref_patterns)]

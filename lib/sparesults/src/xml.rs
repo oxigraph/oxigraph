@@ -478,6 +478,8 @@ enum ResultsState {
     Head,
     AfterHead,
     Boolean,
+    AfterBoolean(bool),
+    AfterSparql(bool),
 }
 
 struct XmlInnerQueryResultsParser {
@@ -503,7 +505,11 @@ impl XmlInnerQueryResultsParser {
                         self.state = ResultsState::Sparql;
                         Ok(None)
                     } else {
-                        Err(QueryResultsSyntaxError::msg(format!("Expecting <sparql> tag, found <{}>", event.name().into_inner())).into())
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <sparql> tag, found <{}>",
+                            event.name().into_inner()
+                        ))
+                        .into())
                     }
                 }
                 ResultsState::Sparql => {
@@ -511,22 +517,33 @@ impl XmlInnerQueryResultsParser {
                         self.state = ResultsState::Head;
                         Ok(None)
                     } else {
-                        Err(QueryResultsSyntaxError::msg(format!("Expecting <head> tag, found <{}>", event.name().into_inner())).into())
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <head> tag, found <{}>",
+                            event.name().into_inner()
+                        ))
+                        .into())
                     }
                 }
                 ResultsState::Head => {
                     if event.local_name().into_inner() == "variable" {
-                        let name = event.attributes()
+                        let name = event
+                            .attributes()
                             .filter_map(Result::ok)
                             .find(|attr| attr.key.local_name().into_inner() == "name")
-                            .ok_or_else(|| QueryResultsSyntaxError::msg("No name attribute found for the <variable> tag"))?;
+                            .ok_or_else(|| {
+                                QueryResultsSyntaxError::msg(
+                                    "No name attribute found for the <variable> tag",
+                                )
+                            })?;
                         let name = name.normalized_value(self.xml_version)?;
-                        let variable = Variable::new(OxString::new_owned(&name)).map_err(|e| QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}")))?;
+                        let variable = Variable::new(OxString::new_owned(&name)).map_err(|e| {
+                            QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}"))
+                        })?;
                         if self.variables.contains(&variable) {
                             return Err(QueryResultsSyntaxError::msg(format!(
                                 "The variable {variable} is declared twice"
                             ))
-                                .into());
+                            .into());
                         }
                         self.variables.push(variable);
                         Ok(None)
@@ -534,7 +551,11 @@ impl XmlInnerQueryResultsParser {
                         // no op
                         Ok(None)
                     } else {
-                        Err(QueryResultsSyntaxError::msg(format!("Expecting <variable> or <link> tag, found <{}>", event.name().into_inner())).into())
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <variable> or <link> tag, found <{}>",
+                            event.name().into_inner()
+                        ))
+                        .into())
                     }
                 }
                 ResultsState::AfterHead => {
@@ -567,16 +588,37 @@ impl XmlInnerQueryResultsParser {
                                 xml_version: self.xml_version,
                             },
                         }))
-                    } else if event.local_name().into_inner() != "link" && event.local_name().into_inner() != "results" && event.local_name().into_inner() != "boolean" {
-                        Err(QueryResultsSyntaxError::msg(format!("Expecting sparql tag, found <{}>", event.name().into_inner())).into())
+                    } else if event.local_name().into_inner() != "link"
+                        && event.local_name().into_inner() != "results"
+                        && event.local_name().into_inner() != "boolean"
+                    {
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting sparql tag, found <{}>",
+                            event.name().into_inner()
+                        ))
+                        .into())
                     } else {
                         Ok(None)
                     }
                 }
-                ResultsState::Boolean => Err(QueryResultsSyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", event.name().into_inner())).into())
+                ResultsState::Boolean => Err(QueryResultsSyntaxError::msg(format!(
+                    "Unexpected tag inside of <boolean> tag: <{}>",
+                    event.name().into_inner()
+                ))
+                .into()),
+                ResultsState::AfterBoolean(_) => Err(QueryResultsSyntaxError::msg(format!(
+                    "Expecting </sparql> tag, found <{}>",
+                    event.name().into_inner()
+                ))
+                .into()),
+                ResultsState::AfterSparql(_) => Err(QueryResultsSyntaxError::msg(
+                    "Extra XML is not allowed at the end of the document",
+                )
+                .into()),
             },
             Event::Text(event) => {
-                self.text_buffer.push_str(&event.xml_content(self.xml_version));
+                self.text_buffer
+                    .push_str(&event.xml_content(self.xml_version));
                 Ok(None)
             }
             Event::GeneralRef(event) => {
@@ -588,12 +630,28 @@ impl XmlInnerQueryResultsParser {
                 let value = value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '));
                 match self.state {
                     ResultsState::Boolean => {
-                        if value == "true" {
-                            Ok(Some(XmlInnerQueryResults::Boolean(true)))
+                        let value = if value == "true" {
+                            true
                         } else if value == "false" {
-                            Ok(Some(XmlInnerQueryResults::Boolean(false)))
+                            false
                         } else {
-                            Err(QueryResultsSyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
+                            return Err(QueryResultsSyntaxError::msg(format!(
+                                "Unexpected boolean value. Found '{value}'"
+                            ))
+                            .into());
+                        };
+                        self.state = ResultsState::AfterBoolean(value);
+                        Ok(None)
+                    }
+                    ResultsState::AfterBoolean(boolean) => {
+                        if event.local_name().into_inner() == "sparql" && value.is_empty() {
+                            self.state = ResultsState::AfterSparql(boolean);
+                            Ok(None)
+                        } else {
+                            Err(QueryResultsSyntaxError::msg(
+                                "Expecting </sparql> tag after the boolean result",
+                            )
+                            .into())
                         }
                     }
                     ResultsState::Head => {
@@ -602,28 +660,46 @@ impl XmlInnerQueryResultsParser {
                         }
                         Ok(None)
                     }
-                    _ => if value.is_empty() {
-                        Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into())
-                    } else {
-                        Err(QueryResultsSyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
+                    _ => {
+                        if value.is_empty() {
+                            Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into())
+                        } else {
+                            Err(QueryResultsSyntaxError::msg(format!(
+                                "Unexpected textual value found: '{value}'"
+                            ))
+                            .into())
+                        }
                     }
                 }
             }
-            Event::Eof => Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into()),
+            Event::Eof => {
+                if let ResultsState::AfterSparql(value) = self.state {
+                    if self
+                        .text_buffer
+                        .trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '))
+                        .is_empty()
+                    {
+                        Ok(Some(XmlInnerQueryResults::Boolean(value)))
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(
+                            "Extra XML is not allowed at the end of the document",
+                        )
+                        .into())
+                    }
+                } else {
+                    Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into())
+                }
+            }
             Event::Decl(event) => {
                 self.xml_version = event.xml_version()?;
                 Ok(None)
             }
-            Event::Comment(_) | Event::PI(_) | Event::DocType(_) => {
-                Ok(None)
-            }
+            Event::Comment(_) | Event::PI(_) | Event::DocType(_) => Ok(None),
             Event::Empty(_) => unreachable!("Empty events are expended"),
-            Event::CData(_) => {
-                Err(QueryResultsSyntaxError::msg(
-                    "<![CDATA[...]]> are not supported in SPARQL XML results",
-                )
-                    .into())
-            }
+            Event::CData(_) => Err(QueryResultsSyntaxError::msg(
+                "<![CDATA[...]]> are not supported in SPARQL XML results",
+            )
+            .into()),
         }
     }
 }
