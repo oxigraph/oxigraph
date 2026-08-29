@@ -25,9 +25,13 @@ impl SmallString {
 
     #[inline]
     pub fn from_be_bytes(bytes: [u8; 16]) -> Result<Self, BadSmallStringError> {
+        // We check the length is credible
+        let length = bytes[15].into();
+        if length > 15 {
+            return Err(BadSmallStringError::TooLong(length));
+        }
         // We check that it is valid UTF-8
-        str::from_utf8(&bytes.as_ref()[..bytes[15].into()])
-            .map_err(BadSmallStringError::BadUtf8)?;
+        str::from_utf8(&bytes.as_ref()[..length]).map_err(BadSmallStringError::BadUtf8)?;
         Ok(Self { inner: bytes })
     }
 
