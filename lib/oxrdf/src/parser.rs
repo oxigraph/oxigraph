@@ -463,7 +463,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
             if count_exponent > 0 {
                 Ok((
-                    Literal::new_typed_literal(OxString::new_owned(s), xsd::DOUBLE),
+                    Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::DOUBLE),
                     &s[cursor..],
                 ))
             } else {
@@ -474,7 +474,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         } else if with_dot {
             if count_after > 0 {
                 Ok((
-                    Literal::new_typed_literal(OxString::new_owned(s), xsd::DECIMAL),
+                    Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::DECIMAL),
                     &s[cursor..],
                 ))
             } else {
@@ -484,7 +484,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
         } else if count_before > 0 {
             Ok((
-                Literal::new_typed_literal(OxString::new_owned(s), xsd::INTEGER),
+                Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::INTEGER),
                 &s[cursor..],
             ))
         } else {
@@ -640,6 +640,14 @@ mod tests {
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),
                 Literal::new_simple_literal("o"),
+            )
+        );
+        assert_eq!(
+            Term::from_str("<<( _:s <http://example.com/p> 1.2e3 )>>").unwrap(),
+            Triple::new(
+                BlankNode::new("s").unwrap(),
+                NamedNode::new("http://example.com/p").unwrap(),
+                Literal::new_typed_literal("1.2e3", xsd::DOUBLE),
             )
         );
     }
