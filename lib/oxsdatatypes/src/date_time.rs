@@ -2084,7 +2084,7 @@ fn date_time_lexical_rep(input: &str) -> Result<(DateTime, &str), ParseDateTimeE
     )?;
     let (second, input) = second_frag(input)?;
     // We validate 24:00:00
-    if hour == 24 && minute != 0 && second != Decimal::from(0) {
+    if hour == 24 && (minute != 0 || second != Decimal::from(0)) {
         return Err(ParseDateTimeError::msg(
             "Times are not allowed to be after 24:00:00",
         ));
@@ -2109,7 +2109,7 @@ fn time_lexical_rep(input: &str) -> Result<(Time, &str), ParseDateTimeError> {
     )?;
     let (second, input) = second_frag(input)?;
     // We validate 24:00:00
-    if hour == 24 && minute != 0 && second != Decimal::from(0) {
+    if hour == 24 && (minute != 0 || second != Decimal::from(0)) {
         return Err(ParseDateTimeError::msg(
             "Times are not allowed to be after 24:00:00",
         ));
