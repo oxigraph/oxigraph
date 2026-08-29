@@ -8,6 +8,8 @@
 	rdfs:comment "Oxigraph parsers test case" ;
 	mf:entries (
 		<#blank_node_with_linebreak>
+		<#blank_node_with_two_dots_nt>
+		<#blank_node_with_two_dots_ttl>
 		<#bad_lang>
 		<#language_normalization_ttl>
 		<#language_normalization_xml>
@@ -41,6 +43,16 @@
 	mf:name "blank node with linebreak" ;
 	mf:action <blank_node_with_linebreak.ttl> ;
 	mf:result <blank_node_with_linebreak.nt> .
+
+<#blank_node_with_two_dots_nt>
+	rdf:type rdft:TestNTriplesPositiveSyntax ;
+	mf:name "blank node with two dots" ;
+	mf:action <blank_node_with_two_dots.nt> .
+
+<#blank_node_with_two_dots_ttl>
+	rdf:type rdft:TestTurtlePositiveSyntax ;
+	mf:name "blank node with two dots" ;
+	mf:action <blank_node_with_two_dots.nt> .
 
 <#language_normalization_ttl>
 	rdf:type rdft:TestTurtleEval ;
