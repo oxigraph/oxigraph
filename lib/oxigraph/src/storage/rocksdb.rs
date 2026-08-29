@@ -1294,10 +1294,12 @@ impl RocksDbStorageReadableTransaction<'_> {
     }
 
     pub fn clear_all_named_graphs(&mut self) -> Result<(), StorageError> {
+        let mut offset = 0;
         loop {
             let graph_names = self
                 .reader()
                 .named_graphs()
+                .skip(offset)
                 .take(BATCH_SIZE)
                 .collect::<Result<Vec<_>, _>>()?;
             for graph_name in &graph_names {
@@ -1306,6 +1308,7 @@ impl RocksDbStorageReadableTransaction<'_> {
             if graph_names.len() < BATCH_SIZE {
                 return Ok(());
             }
+            offset += BATCH_SIZE;
         }
     }
 
