@@ -13,7 +13,7 @@ use std::str;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum N3Token<'a> {
-    IriRef(OxString),
+    IriRef(N3String<'a>),
     PrefixedName {
         prefix: &'a str,
         local: OxStr<'a>,
@@ -21,8 +21,8 @@ pub enum N3Token<'a> {
     },
     Variable(OxString),
     BlankNodeLabel(&'a str),
-    String(OxString),
-    LongString(OxString),
+    String(N3String<'a>),
+    LongString(N3String<'a>),
     Integer(&'a str),
     Decimal(&'a str),
     Double(&'a str),
@@ -33,6 +33,41 @@ pub enum N3Token<'a> {
     },
     Punctuation(&'a str),
     PlainKeyword(&'a str),
+}
+
+pub enum N3String<'a> {
+    Borrowed(&'a str),
+    Owned(OxString),
+}
+
+impl std::fmt::Debug for N3String<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
+impl PartialEq for N3String<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for N3String<'_> {}
+
+impl N3String<'_> {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Borrowed(value) => value,
+            Self::Owned(value) => value,
+        }
+    }
+
+    pub fn into_owned(self) -> OxString {
+        match self {
+            Self::Borrowed(value) => OxString::new_owned(value),
+            Self::Owned(value) => value,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -202,11 +237,11 @@ impl N3Lexer {
         }
     }
 
-    fn recognize_iri(
+    fn recognize_iri<'a>(
         &mut self,
-        data: &[u8],
+        data: &'a [u8],
         options: &N3LexerOptions,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
         self.raw_buffer.clear();
         let mut i = 1;
@@ -215,22 +250,25 @@ impl N3Lexer {
             i += end;
             match data[i] {
                 b'>' => {
-                    let iri = if self.raw_buffer.is_empty() {
-                        &data[1..i]
-                    } else {
-                        self.raw_buffer.extend_from_slice(&data[i - end..i]);
-                        &self.raw_buffer
-                    };
-                    return Some((
-                        i + 1,
-                        Self::parse_iri(
+                    let result = if self.raw_buffer.is_empty() {
+                        Self::parse_borrowed_iri(
                             self.lenient,
                             &mut self.string_buffer,
-                            iri,
+                            &data[1..i],
                             0..i + 1,
                             options,
-                        ),
-                    ));
+                        )
+                    } else {
+                        self.raw_buffer.extend_from_slice(&data[i - end..i]);
+                        Self::parse_owned_iri(
+                            self.lenient,
+                            &mut self.string_buffer,
+                            &self.raw_buffer,
+                            0..i + 1,
+                            options,
+                        )
+                    };
+                    return Some((i + 1, result));
                 }
                 b'\\' => {
                     self.raw_buffer.extend_from_slice(&data[i - end..i]);
@@ -250,7 +288,47 @@ impl N3Lexer {
         }
     }
 
-    fn parse_iri(
+    fn parse_borrowed_iri<'a>(
+        lenient: bool,
+        string_buffer: &mut String,
+        iri: &'a [u8],
+        position: Range<usize>,
+        options: &N3LexerOptions,
+    ) -> Result<N3Token<'a>, TokenRecognizerError> {
+        let iri = str_from_utf8(iri, position.clone())?;
+        if lenient {
+            let Some(base_iri) = options.base_iri.as_ref() else {
+                return Ok(N3Token::IriRef(N3String::Borrowed(iri)));
+            };
+            let iri = IriRef::parse_unchecked(iri);
+            Ok(N3Token::IriRef(if iri.is_absolute() {
+                N3String::Borrowed(iri.into_inner())
+            } else {
+                string_buffer.clear();
+                base_iri.resolve_into_unchecked(&iri, string_buffer);
+                N3String::Owned(OxString::new_owned(string_buffer))
+            }))
+        } else {
+            let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
+            Ok(N3Token::IriRef(if iri.is_absolute() {
+                N3String::Borrowed(iri.into_inner())
+            } else if let Some(base_iri) = options.base_iri.as_ref() {
+                string_buffer.clear();
+                base_iri
+                    .resolve_into(&iri, string_buffer)
+                    .map_err(|e| (position, e.to_string()))?;
+                N3String::Owned(OxString::new_owned(string_buffer))
+            } else {
+                return Err((
+                    position,
+                    format!("{iri} is a relative IRI even if no @base is set"),
+                )
+                    .into());
+            }))
+        }
+    }
+
+    fn parse_owned_iri(
         lenient: bool,
         string_buffer: &mut String,
         iri: &[u8],
@@ -260,33 +338,37 @@ impl N3Lexer {
         let iri = str_from_utf8(iri, position.clone())?;
         if lenient {
             let Some(base_iri) = options.base_iri.as_ref() else {
-                return Ok(N3Token::IriRef(OxString::new_owned(iri)));
+                return Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(iri))));
             };
             let iri = IriRef::parse_unchecked(iri);
-            Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
-                iri.into_inner()
-            } else {
-                string_buffer.clear();
-                base_iri.resolve_into_unchecked(&iri, string_buffer);
-                string_buffer
-            })))
+            Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(
+                if iri.is_absolute() {
+                    iri.into_inner()
+                } else {
+                    string_buffer.clear();
+                    base_iri.resolve_into_unchecked(&iri, string_buffer);
+                    string_buffer
+                },
+            ))))
         } else {
             let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
-            Ok(N3Token::IriRef(OxString::new_owned(if iri.is_absolute() {
-                iri.into_inner()
-            } else if let Some(base_iri) = options.base_iri.as_ref() {
-                string_buffer.clear();
-                base_iri
-                    .resolve_into(&iri, string_buffer)
-                    .map_err(|e| (position, e.to_string()))?;
-                string_buffer
-            } else {
-                return Err((
-                    position,
-                    format!("{iri} is a relative IRI even if no @base is set"),
-                )
-                    .into());
-            })))
+            Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(
+                if iri.is_absolute() {
+                    iri.into_inner()
+                } else if let Some(base_iri) = options.base_iri.as_ref() {
+                    string_buffer.clear();
+                    base_iri
+                        .resolve_into(&iri, string_buffer)
+                        .map_err(|e| (position, e.to_string()))?;
+                    string_buffer
+                } else {
+                    return Err((
+                        position,
+                        format!("{iri} is a relative IRI even if no @base is set"),
+                    )
+                        .into());
+                },
+            ))))
         }
     }
 
@@ -690,11 +772,11 @@ impl N3Lexer {
                 .transpose()?,
         })
     }
-    fn recognize_string(
+    fn recognize_string<'a>(
         &mut self,
-        data: &[u8],
+        data: &'a [u8],
         delimiter: u8,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         // [22]  STRING_LITERAL_QUOTE         ::=  '"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
         // [23]  STRING_LITERAL_SINGLE_QUOTE  ::=  "'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
         self.raw_buffer.clear();
@@ -712,19 +794,16 @@ impl N3Lexer {
             i += end;
             match data[i] {
                 c if c == delimiter => {
-                    return Some((
-                        i + 1,
-                        str_from_utf8(
-                            if self.raw_buffer.is_empty() {
-                                &data[1..i]
-                            } else {
-                                self.raw_buffer.extend_from_slice(extra_data);
-                                &self.raw_buffer
-                            },
-                            1..i,
-                        )
-                        .map(|s| N3Token::String(OxString::new_owned(s))),
-                    ));
+                    let result = if self.raw_buffer.is_empty() {
+                        str_from_utf8(&data[1..i], 1..i)
+                            .map(|value| N3Token::String(N3String::Borrowed(value)))
+                    } else {
+                        self.raw_buffer.extend_from_slice(extra_data);
+                        str_from_utf8(&self.raw_buffer, 1..i).map(|value| {
+                            N3Token::String(N3String::Owned(OxString::new_owned(value)))
+                        })
+                    };
+                    return Some((i + 1, result));
                 }
                 b'\\' => {
                     self.raw_buffer.extend_from_slice(extra_data);
@@ -759,11 +838,11 @@ impl N3Lexer {
         }
     }
 
-    fn recognize_long_string(
+    fn recognize_long_string<'a>(
         &mut self,
-        data: &[u8],
+        data: &'a [u8],
         delimiter: u8,
-    ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         // [24]  STRING_LITERAL_LONG_SINGLE_QUOTE  ::=  "'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
         // [25]  STRING_LITERAL_LONG_QUOTE         ::=  '"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
         self.raw_buffer.clear();
@@ -775,19 +854,16 @@ impl N3Lexer {
             match data[i] {
                 c if c == delimiter => {
                     if *data.get(i + 1)? == delimiter && *data.get(i + 2)? == delimiter {
-                        return Some((
-                            i + 3,
-                            str_from_utf8(
-                                if self.raw_buffer.is_empty() {
-                                    &data[3..i]
-                                } else {
-                                    self.raw_buffer.extend_from_slice(extra_data);
-                                    &self.raw_buffer
-                                },
-                                1..i,
-                            )
-                            .map(|s| N3Token::LongString(OxString::new_owned(s))),
-                        ));
+                        let result = if self.raw_buffer.is_empty() {
+                            str_from_utf8(&data[3..i], 1..i)
+                                .map(|value| N3Token::LongString(N3String::Borrowed(value)))
+                        } else {
+                            self.raw_buffer.extend_from_slice(extra_data);
+                            str_from_utf8(&self.raw_buffer, 1..i).map(|value| {
+                                N3Token::LongString(N3String::Owned(OxString::new_owned(value)))
+                            })
+                        };
+                        return Some((i + 3, result));
                     }
                     i += 1;
                     self.raw_buffer.extend_from_slice(extra_data);
