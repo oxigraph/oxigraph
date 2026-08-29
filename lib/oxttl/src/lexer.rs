@@ -565,29 +565,20 @@ impl N3Lexer {
             match c {
                 Ok((c, consumed)) => {
                     if (i == 2 && (Self::is_possible_pn_chars_u(c) || c.is_ascii_digit()))
-                        || (i > 2 && Self::is_possible_pn_chars(c))
+                        || (i > 2 && (Self::is_possible_pn_chars(c) || c == '.'))
                     {
                         // Ok
-                    } else if i == 2 {
-                        return Some((i, Err((0..i, "A blank node ID cannot be empty").into())));
-                    } else if c == '.' {
-                        if data[i - 1] == b'.' {
-                            i -= 1;
-                            return Some((
-                                i,
-                                str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
-                            ));
-                        }
-                    } else if data[i - 1] == b'.' {
-                        i -= 1;
-                        return Some((
-                            i,
-                            str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
-                        ));
                     } else {
+                        while data[i - 1] == b'.' {
+                            i -= 1;
+                        }
                         return Some((
                             i,
-                            str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
+                            if i > 2 {
+                                str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel)
+                            } else {
+                                Err((0..i, "A blank node ID cannot be empty").into())
+                            },
                         ));
                     }
                     i += consumed;
@@ -596,7 +587,7 @@ impl N3Lexer {
             }
         }
         is_ending.then(|| {
-            if data[i - 1] == b'.' {
+            while data[i - 1] == b'.' {
                 i -= 1;
             }
             (
