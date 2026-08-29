@@ -2,12 +2,12 @@
 //! and a serializer implemented by [`NTriplesSerializer`].
 
 use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
-use crate::line_formats::NQuadsRecognizer;
+use crate::line_formats::{BorrowedNQuadsRecognizer, NQuadsRecognizer};
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
-use oxrdf::Triple;
+use oxrdf::{Triple, TripleRef};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 use std::path::Path;
@@ -109,6 +109,65 @@ impl NTriplesParser {
         ReaderNTriplesParser {
             inner: self.low_level().parser.for_reader(reader),
         }
+    }
+
+    /// Parses an N-Triples file from a [`Read`] implementation and calls
+    /// `on_triple` for each parsed triple.
+    ///
+    /// The callback receives a [`TripleRef`] borrowing from reusable parser
+    /// buffers. Its strings are only valid for the duration of the callback
+    /// invocation. Use [`TripleRef::into_owned`] if a triple must be retained.
+    /// This callback API avoids allocating owned RDF terms for every triple.
+    ///
+    /// Count triples without materializing them:
+    /// ```
+    /// use oxttl::{NTriplesParser, TurtleParseError};
+    ///
+    /// let input = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n";
+    /// let mut count = 0;
+    /// NTriplesParser::new().parse_reader(input.as_slice(), |triple| {
+    ///     // `triple` and its strings cannot be retained after this call.
+    ///     assert_eq!(triple.subject.to_string(), "<http://example.com/s>");
+    ///     count += 1;
+    ///     Ok::<_, TurtleParseError>(())
+    /// })?;
+    /// assert_eq!(count, 1);
+    /// # Result::<_, TurtleParseError>::Ok(())
+    /// ```
+    ///
+    /// Parsing stops at the first syntax, I/O, or callback error. Callback
+    /// errors are returned unchanged. When RDF 1.2 support is enabled, triple
+    /// term subtrees are materialized temporarily because [`TripleRef`]
+    /// represents them using owned [`Triple`] values. Ordinary terms keep the
+    /// allocation-light borrowed representation.
+    ///
+    /// This is a streaming API: if parsing fails late, callbacks for earlier
+    /// statements have already run. Consumers that require atomic ingestion
+    /// should stage their changes and commit only after this method returns
+    /// [`Ok`].
+    pub fn parse_reader<R: Read, E>(
+        self,
+        reader: R,
+        mut on_triple: impl for<'a> FnMut(TripleRef<'a>) -> Result<(), E>,
+    ) -> Result<(), E>
+    where
+        E: From<TurtleParseError>,
+    {
+        let mut parser = BorrowedNQuadsRecognizer::new_borrowed_parser(
+            Vec::new(),
+            false,
+            false,
+            self.lenient,
+            self.max_buffer_size,
+        )
+        .for_reader(reader);
+        while let Some(triple) = parser.next() {
+            let triple = triple.map_err(E::from)?;
+            let result = on_triple(triple.as_ref().into());
+            parser.parser.reuse_output(triple);
+            result?;
+        }
+        Ok(())
     }
 
     /// Parses a N-Triples file from a [`AsyncRead`] implementation.

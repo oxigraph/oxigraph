@@ -4,6 +4,8 @@ use oxigraph_testsuite::files::read_file;
 use oxigraph_testsuite::manifest::TestManifest;
 use oxrdf::Dataset;
 use oxrdf::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
+use oxttl::{NTriplesParser, TurtleParseError};
+use std::hint::black_box;
 use std::io::Read;
 
 fn test_data_from_testsuite(manifest_uri: String, include_tests_types: &[&str]) -> Vec<u8> {
@@ -115,6 +117,23 @@ fn bench_parse_ntriples_with_ntriples(c: &mut Criterion) {
     )
 }
 
+fn bench_parse_ntriples_with_borrowed_callback(c: &mut Criterion) {
+    let data = ntriples_test_data();
+    let mut group = c.benchmark_group("oxttl ntriples");
+    group.throughput(Throughput::Bytes(data.len() as u64));
+    group.bench_with_input("borrowed callback", &data, |b, data| {
+        b.iter(|| {
+            NTriplesParser::new()
+                .parse_reader(data.as_slice(), |triple| {
+                    black_box(triple);
+                    Ok::<_, TurtleParseError>(())
+                })
+                .unwrap();
+        })
+    });
+    group.finish();
+}
+
 fn bench_parse_ntriples_with_turtle(c: &mut Criterion) {
     parse_bench(
         c,
@@ -214,6 +233,7 @@ fn canonicalization_bench(c: &mut Criterion) {
 criterion_group!(
     w3c_testsuite,
     bench_parse_ntriples_with_ntriples,
+    bench_parse_ntriples_with_borrowed_callback,
     bench_parse_ntriples_with_turtle,
     bench_parse_turtle_with_turtle,
     bench_parse_jsonld_with_jsonld,
