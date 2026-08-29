@@ -24,6 +24,7 @@ async-tokio = [
 json-event-parser.workspace = true
 memchr.workspace = true
 oxrdf.workspace = true
+oxstr.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }

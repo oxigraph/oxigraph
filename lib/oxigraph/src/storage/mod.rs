@@ -1,4 +1,4 @@
-use crate::model::{GraphName, NamedOrBlankNode, OxString, Quad};
+use crate::model::{GraphName, NamedOrBlankNode, Quad};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
@@ -11,6 +11,7 @@ use crate::storage::rocksdb::{
     RocksDbStorageBulkLoader, RocksDbStorageOptions, RocksDbStorageReadableTransaction,
     RocksDbStorageReader, RocksDbStorageTransaction,
 };
+use oxstr::OxString;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 #[cfg(not(target_family = "wasm"))]

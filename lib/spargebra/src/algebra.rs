@@ -2,7 +2,7 @@
 
 use crate::term::*;
 use crate::vocab::sparql;
-use oxrdf::OxString;
+use oxstr::OxString;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as _;

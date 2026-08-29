@@ -6,10 +6,11 @@ use oxiri::{Iri, IriRef};
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, OxString, Term, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, Term, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, TimezoneOffset, YearMonthDuration};
 use oxsdatatypes::{DateTime, Decimal, Double, Float, Integer};
+use oxstr::OxString;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;

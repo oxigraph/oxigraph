@@ -6,6 +6,7 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJson
 use json_event_parser::{TokioAsyncReaderJsonParser, TokioAsyncWriterJsonSerializer};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
+use oxstr::OxString;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::mem::take;

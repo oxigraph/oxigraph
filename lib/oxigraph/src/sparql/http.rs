@@ -1,6 +1,7 @@
 use crate::http::HttpClient;
-use crate::model::{NamedNode, OxString};
+use crate::model::NamedNode;
 use oxiri::Iri;
+use oxstr::OxString;
 use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
 use spargebra::algebra::QueryExpression;

@@ -8,7 +8,8 @@
 use crate::geosparql;
 use geo::Geometry;
 use geojson::{GeoJson, Geometry as GeoJsonGeometry};
-use oxrdf::{Literal, OxString, Term};
+use oxrdf::{Literal, Term};
+use oxstr::OxString;
 use std::str::FromStr;
 use wkt::{ToWkt, TryFromWkt};
 

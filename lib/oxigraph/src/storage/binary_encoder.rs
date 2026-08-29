@@ -817,8 +817,9 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{OxString, Term};
+    use crate::model::Term;
     use crate::storage::numeric_encoder::*;
+    use oxstr::OxString;
     use std::cell::RefCell;
     use std::collections::HashMap;
 

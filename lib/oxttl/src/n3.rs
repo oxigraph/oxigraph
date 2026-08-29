@@ -14,9 +14,8 @@ use oxiri::{Iri, IriParseError};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{
-    BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term, Variable,
-};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term, Variable};
+use oxstr::OxString;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 use std::fmt;

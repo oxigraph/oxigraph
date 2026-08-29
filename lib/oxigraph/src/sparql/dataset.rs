@@ -1,4 +1,4 @@
-use crate::model::{OxString, Term};
+use crate::model::Term;
 #[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
@@ -6,6 +6,7 @@ use crate::storage::numeric_encoder::{
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxsdatatypes::Boolean;
+use oxstr::OxString;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
 use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};

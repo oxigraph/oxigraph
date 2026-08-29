@@ -4,7 +4,7 @@ use crate::algebra::*;
 use crate::error::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
-use oxrdf::OxString;
+use oxstr::OxString;
 use std::fmt;
 use std::str::FromStr;
 

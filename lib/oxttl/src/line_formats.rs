@@ -6,7 +6,8 @@ use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOr
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxstr::OxString;
 
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,

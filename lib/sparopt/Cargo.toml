@@ -19,6 +19,7 @@ sep-0006 = ["spargebra/sep-0006"]
 
 [dependencies]
 oxrdf.workspace = true
+oxstr.workspace = true
 rand.workspace = true
 spargebra.workspace = true
 

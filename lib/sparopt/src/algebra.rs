@@ -1,7 +1,7 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
-use oxrdf::OxString;
 use oxrdf::vocab::xsd;
+use oxstr::OxString;
 use rand::random;
 pub use spargebra::algebra::PropertyPathExpression;
 use spargebra::algebra::{

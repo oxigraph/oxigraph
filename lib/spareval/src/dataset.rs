@@ -1,8 +1,8 @@
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::{
-    BlankNode, Dataset, GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, OxString,
-    Quad, Term,
+    BlankNode, Dataset, GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, Quad,
+    Term,
 };
 #[cfg(feature = "sparql-12")]
 use oxrdf::{NamedOrBlankNode, Triple};
@@ -11,6 +11,7 @@ use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
 #[cfg(feature = "calendar-ext")]
 use oxsdatatypes::{GDay, GMonth, GMonthDay, GYear, GYearMonth};
+use oxstr::OxString;
 use rustc_hash::FxHashSet;
 use std::convert::Infallible;
 use std::error::Error;

@@ -33,6 +33,7 @@ flate2.workspace = true
 oxhttp = { workspace = true, features = ["flate2"] }
 oxigraph = { workspace = true, default-features = true }
 oxiri.workspace = true
+oxstr.workspace = true
 rand.workspace = true
 rayon-core.workspace = true
 url.workspace = true

@@ -1,4 +1,4 @@
-use crate::OxString;
+use oxstr::OxString;
 use std::cmp::Ordering;
 use std::fmt;
 

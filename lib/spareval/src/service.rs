@@ -1,6 +1,7 @@
 use crate::{QueryEvaluationError, QuerySolutionIter};
 use oxiri::Iri;
-use oxrdf::{NamedNode, OxString};
+use oxrdf::NamedNode;
+use oxstr::OxString;
 use spargebra::algebra::QueryExpression;
 use std::collections::HashMap;
 use std::error::Error;
@@ -15,7 +16,8 @@ use std::sync::Arc;
 ///
 /// ```
 /// use oxiri::Iri;
-/// use oxrdf::{Dataset, Literal, NamedNode, OxString, Variable};
+/// use oxrdf::{Dataset, Literal, NamedNode, Variable};
+/// use oxstr::OxString;
 /// use sparesults::QuerySolution;
 /// use spareval::{QueryEvaluator, QueryResults, QuerySolutionIter, ServiceHandler};
 /// use spargebra::SparqlParser;
@@ -83,7 +85,8 @@ pub trait ServiceHandler: Send + Sync {
 ///
 /// ```
 /// use oxiri::Iri;
-/// use oxrdf::{Dataset, NamedNode, OxString, Variable};
+/// use oxrdf::{Dataset, NamedNode, Variable};
+/// use oxstr::OxString;
 /// use sparesults::QuerySolution;
 /// use spareval::{DefaultServiceHandler, QueryEvaluator, QueryResults, QuerySolutionIter};
 /// use spargebra::SparqlParser;

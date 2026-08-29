@@ -29,6 +29,7 @@ md-5.workspace = true
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes"] }
 oxsdatatypes.workspace = true
+oxstr.workspace = true
 rand.workspace = true
 regex.workspace = true
 rustc-hash.workspace = true

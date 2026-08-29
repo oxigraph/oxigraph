@@ -32,6 +32,7 @@ oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes", "rdfc-10"] }
 oxrdfio.workspace = true
 oxsdatatypes.workspace = true
+oxstr.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
 siphasher.workspace = true

@@ -20,6 +20,7 @@ async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
+oxstr.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }

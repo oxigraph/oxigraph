@@ -3,8 +3,9 @@ use crate::BaseDirection;
 use crate::vocab::xsd;
 use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
-    NamedNode, OxString, Quad, Term, Triple, Variable, VariableNameParseError,
+    NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
 };
+use oxstr::OxString;
 use std::borrow::Cow;
 use std::char;
 use std::str::{Chars, FromStr};

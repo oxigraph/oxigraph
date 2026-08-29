@@ -10,6 +10,7 @@ IGNORE_PACKAGES = {"oxigraph-js", "oxigraph-testsuite", "pyoxigraph", "sparql-sm
 ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
     "oxhttp",
+    "oxstr",
     "geo",
     "oxiri",
     "wkt",

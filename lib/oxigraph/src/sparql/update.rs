@@ -4,12 +4,13 @@ use crate::http::HttpClient;
 use crate::io::DocumentLoader;
 #[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
-use crate::model::{GraphName as OxGraphName, OxString, Quad as OxQuad};
+use crate::model::{GraphName as OxGraphName, Quad as OxQuad};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
 use crate::storage::{Storage, StorageError, StorageReadableTransaction, StorageTransaction};
 use crate::store::{Store, Transaction};
 use oxiri::Iri;
+use oxstr::OxString;
 use rustc_hash::FxHashMap;
 use spareval::{DeleteInsertQuad, QueryDatasetSpecification, QueryEvaluator};
 use spargebra::algebra::GraphTarget;

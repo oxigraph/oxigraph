@@ -1,6 +1,6 @@
 use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
-use oxrdf::OxString;
+use oxstr::OxString;
 use quick_xml::events::attributes::AttrError;
 use std::io;
 use std::sync::Arc;

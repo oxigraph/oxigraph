@@ -1,4 +1,4 @@
-use crate::model::OxString;
+use oxstr::OxString;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};

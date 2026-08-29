@@ -20,6 +20,7 @@ oxigraph = { path = "../lib/oxigraph", default-features = false, features = [
 oxjsonld.path = "../lib/oxjsonld"
 oxrdf.path = "../lib/oxrdf"
 oxrdfxml.path = "../lib/oxrdfxml"
+oxstr = "0.1"
 oxttl.path = "../lib/oxttl"
 sparesults.path = "../lib/sparesults"
 spargebra.path = "../lib/spargebra"

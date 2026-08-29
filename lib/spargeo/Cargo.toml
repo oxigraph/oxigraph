@@ -18,6 +18,7 @@ default = []
 geo.workspace = true
 geojson.workspace = true
 oxrdf.workspace = true
+oxstr.workspace = true
 wkt.workspace = true
 
 [lints]

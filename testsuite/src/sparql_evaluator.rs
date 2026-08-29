@@ -17,7 +17,7 @@ use oxigraph::sparql::results::{
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use oxiri::Iri;
-use oxrdf::OxString;
+use oxstr::OxString;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::SparqlParser;
 use spargebra::algebra::QueryExpression;
