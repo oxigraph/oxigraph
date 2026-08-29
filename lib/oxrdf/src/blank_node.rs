@@ -1,6 +1,6 @@
 #![expect(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 
-use crate::OxString;
+use oxstr::OxString;
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};

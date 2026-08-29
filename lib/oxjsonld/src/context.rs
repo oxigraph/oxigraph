@@ -2,7 +2,7 @@ use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use crate::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::{Iri, IriRef};
-use oxrdf::{OxStr, OxString};
+use oxstr::{OxStr, OxString};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;

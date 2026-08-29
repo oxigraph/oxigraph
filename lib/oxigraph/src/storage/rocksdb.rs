@@ -2,7 +2,7 @@
 use crate::model::vocab::rdf;
 #[cfg(feature = "rdf-12")]
 use crate::model::{BlankNode, Triple};
-use crate::model::{GraphName, NamedOrBlankNode, OxString, Quad, Term};
+use crate::model::{GraphName, NamedOrBlankNode, Quad, Term};
 use crate::storage::binary_encoder::{
     QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
     encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
@@ -18,6 +18,7 @@ use crate::storage::rocksdb_wrapper::{
     Transaction,
 };
 use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
+use oxstr::OxString;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};

@@ -1,9 +1,9 @@
 use crate::named_node::{NamedNode, NamedNodeRef};
-use crate::string::OxString;
 use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
+use oxstr::OxString;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;

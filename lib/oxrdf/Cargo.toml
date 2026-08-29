@@ -15,13 +15,14 @@ rust-version.workspace = true
 default = []
 rdf-12 = []
 rdfc-10 = ["dep:hex", "dep:sha2"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "oxstr/serde"]
 
 [dependencies]
 hex = { workspace = true, optional = true }
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
+oxstr.workspace = true
 sha2 = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true

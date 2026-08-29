@@ -3,6 +3,7 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
+use oxstr::OxString;
 use quick_xml::escape::{EscapeError, resolve_xml_entity};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;

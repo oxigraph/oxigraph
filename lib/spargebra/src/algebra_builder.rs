@@ -21,7 +21,8 @@ use oxiri::{Iri, IriRef};
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, OxString, Variable};
+use oxrdf::{BlankNode, Literal, NamedNode, Variable};
+use oxstr::OxString;
 use rand::random;
 use std::borrow::Cow;
 use std::cmp::{max, min};

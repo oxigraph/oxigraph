@@ -1,8 +1,9 @@
 use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::vocab::rdf;
-use oxigraph::model::{BlankNode, NamedNode, OxString, Triple};
+use oxigraph::model::{BlankNode, NamedNode, Triple};
 use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::sparql::results::QueryResultsFormat;
+use oxstr::OxString;
 
 mod sd {
     use oxigraph::model::NamedNode;

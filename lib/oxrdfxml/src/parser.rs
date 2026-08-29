@@ -5,7 +5,8 @@ use oxiri::{Iri, IriParseError, IriRef};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, OxString, Term, Triple};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
+use oxstr::OxString;
 use quick_xml::escape::{EscapeError, resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;

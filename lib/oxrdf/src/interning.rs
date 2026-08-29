@@ -2,6 +2,7 @@
 
 use crate::vocab::xsd;
 use crate::*;
+use oxstr::OxString;
 use std::collections::hash_map::{Entry, HashMap, RandomState};
 use std::hash::{BuildHasher, Hasher};
 

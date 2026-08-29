@@ -4,7 +4,8 @@ use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriRef};
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
-use oxrdf::{NamedNode, OxStr, OxString};
+use oxrdf::NamedNode;
+use oxstr::{OxStr, OxString};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::ops::Range;

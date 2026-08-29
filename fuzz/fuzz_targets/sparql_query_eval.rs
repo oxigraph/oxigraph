@@ -10,7 +10,8 @@ use oxigraph::sparql::{
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
-use oxrdf::{GraphName, OxString};
+use oxrdf::GraphName;
+use oxstr::OxString;
 use spareval::QueryEvaluator;
 use spargebra::SparqlParser;
 use spargebra::algebra::{QueryDatasetSpecification, QueryExpression};

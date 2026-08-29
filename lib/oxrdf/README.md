@@ -11,6 +11,8 @@ OxRDF is a simple library providing datastructures encoding [RDF 1.1 concepts](h
 
 This crate is intended to be a basic building block of other crates like [Oxigraph](https://crates.io/crates/oxigraph) or [Spargebra](https://crates.io/crates/spargebra).
 
+This crate relies on [`oxstr`](https://crates.io/crates/oxstr) for the string type used by the various datastructures.
+
 Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind the `rdf-12` feature.
 
 Support for [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) is available behind the `rdfc-10` feature.

@@ -12,7 +12,7 @@ use oxjsonld::{
     JsonLdParser, JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet, JsonLdRemoteDocument,
     JsonLdSyntaxError,
 };
-use oxrdf::OxString;
+use oxstr::OxString;
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 use std::fmt::Write;

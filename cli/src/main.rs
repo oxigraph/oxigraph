@@ -14,11 +14,12 @@ use oxhttp::model::header::{
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
 use oxigraph::io::{DocumentLoader, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
-use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode, OxString};
+use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store, Transaction};
 use oxiri::{Iri, IriRef};
+use oxstr::OxString;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
 use std::cell::RefCell;

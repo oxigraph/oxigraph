@@ -3,6 +3,7 @@ use crate::vocab::*;
 use anyhow::{Context, Result, bail};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
+use oxstr::OxString;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 

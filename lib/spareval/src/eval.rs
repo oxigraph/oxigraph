@@ -15,8 +15,9 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::NamedOrBlankNode;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, OxString, Term, Triple, Variable};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Term, Triple, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
+use oxstr::OxString;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
 use spargebra::algebra::PropertyPathExpression;
 #[cfg(feature = "sparql-12")]

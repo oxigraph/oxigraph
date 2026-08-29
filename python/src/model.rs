@@ -2,6 +2,7 @@
 
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
+use oxstr::OxString;
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyIndexError, PyUnicodeDecodeError, PyValueError};
 use pyo3::prelude::*;

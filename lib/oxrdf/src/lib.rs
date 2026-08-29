@@ -11,7 +11,6 @@ mod interning;
 mod literal;
 mod named_node;
 mod parser;
-mod string;
 mod triple;
 mod variable;
 pub mod vocab;
@@ -24,7 +23,6 @@ pub use crate::literal::BaseDirection;
 pub use crate::literal::{Literal, LiteralRef};
 pub use crate::named_node::{NamedNode, NamedNodeRef};
 pub use crate::parser::TermParseError;
-pub use crate::string::{OxStr, OxString};
 pub use crate::triple::{
     GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
     Triple, TripleRef, TryFromTermError,

@@ -1678,6 +1678,7 @@ dependencies = [
  "oxrdfio",
  "oxrocksdb-sys",
  "oxsdatatypes",
+ "oxstr",
  "rand",
  "rustc-hash",
  "serde_json",
@@ -1704,6 +1705,7 @@ dependencies = [
  "oxhttp",
  "oxigraph",
  "oxiri",
+ "oxstr",
  "predicates",
  "rand",
  "rayon-core",
@@ -1736,6 +1738,7 @@ dependencies = [
  "oxiri",
  "oxjsonld",
  "oxrdf",
+ "oxstr",
  "oxttl",
  "spareval",
  "spargebra",
@@ -1768,6 +1771,7 @@ dependencies = [
  "json-event-parser",
  "oxiri",
  "oxrdf",
+ "oxstr",
  "ryu-js",
  "thiserror 2.0.18",
  "tokio",
@@ -1781,6 +1785,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxsdatatypes",
+ "oxstr",
  "rand",
  "serde",
  "serde_json",
@@ -1808,6 +1813,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
+ "oxstr",
  "quick-xml",
  "thiserror 2.0.18",
  "tokio",
@@ -1831,6 +1837,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxstr"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8c3a7befbd89a2df6da36532ef7df41fbecdd702f4f405a10b085f6c30ad2bb"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "oxttl"
 version = "0.3.0-dev"
 dependencies = [
@@ -1838,6 +1853,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
+ "oxstr",
  "rayon",
  "tempfile",
  "thiserror 2.0.18",
@@ -2051,6 +2067,7 @@ name = "pyoxigraph"
 version = "0.6.0-dev"
 dependencies = [
  "oxigraph",
+ "oxstr",
  "pyo3",
 ]
 
@@ -2564,6 +2581,7 @@ dependencies = [
  "json-event-parser",
  "memchr",
  "oxrdf",
+ "oxstr",
  "quick-xml",
  "thiserror 2.0.18",
  "tokio",
@@ -2579,6 +2597,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxsdatatypes",
+ "oxstr",
  "rand",
  "regex",
  "rustc-hash",
@@ -2599,6 +2618,7 @@ dependencies = [
  "logos",
  "oxiri",
  "oxrdf",
+ "oxstr",
  "rand",
  "thiserror 2.0.18",
 ]
@@ -2610,6 +2630,7 @@ dependencies = [
  "geo",
  "geojson",
  "oxrdf",
+ "oxstr",
  "wkt",
 ]
 
@@ -2618,6 +2639,7 @@ name = "sparopt"
 version = "0.4.0-dev"
 dependencies = [
  "oxrdf",
+ "oxstr",
  "rand",
  "spargebra",
 ]

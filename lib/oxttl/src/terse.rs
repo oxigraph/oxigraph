@@ -9,7 +9,8 @@ use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, OxString, Quad, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxstr::OxString;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 

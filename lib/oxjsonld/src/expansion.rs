@@ -7,7 +7,7 @@ use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::{Iri, IriRef};
-use oxrdf::OxString;
+use oxstr::OxString;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;

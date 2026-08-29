@@ -1,5 +1,5 @@
-use crate::string::OxString;
 use oxiri::{Iri, IriParseError};
+use oxstr::OxString;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::cmp::Ordering;

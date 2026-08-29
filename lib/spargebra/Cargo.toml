@@ -22,6 +22,7 @@ chumsky = { workspace = true, features = ["pratt", "stacker"] }
 logos.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
+oxstr.workspace = true
 rand.workspace = true
 thiserror.workspace = true
 

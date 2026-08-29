@@ -28,6 +28,7 @@ rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
 pyo3.workspace = true
+oxstr.workspace = true
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
 oxigraph = { workspace = true, default-features = true, features = [

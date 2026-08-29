@@ -31,6 +31,7 @@
 
 use crate::interning::*;
 use crate::*;
+use oxstr::OxString;
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
 use std::collections::hash_map::Entry;
