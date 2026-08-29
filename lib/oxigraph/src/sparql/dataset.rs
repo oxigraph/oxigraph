@@ -176,7 +176,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
             EncodedTerm::BooleanLiteral(value) => Some(value.into()),
             EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
             EncodedTerm::BigStringLiteral { .. } => {
-                Some(false) // A big literal can't be empty
+                Some(true) // A big literal can't be empty
             }
             EncodedTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
             EncodedTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
