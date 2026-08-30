@@ -462,7 +462,7 @@ enum JsonInnerReaderState {
     },
     AfterBindings,
     BeforeBoolean,
-    AfterRoot(bool),
+    AfterRoot,
     Ignore {
         level: usize,
         after: JsonInnerReaderStateAfterIgnore,
@@ -513,8 +513,14 @@ impl JsonInnerReader {
                         Ok(None)
                     }
                     "results" => {
-                        self.state = JsonInnerReaderState::BeforeResults;
-                        Ok(None)
+                        if self.boolean.is_some() {
+                            Err(QueryResultsSyntaxError::msg(
+                                "SPARQL JSON results must not contain both 'boolean' and 'results' keys",
+                            ))
+                        } else {
+                            self.state = JsonInnerReaderState::BeforeResults;
+                            Ok(None)
+                        }
                     }
                     "boolean" => {
                         self.state = JsonInnerReaderState::BeforeBoolean;
@@ -529,8 +535,8 @@ impl JsonInnerReader {
                     }
                 },
                 JsonEvent::EndObject => {
-                    if let Some(value) = self.boolean {
-                        self.state = JsonInnerReaderState::AfterRoot(value);
+                    if self.boolean.is_some() {
+                        self.state = JsonInnerReaderState::AfterRoot;
                         Ok(None)
                     } else {
                         Err(QueryResultsSyntaxError::msg(
@@ -760,9 +766,14 @@ impl JsonInnerReader {
                     Err(QueryResultsSyntaxError::msg("Unexpected boolean value"))
                 }
             }
-            JsonInnerReaderState::AfterRoot(value) => {
+            JsonInnerReaderState::AfterRoot => {
                 if event == JsonEvent::Eof {
-                    Ok(Some(JsonInnerQueryResults::Boolean(*value)))
+                    let value = self.boolean.ok_or_else(|| {
+                        QueryResultsSyntaxError::msg(
+                            "SPARQL JSON results must contain a 'boolean' key",
+                        )
+                    })?;
+                    Ok(Some(JsonInnerQueryResults::Boolean(value)))
                 } else {
                     Err(QueryResultsSyntaxError::msg(
                         "Extra JSON is not allowed at the end of the document",
