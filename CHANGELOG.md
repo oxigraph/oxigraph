@@ -1,3 +1,17 @@
+# [0.5.10] - 2026-08-30
+
+### Changed
+- Turtle-like languages: allow blank node ids with multiple consecutive dots (these are allowed in the Turtle grammar).
+- SPARQL: optimize properly joins nested inside other joins.
+  This might significantly affect the speed of some queries.
+- SPARQL: fixes the type inference one on the `IF` function and equality simplification on literals.
+- SPARQL: properly large strings effective boolean value to `true` (and not `false`...).
+- SPARQL: fixes `CLEAR NAMED` on the RocksDB storage when there are more than 100k named graphs.
+- SPARQL: fixes validation of `xsd:dateTime` and `xsd:time`: times like `24:01:01` where wrongly considered valid.
+- HTTP endpoint: fix HTTP status code returned on `/store` POST requests.
+- HTTP endpoint: make `PUT` requests on `/store` database changes properly atomic
+
+
 # [0.5.9] - 2026-06-17
 
 ### Changed
