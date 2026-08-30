@@ -12,9 +12,15 @@
     :results_xml_duplicated_variables
     :results_tsv_duplicated_variables
     :results_json_ignored_keys
+    :results_json_boolean_before_head
     :results_xml_ignored_keys
     :results_xml_boundary_whitespace
     :results_json_typed_literal
+    :results_json_boolean_and_results
+    :results_json_truncated_boolean
+    :results_json_trailing_boolean
+    :results_xml_truncated_boolean
+    :results_xml_trailing_boolean
     :late_head
     ) .
 
@@ -34,6 +40,10 @@
     mf:name "Ignore unknown keys in objects" ;
     mf:action <ignored_keys.srj> .
 
+:results_json_boolean_before_head rdf:type ox:PositiveJsonResultsSyntaxTest ;
+    mf:name "Boolean result before head" ;
+    mf:action <boolean_before_head.srj> .
+
 :results_xml_ignored_keys rdf:type ox:PositiveXmlResultsSyntaxTest ;
     mf:name "Ignore unknown attributes on tags" ;
     mf:action <ignored_keys.srx> .
@@ -47,6 +57,26 @@
     mf:name "typed-literal term type is allowed" ;
     mf:action <typed_literal.srj> ;
     mf:result <typed_literal_expected.srj> .
+
+:results_json_boolean_and_results rdf:type ox:NegativeJsonResultsSyntaxTest ;
+    mf:name "JSON result cannot contain both boolean and results" ;
+    mf:action <boolean_and_results.srj> .
+
+:results_json_truncated_boolean rdf:type ox:NegativeJsonResultsSyntaxTest ;
+    mf:name "Boolean results require a complete JSON object" ;
+    mf:action <truncated_boolean.srj> .
+
+:results_json_trailing_boolean rdf:type ox:NegativeJsonResultsSyntaxTest ;
+    mf:name "Boolean results reject trailing JSON content" ;
+    mf:action <trailing_boolean.srj> .
+
+:results_xml_truncated_boolean rdf:type ox:NegativeXmlResultsSyntaxTest ;
+    mf:name "Boolean results require a complete XML document" ;
+    mf:action <truncated_boolean.srx> .
+
+:results_xml_trailing_boolean rdf:type ox:NegativeXmlResultsSyntaxTest ;
+    mf:name "Boolean results reject trailing XML content" ;
+    mf:action <trailing_boolean.srx> .
 
 :late_head rdf:type ox:PositiveJsonResultsSyntaxTest ;
     mf:name "head after the list of results" ;

@@ -438,6 +438,7 @@ struct JsonInnerReader {
     solutions: Vec<(Vec<OxString>, Vec<Term>)>,
     vars_read: bool,
     solutions_read: bool,
+    boolean: Option<bool>,
 }
 
 #[expect(clippy::allow_attributes)]
@@ -462,6 +463,7 @@ enum JsonInnerReaderState {
     },
     AfterBindings,
     BeforeBoolean,
+    AfterRoot,
     Ignore {
         level: usize,
         after: JsonInnerReaderStateAfterIgnore,
@@ -486,6 +488,7 @@ impl JsonInnerReader {
             solutions: Vec::new(),
             vars_read: false,
             solutions_read: false,
+            boolean: None,
         }
     }
 
@@ -511,8 +514,14 @@ impl JsonInnerReader {
                         Ok(None)
                     }
                     "results" => {
-                        self.state = JsonInnerReaderState::BeforeResults;
-                        Ok(None)
+                        if self.boolean.is_some() {
+                            Err(QueryResultsSyntaxError::msg(
+                                "SPARQL JSON results must not contain both 'boolean' and 'results' keys",
+                            ))
+                        } else {
+                            self.state = JsonInnerReaderState::BeforeResults;
+                            Ok(None)
+                        }
                     }
                     "boolean" => {
                         self.state = JsonInnerReaderState::BeforeBoolean;
@@ -526,9 +535,16 @@ impl JsonInnerReader {
                         Ok(None)
                     }
                 },
-                JsonEvent::EndObject => Err(QueryResultsSyntaxError::msg(
-                    "SPARQL JSON results must contain a 'boolean' or a 'results' key",
-                )),
+                JsonEvent::EndObject => {
+                    if self.boolean.is_some() {
+                        self.state = JsonInnerReaderState::AfterRoot;
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(
+                            "SPARQL JSON results must contain a 'boolean' or a 'results' key",
+                        ))
+                    }
+                }
                 _ => unreachable!(),
             },
             JsonInnerReaderState::BeforeHead => {
@@ -744,9 +760,25 @@ impl JsonInnerReader {
             }
             JsonInnerReaderState::BeforeBoolean => {
                 if let JsonEvent::Boolean(v) = event {
-                    Ok(Some(JsonInnerQueryResults::Boolean(v)))
+                    self.boolean = Some(v);
+                    self.state = JsonInnerReaderState::InRootObject;
+                    Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Unexpected boolean value"))
+                }
+            }
+            JsonInnerReaderState::AfterRoot => {
+                if event == JsonEvent::Eof {
+                    let value = self.boolean.ok_or_else(|| {
+                        QueryResultsSyntaxError::msg(
+                            "SPARQL JSON results must contain a 'boolean' key",
+                        )
+                    })?;
+                    Ok(Some(JsonInnerQueryResults::Boolean(value)))
+                } else {
+                    Err(QueryResultsSyntaxError::msg(
+                        "Extra JSON is not allowed at the end of the document",
+                    ))
                 }
             }
             #[expect(clippy::ref_patterns)]
