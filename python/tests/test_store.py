@@ -144,6 +144,7 @@ class TestStore(unittest.TestCase):
     def test_select_query_union_default_graph(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
+        store.add(Quad(foo, bar, baz, BlankNode("g")))
         results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
         assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 0)
@@ -170,6 +171,7 @@ class TestStore(unittest.TestCase):
         results = store.query("SELECT ?s WHERE { ?s ?p ?o }", default_graph=graph)
         assert isinstance(results, QuerySolutions)
         self.assertEqual(len(list(results)), 1)
+        store.add(Quad(foo, bar, baz, graph_bnode))
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
             default_graph=[DefaultGraph(), graph, graph_bnode],
