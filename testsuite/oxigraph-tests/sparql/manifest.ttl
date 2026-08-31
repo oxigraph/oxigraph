@@ -44,6 +44,7 @@
     :port_local_name
     :xsd_string_cast
     :merged_default_graph
+    :merged_default_graph_join
     :merged_default_graph_update
     ) .
 
@@ -51,6 +52,11 @@
     mf:name "Merged default graphs deduplicate triples, not projected values" ;
     mf:action [ qt:query <merged_default_graph.rq> ] ;
     mf:result <merged_default_graph.srj> .
+
+:merged_default_graph_join rdf:type mf:QueryEvaluationTest ;
+    mf:name "Merged default graphs preserve duplicate join solutions after projection" ;
+    mf:action [ qt:query <merged_default_graph_join.rq> ] ;
+    mf:result <merged_default_graph_join.srj> .
 
 :merged_default_graph_update rdf:type mf:UpdateEvaluationTest ;
     mf:name "USING merges shared triples before computing an inserted aggregate" ;

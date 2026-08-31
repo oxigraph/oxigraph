@@ -905,6 +905,9 @@ impl QueryDatasetSpecification {
 
     /// Sets the list of graphs the query should consider as being part of the default graph.
     ///
+    /// Triples present in multiple graphs are matched only once in the merged default graph.
+    /// This does not remove duplicate query solutions produced by joins or projection.
+    ///
     /// By default, only the store default graph is considered.
     /// ```
     /// use oxrdf::{Dataset, NamedNode, Quad};
@@ -1032,7 +1035,7 @@ impl fmt::Debug for QueryExplanation {
 mod tests {
     use super::*;
     use oxrdf::vocab::xsd;
-    use oxrdf::{Literal, Term};
+    use oxrdf::{Dataset, Literal, Quad, Term};
     use spargebra::SparqlParser;
     use spargebra::vocab::sparql;
     use sparopt::algebra::{Expression, QueryExpression};
@@ -1141,6 +1144,43 @@ mod tests {
                 let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
                 assert!(matches!(error, QueryEvaluationError::Dataset(_)));
                 assert_eq!(error.to_string(), "dataset read failed");
+            }
+        }
+    }
+
+    #[test]
+    fn merged_default_graph_streams_and_honors_cancellation() {
+        let dataset = Dataset::from_iter(["urn:g1", "urn:g2"].map(|graph| {
+            Quad::new(
+                NamedNode::new_unchecked("urn:s"),
+                NamedNode::new_unchecked("urn:p"),
+                NamedNode::new_unchecked("urn:o"),
+                NamedNode::new_unchecked(graph),
+            )
+        }));
+        let query = SparqlParser::new()
+            .parse_query("SELECT * FROM <urn:g1> FROM <urn:g2> WHERE { ?s ?p ?o }")
+            .unwrap();
+        for union in [false, true] {
+            let cancellation_token = CancellationToken::new();
+            let evaluator =
+                QueryEvaluator::new().with_cancellation_token(cancellation_token.clone());
+            let mut prepared = evaluator.prepare(&query);
+            if union {
+                prepared.dataset_mut().set_default_graph_as_union();
+            }
+            let results = prepared.execute(&dataset).unwrap();
+            assert!(matches!(&results, QueryResults::Solutions(_)));
+            if let QueryResults::Solutions(mut solutions) = results {
+                assert_eq!(
+                    solutions.next().unwrap().unwrap().get("s"),
+                    Some(&NamedNode::new_unchecked("urn:s").into())
+                );
+                cancellation_token.cancel();
+                assert!(matches!(
+                    solutions.next().unwrap(),
+                    Err(QueryEvaluationError::Cancelled)
+                ));
             }
         }
     }

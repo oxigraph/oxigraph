@@ -1,0 +1,7 @@
+SELECT ?value
+FROM <merged_graph_1.ttl>
+FROM <merged_graph_2.ttl>
+WHERE {
+    ?s <urn:p> ?value .
+    ?other <urn:p> ?value .
+}
