@@ -67,7 +67,13 @@ fuzz_target!(|data: &[u8]| {
             assert!(errors.is_empty());
             assert_eq!(borrowed_quads, quads);
         }
-        Err(_) => assert!(!errors.is_empty()),
+        Err(error) => {
+            let error = error.to_string();
+            assert!(
+                errors.contains(&error),
+                "the owned parser should report the borrowed parser error {error:?}, found {errors:?}"
+            );
+        }
     }
 
     // We test also unchecked if valid

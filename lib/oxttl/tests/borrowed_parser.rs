@@ -142,6 +142,25 @@ mod tests {
         assert!(error.to_string().contains("Only a single triple"));
     }
 
+    #[test]
+    fn ntriples_graph_name_is_not_exposed_to_callback() {
+        let input = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n";
+        let owned_error = NTriplesParser::new()
+            .for_reader(input.as_bytes())
+            .find_map(Result::err)
+            .unwrap();
+        let mut calls = 0;
+        let borrowed_error = NTriplesParser::new()
+            .parse_reader(input.as_bytes(), |_| {
+                calls += 1;
+                Ok::<_, TurtleParseError>(())
+            })
+            .unwrap_err();
+
+        assert_eq!(calls, 0);
+        assert_eq!(borrowed_error.to_string(), owned_error.to_string());
+    }
+
     struct ErrorAfterData {
         data: Option<&'static [u8]>,
     }
@@ -376,6 +395,26 @@ mod tests {
             assert_eq!(calls, 0, "input: {input:?}");
             assert_eq!(borrowed.to_string(), owned.to_string(), "input: {input:?}");
         }
+    }
+
+    #[cfg(not(feature = "rdf-12"))]
+    #[test]
+    fn rdf_12_triple_terms_are_not_exposed_without_the_feature() {
+        let input = "<http://example.com/s> <http://example.com/p> <<( <http://example.com/qs> <http://example.com/qp> <http://example.com/qo> )>> .\n";
+        let owned_error = NTriplesParser::new()
+            .for_reader(input.as_bytes())
+            .find_map(Result::err)
+            .unwrap();
+        let mut calls = 0;
+        let borrowed_error = NTriplesParser::new()
+            .parse_reader(input.as_bytes(), |_| {
+                calls += 1;
+                Ok::<_, TurtleParseError>(())
+            })
+            .unwrap_err();
+
+        assert_eq!(calls, 0);
+        assert_eq!(borrowed_error.to_string(), owned_error.to_string());
     }
 
     #[test]
