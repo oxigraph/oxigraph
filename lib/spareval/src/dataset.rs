@@ -230,6 +230,7 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct InternalQuad<T> {
     pub subject: T,
     pub predicate: T,

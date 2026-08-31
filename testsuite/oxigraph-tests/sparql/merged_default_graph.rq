@@ -1,0 +1,4 @@
+SELECT (COUNT(*) AS ?count) (SUM(?value) AS ?total)
+FROM <merged_graph_1.ttl>
+FROM <merged_graph_2.ttl>
+WHERE { ?s <urn:p> ?value }

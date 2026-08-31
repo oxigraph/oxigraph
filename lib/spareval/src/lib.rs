@@ -863,29 +863,38 @@ impl QueryDatasetSpecification {
     }
 
     /// Sets the default graph of the query to be the union of all the graphs in the queried store.
+    /// Triples present in multiple graphs are returned only once.
     ///
     /// ```
     /// use oxrdf::{Dataset, NamedNode, Quad};
     /// use spareval::{QueryEvaluator, QueryResults};
     /// use spargebra::SparqlParser;
     ///
-    /// let dataset = Dataset::from_iter([Quad::new(
+    /// let quad = Quad::new(
     ///     NamedNode::new("http://example.com/s")?,
     ///     NamedNode::new("http://example.com/p")?,
     ///     NamedNode::new("http://example.com/o")?,
     ///     NamedNode::new("http://example.com/g")?,
-    /// )]);
+    /// );
+    /// let dataset = Dataset::from_iter([
+    ///     quad.clone(),
+    ///     Quad {
+    ///         graph_name: NamedNode::new("http://example.com/g2")?.into(),
+    ///         ..quad
+    ///     },
+    /// ]);
     /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
     /// let evaluator = QueryEvaluator::new();
     /// let mut prepared = evaluator.prepare(&query);
     /// prepared
     ///     .dataset_mut()
-    ///     .set_default_graph(vec![NamedNode::new("http://example.com/g")?.into()]);
+    ///     .set_default_graph_as_union();
     /// if let QueryResults::Solutions(mut solutions) = prepared.execute(&dataset)? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("s"),
     ///         Some(&NamedNode::new("http://example.com/s")?.into())
     ///     );
+    ///     assert!(solutions.next().is_none());
     /// }
     ///
     /// # Ok::<_, Box<dyn std::error::Error>>(())
@@ -1107,6 +1116,32 @@ mod tests {
             let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
             assert!(matches!(error, QueryEvaluationError::Dataset(_)));
             assert_eq!(error.to_string(), "dataset read failed");
+        }
+    }
+
+    #[test]
+    fn merged_default_graph_propagates_read_errors() {
+        let query = SparqlParser::new()
+            .parse_query(
+                "SELECT * FROM <http://example.com/g1> FROM <http://example.com/g2>
+                 WHERE { ?s <http://example.com/right> ?o }",
+            )
+            .unwrap();
+        let evaluator = QueryEvaluator::new();
+        for union in [false, true] {
+            let mut prepared = evaluator.prepare(&query);
+            if union {
+                prepared.dataset_mut().set_default_graph_as_union();
+            }
+            let results = prepared
+                .execute(FailingDataset { fail_reads: true })
+                .unwrap();
+            assert!(matches!(&results, QueryResults::Solutions(_)));
+            if let QueryResults::Solutions(results) = results {
+                let error = results.collect::<Result<Vec<_>, _>>().unwrap_err();
+                assert!(matches!(error, QueryEvaluationError::Dataset(_)));
+                assert_eq!(error.to_string(), "dataset read failed");
+            }
         }
     }
 

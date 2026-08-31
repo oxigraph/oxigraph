@@ -174,22 +174,22 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                             )
                         })
                         .collect::<Vec<_>>();
-                    Box::new(iters.into_iter().flatten().map(|quad| {
+                    Box::new(hash_deduplicate(iters.into_iter().flatten().map(|quad| {
                         let mut quad = quad?;
                         quad.graph_name = None;
                         Ok(quad)
-                    }))
+                    })))
                 }
             } else {
                 // The default graph has not been set, it is the union of all graphs, we query all graphs
-                Box::new(
+                Box::new(hash_deduplicate(
                     self.underlying_internal_quads_for_pattern(subject, predicate, object, None)
                         .map(|quad| {
                             let mut quad = quad?;
                             quad.graph_name = None;
                             Ok(quad)
                         }),
-                )
+                ))
             }
         } else if let Some(named_graphs) = &self.specification.named {
             // The list of possible named graphs has been set, we only query these named graphs
