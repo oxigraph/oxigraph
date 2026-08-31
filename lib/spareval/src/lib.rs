@@ -1150,14 +1150,21 @@ mod tests {
 
     #[test]
     fn merged_default_graph_streams_and_honors_cancellation() {
-        let dataset = Dataset::from_iter(["urn:g1", "urn:g2"].map(|graph| {
-            Quad::new(
-                NamedNode::new_unchecked("urn:s"),
-                NamedNode::new_unchecked("urn:p"),
-                NamedNode::new_unchecked("urn:o"),
-                NamedNode::new_unchecked(graph),
-            )
-        }));
+        let dataset = Dataset::from_iter(
+            [
+                ("urn:g1", "urn:o"),
+                ("urn:g2", "urn:o"),
+                ("urn:g2", "urn:other"),
+            ]
+            .map(|(graph, object)| {
+                Quad::new(
+                    NamedNode::new_unchecked("urn:s"),
+                    NamedNode::new_unchecked("urn:p"),
+                    NamedNode::new_unchecked(object),
+                    NamedNode::new_unchecked(graph),
+                )
+            }),
+        );
         let query = SparqlParser::new()
             .parse_query("SELECT * FROM <urn:g1> FROM <urn:g2> WHERE { ?s ?p ?o }")
             .unwrap();
