@@ -1,6 +1,5 @@
 //! Shared parser implementation for Turtle and TriG.
 
-use crate::MIN_BUFFER_SIZE;
 use crate::lexer::{
     N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
 };
@@ -1134,24 +1133,14 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
-    pub fn new_parser<B>(
-        data: B,
-        is_ending: bool,
+    pub fn new_parser(
         with_graph_name: bool,
         lenient: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
-        max_buffer_size: usize,
-    ) -> Parser<B, Self> {
+    ) -> Parser<Self> {
         Parser::new(
-            Lexer::new(
-                N3Lexer::new(N3LexerMode::Turtle, lenient),
-                data,
-                is_ending,
-                MIN_BUFFER_SIZE,
-                max_buffer_size,
-                Some(b"#"),
-            ),
+            Lexer::new(N3Lexer::new(N3LexerMode::Turtle, lenient), Some(b"#")),
             Self {
                 stack: vec![TriGState::TriGDoc],
                 cur_subject: Vec::new(),

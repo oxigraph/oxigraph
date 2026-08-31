@@ -11,5 +11,5 @@ pub use self::lexer::{Lexer, TokenOrLineJump, TokenRecognizer, TokenRecognizerEr
 #[cfg(feature = "async-tokio")]
 pub use self::parser::TokioAsyncReaderIterator;
 pub use self::parser::{
-    Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
+    LowLevelIterator, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
 };
