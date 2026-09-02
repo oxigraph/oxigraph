@@ -16,6 +16,18 @@ The parser supports two modes:
 - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
 - To enable it, call the [`with_profile(JsonLdProfile::Streaming)`](JsonLdParser::with_profile) method.
 
+## Standards support
+
+OxJSON-LD follows the latest JSON-LD processing algorithms. The
+`JsonLdProcessingMode::JsonLd1_0` mode rejects JSON-LD 1.1-only features, but
+is not a strict backward-compatibility mode for algorithm edge cases that
+changed between JSON-LD 1.0 and 1.1.
+
+When the `rdf-12` feature is enabled, JSON-LD base direction is converted to
+native RDF 1.2 directional language-tagged literals. Without this feature,
+base direction is ignored. The alternative JSON-LD 1.1 `rdfDirection`
+representations (`i18n-datatype` and `compound-literal`) are not supported.
+
 Usage example counting the number of people in a JSON-LD file:
 
 ```rust

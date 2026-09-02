@@ -99,6 +99,9 @@ pub mod jld {
 
     pub const BASE: NamedNode =
         NamedNode::new_const_unchecked("https://w3c.github.io/json-ld-api/tests/vocab#base");
+    pub const EXPAND_CONTEXT: NamedNode = NamedNode::new_const_unchecked(
+        "https://w3c.github.io/json-ld-api/tests/vocab#expandContext",
+    );
     pub const NEGATIVE_EVALUATION_TEST: NamedNode = NamedNode::new_const_unchecked(
         "https://w3c.github.io/json-ld-api/tests/vocab#NegativeEvaluationTest",
     );
