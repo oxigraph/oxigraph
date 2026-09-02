@@ -42,6 +42,23 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>;
 
+    /// Fetches quads from the RDF merge of the given graphs according to a pattern.
+    ///
+    /// `None` for `graph_names` encodes the union of all graphs. Implementations may override
+    /// this method when they can compute the merge more efficiently than hash deduplication.
+    /// Returned quads must have no graph name and must not contain duplicate triples.
+    fn internal_quads_for_pattern_in_union(
+        &self,
+        _subject: Option<&Self::InternalTerm>,
+        _predicate: Option<&Self::InternalTerm>,
+        _object: Option<&Self::InternalTerm>,
+        _graph_names: Option<&[Option<Self::InternalTerm>]>,
+    ) -> Option<
+        impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>,
+    > {
+        None::<std::iter::Empty<_>>
+    }
+
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
         &self,

@@ -245,6 +245,26 @@ impl<'a> StorageReader<'a> {
         }
     }
 
+    #[cfg_attr(
+        not(all(not(target_family = "wasm"), feature = "rocksdb")),
+        expect(unused_variables)
+    )]
+    pub fn quads_for_pattern_in_union(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_names: Option<&[Option<EncodedTerm>]>,
+    ) -> Option<Box<dyn Iterator<Item = Result<EncodedQuad, StorageError>> + 'a>> {
+        match &self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReaderKind::RocksDb(reader) => Some(Box::new(
+                reader.quads_for_pattern_in_union(subject, predicate, object, graph_names),
+            )),
+            StorageReaderKind::Memory(_) => None,
+        }
+    }
+
     pub fn named_graphs(&self) -> DecodingGraphIterator<'a> {
         DecodingGraphIterator {
             kind: match &self.kind {

@@ -117,6 +117,26 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
             })
     }
 
+    fn underlying_internal_quads_for_pattern_in_union(
+        &self,
+        subject: Option<&D::InternalTerm>,
+        predicate: Option<&D::InternalTerm>,
+        object: Option<&D::InternalTerm>,
+        graph_names: Option<&[Option<D::InternalTerm>]>,
+    ) -> Option<
+        impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + use<'a, D>,
+    > {
+        let cancellation_token = self.cancellation_token.clone();
+        self.dataset
+            .internal_quads_for_pattern_in_union(subject, predicate, object, graph_names)
+            .map(|iter| {
+                iter.map(move |r| {
+                    cancellation_token.ensure_alive()?;
+                    r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+                })
+            })
+    }
+
     fn internal_quads_for_pattern(
         &self,
         subject: Option<&D::InternalTerm>,
@@ -163,6 +183,14 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                         }),
                     )
                 } else {
+                    if let Some(iter) = self.underlying_internal_quads_for_pattern_in_union(
+                        subject,
+                        predicate,
+                        object,
+                        Some(default_graph_graphs),
+                    ) {
+                        return Box::new(iter);
+                    }
                     let iters = default_graph_graphs
                         .iter()
                         .map(|graph_name| {
@@ -182,6 +210,11 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                 }
             } else {
                 // The default graph has not been set, it is the union of all graphs, we query all graphs
+                if let Some(iter) = self.underlying_internal_quads_for_pattern_in_union(
+                    subject, predicate, object, None,
+                ) {
+                    return Box::new(iter);
+                }
                 Box::new(hash_deduplicate(
                     self.underlying_internal_quads_for_pattern(subject, predicate, object, None)
                         .map(|quad| {

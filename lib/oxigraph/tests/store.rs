@@ -4,6 +4,8 @@
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
@@ -148,6 +150,65 @@ fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
         assert!(store.contains(&q)?);
     }
     store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_merged_default_graph_on_disk() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    let s1 = NamedNode::new_unchecked("urn:s1");
+    let s2 = NamedNode::new_unchecked("urn:s2");
+    let s3 = NamedNode::new_unchecked("urn:s3");
+    let p1 = NamedNode::new_unchecked("urn:p1");
+    let p2 = NamedNode::new_unchecked("urn:p2");
+    let o1 = NamedNode::new_unchecked("urn:o1");
+    let o2 = NamedNode::new_unchecked("urn:o2");
+    let g1 = NamedNode::new_unchecked("urn:g1");
+    let g2 = NamedNode::new_unchecked("urn:g2");
+    for quad in [
+        Quad::new(s1.clone(), p1.clone(), o1.clone(), g1.clone()),
+        Quad::new(s2.clone(), p1.clone(), o1.clone(), g1.clone()),
+        Quad::new(s1.clone(), p2.clone(), o2.clone(), g1.clone()),
+        Quad::new(s1.clone(), p1.clone(), o1.clone(), g2.clone()),
+        Quad::new(s1.clone(), p2.clone(), o2.clone(), g2.clone()),
+        Quad::new(s3, p1, o1, g2),
+    ] {
+        store.insert(quad)?;
+    }
+
+    for (pattern, expected_count) in [
+        ("?s ?p ?o", 4),
+        ("<urn:s1> ?p ?o", 2),
+        ("?s <urn:p1> ?o", 3),
+        ("?s ?p <urn:o1>", 3),
+        ("<urn:s1> ?p <urn:o1>", 1),
+        ("<urn:s1> <urn:p1> ?o", 1),
+        ("?s <urn:p1> <urn:o1>", 3),
+        ("<urn:s1> <urn:p1> <urn:o1>", 1),
+    ] {
+        let query = format!("SELECT * FROM <urn:g1> FROM <urn:g2> WHERE {{ {pattern} }}");
+        let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+            .parse_query(&query)?
+            .on_store(&store)
+            .execute()?
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            solutions.collect::<Result<Vec<_>, _>>()?.len(),
+            expected_count,
+            "pattern: {pattern}"
+        );
+    }
+
+    let mut query = SparqlEvaluator::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
+    query.dataset_mut().set_default_graph_as_union();
+    let QueryResults::Solutions(solutions) = query.on_store(&store).execute()? else {
+        unreachable!()
+    };
+    assert_eq!(solutions.collect::<Result<Vec<_>, _>>()?.len(), 4);
     Ok(())
 }
 
