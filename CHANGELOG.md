@@ -1,3 +1,10 @@
+# [0.5.11] - 2026-09-02
+
+### Changed
+- CLI: Set `load` command exit status to failed if any of the loaded files fails to load.
+- HTTP server: fixes repeated URL query arguments support like `default-graph-uri`.
+
+
 # [0.5.10] - 2026-08-30
 
 ### Changed
