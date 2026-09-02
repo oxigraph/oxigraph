@@ -1586,7 +1586,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "bzip2",
  "codspeed-criterion-compat",
@@ -1608,12 +1608,12 @@ dependencies = [
  "spareval",
  "spargebra",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1634,7 +1634,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1736,7 +1736,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "bindgen",
  "cc",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "oxigraph",
  "pyo3",

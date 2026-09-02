@@ -22,7 +22,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.10"
+version = "0.5.11"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
@@ -83,12 +83,12 @@ wasm-bindgen-futures = "0.4.58"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.10", path = "lib/oxigraph", default-features = false }
+oxigraph = { version = "=0.5.11", path = "lib/oxigraph", default-features = false }
 oxjsonld = { version = "=0.2.6", path = "lib/oxjsonld" }
 oxrdf = { version = "=0.3.4", path = "lib/oxrdf" }
 oxrdfio = { version = "=0.2.6", path = "lib/oxrdfio" }
 oxrdfxml = { version = "=0.2.4", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.5.10", path = "./oxrocksdb-sys" }
+oxrocksdb-sys = { version = "=0.5.11", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.3", path = "lib/oxsdatatypes" }
 oxttl = { version = "=0.2.4", path = "lib/oxttl" }
 spargebra = { version = "=0.4.7", path = "lib/spargebra" }
