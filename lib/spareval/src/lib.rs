@@ -14,7 +14,7 @@ mod update;
 
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
-pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
+pub use crate::dataset::{ExpressionTerm, InternalQuad, InternalTriple, QueryableDataset};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::CancellationToken;
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};

@@ -12,6 +12,7 @@ use crate::storage::rocksdb::{
     RocksDbStorageReader, RocksDbStorageTransaction,
 };
 use oxstr::OxString;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 #[cfg(not(target_family = "wasm"))]
@@ -245,23 +246,42 @@ impl<'a> StorageReader<'a> {
         }
     }
 
-    #[cfg_attr(
-        not(all(not(target_family = "wasm"), feature = "rocksdb")),
-        expect(unused_variables)
-    )]
     pub fn quads_for_pattern_in_union(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_names: Option<&[Option<EncodedTerm>]>,
-    ) -> Option<Box<dyn Iterator<Item = Result<EncodedQuad, StorageError>> + 'a>> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, StorageError>> + 'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => Some(Box::new(
-                reader.quads_for_pattern_in_union(subject, predicate, object, graph_names),
-            )),
-            StorageReaderKind::Memory(_) => None,
+            StorageReaderKind::RocksDb(reader) => {
+                Box::new(reader.quads_for_pattern_in_union(subject, predicate, object, graph_names))
+            }
+            StorageReaderKind::Memory(_) => {
+                let iter: Box<dyn Iterator<Item = Result<_, _>> + 'a> =
+                    if let Some(graph_names) = graph_names {
+                        let iters = graph_names
+                            .iter()
+                            .map(|graph_name| {
+                                self.quads_for_pattern(
+                                    subject,
+                                    predicate,
+                                    object,
+                                    Some(graph_name.as_ref().unwrap_or(&EncodedTerm::DefaultGraph)),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        Box::new(iters.into_iter().flatten())
+                    } else {
+                        Box::new(self.quads_for_pattern(subject, predicate, object, None))
+                    };
+                Box::new(hash_deduplicate(iter.map(|quad| {
+                    let mut quad = quad?;
+                    quad.graph_name = EncodedTerm::DefaultGraph;
+                    Ok(quad)
+                })))
+            }
         }
     }
 
@@ -303,6 +323,16 @@ impl<'a> StorageReader<'a> {
             StorageReaderKind::Memory(reader) => reader.validate(),
         }
     }
+}
+
+fn hash_deduplicate<T: Eq + std::hash::Hash + Clone, E>(
+    iter: impl Iterator<Item = Result<T, E>>,
+) -> impl Iterator<Item = Result<T, E>> {
+    let mut already_seen = FxHashSet::with_capacity_and_hasher(iter.size_hint().0, FxBuildHasher);
+    iter.filter(move |result| match result {
+        Ok(value) => already_seen.insert(value.clone()),
+        Err(_) => true,
+    })
 }
 
 #[must_use]

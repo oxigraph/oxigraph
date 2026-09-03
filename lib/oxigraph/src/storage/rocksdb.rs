@@ -997,7 +997,7 @@ struct QuadHead {
 #[must_use]
 pub struct RocksDbMergedDecodingQuadIterator<'a> {
     iters: Vec<RocksDbChainedDecodingQuadIterator<'a>>,
-    heads: Vec<Option<Result<QuadHead, StorageError>>>,
+    heads: Vec<Option<QuadHead>>,
     order: TripleOrder,
     previous: Option<EncodedQuad>,
 }
@@ -1021,35 +1021,26 @@ impl Iterator for RocksDbMergedDecodingQuadIterator<'_> {
         loop {
             for (head, iter) in self.heads.iter_mut().zip(&mut self.iters) {
                 if head.is_none() {
-                    *head = iter.next().map(|quad| {
-                        quad.map(|quad| QuadHead {
+                    if let Some(quad) = iter.next() {
+                        let quad = match quad {
+                            Ok(quad) => quad,
+                            Err(error) => return Some(Err(error)),
+                        };
+                        *head = Some(QuadHead {
                             key: self.order.key(&quad),
                             quad,
-                        })
-                    });
+                        });
+                    }
                 }
-            }
-            if let Some(index) = self
-                .heads
-                .iter()
-                .position(|head| matches!(head, Some(Err(_))))
-            {
-                return self.heads[index]
-                    .take()
-                    .map(|head| head.map(|head| head.quad));
             }
             let index = self
                 .heads
                 .iter()
                 .enumerate()
-                .filter_map(|(index, head)| Some((index, &head.as_ref()?.as_ref().ok()?.key)))
+                .filter_map(|(index, head)| Some((index, &head.as_ref()?.key)))
                 .min_by(|(_, a), (_, b)| a.cmp(b))
                 .map(|(index, _)| index)?;
-            let head = self.heads.get_mut(index)?.take()?;
-            let mut quad = match head {
-                Ok(head) => head.quad,
-                Err(error) => return Some(Err(error)),
-            };
+            let mut quad = self.heads.get_mut(index)?.take()?.quad;
             quad.graph_name = EncodedTerm::DefaultGraph;
             if self.previous.as_ref() == Some(&quad) {
                 continue;
