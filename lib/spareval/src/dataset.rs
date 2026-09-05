@@ -12,7 +12,7 @@ use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
 #[cfg(feature = "calendar-ext")]
 use oxsdatatypes::{GDay, GMonth, GMonthDay, GYear, GYearMonth};
 use oxstr::OxString;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use std::convert::Infallible;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -41,6 +41,43 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>;
+
+    /// Fetches triples from the RDF merge of the given graphs according to a pattern.
+    ///
+    /// `None` for `graph_names` encodes the union of all named graphs. Implementations may
+    /// override this method when they can compute the merge more efficiently than hash
+    /// deduplication.
+    fn internal_triples_for_pattern(
+        &self,
+        subject: Option<&Self::InternalTerm>,
+        predicate: Option<&Self::InternalTerm>,
+        object: Option<&Self::InternalTerm>,
+        graph_names: Option<&[Option<Self::InternalTerm>]>,
+    ) -> impl Iterator<Item = Result<InternalTriple<Self::InternalTerm>, Self::Error>> + use<'a, Self>
+    {
+        let iter: Box<dyn Iterator<Item = Result<_, _>> + 'a> =
+            if let Some(graph_names) = graph_names {
+                let iters = graph_names
+                    .iter()
+                    .map(|graph_name| {
+                        self.internal_quads_for_pattern(
+                            subject,
+                            predicate,
+                            object,
+                            Some(graph_name.as_ref()),
+                        )
+                        .map(|quad| quad.map(InternalTriple::from))
+                    })
+                    .collect::<Vec<_>>();
+                Box::new(iters.into_iter().flatten())
+            } else {
+                Box::new(
+                    self.internal_quads_for_pattern(subject, predicate, object, None)
+                        .map(|quad| quad.map(InternalTriple::from)),
+                )
+            };
+        hash_deduplicate(iter)
+    }
 
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
@@ -236,6 +273,36 @@ pub struct InternalQuad<T> {
     pub object: T,
     /// `None` if the quad is in the default graph
     pub graph_name: Option<T>,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct InternalTriple<T> {
+    pub subject: T,
+    pub predicate: T,
+    pub object: T,
+}
+
+impl<T> From<InternalQuad<T>> for InternalTriple<T> {
+    fn from(quad: InternalQuad<T>) -> Self {
+        Self {
+            subject: quad.subject,
+            predicate: quad.predicate,
+            object: quad.object,
+        }
+    }
+}
+
+pub(crate) fn hash_deduplicate<T: Eq + Hash + Clone, E>(
+    iter: impl Iterator<Item = Result<T, E>>,
+) -> impl Iterator<Item = Result<T, E>> {
+    let mut already_seen = FxHashSet::with_capacity_and_hasher(iter.size_hint().0, FxBuildHasher);
+    iter.filter(move |e| {
+        if let Ok(e) = e {
+            already_seen.insert(e.clone())
+        } else {
+            true
+        }
+    })
 }
 
 /// A term as understood by the expression evaluator

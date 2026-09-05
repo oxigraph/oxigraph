@@ -2,14 +2,14 @@ use crate::model::Term;
 #[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
-    Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
+    Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxsdatatypes::Boolean;
 use oxstr::OxString;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
-use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
+use spareval::{ExpressionTerm, InternalQuad, InternalTriple, QueryableDataset};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -57,19 +57,19 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                 object,
                 graph_name.map(|graph_name| graph_name.unwrap_or(&EncodedTerm::DefaultGraph)),
             )
-            .map(|quad| {
-                let quad = quad?;
-                Ok(InternalQuad {
-                    subject: quad.subject,
-                    predicate: quad.predicate,
-                    object: quad.object,
-                    graph_name: if quad.graph_name.is_default_graph() {
-                        None
-                    } else {
-                        Some(quad.graph_name)
-                    },
-                })
-            })
+            .map(to_internal_quad)
+    }
+
+    fn internal_triples_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_names: Option<&[Option<EncodedTerm>]>,
+    ) -> impl Iterator<Item = Result<InternalTriple<EncodedTerm>, StorageError>> + use<'a> {
+        self.reader
+            .quads_for_pattern_in_union(subject, predicate, object, graph_names)
+            .map(to_internal_triple)
     }
 
     fn internal_named_graphs(
@@ -186,6 +186,33 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
             _ => None,
         })
     }
+}
+
+fn to_internal_quad(
+    quad: Result<EncodedQuad, StorageError>,
+) -> Result<InternalQuad<EncodedTerm>, StorageError> {
+    let quad = quad?;
+    Ok(InternalQuad {
+        subject: quad.subject,
+        predicate: quad.predicate,
+        object: quad.object,
+        graph_name: if quad.graph_name.is_default_graph() {
+            None
+        } else {
+            Some(quad.graph_name)
+        },
+    })
+}
+
+fn to_internal_triple(
+    quad: Result<EncodedQuad, StorageError>,
+) -> Result<InternalTriple<EncodedTerm>, StorageError> {
+    let quad = quad?;
+    Ok(InternalTriple {
+        subject: quad.subject,
+        predicate: quad.predicate,
+        object: quad.object,
+    })
 }
 
 impl StrLookup for DatasetView<'_> {

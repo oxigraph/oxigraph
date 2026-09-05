@@ -105,7 +105,10 @@ describe("Store", () => {
         });
 
         it("SELECT with union graph", () => {
-            const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+            const store = new Store([
+                dataModel.quad(ex, ex, ex, ex),
+                dataModel.quad(ex, ex, ex, ex2),
+            ]);
             const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
                 use_default_graph_as_union: true,
             }) as Map<string, Term>[];
@@ -120,12 +123,12 @@ describe("Store", () => {
             assert.strictEqual(1, results.length);
         });
 
-        it("SELECT with explicit default graph list", () => {
+        it("SELECT deduplicates explicit default graph list", () => {
             const store = new Store([dataModel.quad(ex, ex, ex), dataModel.quad(ex, ex, ex, ex)]);
             const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
                 default_graph: [dataModel.defaultGraph(), ex],
             }) as Map<string, Term>[];
-            assert.strictEqual(2, results.length);
+            assert.strictEqual(1, results.length);
         });
 
         it("SELECT with explicit named graphs list", () => {

@@ -3,6 +3,9 @@
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
 
+### Fixed
+- SPARQL: avoid counting shared triples multiple times when merging default graphs with `FROM`, `USING`, or the union-default-graph option. RocksDB-backed stores use their ordered indexes to perform this merge without retaining all matched triples.
+
 
 # [0.5.7] - 2026-04-19
 

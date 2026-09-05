@@ -43,7 +43,31 @@
     :order_by_rand
     :port_local_name
     :xsd_string_cast
+    :merged_default_graph
+    :merged_default_graph_join
+    :merged_default_graph_update
     ) .
+
+:merged_default_graph rdf:type mf:QueryEvaluationTest ;
+    mf:name "Merged default graphs deduplicate triples, not projected values" ;
+    mf:action [ qt:query <merged_default_graph.rq> ] ;
+    mf:result <merged_default_graph.srj> .
+
+:merged_default_graph_join rdf:type mf:QueryEvaluationTest ;
+    mf:name "Merged default graphs preserve duplicate join solutions after projection" ;
+    mf:action [ qt:query <merged_default_graph_join.rq> ] ;
+    mf:result <merged_default_graph_join.srj> .
+
+:merged_default_graph_update rdf:type mf:UpdateEvaluationTest ;
+    mf:name "USING merges shared triples before computing an inserted aggregate" ;
+    mf:action [
+        ut:request <merged_default_graph.ru> ;
+        ut:graphData <merged_graph_1.ttl>, <merged_graph_2.ttl>
+    ] ;
+    mf:result [
+        ut:data <merged_default_graph_update.ttl> ;
+        ut:graphData <merged_graph_1.ttl>, <merged_graph_2.ttl>
+    ] .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
     mf:name "Multibytes character at the end of a unicode escape sequence" ;
