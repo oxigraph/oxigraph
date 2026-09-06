@@ -669,7 +669,6 @@ impl From<&Triple> for EncodedTerm {
     }
 }
 
-#[cfg(feature = "rdf-12")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct EncodedTriple {
     pub subject: EncodedTerm,
@@ -677,7 +676,6 @@ pub struct EncodedTriple {
     pub object: EncodedTerm,
 }
 
-#[cfg(feature = "rdf-12")]
 impl EncodedTriple {
     pub fn new(subject: EncodedTerm, predicate: EncodedTerm, object: EncodedTerm) -> Self {
         Self {
@@ -688,7 +686,6 @@ impl EncodedTriple {
     }
 }
 
-#[cfg(feature = "rdf-12")]
 impl From<&Triple> for EncodedTriple {
     fn from(triple: &Triple) -> Self {
         Self {
@@ -730,6 +727,16 @@ impl From<&Quad> for EncodedQuad {
             predicate: (&quad.predicate).into(),
             object: (&quad.object).into(),
             graph_name: (&quad.graph_name).into(),
+        }
+    }
+}
+
+impl From<EncodedQuad> for EncodedTriple {
+    fn from(quad: EncodedQuad) -> Self {
+        Self {
+            subject: quad.subject,
+            predicate: quad.predicate,
+            object: quad.object,
         }
     }
 }

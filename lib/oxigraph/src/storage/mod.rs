@@ -4,7 +4,9 @@ use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
     MemoryStorageTransaction, QuadIterator,
 };
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    EncodedQuad, EncodedTerm, EncodedTriple, StrHash, StrLookup,
+};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use crate::storage::rocksdb::{
     RocksDbChainedDecodingQuadIterator, RocksDbDecodingGraphIterator, RocksDbStorage,
@@ -246,41 +248,40 @@ impl<'a> StorageReader<'a> {
         }
     }
 
-    pub fn quads_for_pattern_in_union(
+    pub fn triples_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_names: Option<&[Option<EncodedTerm>]>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, StorageError>> + 'a> {
+    ) -> Box<dyn Iterator<Item = Result<EncodedTriple, StorageError>> + 'a> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => {
-                Box::new(reader.quads_for_pattern_in_union(subject, predicate, object, graph_names))
+                reader.triples_for_pattern(subject, predicate, object, graph_names)
             }
             StorageReaderKind::Memory(_) => {
-                let iter: Box<dyn Iterator<Item = Result<_, _>> + 'a> =
-                    if let Some(graph_names) = graph_names {
-                        let iters = graph_names
-                            .iter()
-                            .map(|graph_name| {
-                                self.quads_for_pattern(
-                                    subject,
-                                    predicate,
-                                    object,
-                                    Some(graph_name.as_ref().unwrap_or(&EncodedTerm::DefaultGraph)),
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        Box::new(iters.into_iter().flatten())
-                    } else {
-                        Box::new(self.quads_for_pattern(subject, predicate, object, None))
-                    };
-                Box::new(hash_deduplicate(iter.map(|quad| {
-                    let mut quad = quad?;
-                    quad.graph_name = EncodedTerm::DefaultGraph;
-                    Ok(quad)
-                })))
+                if let Some(graph_names) = graph_names {
+                    let iters = graph_names
+                        .iter()
+                        .map(|graph_name| {
+                            self.quads_for_pattern(
+                                subject,
+                                predicate,
+                                object,
+                                Some(graph_name.as_ref().unwrap_or(&EncodedTerm::DefaultGraph)),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Box::new(hash_deduplicate(
+                        iters.into_iter().flatten().map(|quad| Ok(quad?.into())),
+                    ))
+                } else {
+                    Box::new(hash_deduplicate(
+                        self.quads_for_pattern(subject, predicate, object, None)
+                            .map(|quad| Ok(quad?.into())),
+                    ))
+                }
             }
         }
     }
