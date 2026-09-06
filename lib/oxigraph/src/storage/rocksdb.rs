@@ -11,7 +11,8 @@ use crate::storage::binary_encoder::{
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
-    Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
+    Decoder, EncodedQuad, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
+    insert_term,
 };
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, DbOptions, Iter, ReadableTransaction, Reader,
@@ -503,14 +504,13 @@ impl<'a> RocksDbStorageReader<'a> {
         }
     }
 
-    pub fn quads_for_pattern_in_union(
+    pub fn triples_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_names: Option<&[Option<EncodedTerm>]>,
-    ) -> RocksDbMergedDecodingQuadIterator<'a> {
-        let order = TripleOrder::from_pattern(subject, predicate, object);
+    ) -> Box<dyn Iterator<Item = Result<EncodedTriple, StorageError>> + 'a> {
         let iters = if let Some(graph_names) = graph_names {
             graph_names
                 .iter()
@@ -527,10 +527,27 @@ impl<'a> RocksDbStorageReader<'a> {
                     object,
                     Some(&EncodedTerm::DefaultGraph),
                 ),
-                self.quads_for_pattern_in_named_graphs(subject, predicate, object),
+                RocksDbChainedDecodingQuadIterator::new(
+                    self.quads_for_pattern_in_named_graphs(subject, predicate, object),
+                ),
             ]
         };
-        RocksDbMergedDecodingQuadIterator::new(iters, order)
+        Box::new(RocksDbMergedDecodingTripleIterator::new(
+            iters,
+            if subject.is_some() {
+                if predicate.is_none() && object.is_some() {
+                    write_osp_quad
+                } else {
+                    write_spo_quad
+                }
+            } else if predicate.is_some() {
+                write_pos_quad
+            } else if object.is_some() {
+                write_osp_quad
+            } else {
+                write_spo_quad
+            },
+        ))
     }
 
     fn quads_for_pattern_in_named_graphs(
@@ -538,8 +555,8 @@ impl<'a> RocksDbStorageReader<'a> {
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
-    ) -> RocksDbChainedDecodingQuadIterator<'a> {
-        RocksDbChainedDecodingQuadIterator::new(match subject {
+    ) -> RocksDbDecodingQuadIterator<'a> {
+        match subject {
             Some(subject) => match predicate {
                 Some(predicate) => match object {
                     Some(object) => {
@@ -562,7 +579,7 @@ impl<'a> RocksDbStorageReader<'a> {
                     None => self.spog_quads(&[]),
                 },
             },
-        })
+        }
     }
 
     pub fn quads(&self) -> RocksDbChainedDecodingQuadIterator<'a> {
@@ -950,72 +967,36 @@ impl Iterator for RocksDbChainedDecodingQuadIterator<'_> {
     }
 }
 
-#[derive(Clone, Copy)]
-enum TripleOrder {
-    Spo,
-    Pos,
-    Osp,
-}
-
-impl TripleOrder {
-    fn from_pattern(
-        subject: Option<&EncodedTerm>,
-        predicate: Option<&EncodedTerm>,
-        object: Option<&EncodedTerm>,
-    ) -> Self {
-        if subject.is_some() {
-            if predicate.is_none() && object.is_some() {
-                Self::Osp
-            } else {
-                Self::Spo
-            }
-        } else if predicate.is_some() {
-            Self::Pos
-        } else if object.is_some() {
-            Self::Osp
-        } else {
-            Self::Spo
-        }
-    }
-
-    fn key(self, quad: &EncodedQuad) -> Vec<u8> {
-        let mut key = Vec::with_capacity(3 * WRITTEN_TERM_MAX_SIZE);
-        match self {
-            Self::Spo => write_spo_quad(&mut key, quad),
-            Self::Pos => write_pos_quad(&mut key, quad),
-            Self::Osp => write_osp_quad(&mut key, quad),
-        }
-        key
-    }
-}
-
 struct QuadHead {
     key: Vec<u8>,
     quad: EncodedQuad,
 }
 
 #[must_use]
-pub struct RocksDbMergedDecodingQuadIterator<'a> {
+pub struct RocksDbMergedDecodingTripleIterator<'a> {
     iters: Vec<RocksDbChainedDecodingQuadIterator<'a>>,
     heads: Vec<Option<QuadHead>>,
-    order: TripleOrder,
     previous: Option<EncodedQuad>,
+    key: fn(&mut Vec<u8>, &EncodedQuad),
 }
 
-impl<'a> RocksDbMergedDecodingQuadIterator<'a> {
-    fn new(iters: Vec<RocksDbChainedDecodingQuadIterator<'a>>, order: TripleOrder) -> Self {
+impl<'a> RocksDbMergedDecodingTripleIterator<'a> {
+    fn new(
+        iters: Vec<RocksDbChainedDecodingQuadIterator<'a>>,
+        key: fn(&mut Vec<u8>, &EncodedQuad),
+    ) -> Self {
         let heads = std::iter::repeat_with(|| None).take(iters.len()).collect();
         Self {
             iters,
             heads,
-            order,
             previous: None,
+            key,
         }
     }
 }
 
-impl Iterator for RocksDbMergedDecodingQuadIterator<'_> {
-    type Item = Result<EncodedQuad, StorageError>;
+impl Iterator for RocksDbMergedDecodingTripleIterator<'_> {
+    type Item = Result<EncodedTriple, StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -1026,10 +1007,9 @@ impl Iterator for RocksDbMergedDecodingQuadIterator<'_> {
                             Ok(quad) => quad,
                             Err(error) => return Some(Err(error)),
                         };
-                        *head = Some(QuadHead {
-                            key: self.order.key(&quad),
-                            quad,
-                        });
+                        let mut buffer = Vec::new();
+                        (self.key)(&mut buffer, &quad);
+                        *head = Some(QuadHead { key: buffer, quad });
                     }
                 }
             }
@@ -1046,7 +1026,7 @@ impl Iterator for RocksDbMergedDecodingQuadIterator<'_> {
                 continue;
             }
             self.previous = Some(quad.clone());
-            return Some(Ok(quad));
+            return Some(Ok(quad.into()));
         }
     }
 }
