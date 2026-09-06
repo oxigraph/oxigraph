@@ -7,7 +7,7 @@ use crate::type_inference::{
 use oxrdf::Variable;
 use oxrdf::vocab::rdf;
 use spargebra::algebra::PropertyPathExpression;
-use spargebra::term::{GroundTermPattern, NamedNodePattern};
+use spargebra::term::{NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
 use std::cmp::{max, min};
 
@@ -1152,9 +1152,9 @@ fn is_fit_for_for_loop_join(
 }
 
 fn is_path_fit_for_for_loop_join(
-    subject: &GroundTermPattern,
+    subject: &TermPattern,
     path: &PropertyPathExpression,
-    object: &GroundTermPattern,
+    object: &TermPattern,
     entry_types: &VariableTypes,
 ) -> bool {
     match path {
@@ -1175,7 +1175,7 @@ fn is_path_fit_for_for_loop_join(
         }
         PropertyPathExpression::ZeroOrMorePath(_) | PropertyPathExpression::ZeroOrOnePath(_) => {
             // We don't want to set the left or right side of the zero or ... path because it could be returned in the result set even if it is not supported in the graph
-            if let (GroundTermPattern::Variable(subject), GroundTermPattern::Variable(object)) =
+            if let (TermPattern::Variable(subject), TermPattern::Variable(object)) =
                 (subject, object)
             {
                 entry_types.get(subject) == VariableType::UNDEF
@@ -1449,12 +1449,12 @@ fn estimate_path_size(start_bound: bool, path: &PropertyPathExpression, end_boun
     }
 }
 
-fn is_term_pattern_bound(pattern: &GroundTermPattern, input_types: &VariableTypes) -> bool {
+fn is_term_pattern_bound(pattern: &TermPattern, input_types: &VariableTypes) -> bool {
     match pattern {
-        GroundTermPattern::NamedNode(_) | GroundTermPattern::Literal(_) => true,
-        GroundTermPattern::Variable(v) => !input_types.get(v).undef,
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
+        TermPattern::Variable(v) => !input_types.get(v).undef,
         #[cfg(feature = "sparql-12")]
-        GroundTermPattern::Triple(t) => {
+        TermPattern::Triple(t) => {
             is_term_pattern_bound(&t.subject, input_types)
                 && is_named_node_pattern_bound(&t.predicate, input_types)
                 && is_term_pattern_bound(&t.object, input_types)

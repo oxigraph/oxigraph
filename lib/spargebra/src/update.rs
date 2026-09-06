@@ -210,8 +210,8 @@ impl From<DeleteDataOperation> for GraphUpdateOperation {
 /// The [delete insert](https://www.w3.org/TR/sparql11-update/#defn_deleteInsertOperation) update operation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct DeleteInsertOperation {
-    pub delete: Vec<GroundQuadPattern>,
-    pub insert: Vec<QuadPattern>,
+    pub delete: Vec<QuadPattern>,
+    pub insert: Vec<QuadTemplate>,
     pub using: Option<QueryDatasetSpecification>,
     pub pattern: Box<QueryExpression>,
 }

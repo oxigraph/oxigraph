@@ -8,15 +8,14 @@ use spargebra::algebra::{
     AggregateExpression as AlAggregateExpression, Expression as AlExpression,
     OrderExpression as AlOrderExpression, QueryExpression as AlQueryExpression,
 };
-use spargebra::term::{BlankNode, TermPattern, TriplePattern};
-pub use spargebra::term::{
-    GroundTerm, GroundTermPattern, Literal, NamedNode, NamedNodePattern, Variable,
-};
 #[cfg(feature = "sparql-12")]
-use spargebra::term::{GroundTriple, GroundTriplePattern};
+use spargebra::term::GroundTriple;
+pub use spargebra::term::{
+    GroundTerm, Literal, NamedNode, NamedNodePattern, TermPattern, TriplePattern, Variable,
+};
 use spargebra::vocab::sparql;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{BitAnd, BitOr, Not};
 
@@ -207,51 +206,6 @@ impl Expression {
         }
     }
 
-    fn from_sparql_algebra(expression: &AlExpression) -> Self {
-        match expression {
-            AlExpression::NamedNode(node) => Self::NamedNode(node.clone()),
-            AlExpression::Literal(literal) => Self::Literal(literal.clone()),
-            AlExpression::Variable(variable) => Self::Variable(variable.clone()),
-            AlExpression::Or(left, right) => Self::Or(vec![
-                Self::from_sparql_algebra(left),
-                Self::from_sparql_algebra(right),
-            ]),
-            AlExpression::And(left, right) => Self::And(vec![
-                Self::from_sparql_algebra(left),
-                Self::from_sparql_algebra(right),
-            ]),
-            AlExpression::In(left, right) => {
-                let left = Self::from_sparql_algebra(left);
-                match right.len() {
-                    0 => Self::if_cond(left, false.into(), false.into()),
-                    1 => Self::equal(left, Self::from_sparql_algebra(&right[0])),
-                    _ => Self::Or(
-                        right
-                            .iter()
-                            .map(|e| Self::equal(left.clone(), Self::from_sparql_algebra(e)))
-                            .collect(),
-                    ),
-                }
-            }
-            AlExpression::Exists(inner) => Self::Exists(Box::new(
-                QueryExpression::from_sparql_algebra(inner, &mut HashMap::new()),
-            )),
-            AlExpression::Bound(variable) => Self::Bound(variable.clone()),
-            AlExpression::If(cond, yes, no) => Self::If(
-                Box::new(Self::from_sparql_algebra(cond)),
-                Box::new(Self::from_sparql_algebra(yes)),
-                Box::new(Self::from_sparql_algebra(no)),
-            ),
-            AlExpression::Coalesce(inner) => {
-                Self::Coalesce(inner.iter().map(Self::from_sparql_algebra).collect())
-            }
-            AlExpression::FunctionCall(name, args) => Self::FunctionCall(
-                name.clone(),
-                args.iter().map(Self::from_sparql_algebra).collect(),
-            ),
-        }
-    }
-
     fn returns_boolean(&self) -> bool {
         match self {
             Self::Or(_) | Self::And(_) | Self::Exists(_) | Self::Bound(_) => true,
@@ -317,14 +271,14 @@ impl From<NamedNodePattern> for Expression {
     }
 }
 
-impl From<GroundTermPattern> for Expression {
-    fn from(value: GroundTermPattern) -> Self {
+impl From<TermPattern> for Expression {
+    fn from(value: TermPattern) -> Self {
         match value {
-            GroundTermPattern::NamedNode(value) => value.into(),
-            GroundTermPattern::Literal(value) => value.into(),
+            TermPattern::NamedNode(value) => value.into(),
+            TermPattern::Literal(value) => value.into(),
             #[cfg(feature = "sparql-12")]
-            GroundTermPattern::Triple(value) => (*value).into(),
-            GroundTermPattern::Variable(variable) => variable.into(),
+            TermPattern::Triple(value) => (*value).into(),
+            TermPattern::Variable(variable) => variable.into(),
         }
     }
 }
@@ -344,8 +298,8 @@ impl From<GroundTriple> for Expression {
 }
 
 #[cfg(feature = "sparql-12")]
-impl From<GroundTriplePattern> for Expression {
-    fn from(value: GroundTriplePattern) -> Self {
+impl From<TriplePattern> for Expression {
+    fn from(value: TriplePattern) -> Self {
         Self::FunctionCall(
             sparql::TRIPLE,
             vec![
@@ -366,6 +320,46 @@ impl From<Variable> for Expression {
 impl From<bool> for Expression {
     fn from(value: bool) -> Self {
         Literal::from(value).into()
+    }
+}
+
+impl From<&AlExpression> for Expression {
+    fn from(expression: &AlExpression) -> Self {
+        match expression {
+            AlExpression::NamedNode(node) => Self::NamedNode(node.clone()),
+            AlExpression::Literal(literal) => Self::Literal(literal.clone()),
+            AlExpression::Variable(variable) => Self::Variable(variable.clone()),
+            AlExpression::Or(left, right) => {
+                Self::Or(vec![left.as_ref().into(), right.as_ref().into()])
+            }
+            AlExpression::And(left, right) => {
+                Self::And(vec![left.as_ref().into(), right.as_ref().into()])
+            }
+            AlExpression::In(left, right) => {
+                let left = left.as_ref().into();
+                match right.len() {
+                    0 => Self::if_cond(left, false.into(), false.into()),
+                    1 => Self::equal(left, (&right[0]).into()),
+                    _ => Self::Or(
+                        right
+                            .iter()
+                            .map(|e| Self::equal(left.clone(), e.into()))
+                            .collect(),
+                    ),
+                }
+            }
+            AlExpression::Exists(inner) => Self::Exists(Box::new(QueryExpression::from(&**inner))),
+            AlExpression::Bound(variable) => Self::Bound(variable.clone()),
+            AlExpression::If(cond, yes, no) => Self::If(
+                Box::new(cond.as_ref().into()),
+                Box::new(yes.as_ref().into()),
+                Box::new(no.as_ref().into()),
+            ),
+            AlExpression::Coalesce(inner) => Self::Coalesce(inner.iter().map(Into::into).collect()),
+            AlExpression::FunctionCall(name, args) => {
+                Self::FunctionCall(name.clone(), args.iter().map(Into::into).collect())
+            }
+        }
     }
 }
 
@@ -433,16 +427,16 @@ impl Not for Expression {
 pub enum QueryExpression {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     QuadPattern {
-        subject: GroundTermPattern,
+        subject: TermPattern,
         predicate: NamedNodePattern,
-        object: GroundTermPattern,
+        object: TermPattern,
         graph_name: Option<NamedNodePattern>, // None for the default graph
     },
     /// A [property path pattern](https://www.w3.org/TR/sparql11-query/#defn_evalPP_predicate).
     Path {
-        subject: GroundTermPattern,
+        subject: TermPattern,
         path: PropertyPathExpression,
-        object: GroundTermPattern,
+        object: TermPattern,
     },
     /// [Graph](https://www.w3.org/TR/sparql11-query/#defn_evalGraph).
     Graph {
@@ -950,22 +944,37 @@ impl QueryExpression {
         order
     }
 
-    fn from_sparql_algebra(
-        query_expression: &AlQueryExpression,
-        blank_nodes: &mut HashMap<BlankNode, Variable>,
-    ) -> Self {
+    /// Makes sure the expression is a variable, use Extend in the other cases
+    fn algebra_expression_to_constant_or_variable(
+        expression: &AlExpression,
+        query_expression: QueryExpression,
+    ) -> (Variable, QueryExpression) {
+        if let AlExpression::Variable(variable) = expression {
+            (variable.clone(), query_expression)
+        } else {
+            let variable = new_var();
+            (
+                variable.clone(),
+                QueryExpression::Extend {
+                    inner: Box::new(query_expression),
+                    variable,
+                    expression: expression.into(),
+                },
+            )
+        }
+    }
+}
+
+impl From<&AlQueryExpression> for QueryExpression {
+    fn from(query_expression: &AlQueryExpression) -> Self {
         match query_expression {
             AlQueryExpression::Bgp { patterns } => patterns
                 .iter()
-                .map(|p| {
-                    let (subject, predicate, object) =
-                        Self::triple_pattern_from_algebra(p, blank_nodes);
-                    Self::QuadPattern {
-                        subject,
-                        predicate,
-                        object,
-                        graph_name: None,
-                    }
+                .map(|pattern| Self::QuadPattern {
+                    subject: pattern.subject.clone(),
+                    predicate: pattern.predicate.clone(),
+                    object: pattern.object.clone(),
+                    graph_name: None,
                 })
                 .reduce(|a, b| Self::Join {
                     left: Box::new(a),
@@ -978,13 +987,13 @@ impl QueryExpression {
                 path,
                 object,
             } => Self::Path {
-                subject: Self::term_pattern_from_algebra(subject, blank_nodes),
+                subject: subject.clone(),
                 path: path.clone(),
-                object: Self::term_pattern_from_algebra(object, blank_nodes),
+                object: object.clone(),
             },
             AlQueryExpression::Join { left, right } => Self::Join {
-                left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
-                right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
+                left: Box::new((&**left).into()),
+                right: Box::new((&**right).into()),
                 algorithm: JoinAlgorithm::default(),
             },
             AlQueryExpression::LeftJoin {
@@ -992,44 +1001,39 @@ impl QueryExpression {
                 right,
                 expression,
             } => Self::LeftJoin {
-                left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
-                right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
-                expression: expression
-                    .as_ref()
-                    .map_or_else(|| true.into(), Expression::from_sparql_algebra),
+                left: Box::new((&**left).into()),
+                right: Box::new((&**right).into()),
+                expression: expression.as_ref().map_or_else(|| true.into(), Into::into),
                 algorithm: LeftJoinAlgorithm::default(),
             },
             #[cfg(feature = "sep-0006")]
             AlQueryExpression::Lateral { left, right } => Self::Lateral {
-                left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
-                right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
+                left: Box::new((&**left).into()),
+                right: Box::new((&**right).into()),
             },
             AlQueryExpression::Filter { inner, expr } => Self::Filter {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
-                expression: Expression::from_sparql_algebra(expr),
+                inner: Box::new((&**inner).into()),
+                expression: expr.into(),
             },
             AlQueryExpression::Union { left, right } => Self::Union {
-                inner: vec![
-                    Self::from_sparql_algebra(left, blank_nodes),
-                    Self::from_sparql_algebra(right, blank_nodes),
-                ],
+                inner: vec![(&**left).into(), (&**right).into()],
             },
             AlQueryExpression::Graph { inner, name } => Self::Graph {
                 graph_name: name.clone(),
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
             },
             AlQueryExpression::Extend {
                 inner,
                 expression,
                 variable,
             } => Self::Extend {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
-                expression: Expression::from_sparql_algebra(expression),
+                inner: Box::new((&**inner).into()),
+                expression: expression.into(),
                 variable: variable.clone(),
             },
             AlQueryExpression::Minus { left, right } => Self::Minus {
-                left: Box::new(Self::from_sparql_algebra(left, blank_nodes)),
-                right: Box::new(Self::from_sparql_algebra(right, blank_nodes)),
+                left: Box::new((&**left).into()),
+                right: Box::new((&**right).into()),
                 algorithm: MinusAlgorithm::default(),
             },
             AlQueryExpression::Values {
@@ -1040,7 +1044,7 @@ impl QueryExpression {
                 bindings: bindings.clone(),
             },
             AlQueryExpression::OrderBy { inner, expression } => {
-                let mut inner = Self::from_sparql_algebra(inner, blank_nodes);
+                let mut inner = (&**inner).into();
                 let mut expressions = Vec::with_capacity(expression.len());
                 for e in expression {
                     expressions.push(match e {
@@ -1062,21 +1066,21 @@ impl QueryExpression {
                 }
             }
             AlQueryExpression::Project { inner, variables } => Self::Project {
-                inner: Box::new(Self::from_sparql_algebra(inner, &mut HashMap::new())),
+                inner: Box::new((&**inner).into()),
                 variables: variables.clone(),
             },
             AlQueryExpression::Distinct { inner } => Self::Distinct {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
             },
             AlQueryExpression::Reduced { inner } => Self::Distinct {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
             },
             AlQueryExpression::Slice {
                 inner,
                 offset,
                 limit,
             } => Self::Slice {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
                 offset: *offset,
                 limit: *limit,
             },
@@ -1085,13 +1089,11 @@ impl QueryExpression {
                 variables,
                 aggregates,
             } => Self::Group {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
                 variables: variables.clone(),
                 aggregates: aggregates
                     .iter()
-                    .map(|(var, expr)| {
-                        (var.clone(), AggregateExpression::from_sparql_algebra(expr))
-                    })
+                    .map(|(var, expr)| (var.clone(), expr.into()))
                     .collect(),
             },
             AlQueryExpression::Service {
@@ -1099,75 +1101,11 @@ impl QueryExpression {
                 name,
                 silent,
             } => Self::Service {
-                inner: Box::new(Self::from_sparql_algebra(inner, blank_nodes)),
+                inner: Box::new((&**inner).into()),
                 name: name.clone(),
                 silent: *silent,
             },
         }
-    }
-
-    fn triple_pattern_from_algebra(
-        pattern: &TriplePattern,
-        blank_nodes: &mut HashMap<BlankNode, Variable>,
-    ) -> (GroundTermPattern, NamedNodePattern, GroundTermPattern) {
-        (
-            Self::term_pattern_from_algebra(&pattern.subject, blank_nodes),
-            pattern.predicate.clone(),
-            Self::term_pattern_from_algebra(&pattern.object, blank_nodes),
-        )
-    }
-
-    fn term_pattern_from_algebra(
-        pattern: &TermPattern,
-        blank_nodes: &mut HashMap<BlankNode, Variable>,
-    ) -> GroundTermPattern {
-        match pattern {
-            TermPattern::NamedNode(node) => node.clone().into(),
-            TermPattern::BlankNode(node) => blank_nodes
-                .entry(node.clone())
-                .or_insert_with(new_var)
-                .clone()
-                .into(),
-            TermPattern::Literal(literal) => literal.clone().into(),
-            #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(pattern) => {
-                let (subject, predicate, object) =
-                    Self::triple_pattern_from_algebra(pattern, blank_nodes);
-                GroundTriplePattern {
-                    subject,
-                    predicate,
-                    object,
-                }
-                .into()
-            }
-            TermPattern::Variable(variable) => variable.clone().into(),
-        }
-    }
-
-    /// Makes sure the expression is a variable, use Extend in the other cases
-    fn algebra_expression_to_constant_or_variable(
-        expression: &AlExpression,
-        query_expression: QueryExpression,
-    ) -> (Variable, QueryExpression) {
-        if let AlExpression::Variable(variable) = expression {
-            (variable.clone(), query_expression)
-        } else {
-            let variable = new_var();
-            (
-                variable.clone(),
-                QueryExpression::Extend {
-                    inner: Box::new(query_expression),
-                    variable,
-                    expression: Expression::from_sparql_algebra(expression),
-                },
-            )
-        }
-    }
-}
-
-impl From<&AlQueryExpression> for QueryExpression {
-    fn from(query_expression: &AlQueryExpression) -> Self {
-        Self::from_sparql_algebra(query_expression, &mut HashMap::new())
     }
 }
 
@@ -1182,9 +1120,9 @@ impl From<&QueryExpression> for AlQueryExpression {
             } => {
                 let pattern = Self::Bgp {
                     patterns: vec![TriplePattern {
-                        subject: subject.clone().into(),
+                        subject: subject.clone(),
                         predicate: predicate.clone(),
-                        object: object.clone().into(),
+                        object: object.clone(),
                     }],
                 };
                 if let Some(graph_name) = graph_name {
@@ -1201,9 +1139,9 @@ impl From<&QueryExpression> for AlQueryExpression {
                 path,
                 object,
             } => Self::Path {
-                subject: subject.clone().into(),
+                subject: subject.clone(),
                 path: path.clone(),
-                object: object.clone().into(),
+                object: object.clone(),
             },
             QueryExpression::Graph { graph_name, inner } => Self::Graph {
                 inner: Box::new(inner.as_ref().into()),
@@ -1394,8 +1332,8 @@ pub enum AggregateExpression {
     },
 }
 
-impl AggregateExpression {
-    fn from_sparql_algebra(expression: &AlAggregateExpression) -> Self {
+impl From<&AlAggregateExpression> for AggregateExpression {
+    fn from(expression: &AlAggregateExpression) -> Self {
         match expression {
             AlAggregateExpression::CountSolutions { distinct } => Self::CountSolutions {
                 distinct: *distinct,
@@ -1407,7 +1345,7 @@ impl AggregateExpression {
                 scalarvals,
             } => Self::FunctionCall {
                 name: name.clone(),
-                expr: Expression::from_sparql_algebra(expr),
+                expr: expr.into(),
                 distinct: *distinct,
                 scalarvals: scalarvals.clone(),
             },
@@ -1474,14 +1412,14 @@ fn hash(v: impl Hash) -> u64 {
 }
 
 fn lookup_term_pattern_variables<'a>(
-    pattern: &'a GroundTermPattern,
+    pattern: &'a TermPattern,
     callback: &mut impl FnMut(&'a Variable),
 ) {
-    if let GroundTermPattern::Variable(v) = pattern {
+    if let TermPattern::Variable(v) = pattern {
         callback(v);
     }
     #[cfg(feature = "sparql-12")]
-    if let GroundTermPattern::Triple(t) = pattern {
+    if let TermPattern::Triple(t) = pattern {
         lookup_term_pattern_variables(&t.subject, callback);
         if let NamedNodePattern::Variable(v) = &t.predicate {
             callback(v);
@@ -1500,9 +1438,9 @@ mod tests {
 
     fn quad_pattern(subject: &str, predicate: &str, object: &str) -> QueryExpression {
         QueryExpression::QuadPattern {
-            subject: GroundTermPattern::Variable(var(subject)),
+            subject: TermPattern::Variable(var(subject)),
             predicate: NamedNodePattern::Variable(var(predicate)),
-            object: GroundTermPattern::Variable(var(object)),
+            object: TermPattern::Variable(var(object)),
             graph_name: None,
         }
     }

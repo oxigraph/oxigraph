@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.org/>
+
+ex:s1 ex:p1 ex:o1 .
+
+ex:s2 ex:p2 ex:o2 .
+
+ex:s ex:p1 ex:o ; ex:p2 ex:o .
