@@ -46,6 +46,7 @@
     :merged_default_graph
     :merged_default_graph_join
     :merged_default_graph_update
+    :repeated_blank_node
     ) .
 
 :merged_default_graph rdf:type mf:QueryEvaluationTest ;
@@ -237,3 +238,8 @@
     mf:name "xsd:string cast edge case testing" ;
     mf:action [ qt:query <xsd_string_cast.rq> ] ;
     mf:result  <xsd_string_cast.srx> .
+
+:repeated_blank_node rdf:type mf:QueryEvaluationTest ;
+    mf:name "same blank node multiple times in the query" ;
+    mf:action [ qt:query <repeated_blank_node.rq> ; qt:data <repeated_blank_node.ttl> ] ;
+    mf:result  <repeated_blank_node.srx> .

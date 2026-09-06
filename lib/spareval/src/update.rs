@@ -5,11 +5,10 @@ use oxrdf::{BlankNode, GraphName, NamedNode, Quad, Term};
 use rustc_hash::FxHashMap;
 use sparesults::QuerySolution;
 use spargebra::term::{
-    GraphNamePattern, GroundQuadPattern, GroundTermPattern, NamedNodePattern, QuadPattern,
-    TermPattern,
+    GraphNamePattern, NamedNodePattern, QuadPattern, QuadTemplate, TermPattern, TermTemplate,
 };
 #[cfg(feature = "sparql-12")]
-use spargebra::term::{GroundTriplePattern, TriplePattern};
+use spargebra::term::{TriplePattern, TripleTemplate};
 use std::collections::VecDeque;
 use std::mem::take;
 
@@ -24,9 +23,9 @@ pub enum DeleteInsertQuad {
 pub struct DeleteInsertIter<'a, 'b> {
     solutions: QuerySolutionIter<'a>,
     ground_delete: Vec<Quad>,
-    variable_delete: Vec<&'b GroundQuadPattern>,
+    variable_delete: Vec<&'b QuadPattern>,
     ground_insert: Vec<Quad>,
-    variable_insert: Vec<&'b QuadPattern>,
+    variable_insert: Vec<&'b QuadTemplate>,
     buffer: VecDeque<DeleteInsertQuad>,
     bnodes: FxHashMap<BlankNode, BlankNode>,
 }
@@ -34,8 +33,8 @@ pub struct DeleteInsertIter<'a, 'b> {
 impl<'a, 'b> DeleteInsertIter<'a, 'b> {
     pub(crate) fn new(
         solutions: QuerySolutionIter<'a>,
-        delete: &'b [GroundQuadPattern],
-        insert: &'b [QuadPattern],
+        delete: &'b [QuadPattern],
+        insert: &'b [QuadTemplate],
         without_optimizations: bool,
     ) -> Self {
         let mut ground_delete = Vec::new();
@@ -119,7 +118,7 @@ impl Iterator for DeleteInsertIter<'_, '_> {
 }
 
 fn fill_quad_pattern(
-    quad: &QuadPattern,
+    quad: &QuadTemplate,
     solution: &QuerySolution,
     bnodes: &mut FxHashMap<BlankNode, BlankNode>,
 ) -> Option<Quad> {
@@ -138,17 +137,17 @@ fn fill_quad_pattern(
 }
 
 fn fill_term_or_var(
-    term: &TermPattern,
+    term: &TermTemplate,
     solution: &QuerySolution,
     bnodes: &mut FxHashMap<BlankNode, BlankNode>,
 ) -> Option<Term> {
     Some(match term {
-        TermPattern::NamedNode(term) => term.clone().into(),
-        TermPattern::BlankNode(bnode) => convert_blank_node(bnode, bnodes).into(),
-        TermPattern::Literal(term) => term.clone().into(),
+        TermTemplate::NamedNode(term) => term.clone().into(),
+        TermTemplate::BlankNode(bnode) => convert_blank_node(bnode, bnodes).into(),
+        TermTemplate::Literal(term) => term.clone().into(),
         #[cfg(feature = "sparql-12")]
-        TermPattern::Triple(triple) => fill_triple_pattern(triple, solution, bnodes)?.into(),
-        TermPattern::Variable(v) => solution.get(v)?.clone(),
+        TermTemplate::Triple(triple) => fill_triple_pattern(triple, solution, bnodes)?.into(),
+        TermTemplate::Variable(v) => solution.get(v)?.clone(),
     })
 }
 
@@ -181,7 +180,7 @@ fn fill_graph_name_or_var(term: &GraphNamePattern, solution: &QuerySolution) -> 
 
 #[cfg(feature = "sparql-12")]
 fn fill_triple_pattern(
-    triple: &TriplePattern,
+    triple: &TripleTemplate,
     solution: &QuerySolution,
     bnodes: &mut FxHashMap<BlankNode, BlankNode>,
 ) -> Option<Triple> {
@@ -197,7 +196,7 @@ fn fill_triple_pattern(
         object: fill_term_or_var(&triple.object, solution, bnodes)?,
     })
 }
-fn fill_ground_quad_pattern(quad: &GroundQuadPattern, solution: &QuerySolution) -> Option<Quad> {
+fn fill_ground_quad_pattern(quad: &QuadPattern, solution: &QuerySolution) -> Option<Quad> {
     Some(Quad {
         subject: match fill_ground_term_or_var(&quad.subject, solution)? {
             Term::NamedNode(node) => node.into(),
@@ -212,21 +211,18 @@ fn fill_ground_quad_pattern(quad: &GroundQuadPattern, solution: &QuerySolution) 
     })
 }
 
-fn fill_ground_term_or_var(term: &GroundTermPattern, solution: &QuerySolution) -> Option<Term> {
+fn fill_ground_term_or_var(term: &TermPattern, solution: &QuerySolution) -> Option<Term> {
     Some(match term {
-        GroundTermPattern::NamedNode(term) => term.clone().into(),
-        GroundTermPattern::Literal(term) => term.clone().into(),
+        TermPattern::NamedNode(term) => term.clone().into(),
+        TermPattern::Literal(term) => term.clone().into(),
         #[cfg(feature = "sparql-12")]
-        GroundTermPattern::Triple(triple) => fill_ground_triple_pattern(triple, solution)?.into(),
-        GroundTermPattern::Variable(v) => solution.get(v)?.clone(),
+        TermPattern::Triple(triple) => fill_ground_triple_pattern(triple, solution)?.into(),
+        TermPattern::Variable(v) => solution.get(v)?.clone(),
     })
 }
 
 #[cfg(feature = "sparql-12")]
-fn fill_ground_triple_pattern(
-    triple: &GroundTriplePattern,
-    solution: &QuerySolution,
-) -> Option<Triple> {
+fn fill_ground_triple_pattern(triple: &TriplePattern, solution: &QuerySolution) -> Option<Triple> {
     Some(Triple {
         subject: match fill_ground_term_or_var(&triple.subject, solution)? {
             Term::NamedNode(node) => node.into(),

@@ -8,8 +8,8 @@ use crate::query::{AskQuery, ConstructQuery, DescribeQuery, Query, SelectQuery};
 #[cfg(feature = "sparql-12")]
 use crate::term::GroundTriple;
 use crate::term::{
-    GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm, NamedNodePattern, Quad,
-    QuadPattern, TermPattern, TriplePattern,
+    GraphName, GraphNamePattern, GroundQuad, GroundTerm, NamedNodePattern, Quad, QuadPattern,
+    QuadTemplate, TermPattern, TermTemplate, TriplePattern, TripleTemplate,
 };
 use crate::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
@@ -23,7 +23,6 @@ use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Variable};
 use oxstr::OxString;
-use rand::random;
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -35,6 +34,8 @@ pub struct AlgebraBuilder<'a> {
     prefixes: HashMap<OxString, Iri<OxString>>,
     custom_aggregate_functions: &'a HashSet<NamedNode>,
     buffer: String,
+    variable_allocator: FreshVariableAllocator<'a>,
+    blank_node_allocator: FreshBlankNodeAllocator<'a>,
 }
 
 impl<'a> AlgebraBuilder<'a> {
@@ -48,10 +49,14 @@ impl<'a> AlgebraBuilder<'a> {
             prefixes,
             custom_aggregate_functions,
             buffer: String::new(),
+            variable_allocator: FreshVariableAllocator::default(),
+            blank_node_allocator: FreshBlankNodeAllocator::default(),
         }
     }
 
     pub fn build_query(mut self, query: ast::Query<'a>) -> Result<Query, AlgebraBuilderError> {
+        self.variable_allocator.reset_with_query(&query);
+        self.blank_node_allocator.reset_with_query(&query);
         self.apply_prologue(query.prologue)?;
         Ok(match query.variant {
             ast::QueryQuery::Select(select) => {
@@ -354,7 +359,7 @@ impl<'a> AlgebraBuilder<'a> {
                     variables.push(variable);
                 } else {
                     // We have to introduce an intermediate variable
-                    let variable = random_variable();
+                    let variable = self.variable_allocator.fresh_variable("g");
                     p = QueryExpression::Extend {
                         inner: Box::new(p),
                         variable: variable.clone(),
@@ -440,7 +445,12 @@ impl<'a> AlgebraBuilder<'a> {
             }
             // TODO: is it really useful to always do a projection?
             p.on_in_scope_variable(|v| {
-                if !projection_variables.contains(v) {
+                if !projection_variables.contains(v)
+                    && !self
+                        .variable_allocator
+                        .allocated_variable_names
+                        .contains(v.as_str())
+                {
                     projection_variables.push(v.clone());
                 }
             });
@@ -502,7 +512,7 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_triple_template(
         &mut self,
         template: Vec<(ast::GraphNode<'a>, ast::PropertyList<'a>)>,
-    ) -> Result<Vec<TriplePattern>, AlgebraBuilderError> {
+    ) -> Result<Vec<TripleTemplate>, AlgebraBuilderError> {
         let mut patterns = Vec::new();
         for (subject, property_list) in template {
             let subject = self.build_graph_node(subject, &mut patterns)?;
@@ -1006,7 +1016,7 @@ impl<'a> AlgebraBuilder<'a> {
             ast::Expression::Bound(v) => Expression::Bound(Self::build_variable(v)),
             ast::Expression::Aggregate(aggregate) => {
                 let aggregate = self.build_aggregate(expression.span.make_wrapped(aggregate))?;
-                register_aggregate(aggregate, aggregates).into()
+                self.register_aggregate(aggregate, aggregates).into()
             }
             ast::Expression::Iri(n) => Expression::NamedNode(self.build_named_node(n)?),
             ast::Expression::Literal(l) => Expression::Literal(self.build_literal(l)?),
@@ -1139,16 +1149,17 @@ impl<'a> AlgebraBuilder<'a> {
                         args.args.into_iter().next().unwrap(),
                         "Aggregated expressions cannot be nested",
                     )?;
-                    return Ok(register_aggregate(
-                        AggregateExpression::FunctionCall {
-                            name,
-                            expr,
-                            distinct: args.distinct,
-                            scalarvals: BTreeMap::new(),
-                        },
-                        aggregates,
-                    )
-                    .into());
+                    return Ok(self
+                        .register_aggregate(
+                            AggregateExpression::FunctionCall {
+                                name,
+                                expr,
+                                distinct: args.distinct,
+                                scalarvals: BTreeMap::new(),
+                            },
+                            aggregates,
+                        )
+                        .into());
                 }
                 if args.distinct {
                     return Err(AlgebraBuilderError::new(
@@ -1201,9 +1212,9 @@ impl<'a> AlgebraBuilder<'a> {
 
     fn build_property_list(
         &mut self,
-        subject: &TermPattern,
+        subject: &TermTemplate,
         property_list: ast::PropertyList<'a>,
-        patterns: &mut Vec<TriplePattern>,
+        patterns: &mut Vec<TripleTemplate>,
     ) -> Result<(), AlgebraBuilderError> {
         for (predicate, objects) in property_list {
             let predicate = self.build_verb(predicate)?;
@@ -1216,7 +1227,7 @@ impl<'a> AlgebraBuilder<'a> {
                     object,
                     patterns,
                 )?;
-                patterns.push(TriplePattern::new(
+                patterns.push(TripleTemplate::new(
                     subject.clone(),
                     predicate.clone(),
                     object,
@@ -1248,7 +1259,7 @@ impl<'a> AlgebraBuilder<'a> {
                         TriplePattern::new(subject.clone(), predicate, object),
                     )),
                     VarOrPath::Path(path) => {
-                        add_path_to_patterns(subject.clone(), path, object, patterns)
+                        self.add_path_to_patterns(subject.clone(), path, object, patterns)
                     }
                 }
             }
@@ -1258,11 +1269,11 @@ impl<'a> AlgebraBuilder<'a> {
 
     fn build_object(
         &mut self,
-        #[cfg(feature = "sparql-12")] subject: &TermPattern,
+        #[cfg(feature = "sparql-12")] subject: &TermTemplate,
         #[cfg(feature = "sparql-12")] predicate: &NamedNodePattern,
         object: ast::Object<'a>,
-        patterns: &mut Vec<TriplePattern>,
-    ) -> Result<TermPattern, AlgebraBuilderError> {
+        patterns: &mut Vec<TripleTemplate>,
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
         let object_pattern = self.build_graph_node(object.graph_node, patterns)?;
         #[cfg(feature = "sparql-12")]
         {
@@ -1274,22 +1285,23 @@ impl<'a> AlgebraBuilder<'a> {
                         current_reifier = Some(if let Some(r) = r {
                             self.build_reifier_id(r)?
                         } else {
-                            BlankNode::default().into()
+                            self.blank_node_allocator.fresh_blank_node("r").into()
                         });
                         reifier_to_emit
                     }
                     ast::Annotation::AnnotationBlock(a) => {
-                        let reifier_to_emit = take(&mut current_reifier)
-                            .unwrap_or_else(|| BlankNode::default().into());
+                        let reifier_to_emit = take(&mut current_reifier).unwrap_or_else(|| {
+                            self.blank_node_allocator.fresh_blank_node("r").into()
+                        });
                         self.build_property_list(&reifier_to_emit, a, patterns)?;
                         Some(reifier_to_emit)
                     }
                 };
                 if let Some(reifier) = reifier_to_emit {
-                    patterns.push(TriplePattern::new(
+                    patterns.push(TripleTemplate::new(
                         reifier,
                         rdf::REIFIES,
-                        TriplePattern::new(
+                        TripleTemplate::new(
                             subject.clone(),
                             predicate.clone(),
                             object_pattern.clone(),
@@ -1317,15 +1329,17 @@ impl<'a> AlgebraBuilder<'a> {
                     ast::AnnotationPath::Reifier(r) => {
                         let reifier_to_emit = current_reifier;
                         current_reifier = Some(annotation.span.make_wrapped(if let Some(r) = r {
-                            self.build_reifier_id(r)?
+                            self.build_reifier_id_path(r)?
                         } else {
-                            BlankNode::default().into()
+                            self.variable_allocator.fresh_variable("r").into()
                         }));
                         reifier_to_emit
                     }
                     ast::AnnotationPath::AnnotationBlock(a) => {
                         let reifier_to_emit = take(&mut current_reifier).unwrap_or_else(|| {
-                            annotation.span.make_wrapped(BlankNode::default().into())
+                            annotation
+                                .span
+                                .make_wrapped(self.variable_allocator.fresh_variable("r").into())
                         });
                         self.build_property_list_path(&reifier_to_emit.inner, a, patterns)?;
                         Some(reifier_to_emit)
@@ -1359,32 +1373,45 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_reifier_id(
         &mut self,
         var_or_reifier_id: ast::VarOrReifierId<'a>,
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
+        Ok(match var_or_reifier_id {
+            ast::VarOrReifierId::Var(v) => Self::build_variable(v).into(),
+            ast::VarOrReifierId::Iri(n) => self.build_named_node(n)?.into(),
+            ast::VarOrReifierId::BlankNode(n) => self.build_blank_node(n).into(),
+        })
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn build_reifier_id_path(
+        &mut self,
+        var_or_reifier_id: ast::VarOrReifierId<'a>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         Ok(match var_or_reifier_id {
             ast::VarOrReifierId::Var(v) => Self::build_variable(v).into(),
             ast::VarOrReifierId::Iri(n) => self.build_named_node(n)?.into(),
-            ast::VarOrReifierId::BlankNode(n) => Self::build_blank_node(n).into(),
+            ast::VarOrReifierId::BlankNode(n) => self.build_blank_node_path(n).into(),
         })
     }
 
     fn build_graph_node(
         &mut self,
         graph_node: ast::GraphNode<'a>,
-        patterns: &mut Vec<TriplePattern>,
-    ) -> Result<TermPattern, AlgebraBuilderError> {
+        patterns: &mut Vec<TripleTemplate>,
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
         match graph_node {
             ast::GraphNode::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
             ast::GraphNode::Collection(elements) => {
-                let mut current_list_node = TermPattern::from(rdf::NIL);
+                let mut current_list_node = TermTemplate::from(rdf::NIL);
                 for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node(element, patterns)?;
-                    let new_blank_node = TermPattern::from(BlankNode::default());
-                    patterns.push(TriplePattern::new(
+                    let new_blank_node =
+                        TermTemplate::from(self.blank_node_allocator.fresh_blank_node("c"));
+                    patterns.push(TripleTemplate::new(
                         new_blank_node.clone(),
                         rdf::FIRST,
                         element.clone(),
                     ));
-                    patterns.push(TriplePattern::new(
+                    patterns.push(TripleTemplate::new(
                         new_blank_node.clone(),
                         rdf::REST,
                         current_list_node,
@@ -1394,7 +1421,7 @@ impl<'a> AlgebraBuilder<'a> {
                 Ok(current_list_node)
             }
             ast::GraphNode::BlankNodePropertyList(property_list) => {
-                let subject = TermPattern::from(BlankNode::default());
+                let subject = TermTemplate::from(self.blank_node_allocator.fresh_blank_node("b"));
                 self.build_property_list(&subject, property_list.inner, patterns)?;
                 Ok(subject)
             }
@@ -1409,12 +1436,13 @@ impl<'a> AlgebraBuilder<'a> {
         patterns: &mut Vec<TripleOrPathPattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         match graph_node_path {
-            ast::GraphNodePath::VarOrTerm(var_or_term) => self.build_term_pattern(var_or_term),
+            ast::GraphNodePath::VarOrTerm(var_or_term) => self.build_term_pattern_path(var_or_term),
             ast::GraphNodePath::Collection(elements) => {
                 let mut current_list_node = TermPattern::from(rdf::NIL);
                 for element in elements.inner.into_iter().rev() {
                     let element = self.build_graph_node_path(element, patterns)?;
-                    let new_blank_node = TermPattern::from(BlankNode::default());
+                    let new_blank_node =
+                        TermPattern::from(self.variable_allocator.fresh_variable("c"));
                     patterns.push(TripleOrPathPattern::Triple(TriplePattern::new(
                         new_blank_node.clone(),
                         rdf::FIRST,
@@ -1430,14 +1458,14 @@ impl<'a> AlgebraBuilder<'a> {
                 Ok(current_list_node)
             }
             ast::GraphNodePath::BlankNodePropertyList(property_list) => {
-                let subject = TermPattern::from(BlankNode::default());
+                let subject = TermPattern::from(self.variable_allocator.fresh_variable("b"));
                 self.build_property_list_path(&subject, property_list.inner, patterns)?;
                 Ok(subject)
             }
             #[cfg(feature = "sparql-12")]
             ast::GraphNodePath::ReifiedTriple(t) => {
                 let mut extra_patterns = Vec::new();
-                let term = self.build_reified_triple(t, &mut extra_patterns)?;
+                let term = self.build_reified_triple_path(t, &mut extra_patterns)?;
                 patterns.extend(extra_patterns.into_iter().map(TripleOrPathPattern::Triple));
                 Ok(term)
             }
@@ -1519,16 +1547,33 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_term_pattern(
         &mut self,
         var_or_term: ast::VarOrTerm<'a>,
-    ) -> Result<TermPattern, AlgebraBuilderError> {
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
         Ok(match var_or_term {
             ast::VarOrTerm::Var(v) => Self::build_variable(v).into(),
             ast::VarOrTerm::Iri(n) => self.build_named_node(n)?.into(),
-            ast::VarOrTerm::BlankNode(n) => Self::build_blank_node(n).into(),
+            ast::VarOrTerm::BlankNode(n) => self.build_blank_node(n).into(),
             ast::VarOrTerm::Literal(l) => self.build_literal(l)?.into(),
             ast::VarOrTerm::Nil => rdf::NIL.into(),
             #[cfg(feature = "sparql-12")]
             ast::VarOrTerm::TripleTerm(t) => {
-                TermPattern::Triple(Box::new(self.build_triple_term(*t)?))
+                TermTemplate::Triple(Box::new(self.build_triple_term(*t)?))
+            }
+        })
+    }
+
+    fn build_term_pattern_path(
+        &mut self,
+        var_or_term: ast::VarOrTerm<'a>,
+    ) -> Result<TermPattern, AlgebraBuilderError> {
+        Ok(match var_or_term {
+            ast::VarOrTerm::Var(v) => Self::build_variable(v).into(),
+            ast::VarOrTerm::Iri(n) => self.build_named_node(n)?.into(),
+            ast::VarOrTerm::BlankNode(n) => self.build_blank_node_path(n).into(),
+            ast::VarOrTerm::Literal(l) => self.build_literal(l)?.into(),
+            ast::VarOrTerm::Nil => rdf::NIL.into(),
+            #[cfg(feature = "sparql-12")]
+            ast::VarOrTerm::TripleTerm(t) => {
+                TermPattern::Triple(Box::new(self.build_triple_term_path(*t)?))
             }
         })
     }
@@ -1537,8 +1582,8 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_triple_term(
         &mut self,
         triple_term: ast::TripleTerm<'a>,
-    ) -> Result<TriplePattern, AlgebraBuilderError> {
-        Ok(TriplePattern::new(
+    ) -> Result<TripleTemplate, AlgebraBuilderError> {
+        Ok(TripleTemplate::new(
             self.build_term_pattern(triple_term.subject)?,
             self.build_verb(triple_term.predicate)?,
             self.build_term_pattern(triple_term.object)?,
@@ -1546,20 +1591,52 @@ impl<'a> AlgebraBuilder<'a> {
     }
 
     #[cfg(feature = "sparql-12")]
+    fn build_triple_term_path(
+        &mut self,
+        triple_term: ast::TripleTerm<'a>,
+    ) -> Result<TriplePattern, AlgebraBuilderError> {
+        Ok(TriplePattern::new(
+            self.build_term_pattern_path(triple_term.subject)?,
+            self.build_verb(triple_term.predicate)?,
+            self.build_term_pattern_path(triple_term.object)?,
+        ))
+    }
+
+    #[cfg(feature = "sparql-12")]
     fn build_reified_triple(
+        &mut self,
+        triple: ast::ReifiedTriple<'a>,
+        patterns: &mut Vec<TripleTemplate>,
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
+        let reifier = triple
+            .reifier
+            .map(|r| self.build_reifier_id(r))
+            .transpose()?
+            .unwrap_or_else(|| self.blank_node_allocator.fresh_blank_node("r").into());
+        let triple = TripleTemplate::new(
+            self.build_reified_triple_subject_or_object(triple.subject, patterns)?,
+            self.build_verb(triple.predicate)?,
+            self.build_reified_triple_subject_or_object(triple.object, patterns)?,
+        );
+        patterns.push(TripleTemplate::new(reifier.clone(), rdf::REIFIES, triple));
+        Ok(reifier)
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn build_reified_triple_path(
         &mut self,
         triple: ast::ReifiedTriple<'a>,
         patterns: &mut Vec<TriplePattern>,
     ) -> Result<TermPattern, AlgebraBuilderError> {
         let reifier = triple
             .reifier
-            .map(|r| self.build_reifier_id(r))
+            .map(|r| self.build_reifier_id_path(r))
             .transpose()?
-            .unwrap_or_else(|| BlankNode::default().into());
+            .unwrap_or_else(|| self.variable_allocator.fresh_variable("r").into());
         let triple = TriplePattern::new(
-            self.build_reified_triple_subject_or_object(triple.subject, patterns)?,
+            self.build_reified_triple_subject_or_object_path(triple.subject, patterns)?,
             self.build_verb(triple.predicate)?,
-            self.build_reified_triple_subject_or_object(triple.object, patterns)?,
+            self.build_reified_triple_subject_or_object_path(triple.object, patterns)?,
         );
         patterns.push(TriplePattern::new(reifier.clone(), rdf::REIFIES, triple));
         Ok(reifier)
@@ -1569,18 +1646,38 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_reified_triple_subject_or_object(
         &mut self,
         triple_term: ast::ReifiedTripleSubjectOrObject<'a>,
-        patterns: &mut Vec<TriplePattern>,
-    ) -> Result<TermPattern, AlgebraBuilderError> {
+        patterns: &mut Vec<TripleTemplate>,
+    ) -> Result<TermTemplate, AlgebraBuilderError> {
         Ok(match triple_term {
             ast::ReifiedTripleSubjectOrObject::Var(v) => Self::build_variable(v).into(),
             ast::ReifiedTripleSubjectOrObject::Iri(n) => self.build_named_node(n)?.into(),
-            ast::ReifiedTripleSubjectOrObject::BlankNode(n) => Self::build_blank_node(n).into(),
+            ast::ReifiedTripleSubjectOrObject::BlankNode(n) => self.build_blank_node(n).into(),
             ast::ReifiedTripleSubjectOrObject::Literal(l) => self.build_literal(l)?.into(),
             ast::ReifiedTripleSubjectOrObject::ReifiedTriple(t) => {
                 self.build_reified_triple(*t, patterns)?
             }
             ast::ReifiedTripleSubjectOrObject::TripleTerm(t) => {
-                TermPattern::Triple(Box::new(self.build_triple_term(*t)?))
+                TermTemplate::Triple(Box::new(self.build_triple_term(*t)?))
+            }
+        })
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn build_reified_triple_subject_or_object_path(
+        &mut self,
+        triple_term: ast::ReifiedTripleSubjectOrObject<'a>,
+        patterns: &mut Vec<TriplePattern>,
+    ) -> Result<TermPattern, AlgebraBuilderError> {
+        Ok(match triple_term {
+            ast::ReifiedTripleSubjectOrObject::Var(v) => Self::build_variable(v).into(),
+            ast::ReifiedTripleSubjectOrObject::Iri(n) => self.build_named_node(n)?.into(),
+            ast::ReifiedTripleSubjectOrObject::BlankNode(n) => self.build_blank_node_path(n).into(),
+            ast::ReifiedTripleSubjectOrObject::Literal(l) => self.build_literal(l)?.into(),
+            ast::ReifiedTripleSubjectOrObject::ReifiedTriple(t) => {
+                self.build_reified_triple_path(*t, patterns)?
+            }
+            ast::ReifiedTripleSubjectOrObject::TripleTerm(t) => {
+                TermPattern::Triple(Box::new(self.build_triple_term_path(*t)?))
             }
         })
     }
@@ -1651,11 +1748,19 @@ impl<'a> AlgebraBuilder<'a> {
         })
     }
 
-    fn build_blank_node(blank_node: Spanned<ast::BlankNode<'a>>) -> BlankNode {
+    fn build_blank_node(&mut self, blank_node: Spanned<ast::BlankNode<'a>>) -> BlankNode {
         if let Some(id) = blank_node.inner.0 {
             BlankNode::new_unchecked(OxString::new_owned(id))
         } else {
-            BlankNode::default()
+            self.blank_node_allocator.fresh_blank_node("a")
+        }
+    }
+
+    fn build_blank_node_path(&mut self, blank_node: Spanned<ast::BlankNode<'a>>) -> Variable {
+        if let Some(id) = blank_node.inner.0 {
+            self.variable_allocator.map_blank_node_id(id)
+        } else {
+            self.variable_allocator.fresh_variable("bn")
         }
     }
 
@@ -1726,9 +1831,11 @@ impl<'a> AlgebraBuilder<'a> {
 
     pub fn build_update(mut self, update: ast::Update<'a>) -> Result<Update, AlgebraBuilderError> {
         valid_update_operation_blank_node_id_syntax_restrictions(&update)?;
+        self.blank_node_allocator.reset_with_update(&update);
 
         let mut operations = Vec::new();
         for (prologue, update1) in update.operations {
+            self.variable_allocator.reset_with_update1(&update1);
             self.apply_prologue(prologue)?;
             match update1 {
                 ast::Update1::Load { silent, from, to } => operations.push(
@@ -1822,9 +1929,9 @@ impl<'a> AlgebraBuilder<'a> {
                         }
                         current_graph_name = &pattern.graph_name;
                         current_bgp.push(TriplePattern {
-                            subject: pattern.subject.clone().into(),
+                            subject: pattern.subject.clone(),
                             predicate: pattern.predicate.clone(),
-                            object: pattern.object.clone().into(),
+                            object: pattern.object.clone(),
                         });
                     }
                     graph_pattern = new_join(
@@ -1908,8 +2015,8 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_ground_quad_patterns(
         &mut self,
         quads: ast::QuadPatterns<'a>,
-    ) -> Result<Vec<GroundQuadPattern>, AlgebraBuilderError> {
-        let mut visitor = FindBlankNodeOrVariable::default();
+    ) -> Result<Vec<QuadPattern>, AlgebraBuilderError> {
+        let mut visitor = FindAnyBlankNode::default();
         visitor.visit_quads(&quads);
         if let Some(blank_node) = visitor.blank_node {
             return Err(AlgebraBuilderError::new(
@@ -1928,7 +2035,7 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         quads: ast::QuadPatterns<'a>,
     ) -> Result<Vec<Quad>, AlgebraBuilderError> {
-        let mut visitor = FindBlankNodeOrVariable::default();
+        let mut visitor = FindAnyVariable::default();
         visitor.visit_quads(&quads);
         if let Some(variable) = visitor.variable {
             return Err(AlgebraBuilderError::new(
@@ -1947,7 +2054,7 @@ impl<'a> AlgebraBuilder<'a> {
         &mut self,
         quads: ast::QuadPatterns<'a>,
     ) -> Result<Vec<GroundQuad>, AlgebraBuilderError> {
-        let mut visitor = FindBlankNodeOrVariable::default();
+        let mut visitor = FindAnyVariable::default();
         visitor.visit_quads(&quads);
         if let Some(variable) = visitor.variable {
             return Err(AlgebraBuilderError::new(
@@ -1955,6 +2062,8 @@ impl<'a> AlgebraBuilder<'a> {
                 "Variables are not allowed in DELETE DATA",
             ));
         }
+        let mut visitor = FindAnyBlankNode::default();
+        visitor.visit_quads(&quads);
         if let Some(blank_node) = visitor.blank_node {
             return Err(AlgebraBuilderError::new(
                 blank_node.span,
@@ -1971,7 +2080,7 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_quad_patterns(
         &mut self,
         quads: ast::QuadPatterns<'a>,
-    ) -> Result<Vec<QuadPattern>, AlgebraBuilderError> {
+    ) -> Result<Vec<QuadTemplate>, AlgebraBuilderError> {
         let mut patterns = Vec::new();
         for (graph_name, triples) in quads {
             let graph_name = if let Some(graph_name) = graph_name {
@@ -1980,7 +2089,7 @@ impl<'a> AlgebraBuilder<'a> {
                 GraphNamePattern::DefaultGraph
             };
             for triple in self.build_triple_template(triples)? {
-                patterns.push(QuadPattern {
+                patterns.push(QuadTemplate {
                     subject: triple.subject,
                     predicate: triple.predicate,
                     object: triple.object,
@@ -2012,25 +2121,49 @@ impl<'a> AlgebraBuilder<'a> {
             ast::GraphRefAll::All => GraphTarget::AllGraphs,
         })
     }
-}
 
-fn register_aggregate(
-    agg: AggregateExpression,
-    aggregates: &mut Vec<(Variable, AggregateExpression)>,
-) -> Variable {
-    aggregates
-        .iter()
-        .find_map(|(v, a)| (*a == agg).then_some(v))
-        .cloned()
-        .unwrap_or_else(|| {
-            let new_var = random_variable();
-            aggregates.push((new_var.clone(), agg));
-            new_var
-        })
-}
+    fn register_aggregate(
+        &mut self,
+        agg: AggregateExpression,
+        aggregates: &mut Vec<(Variable, AggregateExpression)>,
+    ) -> Variable {
+        aggregates
+            .iter()
+            .find_map(|(v, a)| (*a == agg).then_some(v))
+            .cloned()
+            .unwrap_or_else(|| {
+                let new_var = self.variable_allocator.fresh_variable("agg");
+                aggregates.push((new_var.clone(), agg));
+                new_var
+            })
+    }
 
-fn random_variable() -> Variable {
-    Variable::new_unchecked(OxString::new_owned(&format!("{:x}", random::<u128>())))
+    fn add_path_to_patterns(
+        &mut self,
+        subject: TermPattern,
+        path: PropertyPathExpression,
+        object: TermPattern,
+        patterns: &mut Vec<TripleOrPathPattern>,
+    ) {
+        match path {
+            PropertyPathExpression::Link(predicate) => patterns.push(TripleOrPathPattern::Triple(
+                TriplePattern::new(subject, predicate, object),
+            )),
+            PropertyPathExpression::Inv(path) => {
+                self.add_path_to_patterns(object, *path, subject, patterns)
+            }
+            PropertyPathExpression::Seq(path1, path2) => {
+                let middle = self.variable_allocator.fresh_variable("m");
+                self.add_path_to_patterns(subject, *path1, middle.clone().into(), patterns);
+                self.add_path_to_patterns(middle.into(), *path2, object, patterns)
+            }
+            _ => patterns.push(TripleOrPathPattern::Path {
+                subject,
+                path,
+                object,
+            }),
+        }
+    }
 }
 
 fn find_unbound_variable<'a>(
@@ -2184,30 +2317,6 @@ enum TripleOrPathPattern {
 enum VarOrPath {
     Var(Variable),
     Path(PropertyPathExpression),
-}
-
-fn add_path_to_patterns(
-    subject: TermPattern,
-    path: PropertyPathExpression,
-    object: TermPattern,
-    patterns: &mut Vec<TripleOrPathPattern>,
-) {
-    match path {
-        PropertyPathExpression::Link(predicate) => patterns.push(TripleOrPathPattern::Triple(
-            TriplePattern::new(subject, predicate, object),
-        )),
-        PropertyPathExpression::Inv(path) => add_path_to_patterns(object, *path, subject, patterns),
-        PropertyPathExpression::Seq(path1, path2) => {
-            let middle = BlankNode::default();
-            add_path_to_patterns(subject, *path1, middle.clone().into(), patterns);
-            add_path_to_patterns(middle.into(), *path2, object, patterns)
-        }
-        _ => patterns.push(TripleOrPathPattern::Path {
-            subject,
-            path,
-            object,
-        }),
-    }
 }
 
 /// Called on every variable defined using "AS" or "VALUES"
@@ -2476,12 +2585,7 @@ fn find_update_operation_blank_node_ids_and_validate_syntax_restrictions<'a>(
         | ast::Update1::InsertData { quads }
         | ast::Update1::DeleteData { quads } => {
             let mut blank_nodes = HashMap::new();
-            for (_, triples) in quads {
-                for (subject, property_list) in triples {
-                    blank_nodes.visit_graph_node(subject);
-                    blank_nodes.visit_property_list(property_list);
-                }
-            }
+            blank_nodes.visit_quads(quads);
             Ok(blank_nodes)
         }
     }
@@ -2593,6 +2697,248 @@ fn extend_blank_node_ids_if_not_overlapping<'a>(
 trait TermVisitor<'a> {
     fn on_blank_node(&mut self, _blank_node: &Spanned<ast::BlankNode<'a>>) {}
     fn on_variable(&mut self, _variable: &Spanned<ast::Var<'a>>) {}
+
+    fn visit_query(&mut self, query: &ast::Query<'a>) {
+        match &query.variant {
+            ast::QueryQuery::Select(query) => {
+                self.visit_select_clause(&query.select_clause);
+                self.visit_graph_pattern(&query.where_clause);
+                self.visit_solution_modifier(&query.solution_modifier);
+            }
+            ast::QueryQuery::Construct(query) => {
+                for (subject, property_list) in &query.template.inner {
+                    self.visit_graph_node(subject);
+                    self.visit_property_list(property_list);
+                }
+                if let Some(where_clause) = &query.where_clause {
+                    self.visit_graph_pattern(where_clause);
+                }
+                self.visit_solution_modifier(&query.solution_modifier);
+            }
+            ast::QueryQuery::Describe(query) => {
+                if let ast::DescribeTargets::Explicit(targets) = &query.targets.inner {
+                    for target in targets {
+                        self.visit_var_or_iri(&target.inner);
+                    }
+                }
+                if let Some(where_clause) = &query.where_clause {
+                    self.visit_graph_pattern(where_clause);
+                }
+                self.visit_solution_modifier(&query.solution_modifier);
+            }
+            ast::QueryQuery::Ask(query) => {
+                self.visit_graph_pattern(&query.where_clause);
+                self.visit_solution_modifier(&query.solution_modifier);
+            }
+        }
+        if let Some(values_clause) = &query.values_clause {
+            self.visit_values_clause(values_clause);
+        }
+    }
+
+    fn visit_update(&mut self, update: &ast::Update<'a>) {
+        for (_, update) in &update.operations {
+            self.visit_update1(update);
+        }
+    }
+
+    fn visit_update1(&mut self, update: &ast::Update1<'a>) {
+        match update {
+            ast::Update1::DeleteWhere { pattern }
+            | ast::Update1::InsertData { quads: pattern }
+            | ast::Update1::DeleteData { quads: pattern } => self.visit_quads(pattern),
+            ast::Update1::Modify {
+                delete,
+                insert,
+                r#where,
+                ..
+            } => {
+                self.visit_quads(delete);
+                self.visit_quads(insert);
+                self.visit_graph_pattern(r#where);
+            }
+            ast::Update1::Load { .. }
+            | ast::Update1::Clear { .. }
+            | ast::Update1::Drop { .. }
+            | ast::Update1::Create { .. }
+            | ast::Update1::Add { .. }
+            | ast::Update1::Move { .. }
+            | ast::Update1::Copy { .. } => {}
+        }
+    }
+
+    fn visit_select_clause(&mut self, select_clause: &ast::SelectClause<'a>) {
+        if let ast::SelectVariables::Explicit(bindings) = &select_clause.bindings.inner {
+            for binding in bindings {
+                let (expression, variable) = &binding.inner;
+                if let Some(expression) = expression {
+                    self.visit_expression(&expression.inner);
+                }
+                self.on_variable(variable);
+            }
+        }
+    }
+
+    fn visit_solution_modifier(&mut self, solution_modifier: &ast::SolutionModifier<'a>) {
+        for (expression, variable) in &solution_modifier.group_clause {
+            self.visit_expression(&expression.inner);
+            if let Some(variable) = variable {
+                self.on_variable(variable);
+            }
+        }
+        for expression in &solution_modifier.having_clause {
+            self.visit_expression(&expression.inner);
+        }
+        for condition in &solution_modifier.order_clause {
+            match condition {
+                ast::OrderCondition::Asc(expression) | ast::OrderCondition::Desc(expression) => {
+                    self.visit_expression(&expression.inner);
+                }
+            }
+        }
+    }
+
+    fn visit_values_clause(&mut self, values_clause: &ast::ValuesClause<'a>) {
+        for variable in &values_clause.variables {
+            self.on_variable(variable);
+        }
+    }
+
+    fn visit_graph_pattern(&mut self, graph_pattern: &ast::GraphPattern<'a>) {
+        match graph_pattern {
+            ast::GraphPattern::Group(elements) => {
+                for element in elements {
+                    match &element.inner {
+                        ast::GraphPatternElement::Filter(expression) => {
+                            self.visit_expression(&expression.inner);
+                        }
+                        ast::GraphPatternElement::Union(patterns) => {
+                            for pattern in patterns {
+                                self.visit_graph_pattern(pattern);
+                            }
+                        }
+                        ast::GraphPatternElement::Minus(pattern)
+                        | ast::GraphPatternElement::Optional(pattern) => {
+                            self.visit_graph_pattern(pattern);
+                        }
+                        ast::GraphPatternElement::Values(values_clause) => {
+                            self.visit_values_clause(values_clause);
+                        }
+                        ast::GraphPatternElement::Bind(expression, variable) => {
+                            self.visit_expression(&expression.inner);
+                            self.on_variable(variable);
+                        }
+                        ast::GraphPatternElement::Service { name, pattern, .. }
+                        | ast::GraphPatternElement::Graph { name, pattern } => {
+                            self.visit_var_or_iri(name);
+                            self.visit_graph_pattern(pattern);
+                        }
+                        ast::GraphPatternElement::Triples(triples) => {
+                            for (subject, property_list) in triples {
+                                self.visit_graph_node_path(subject);
+                                self.visit_property_list_path(property_list);
+                            }
+                        }
+                        #[cfg(feature = "sep-0006")]
+                        ast::GraphPatternElement::Lateral(pattern) => {
+                            self.visit_graph_pattern(pattern);
+                        }
+                    }
+                }
+            }
+            ast::GraphPattern::SubSelect(select) => {
+                self.visit_select_clause(&select.select_clause);
+                self.visit_graph_pattern(&select.where_clause);
+                self.visit_solution_modifier(&select.solution_modifier);
+                if let Some(values_clause) = &select.values_clause {
+                    self.visit_values_clause(values_clause);
+                }
+            }
+        }
+    }
+
+    fn visit_expression(&mut self, expression: &ast::Expression<'a>) {
+        match expression {
+            ast::Expression::Or(left, right)
+            | ast::Expression::And(left, right)
+            | ast::Expression::Equal(left, right)
+            | ast::Expression::NotEqual(left, right)
+            | ast::Expression::Less(left, right)
+            | ast::Expression::LessOrEqual(left, right)
+            | ast::Expression::Greater(left, right)
+            | ast::Expression::GreaterOrEqual(left, right)
+            | ast::Expression::Add(left, right)
+            | ast::Expression::Subtract(left, right)
+            | ast::Expression::Multiply(left, right)
+            | ast::Expression::Divide(left, right) => {
+                self.visit_expression(&left.inner);
+                self.visit_expression(&right.inner);
+            }
+            ast::Expression::In(expression, expressions)
+            | ast::Expression::NotIn(expression, expressions) => {
+                self.visit_expression(&expression.inner);
+                for expression in expressions {
+                    self.visit_expression(&expression.inner);
+                }
+            }
+            ast::Expression::UnaryPlus(expression)
+            | ast::Expression::UnaryMinus(expression)
+            | ast::Expression::Not(expression) => self.visit_expression(&expression.inner),
+            ast::Expression::Bound(variable) | ast::Expression::Var(variable) => {
+                self.on_variable(variable);
+            }
+            ast::Expression::Aggregate(aggregate) => self.visit_aggregate(aggregate),
+            ast::Expression::BuiltIn(_, arguments) => {
+                for argument in arguments {
+                    self.visit_expression(&argument.inner);
+                }
+            }
+            ast::Expression::Function(_, arguments) => {
+                for argument in &arguments.args {
+                    self.visit_expression(&argument.inner);
+                }
+            }
+            ast::Expression::Exists(pattern) | ast::Expression::NotExists(pattern) => {
+                self.visit_graph_pattern(pattern);
+            }
+            ast::Expression::Iri(_) | ast::Expression::Literal(_) => {}
+            #[cfg(feature = "sparql-12")]
+            ast::Expression::TripleTerm(triple) => self.visit_expression_triple_term(triple),
+        }
+    }
+
+    fn visit_aggregate(&mut self, aggregate: &ast::Aggregate<'a>) {
+        match aggregate {
+            ast::Aggregate::Count(_, expression) => {
+                if let Some(expression) = expression {
+                    self.visit_expression(&expression.inner);
+                }
+            }
+            ast::Aggregate::Sum(_, expression)
+            | ast::Aggregate::Min(_, expression)
+            | ast::Aggregate::Max(_, expression)
+            | ast::Aggregate::Avg(_, expression)
+            | ast::Aggregate::Sample(_, expression)
+            | ast::Aggregate::GroupConcat(_, expression, _) => {
+                self.visit_expression(&expression.inner);
+            }
+        }
+    }
+
+    #[cfg(feature = "sparql-12")]
+    fn visit_expression_triple_term(&mut self, triple: &ast::ExprTripleTerm<'a>) {
+        if let ast::ExprTripleTermSubject::Var(variable) = &triple.subject {
+            self.on_variable(variable);
+        }
+        self.visit_verb(&triple.predicate);
+        match &triple.object {
+            ast::ExprTripleTermObject::Var(variable) => self.on_variable(variable),
+            ast::ExprTripleTermObject::TripleTerm(triple) => {
+                self.visit_expression_triple_term(triple);
+            }
+            ast::ExprTripleTermObject::Iri(_) | ast::ExprTripleTermObject::Literal(_) => {}
+        }
+    }
 
     fn visit_quads(&mut self, quads: &ast::QuadPatterns<'a>) {
         for (graph_name, triples) in quads {
@@ -2737,6 +3083,9 @@ trait TermVisitor<'a> {
         self.visit_reified_triple_term_subject_or_object(&reified_triple.subject);
         self.visit_verb(&reified_triple.predicate);
         self.visit_reified_triple_term_subject_or_object(&reified_triple.object);
+        if let Some(reifier) = &reified_triple.reifier {
+            self.visit_var_or_reifier_id(reifier);
+        }
     }
 
     #[cfg(feature = "sparql-12")]
@@ -2805,18 +3154,156 @@ impl<'a> TermVisitor<'a> for HashMap<&'a str, SimpleSpan> {
 }
 
 #[derive(Default)]
-struct FindBlankNodeOrVariable<'a> {
+struct FindAnyBlankNode<'a> {
     blank_node: Option<Spanned<ast::BlankNode<'a>>>,
-    variable: Option<Spanned<ast::Var<'a>>>,
 }
 
-impl<'a> TermVisitor<'a> for FindBlankNodeOrVariable<'a> {
+impl<'a> TermVisitor<'a> for FindAnyBlankNode<'a> {
     fn on_blank_node(&mut self, blank_node: &Spanned<ast::BlankNode<'a>>) {
         self.blank_node.get_or_insert(*blank_node);
     }
+}
 
+#[derive(Default)]
+struct FindAnyVariable<'a> {
+    variable: Option<Spanned<ast::Var<'a>>>,
+}
+
+impl<'a> TermVisitor<'a> for FindAnyVariable<'a> {
     fn on_variable(&mut self, variable: &Spanned<ast::Var<'a>>) {
         self.variable.get_or_insert(*variable);
+    }
+}
+
+struct FindAllVariables<'a, 'b> {
+    variables: &'b mut HashSet<&'a str>,
+}
+
+impl<'a> TermVisitor<'a> for FindAllVariables<'a, '_> {
+    fn on_variable(&mut self, variable: &Spanned<ast::Var<'a>>) {
+        self.variables.insert(variable.inner.0);
+    }
+}
+
+#[derive(Default)]
+struct FreshVariableAllocator<'a> {
+    used_variable_names: HashSet<&'a str>,
+    allocated_variable_names: HashSet<OxString>,
+    blank_node_mapping: HashMap<&'a str, Variable>,
+    counter_per_prefix: HashMap<&'a str, usize>,
+}
+
+impl<'a> FreshVariableAllocator<'a> {
+    fn reset_with_query(&mut self, query: &ast::Query<'a>) {
+        self.reset();
+        let mut visitor = FindAllVariables {
+            variables: &mut self.used_variable_names,
+        };
+        visitor.visit_query(query);
+    }
+
+    fn reset_with_update1(&mut self, update1: &ast::Update1<'a>) {
+        self.reset();
+        let mut visitor = FindAllVariables {
+            variables: &mut self.used_variable_names,
+        };
+        visitor.visit_update1(update1);
+    }
+
+    fn reset(&mut self) {
+        self.used_variable_names.clear();
+        self.allocated_variable_names.clear();
+        self.blank_node_mapping.clear();
+        self.counter_per_prefix.clear();
+    }
+
+    fn fresh_variable(&mut self, prefix: &'a str) -> Variable {
+        let counter = self.counter_per_prefix.entry(prefix).or_default();
+        loop {
+            *counter += 1;
+            let name = format!("{prefix}{}", *counter);
+            if !self.used_variable_names.contains(name.as_str())
+                && !self.allocated_variable_names.contains(name.as_str())
+            {
+                // Not used, we can emit
+                return self.emit_fresh_variable(name);
+            }
+        }
+    }
+
+    fn map_blank_node_id(&mut self, name: &'a str) -> Variable {
+        if let Some(var) = self.blank_node_mapping.get(name) {
+            return var.clone();
+        }
+        let var = if !self.used_variable_names.contains(name)
+            && !self.allocated_variable_names.contains(name)
+        {
+            // Not used, we can emit
+            self.emit_fresh_variable(OxString::new_owned(name))
+        } else {
+            self.fresh_variable(name)
+        };
+        self.blank_node_mapping.insert(name, var.clone());
+        var
+    }
+
+    fn emit_fresh_variable(&mut self, name: impl Into<OxString>) -> Variable {
+        let name = name.into();
+        self.allocated_variable_names.insert(name.clone());
+        Variable::new_unchecked(name)
+    }
+}
+
+struct FindAllBlankNodes<'a, 'b> {
+    ids: &'b mut HashSet<&'a str>,
+}
+
+impl<'a> TermVisitor<'a> for FindAllBlankNodes<'a, '_> {
+    fn on_blank_node(&mut self, blank_node: &Spanned<ast::BlankNode<'a>>) {
+        if let Some(id) = blank_node.inner.0 {
+            self.ids.insert(id);
+        }
+    }
+}
+
+#[derive(Default)]
+struct FreshBlankNodeAllocator<'a> {
+    used_blank_node_ids: HashSet<&'a str>,
+    counter_per_prefix: HashMap<&'a str, usize>,
+}
+
+impl<'a> FreshBlankNodeAllocator<'a> {
+    fn reset_with_query(&mut self, query: &ast::Query<'a>) {
+        self.reset();
+        let mut visitor = FindAllBlankNodes {
+            ids: &mut self.used_blank_node_ids,
+        };
+        visitor.visit_query(query);
+    }
+
+    fn reset_with_update(&mut self, update: &ast::Update<'a>) {
+        self.reset();
+        let mut visitor = FindAllBlankNodes {
+            ids: &mut self.used_blank_node_ids,
+        };
+        visitor.visit_update(update);
+    }
+
+    fn reset(&mut self) {
+        self.used_blank_node_ids.clear();
+        self.counter_per_prefix.clear();
+    }
+
+    fn fresh_blank_node(&mut self, prefix: &'a str) -> BlankNode {
+        let counter = self.counter_per_prefix.entry(prefix).or_default();
+        loop {
+            *counter += 1;
+            let id = format!("{prefix}{}", *counter);
+            if !self.used_blank_node_ids.contains(id.as_str()) {
+                // Not used, we can emit
+                return BlankNode::new_unchecked(id);
+            }
+        }
     }
 }
 
@@ -2833,7 +3320,7 @@ fn copy_graph(
     };
     DeleteInsertOperation {
         delete: Vec::new(),
-        insert: vec![QuadPattern::new(
+        insert: vec![QuadTemplate::new(
             Variable::new_unchecked("s"),
             Variable::new_unchecked("p"),
             Variable::new_unchecked("o"),

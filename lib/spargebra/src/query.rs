@@ -179,7 +179,7 @@ impl From<SelectQuery> for Query {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct ConstructQuery {
     /// The query construction template.
-    pub template: Vec<TriplePattern>,
+    pub template: Vec<TripleTemplate>,
     /// The [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
     pub dataset: Option<QueryDatasetSpecification>,
     /// The query selection expression.

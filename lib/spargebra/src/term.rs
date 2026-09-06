@@ -251,11 +251,11 @@ impl fmt::Display for Quad {
     }
 }
 
-impl TryFrom<QuadPattern> for Quad {
+impl TryFrom<QuadTemplate> for Quad {
     type Error = ();
 
     #[inline]
-    fn try_from(quad: QuadPattern) -> Result<Self, Self::Error> {
+    fn try_from(quad: QuadTemplate) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: quad.subject.try_into()?,
             predicate: quad.predicate.try_into()?,
@@ -397,15 +397,14 @@ impl TryFrom<NamedNodePattern> for NamedNode {
     }
 }
 
-/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
+/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TermPattern {
     NamedNode(NamedNode),
-    BlankNode(BlankNode),
     Literal(Literal),
+    Variable(Variable),
     #[cfg(feature = "sparql-12")]
     Triple(Box<TriplePattern>),
-    Variable(Variable),
 }
 
 impl TermPattern {
@@ -413,11 +412,10 @@ impl TermPattern {
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(term) => write!(f, "{term}"),
-            Self::BlankNode(term) => write!(f, "{term}"),
             Self::Literal(term) => write!(f, "{term}"),
+            Self::Variable(var) => write!(f, "{var}"),
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => triple.fmt_sse(f),
-            Self::Variable(var) => write!(f, "{var}"),
         }
     }
 }
@@ -427,11 +425,10 @@ impl fmt::Display for TermPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(term) => term.fmt(f),
-            Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
+            Self::Variable(var) => var.fmt(f),
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
-            Self::Variable(var) => var.fmt(f),
         }
     }
 }
@@ -440,13 +437,6 @@ impl From<NamedNode> for TermPattern {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
-    }
-}
-
-impl From<BlankNode> for TermPattern {
-    #[inline]
-    fn from(node: BlankNode) -> Self {
-        Self::BlankNode(node)
     }
 }
 
@@ -466,30 +456,20 @@ impl From<TriplePattern> for TermPattern {
 }
 
 impl From<Variable> for TermPattern {
+    #[inline]
     fn from(var: Variable) -> Self {
         Self::Variable(var)
     }
 }
 
-impl From<NamedOrBlankNode> for TermPattern {
+impl From<GroundTerm> for TermPattern {
     #[inline]
-    fn from(subject: NamedOrBlankNode) -> Self {
-        match subject {
-            NamedOrBlankNode::NamedNode(node) => node.into(),
-            NamedOrBlankNode::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<Term> for TermPattern {
-    #[inline]
-    fn from(term: Term) -> Self {
+    fn from(term: GroundTerm) -> Self {
         match term {
-            Term::NamedNode(node) => node.into(),
-            Term::BlankNode(node) => node.into(),
-            Term::Literal(literal) => literal.into(),
+            GroundTerm::NamedNode(node) => node.into(),
+            GroundTerm::Literal(literal) => literal.into(),
             #[cfg(feature = "sparql-12")]
-            Term::Triple(t) => TriplePattern::from(*t).into(),
+            GroundTerm::Triple(triple) => TriplePattern::from(*triple).into(),
         }
     }
 }
@@ -504,93 +484,78 @@ impl From<NamedNodePattern> for TermPattern {
     }
 }
 
-impl From<GroundTermPattern> for TermPattern {
-    #[inline]
-    fn from(element: GroundTermPattern) -> Self {
-        match element {
-            GroundTermPattern::NamedNode(node) => node.into(),
-            GroundTermPattern::Literal(literal) => literal.into(),
-            #[cfg(feature = "sparql-12")]
-            GroundTermPattern::Triple(t) => TriplePattern::from(*t).into(),
-            GroundTermPattern::Variable(variable) => variable.into(),
-        }
-    }
-}
-
-impl TryFrom<TermPattern> for NamedOrBlankNode {
+impl TryFrom<TermTemplate> for TermPattern {
     type Error = ();
 
     #[inline]
-    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
-        match term {
-            TermPattern::NamedNode(t) => Ok(t.into()),
-            TermPattern::BlankNode(t) => Ok(t.into()),
+    fn try_from(pattern: TermTemplate) -> Result<Self, Self::Error> {
+        Ok(match pattern {
+            TermTemplate::NamedNode(named_node) => named_node.into(),
+            TermTemplate::BlankNode(_) => return Err(()),
+            TermTemplate::Literal(literal) => literal.into(),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(_) => Err(()),
-            TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
-        }
+            TermTemplate::Triple(triple) => TriplePattern::try_from(*triple)?.into(),
+            TermTemplate::Variable(variable) => variable.into(),
+        })
     }
 }
 
-impl TryFrom<TermPattern> for Term {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
-        match pattern {
-            TermPattern::NamedNode(t) => Ok(t.into()),
-            TermPattern::BlankNode(t) => Ok(t.into()),
-            TermPattern::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
-            TermPattern::Variable(_) => Err(()),
-        }
-    }
-}
-/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
+/// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
+///
+/// It is used in [`ConstructQuery`](crate::query::ConstructQuery).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GroundTermPattern {
+pub enum TermTemplate {
     NamedNode(NamedNode),
+    BlankNode(BlankNode),
     Literal(Literal),
-    Variable(Variable),
     #[cfg(feature = "sparql-12")]
-    Triple(Box<GroundTriplePattern>),
+    Triple(Box<TripleTemplate>),
+    Variable(Variable),
 }
 
-impl GroundTermPattern {
+impl TermTemplate {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(term) => write!(f, "{term}"),
+            Self::BlankNode(term) => write!(f, "{term}"),
             Self::Literal(term) => write!(f, "{term}"),
-            Self::Variable(var) => write!(f, "{var}"),
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => triple.fmt_sse(f),
+            Self::Variable(var) => write!(f, "{var}"),
         }
     }
 }
 
-impl fmt::Display for GroundTermPattern {
+impl fmt::Display for TermTemplate {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(term) => term.fmt(f),
+            Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
-            Self::Variable(var) => var.fmt(f),
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
+            Self::Variable(var) => var.fmt(f),
         }
     }
 }
 
-impl From<NamedNode> for GroundTermPattern {
+impl From<NamedNode> for TermTemplate {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
     }
 }
 
-impl From<Literal> for GroundTermPattern {
+impl From<BlankNode> for TermTemplate {
+    #[inline]
+    fn from(node: BlankNode) -> Self {
+        Self::BlankNode(node)
+    }
+}
+
+impl From<Literal> for TermTemplate {
     #[inline]
     fn from(literal: Literal) -> Self {
         Self::Literal(literal)
@@ -598,33 +563,43 @@ impl From<Literal> for GroundTermPattern {
 }
 
 #[cfg(feature = "sparql-12")]
-impl From<GroundTriplePattern> for GroundTermPattern {
+impl From<TripleTemplate> for TermTemplate {
     #[inline]
-    fn from(triple: GroundTriplePattern) -> Self {
+    fn from(triple: TripleTemplate) -> Self {
         Self::Triple(Box::new(triple))
     }
 }
 
-impl From<Variable> for GroundTermPattern {
-    #[inline]
+impl From<Variable> for TermTemplate {
     fn from(var: Variable) -> Self {
         Self::Variable(var)
     }
 }
 
-impl From<GroundTerm> for GroundTermPattern {
+impl From<NamedOrBlankNode> for TermTemplate {
     #[inline]
-    fn from(term: GroundTerm) -> Self {
-        match term {
-            GroundTerm::NamedNode(node) => node.into(),
-            GroundTerm::Literal(literal) => literal.into(),
-            #[cfg(feature = "sparql-12")]
-            GroundTerm::Triple(triple) => GroundTriplePattern::from(*triple).into(),
+    fn from(subject: NamedOrBlankNode) -> Self {
+        match subject {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
         }
     }
 }
 
-impl From<NamedNodePattern> for GroundTermPattern {
+impl From<Term> for TermTemplate {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            Term::Literal(literal) => literal.into(),
+            #[cfg(feature = "sparql-12")]
+            Term::Triple(t) => TripleTemplate::from(*t).into(),
+        }
+    }
+}
+
+impl From<NamedNodePattern> for TermTemplate {
     #[inline]
     fn from(element: NamedNodePattern) -> Self {
         match element {
@@ -634,19 +609,47 @@ impl From<NamedNodePattern> for GroundTermPattern {
     }
 }
 
-impl TryFrom<TermPattern> for GroundTermPattern {
+impl From<TermPattern> for TermTemplate {
+    #[inline]
+    fn from(element: TermPattern) -> Self {
+        match element {
+            TermPattern::NamedNode(node) => node.into(),
+            TermPattern::Literal(literal) => literal.into(),
+            #[cfg(feature = "sparql-12")]
+            TermPattern::Triple(t) => TripleTemplate::from(*t).into(),
+            TermPattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
+impl TryFrom<TermTemplate> for NamedOrBlankNode {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
-        Ok(match pattern {
-            TermPattern::NamedNode(named_node) => named_node.into(),
-            TermPattern::BlankNode(_) => return Err(()),
-            TermPattern::Literal(literal) => literal.into(),
+    fn try_from(term: TermTemplate) -> Result<Self, Self::Error> {
+        match term {
+            TermTemplate::NamedNode(t) => Ok(t.into()),
+            TermTemplate::BlankNode(t) => Ok(t.into()),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(triple) => GroundTriplePattern::try_from(*triple)?.into(),
-            TermPattern::Variable(variable) => variable.into(),
-        })
+            TermTemplate::Triple(_) => Err(()),
+            TermTemplate::Literal(_) | TermTemplate::Variable(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<TermTemplate> for Term {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: TermTemplate) -> Result<Self, Self::Error> {
+        match pattern {
+            TermTemplate::NamedNode(t) => Ok(t.into()),
+            TermTemplate::BlankNode(t) => Ok(t.into()),
+            TermTemplate::Literal(t) => Ok(t.into()),
+            #[cfg(feature = "sparql-12")]
+            TermTemplate::Triple(t) => Ok(Triple::try_from(*t)?.into()),
+            TermTemplate::Variable(_) => Err(()),
+        }
     }
 }
 
@@ -714,7 +717,9 @@ impl From<NamedNodePattern> for GraphNamePattern {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern).
+///
+/// Note that `spargebra` follows SPARQL 1.2 and converts blank node to variables in patterns.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermPattern,
@@ -754,76 +759,8 @@ impl fmt::Display for TriplePattern {
     }
 }
 
-impl From<Triple> for TriplePattern {
-    #[inline]
-    fn from(triple: Triple) -> Self {
-        Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate.into(),
-            object: triple.object.into(),
-        }
-    }
-}
-
 #[cfg(feature = "sparql-12")]
-impl From<GroundTriplePattern> for TriplePattern {
-    #[inline]
-    fn from(triple: GroundTriplePattern) -> Self {
-        Self {
-            subject: triple.subject.into(),
-            predicate: triple.predicate,
-            object: triple.object.into(),
-        }
-    }
-}
-
-impl TryFrom<TriplePattern> for Triple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate.try_into()?,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes.
-#[cfg(feature = "sparql-12")]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct GroundTriplePattern {
-    pub subject: GroundTermPattern,
-    pub predicate: NamedNodePattern,
-    pub object: GroundTermPattern,
-}
-
-#[cfg(feature = "sparql-12")]
-impl GroundTriplePattern {
-    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    #[cfg(feature = "sparql-12")]
-    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        f.write_str("(triple ")?;
-        self.subject.fmt_sse(f)?;
-        f.write_str(" ")?;
-        self.predicate.fmt_sse(f)?;
-        f.write_str(" ")?;
-        self.object.fmt_sse(f)?;
-        f.write_str(")")
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-impl fmt::Display for GroundTriplePattern {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-impl From<GroundTriple> for GroundTriplePattern {
+impl From<GroundTriple> for TriplePattern {
     #[inline]
     fn from(triple: GroundTriple) -> Self {
         Self {
@@ -835,11 +772,11 @@ impl From<GroundTriple> for GroundTriplePattern {
 }
 
 #[cfg(feature = "sparql-12")]
-impl TryFrom<TriplePattern> for GroundTriplePattern {
+impl TryFrom<TripleTemplate> for TriplePattern {
     type Error = ();
 
     #[inline]
-    fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
+    fn try_from(triple: TripleTemplate) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate,
@@ -848,7 +785,85 @@ impl TryFrom<TriplePattern> for GroundTriplePattern {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
+/// A triple with variables.
+///
+/// It is used in [`ConstructQuery`](crate::query::ConstructQuery).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct TripleTemplate {
+    pub subject: TermTemplate,
+    pub predicate: NamedNodePattern,
+    pub object: TermTemplate,
+}
+
+impl TripleTemplate {
+    pub(crate) fn new(
+        subject: impl Into<TermTemplate>,
+        predicate: impl Into<NamedNodePattern>,
+        object: impl Into<TermTemplate>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+        }
+    }
+
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
+        f.write_str("(triple ")?;
+        self.subject.fmt_sse(f)?;
+        f.write_str(" ")?;
+        self.predicate.fmt_sse(f)?;
+        f.write_str(" ")?;
+        self.object.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for TripleTemplate {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl From<Triple> for TripleTemplate {
+    #[inline]
+    fn from(triple: Triple) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+#[cfg(feature = "sparql-12")]
+impl From<TriplePattern> for TripleTemplate {
+    #[inline]
+    fn from(triple: TriplePattern) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate,
+            object: triple.object.into(),
+        }
+    }
+}
+
+impl TryFrom<TripleTemplate> for Triple {
+    type Error = ();
+
+    #[inline]
+    fn try_from(triple: TripleTemplate) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subject: triple.subject.try_into()?,
+            predicate: triple.predicate.try_into()?,
+            object: triple.object.try_into()?,
+        })
+    }
+}
+
+/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QuadPattern {
     pub subject: TermPattern,
@@ -858,20 +873,6 @@ pub struct QuadPattern {
 }
 
 impl QuadPattern {
-    pub(crate) fn new(
-        subject: impl Into<TermPattern>,
-        predicate: impl Into<NamedNodePattern>,
-        object: impl Into<TermPattern>,
-        graph_name: impl Into<GraphNamePattern>,
-    ) -> Self {
-        Self {
-            subject: subject.into(),
-            predicate: predicate.into(),
-            object: object.into(),
-            graph_name: graph_name.into(),
-        }
-    }
-
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
@@ -908,16 +909,44 @@ impl fmt::Display for QuadPattern {
     }
 }
 
-/// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes.
+impl TryFrom<QuadTemplate> for QuadPattern {
+    type Error = ();
+
+    #[inline]
+    fn try_from(pattern: QuadTemplate) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subject: pattern.subject.try_into()?,
+            predicate: pattern.predicate,
+            object: pattern.object.try_into()?,
+            graph_name: pattern.graph_name,
+        })
+    }
+}
+
+/// A [`TripleTemplate`] in a specific graph
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct GroundQuadPattern {
-    pub subject: GroundTermPattern,
+pub struct QuadTemplate {
+    pub subject: TermTemplate,
     pub predicate: NamedNodePattern,
-    pub object: GroundTermPattern,
+    pub object: TermTemplate,
     pub graph_name: GraphNamePattern,
 }
 
-impl GroundQuadPattern {
+impl QuadTemplate {
+    pub(crate) fn new(
+        subject: impl Into<TermTemplate>,
+        predicate: impl Into<NamedNodePattern>,
+        object: impl Into<TermTemplate>,
+        graph_name: impl Into<GraphNamePattern>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            predicate: predicate.into(),
+            object: object.into(),
+            graph_name: graph_name.into(),
+        }
+    }
+
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
@@ -939,7 +968,7 @@ impl GroundQuadPattern {
     }
 }
 
-impl fmt::Display for GroundQuadPattern {
+impl fmt::Display for QuadTemplate {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.graph_name == GraphNamePattern::DefaultGraph {
@@ -951,19 +980,5 @@ impl fmt::Display for GroundQuadPattern {
                 self.graph_name, self.subject, self.predicate, self.object
             )
         }
-    }
-}
-
-impl TryFrom<QuadPattern> for GroundQuadPattern {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: QuadPattern) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: pattern.subject.try_into()?,
-            predicate: pattern.predicate,
-            object: pattern.object.try_into()?,
-            graph_name: pattern.graph_name,
-        })
     }
 }

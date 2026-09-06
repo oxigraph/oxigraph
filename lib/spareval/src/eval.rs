@@ -24,9 +24,7 @@ use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use spargebra::algebra::PropertyPathExpression;
 #[cfg(feature = "sparql-12")]
 use spargebra::term::GroundTriple;
-use spargebra::term::{
-    GroundTerm, GroundTermPattern, NamedNodePattern, TermPattern, TriplePattern,
-};
+use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TermTemplate, TripleTemplate};
 use spargebra::vocab::sparql;
 use sparopt::algebra::{
     AggregateExpression, Expression, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm,
@@ -523,7 +521,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     pub fn evaluate_construct(
         &self,
         expression: &QueryExpression,
-        template: &[TriplePattern],
+        template: &[TripleTemplate],
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
         Result<QueryTripleIter<'a>, QueryEvaluationError>,
@@ -539,17 +537,17 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let template = template
             .iter()
             .filter_map(|t| {
-                Some(TripleTemplate {
-                    subject: TripleTemplateValue::from_term_or_variable(
+                Some(TripleTemplateValue {
+                    subject: TermTemplateValue::from_term_or_variable(
                         &t.subject,
                         &mut variables,
                         &mut bnodes,
                     )?,
-                    predicate: TripleTemplateValue::from_named_node_or_variable(
+                    predicate: TermTemplateValue::from_named_node_or_variable(
                         &t.predicate,
                         &mut variables,
                     ),
-                    object: TripleTemplateValue::from_term_or_variable(
+                    object: TermTemplateValue::from_term_or_variable(
                         &t.object,
                         &mut variables,
                         &mut bnodes,
@@ -809,18 +807,18 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     fn quad_pattern_evaluator(
         &self,
-        subject: &GroundTermPattern,
+        subject: &TermPattern,
         predicate: &NamedNodePattern,
-        object: &GroundTermPattern,
+        object: &TermPattern,
         graph_name: Option<&NamedNodePattern>,
         encoded_variables: &mut Vec<Variable>,
     ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
         let subject_selector =
-            TupleSelector::from_ground_term_pattern(subject, encoded_variables, &self.dataset)?;
+            TupleSelector::from_term_pattern(subject, encoded_variables, &self.dataset)?;
         let predicate_selector =
             TupleSelector::from_named_node_pattern(predicate, encoded_variables, &self.dataset)?;
         let object_selector =
-            TupleSelector::from_ground_term_pattern(object, encoded_variables, &self.dataset)?;
+            TupleSelector::from_term_pattern(object, encoded_variables, &self.dataset)?;
         let graph_name_selector = if let Some(graph_name) = graph_name {
             Some(TupleSelector::from_named_node_pattern(
                 graph_name,
@@ -935,16 +933,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
     fn path_evaluator(
         &self,
-        subject: &GroundTermPattern,
+        subject: &TermPattern,
         path: &PropertyPathExpression,
-        object: &GroundTermPattern,
+        object: &TermPattern,
         encoded_variables: &mut Vec<Variable>,
     ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
         let subject_selector =
-            TupleSelector::from_ground_term_pattern(subject, encoded_variables, &self.dataset)?;
+            TupleSelector::from_term_pattern(subject, encoded_variables, &self.dataset)?;
         let path = self.encode_property_path(path)?;
         let object_selector =
-            TupleSelector::from_ground_term_pattern(object, encoded_variables, &self.dataset)?;
+            TupleSelector::from_term_pattern(object, encoded_variables, &self.dataset)?;
         let dataset = self.dataset.clone();
         Ok(Rc::new(move |from| {
             let input_subject = match subject_selector.get_pattern_value(
@@ -2698,27 +2696,25 @@ enum TupleSelector<T> {
 }
 
 impl<T> TupleSelector<T> {
-    fn from_ground_term_pattern<'a>(
-        term_pattern: &GroundTermPattern,
+    fn from_term_pattern<'a>(
+        term_pattern: &TermPattern,
         variables: &mut Vec<Variable>,
         dataset: &EvalDataset<'a, impl QueryableDataset<'a, InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match term_pattern {
-            GroundTermPattern::Variable(variable) => {
-                Self::Variable(encode_variable(variables, variable))
-            }
-            GroundTermPattern::NamedNode(term) => {
+            TermPattern::Variable(variable) => Self::Variable(encode_variable(variables, variable)),
+            TermPattern::NamedNode(term) => {
                 Self::Constant(dataset.internalize_term(term.as_ref().into())?)
             }
-            GroundTermPattern::Literal(term) => {
+            TermPattern::Literal(term) => {
                 Self::Constant(dataset.internalize_term(term.as_ref().into())?)
             }
             #[cfg(feature = "sparql-12")]
-            GroundTermPattern::Triple(triple) => {
+            TermPattern::Triple(triple) => {
                 match (
-                    Self::from_ground_term_pattern(&triple.subject, variables, dataset)?,
+                    Self::from_term_pattern(&triple.subject, variables, dataset)?,
                     Self::from_named_node_pattern(&triple.predicate, variables, dataset)?,
-                    Self::from_ground_term_pattern(&triple.object, variables, dataset)?,
+                    Self::from_term_pattern(&triple.object, variables, dataset)?,
                 ) {
                     (
                         Self::Constant(subject),
@@ -3433,7 +3429,7 @@ impl<T: Eq> Iterator for ConsecutiveDeduplication<'_, T> {
 struct ConstructIterator<'a, D: QueryableDataset<'a>> {
     eval: SimpleEvaluator<'a, D>,
     iter: InternalTuplesIterator<'a, D::InternalTerm>,
-    template: Vec<TripleTemplate>,
+    template: Vec<TripleTemplateValue>,
     buffered_results: Vec<Result<Triple, QueryEvaluationError>>,
     already_emitted_results: FxHashSet<Triple>,
     bnodes: Vec<BlankNode>,
@@ -3523,34 +3519,36 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
     }
 }
 
-pub struct TripleTemplate {
-    pub subject: TripleTemplateValue,
-    pub predicate: TripleTemplateValue,
-    pub object: TripleTemplateValue,
+pub struct TripleTemplateValue {
+    pub subject: TermTemplateValue,
+    pub predicate: TermTemplateValue,
+    pub object: TermTemplateValue,
 }
 
-pub enum TripleTemplateValue {
+pub enum TermTemplateValue {
     Constant(Term),
     BlankNode(usize),
     Variable(usize),
     #[cfg(feature = "sparql-12")]
-    Triple(Box<TripleTemplate>),
+    Triple(Box<TripleTemplateValue>),
 }
 
-impl TripleTemplateValue {
+impl TermTemplateValue {
     #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
     fn from_term_or_variable(
-        term_or_variable: &TermPattern,
+        term_or_variable: &TermTemplate,
         variables: &mut Vec<Variable>,
         bnodes: &mut Vec<BlankNode>,
     ) -> Option<Self> {
         Some(match term_or_variable {
-            TermPattern::Variable(variable) => Self::Variable(encode_variable(variables, variable)),
-            TermPattern::NamedNode(node) => Self::Constant(node.clone().into()),
-            TermPattern::BlankNode(bnode) => Self::BlankNode(bnode_key(bnodes, bnode)),
-            TermPattern::Literal(literal) => Self::Constant(literal.clone().into()),
+            TermTemplate::Variable(variable) => {
+                Self::Variable(encode_variable(variables, variable))
+            }
+            TermTemplate::NamedNode(node) => Self::Constant(node.clone().into()),
+            TermTemplate::BlankNode(bnode) => Self::BlankNode(bnode_key(bnodes, bnode)),
+            TermTemplate::Literal(literal) => Self::Constant(literal.clone().into()),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(triple) => {
+            TermTemplate::Triple(triple) => {
                 match (
                     Self::from_term_or_variable(&triple.subject, variables, bnodes)?,
                     Self::from_named_node_or_variable(&triple.predicate, variables),
@@ -3569,7 +3567,7 @@ impl TripleTemplateValue {
                         .into(),
                     ),
                     (subject, predicate, object) => {
-                        TripleTemplateValue::Triple(Box::new(TripleTemplate {
+                        TermTemplateValue::Triple(Box::new(TripleTemplateValue {
                             subject,
                             predicate,
                             object,
@@ -3583,7 +3581,7 @@ impl TripleTemplateValue {
     fn from_named_node_or_variable(
         named_node_or_variable: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-    ) -> TripleTemplateValue {
+    ) -> TermTemplateValue {
         match named_node_or_variable {
             NamedNodePattern::Variable(variable) => {
                 Self::Variable(encode_variable(variables, variable))
@@ -3594,25 +3592,25 @@ impl TripleTemplateValue {
 }
 
 fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
-    selector: &TripleTemplateValue,
+    selector: &TermTemplateValue,
     tuple: &InternalTuple<D::InternalTerm>,
     bnodes: &mut Vec<BlankNode>,
     dataset: &EvalDataset<'a, D>,
 ) -> Result<Option<Term>, QueryEvaluationError> {
     match selector {
-        TripleTemplateValue::Constant(term) => Ok(Some(term.clone())),
-        TripleTemplateValue::Variable(v) => tuple
+        TermTemplateValue::Constant(term) => Ok(Some(term.clone())),
+        TermTemplateValue::Variable(v) => tuple
             .get(*v)
             .map(|t| dataset.externalize_term(t.clone()))
             .transpose(),
-        TripleTemplateValue::BlankNode(bnode) => {
+        TermTemplateValue::BlankNode(bnode) => {
             if *bnode >= bnodes.len() {
                 bnodes.resize_with(*bnode + 1, BlankNode::default)
             }
             Ok(Some(bnodes[*bnode].clone().into()))
         }
         #[cfg(feature = "sparql-12")]
-        TripleTemplateValue::Triple(triple) => {
+        TermTemplateValue::Triple(triple) => {
             let (Some(subject), Some(predicate), Some(object)) = (
                 get_triple_template_value(&triple.subject, tuple, bnodes, dataset)?,
                 get_triple_template_value(&triple.predicate, tuple, bnodes, dataset)?,

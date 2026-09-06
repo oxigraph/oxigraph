@@ -98,13 +98,10 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
 
 fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
     let query_file = test.action.as_deref().context("No action found")?;
-    let query = SparqlParser::new()
+    SparqlParser::new()
         .with_base_iri(query_file)?
         .parse_query(&read_file_to_string(query_file)?)
         .context("Not able to parse")?;
-    SparqlParser::new()
-        .parse_query(&query.to_string())
-        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
     Ok(())
 }
 

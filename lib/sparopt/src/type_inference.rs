@@ -1,7 +1,7 @@
 use crate::algebra::{Expression, QueryExpression};
 use oxrdf::Variable;
 use oxrdf::vocab::xsd;
-use spargebra::term::{GroundTerm, GroundTermPattern, NamedNodePattern};
+use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
 use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr};
@@ -17,11 +17,11 @@ pub fn infer_query_expression_types(
             object,
             graph_name,
         } => {
-            add_ground_term_pattern_types(subject, &mut types, false);
+            add_term_pattern_types(subject, &mut types, false);
             if let NamedNodePattern::Variable(v) = predicate {
                 types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
             }
-            add_ground_term_pattern_types(object, &mut types, true);
+            add_term_pattern_types(object, &mut types, true);
             if let Some(NamedNodePattern::Variable(v)) = graph_name {
                 types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
             }
@@ -30,8 +30,8 @@ pub fn infer_query_expression_types(
         QueryExpression::Path {
             subject, object, ..
         } => {
-            add_ground_term_pattern_types(subject, &mut types, false);
-            add_ground_term_pattern_types(object, &mut types, true);
+            add_term_pattern_types(subject, &mut types, false);
+            add_term_pattern_types(object, &mut types, true);
             types
         }
         QueryExpression::Graph { graph_name, inner } => {
@@ -144,12 +144,8 @@ pub fn infer_query_expression_types(
     }
 }
 
-fn add_ground_term_pattern_types(
-    pattern: &GroundTermPattern,
-    types: &mut VariableTypes,
-    is_object: bool,
-) {
-    if let GroundTermPattern::Variable(v) = pattern {
+fn add_term_pattern_types(pattern: &TermPattern, types: &mut VariableTypes, is_object: bool) {
+    if let TermPattern::Variable(v) = pattern {
         types.intersect_variable_with(
             v.clone(),
             if is_object {
@@ -160,12 +156,12 @@ fn add_ground_term_pattern_types(
         )
     }
     #[cfg(feature = "sparql-12")]
-    if let GroundTermPattern::Triple(t) = pattern {
-        add_ground_term_pattern_types(&t.subject, types, false);
+    if let TermPattern::Triple(t) = pattern {
+        add_term_pattern_types(&t.subject, types, false);
         if let NamedNodePattern::Variable(v) = &t.predicate {
             types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
         }
-        add_ground_term_pattern_types(&t.object, types, true);
+        add_term_pattern_types(&t.object, types, true);
     }
 }
 
