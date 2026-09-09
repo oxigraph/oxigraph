@@ -1486,32 +1486,28 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let (child, child_stats) = self.query_expression_evaluator(inner, encoded_variables);
         stat_children.push(child_stats);
         let child = child?;
-        let by = expression
+        let (expressions, is_asc) = expression
             .iter()
-            .filter_map(|comp| {
-                Some(match comp {
-                    OrderExpression::Asc(variable) => {
-                        (true, slice_key(encoded_variables, variable)?)
-                    }
-                    OrderExpression::Desc(variable) => {
-                        (false, slice_key(encoded_variables, variable)?)
-                    }
+            .map(|comp| {
+                Ok(match comp {
+                    OrderExpression::Asc(expression) => (
+                        self.expression_evaluator(expression, encoded_variables, stat_children)?,
+                        true,
+                    ),
+                    OrderExpression::Desc(expression) => (
+                        self.expression_evaluator(expression, encoded_variables, stat_children)?,
+                        false,
+                    ),
                 })
             })
-            .collect::<Vec<_>>();
-        let dataset = self.dataset.clone();
+            .collect::<Result<(Vec<_>, Vec<_>), QueryEvaluationError>>()?;
         Ok(Rc::new(move |from| {
             let mut tuples_and_sort_keys = match child(from)
                 .map(|tuple| {
                     let tuple = tuple?;
-                    let sort_terms = by
+                    let sort_terms = expressions
                         .iter()
-                        .map(|(_, variable_key)| {
-                            tuple
-                                .get(*variable_key)
-                                .map(|term| dataset.externalize_expression_term(term.clone()))
-                                .transpose()
-                        })
+                        .map(|expr| expr(&tuple))
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok((tuple, sort_terms))
                 })
@@ -1521,7 +1517,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 Err(error) => return Box::new(once(Err(error))),
             };
             tuples_and_sort_keys.sort_unstable_by(|(_, a), (_, b)| {
-                for ((is_asc, _), (a, b)) in by.iter().zip(a.iter().zip(b)) {
+                for (is_asc, (a, b)) in is_asc.iter().zip(a.iter().zip(b)) {
                     match cmp_terms(a.as_ref(), b.as_ref()) {
                         Ordering::Greater => {
                             return if *is_asc {
