@@ -2,7 +2,6 @@
 
 use oxrdf::vocab::xsd;
 use oxstr::OxString;
-use rand::random;
 pub use spargebra::algebra::PropertyPathExpression;
 use spargebra::algebra::{
     AggregateExpression as AlAggregateExpression, Expression as AlExpression,
@@ -943,26 +942,6 @@ impl QueryExpression {
         });
         order
     }
-
-    /// Makes sure the expression is a variable, use Extend in the other cases
-    fn algebra_expression_to_constant_or_variable(
-        expression: &AlExpression,
-        query_expression: QueryExpression,
-    ) -> (Variable, QueryExpression) {
-        if let AlExpression::Variable(variable) = expression {
-            (variable.clone(), query_expression)
-        } else {
-            let variable = new_var();
-            (
-                variable.clone(),
-                QueryExpression::Extend {
-                    inner: Box::new(query_expression),
-                    variable,
-                    expression: expression.into(),
-                },
-            )
-        }
-    }
 }
 
 impl From<&AlQueryExpression> for QueryExpression {
@@ -1043,28 +1022,10 @@ impl From<&AlQueryExpression> for QueryExpression {
                 variables: variables.clone(),
                 bindings: bindings.clone(),
             },
-            AlQueryExpression::OrderBy { inner, expression } => {
-                let mut inner = (&**inner).into();
-                let mut expressions = Vec::with_capacity(expression.len());
-                for e in expression {
-                    expressions.push(match e {
-                        AlOrderExpression::Asc(e) => {
-                            let v;
-                            (v, inner) = Self::algebra_expression_to_constant_or_variable(e, inner);
-                            OrderExpression::Asc(v)
-                        }
-                        AlOrderExpression::Desc(e) => {
-                            let v;
-                            (v, inner) = Self::algebra_expression_to_constant_or_variable(e, inner);
-                            OrderExpression::Desc(v)
-                        }
-                    });
-                }
-                Self::OrderBy {
-                    inner: Box::new(inner),
-                    expression: expressions,
-                }
-            }
+            AlQueryExpression::OrderBy { inner, expression } => Self::OrderBy {
+                inner: Box::new(Self::from(&**inner)),
+                expression: expression.iter().map(Into::into).collect(),
+            },
             AlQueryExpression::Project { inner, variables } => Self::Project {
                 inner: Box::new((&**inner).into()),
                 variables: variables.clone(),
@@ -1378,22 +1339,27 @@ impl From<&AggregateExpression> for AlAggregateExpression {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum OrderExpression {
     /// Ascending order
-    Asc(Variable),
+    Asc(Expression),
     /// Descending order
-    Desc(Variable),
+    Desc(Expression),
+}
+
+impl From<&AlOrderExpression> for OrderExpression {
+    fn from(expression: &AlOrderExpression) -> Self {
+        match expression {
+            AlOrderExpression::Asc(e) => Self::Asc(e.into()),
+            AlOrderExpression::Desc(e) => Self::Desc(e.into()),
+        }
+    }
 }
 
 impl From<&OrderExpression> for AlOrderExpression {
     fn from(expression: &OrderExpression) -> Self {
         match expression {
-            OrderExpression::Asc(e) => Self::Asc(e.clone().into()),
-            OrderExpression::Desc(e) => Self::Desc(e.clone().into()),
+            OrderExpression::Asc(e) => Self::Asc(e.into()),
+            OrderExpression::Desc(e) => Self::Desc(e.into()),
         }
     }
-}
-
-fn new_var() -> Variable {
-    Variable::new_unchecked(OxString::new_owned(&format!("{:x}", random::<u128>())))
 }
 
 fn order_pair<T: Hash>(a: T, b: T) -> (T, T) {
