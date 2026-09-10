@@ -967,7 +967,8 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::BaseExpectIri => {
                     if let N3Token::IriRef(iri) = token {
-                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                        context.lexer_options.base_iri =
+                            Some(Iri::parse_unchecked(iri.into_owned()));
                     } else {
                         self.error(errors, "The BASE keyword should be followed by an IRI")
                     }
@@ -989,7 +990,9 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::PrefixExpectIri { name } => {
                     if let N3Token::IriRef(iri) = token {
-                        context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                        context
+                            .prefixes
+                            .insert(name, Iri::parse_unchecked(iri.into_owned()));
                     } else {
                         self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
                     }
@@ -1167,7 +1170,8 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::PathItem => {
                     match token {
                         N3Token::IriRef(iri) => {
-                            self.terms.push(NamedNode::new_unchecked(iri).into());
+                            self.terms
+                                .push(NamedNode::new_unchecked(iri.into_owned()).into());
                         }
                         N3Token::PrefixedName {
                             prefix,
@@ -1198,7 +1202,9 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::CollectionBeginning);
                         }
                         N3Token::String(value) | N3Token::LongString(value) => {
-                            self.stack.push(N3State::LiteralPossibleSuffix { value });
+                            self.stack.push(N3State::LiteralPossibleSuffix {
+                                value: value.into_owned(),
+                            });
                         }
                         N3Token::Integer(v) => {
                             self.terms.push(
@@ -1258,7 +1264,8 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::IriPropertyList => {
                     match token {
                         N3Token::IriRef(id) => {
-                            self.terms.push(NamedNode::new_unchecked(id).into());
+                            self.terms
+                                .push(NamedNode::new_unchecked(id.into_owned()).into());
                             self.stack.push(N3State::PropertyListEnd);
                             self.stack.push(N3State::PredicateObjectList);
                         }
@@ -1342,8 +1349,11 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::LiteralExpectDatatype { value } => match token {
                     N3Token::IriRef(datatype) => {
                         self.terms.push(
-                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
-                                .into(),
+                            Literal::new_typed_literal(
+                                value,
+                                NamedNode::new_unchecked(datatype.into_owned()),
+                            )
+                            .into(),
                         );
                         return;
                     }

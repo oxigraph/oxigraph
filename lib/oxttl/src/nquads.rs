@@ -2,12 +2,12 @@
 //! and a serializer implemented by [`NQuadsSerializer`].
 
 use crate::chunker::{get_ntriples_file_chunks, get_ntriples_slice_chunks};
-use crate::line_formats::NQuadsRecognizer;
+use crate::line_formats::{BorrowedNQuadsRecognizer, NQuadsRecognizer};
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use crate::{DEFAULT_MAX_BUFFER_SIZE, MIN_PARALLEL_CHUNK_SIZE};
-use oxrdf::{Quad, Triple};
+use oxrdf::{Quad, QuadRef, Triple};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Take, Write};
 use std::path::Path;
@@ -109,6 +109,65 @@ impl NQuadsParser {
         ReaderNQuadsParser {
             inner: self.low_level().parser.for_reader(reader),
         }
+    }
+
+    /// Parses an N-Quads file from a [`Read`] implementation and calls
+    /// `on_quad` for each parsed quad.
+    ///
+    /// The callback receives a [`QuadRef`] borrowing from reusable parser
+    /// buffers. Its strings are only valid for the duration of the callback
+    /// invocation. Use [`QuadRef::into_owned`] if a quad must be retained.
+    /// This callback API avoids allocating owned RDF terms for every quad.
+    ///
+    /// Count quads without materializing them:
+    /// ```
+    /// use oxttl::{NQuadsParser, TurtleParseError};
+    ///
+    /// let input = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n";
+    /// let mut count = 0;
+    /// NQuadsParser::new().parse_reader(input.as_slice(), |quad| {
+    ///     // `quad` and its strings cannot be retained after this call.
+    ///     assert_eq!(quad.graph_name.to_string(), "<http://example.com/g>");
+    ///     count += 1;
+    ///     Ok::<_, TurtleParseError>(())
+    /// })?;
+    /// assert_eq!(count, 1);
+    /// # Result::<_, TurtleParseError>::Ok(())
+    /// ```
+    ///
+    /// Parsing stops at the first syntax, I/O, or callback error. Callback
+    /// errors are returned unchanged. When RDF 1.2 support is enabled, triple
+    /// term subtrees are materialized temporarily because [`QuadRef`] represents
+    /// them using owned [`Triple`] values. Ordinary terms keep the
+    /// allocation-light borrowed representation.
+    ///
+    /// This is a streaming API: if parsing fails late, callbacks for earlier
+    /// statements have already run. Consumers that require atomic ingestion
+    /// should stage their changes and commit only after this method returns
+    /// [`Ok`].
+    pub fn parse_reader<R: Read, E>(
+        self,
+        reader: R,
+        mut on_quad: impl for<'a> FnMut(QuadRef<'a>) -> Result<(), E>,
+    ) -> Result<(), E>
+    where
+        E: From<TurtleParseError>,
+    {
+        let mut parser = BorrowedNQuadsRecognizer::new_borrowed_parser(
+            Vec::new(),
+            false,
+            true,
+            self.lenient,
+            self.max_buffer_size,
+        )
+        .for_reader(reader);
+        while let Some(quad) = parser.next() {
+            let quad = quad.map_err(E::from)?;
+            let result = on_quad(quad.as_ref());
+            parser.parser.reuse_output(quad);
+            result?;
+        }
+        Ok(())
     }
 
     /// Parses a N-Quads file from a [`AsyncRead`] implementation.
