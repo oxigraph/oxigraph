@@ -1,7 +1,7 @@
 #[cfg(feature = "rdf-12")]
-use crate::model::vocab::rdf;
+use crate::model::Triple;
 #[cfg(feature = "rdf-12")]
-use crate::model::{BlankNode, Triple};
+use crate::model::vocab::rdf;
 use crate::model::{GraphName, NamedOrBlankNode, Quad, Term};
 use crate::storage::binary_encoder::{
     QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
@@ -254,8 +254,12 @@ impl RocksDbStorage {
                 );
                 let mut hasher = SipHasher24::new();
                 triple.hash(&mut hasher);
-                let reifier = BlankNode::new_from_unique_id(hasher.finish128().as_u128());
-                let encoded_reifier = (&reifier).into();
+                let encoded_reifier = EncodedTerm::NumericalBlankNode {
+                    id: hasher.finish128().as_u128().to_be_bytes(),
+                };
+                let Term::BlankNode(reifier) = r.decode_term(&encoded_reifier)? else {
+                    unreachable!()
+                };
                 w.insert(Quad::new(
                     reifier,
                     rdf::REIFIES,

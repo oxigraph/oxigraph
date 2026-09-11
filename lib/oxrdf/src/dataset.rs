@@ -845,14 +845,14 @@ impl Dataset {
             // 3.1)
             let subject = self.hash_first_degree_quads_decode_named_or_blank_node(
                 subject,
-                &reference_blank_node_identifier,
+                reference_blank_node_identifier,
             );
             let predicate = predicate.decode_from(&self.interner);
             let object =
-                self.hash_first_degree_quads_decode_term(object, &reference_blank_node_identifier);
+                self.hash_first_degree_quads_decode_term(object, reference_blank_node_identifier);
             let graph_name = self.hash_first_degree_quads_decode_graph_name(
                 graph_name,
-                &reference_blank_node_identifier,
+                reference_blank_node_identifier,
             );
             nquads.push(if graph_name.is_default_graph() {
                 format!("{subject} {predicate} {object} .\n")
@@ -869,12 +869,12 @@ impl Dataset {
     fn hash_first_degree_quads_decode_named_or_blank_node(
         &self,
         term: &InternedNamedOrBlankNode,
-        reference_blank_node_identifier: &InternedBlankNode,
+        reference_blank_node_identifier: InternedBlankNode,
     ) -> NamedOrBlankNode {
         match term {
             InternedNamedOrBlankNode::NamedNode(t) => t.decode_from(&self.interner).into(),
             InternedNamedOrBlankNode::BlankNode(t) => {
-                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
                     "z"
@@ -887,12 +887,12 @@ impl Dataset {
     fn hash_first_degree_quads_decode_term(
         &self,
         term: &InternedTerm,
-        reference_blank_node_identifier: &InternedBlankNode,
+        reference_blank_node_identifier: InternedBlankNode,
     ) -> Term {
         match term {
             InternedTerm::NamedNode(t) => t.decode_from(&self.interner).into(),
             InternedTerm::BlankNode(t) => {
-                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
                     "z"
@@ -919,12 +919,12 @@ impl Dataset {
     fn hash_first_degree_quads_decode_graph_name(
         &self,
         term: &InternedGraphName,
-        reference_blank_node_identifier: &InternedBlankNode,
+        reference_blank_node_identifier: InternedBlankNode,
     ) -> GraphName {
         match term {
             InternedGraphName::NamedNode(t) => t.decode_from(&self.interner).into(),
             InternedGraphName::BlankNode(t) => {
-                BlankNodeRef::new_unchecked(if t == reference_blank_node_identifier {
+                BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
                     "z"

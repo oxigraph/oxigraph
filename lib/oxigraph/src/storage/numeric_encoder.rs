@@ -6,6 +6,7 @@ use oxstr::OxString;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::mem::discriminant;
 use std::str;
 #[cfg(feature = "rdf-12")]
@@ -471,21 +472,38 @@ impl From<&NamedNode> for EncodedTerm {
 
 impl From<&BlankNode> for EncodedTerm {
     fn from(blank_node: &BlankNode) -> Self {
-        if let Some(id) = blank_node.unique_id() {
+        let id = blank_node.as_str();
+        if let Some(id) = blank_node_id_to_integer(id) {
             Self::NumericalBlankNode {
                 id: id.to_be_bytes(),
             }
+        } else if let Ok(id) = id.try_into() {
+            Self::SmallBlankNode(id)
         } else {
-            let id = blank_node.as_str();
-            if let Ok(id) = id.try_into() {
-                Self::SmallBlankNode(id)
-            } else {
-                Self::BigBlankNode {
-                    id_id: StrHash::new(id),
-                }
+            Self::BigBlankNode {
+                id_id: StrHash::new(id),
             }
         }
     }
+}
+
+fn blank_node_id_to_integer(id: &str) -> Option<u128> {
+    let digits = id.as_bytes();
+    let mut value: u128 = 0;
+    if matches!(digits.first(), None | Some(b'0')) {
+        return None; // No empty string or leading zeros
+    }
+    for digit in digits {
+        value = value.checked_mul(16)?.checked_add(
+            match *digit {
+                b'0'..=b'9' => digit - b'0',
+                b'a'..=b'f' => digit - b'a' + 10,
+                _ => return None,
+            }
+            .into(),
+        )?;
+    }
+    Some(value)
 }
 
 impl From<&Literal> for EncodedTerm {
@@ -1032,7 +1050,17 @@ impl<S: StrLookup> Decoder for S {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
             EncodedTerm::NumericalBlankNode { id } => {
-                Ok(BlankNode::new_from_unique_id(u128::from_be_bytes(*id)).into())
+                let mut str = [0; 32];
+                write!(&mut str[..], "{:x}", u128::from_be_bytes(*id)).map_err(|_| {
+                    CorruptionError::msg("u128 hexadecimal serialization not fitting into 32 bytes")
+                })?;
+                let len = str.iter().position(|x| x == &0).unwrap_or(32);
+                Ok(BlankNode::new_unchecked(OxString::new_owned(
+                    str::from_utf8(&str[..len]).map_err(|_| {
+                        CorruptionError::msg("u128 hexadecimal serialization is not valid utf-8")
+                    })?,
+                ))
+                .into())
             }
             EncodedTerm::SmallBlankNode(id) => {
                 Ok(BlankNode::new_unchecked(OxString::new_owned(id.as_str())).into())
