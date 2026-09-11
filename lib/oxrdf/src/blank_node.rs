@@ -1,5 +1,3 @@
-#![expect(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
-
 use oxstr::OxString;
 use rand::random;
 #[cfg(feature = "serde")]
@@ -22,12 +20,8 @@ use std::{fmt, str};
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct BlankNode(BlankNodeContent);
-
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
-enum BlankNodeContent {
-    Named(OxString),
-    Anonymous { id: [u8; 16], str: IdStr },
+pub struct BlankNode {
+    id: OxString,
 }
 
 impl BlankNode {
@@ -51,69 +45,24 @@ impl BlankNode {
     /// [`BlankNode::new`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(id: impl Into<OxString>) -> Self {
-        let id = id.into();
-        if let Some(numerical_id) = to_integer_id(&id) {
-            Self::new_from_unique_id(numerical_id)
-        } else {
-            Self(BlankNodeContent::Named(id))
-        }
-    }
-
-    /// Creates a blank node from a unique numerical id.
-    ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`].
-    #[inline]
-    pub fn new_from_unique_id(id: u128) -> Self {
-        Self(BlankNodeContent::Anonymous {
-            id: id.to_ne_bytes(),
-            str: IdStr::new(id),
-        })
+        Self { id: id.into() }
     }
 
     /// Returns the underlying ID of this blank node.
     #[inline]
     pub fn as_str(&self) -> &str {
-        match &self.0 {
-            BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => str.as_str(),
-        }
+        self.id.as_str()
     }
 
     /// Returns the underlying ID of this blank node.
     #[inline]
     pub fn into_string(self) -> OxString {
-        match self.0 {
-            BlankNodeContent::Named(id) => id,
-            BlankNodeContent::Anonymous { str, .. } => OxString::new_owned(str.as_str()),
-        }
+        self.id
     }
 
     #[inline]
     pub fn as_ref(&self) -> BlankNodeRef<'_> {
-        BlankNodeRef(match &self.0 {
-            BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id.as_str()),
-            BlankNodeContent::Anonymous { id, str } => BlankNodeRefContent::Anonymous {
-                id: *id,
-                str: str.as_str(),
-            },
-        })
-    }
-
-    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`].
-    ///
-    /// ```
-    /// use oxrdf::BlankNode;
-    ///
-    /// assert_eq!(BlankNode::new_from_unique_id(128).unique_id(), Some(128));
-    /// assert_eq!(BlankNode::new("foo")?.unique_id(), None);
-    /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
-    /// ```
-    #[inline]
-    pub const fn unique_id(&self) -> Option<u128> {
-        match self.0 {
-            BlankNodeContent::Named(_) => None,
-            BlankNodeContent::Anonymous { id, .. } => Some(u128::from_ne_bytes(id)),
-        }
+        BlankNodeRef { id: &self.id }
     }
 }
 
@@ -130,13 +79,13 @@ impl Default for BlankNode {
     fn default() -> Self {
         // We ensure the ID does not start with a number to be also valid with RDF/XML
         loop {
-            let id = random();
-            let str = IdStr::new(id);
-            if matches!(str.as_str().as_bytes().first(), Some(b'a'..=b'f')) {
-                return Self(BlankNodeContent::Anonymous {
-                    id: id.to_ne_bytes(),
-                    str,
-                });
+            let mut str = [0; 32];
+            write!(&mut str[..], "{:x}", random::<u128>()).unwrap();
+            if matches!(str[0], b'a'..=b'f') {
+                let len = str.iter().position(|x| *x == 0).unwrap_or(32);
+                return Self {
+                    id: OxString::new_owned(str::from_utf8(&str[..len]).unwrap()),
+                };
             }
         }
     }
@@ -157,12 +106,8 @@ impl Default for BlankNode {
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct BlankNodeRef<'a>(BlankNodeRefContent<'a>);
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-enum BlankNodeRefContent<'a> {
-    Named(&'a str),
-    Anonymous { id: [u8; 16], str: &'a str },
+pub struct BlankNodeRef<'a> {
+    id: &'a str,
 }
 
 impl<'a> BlankNodeRef<'a> {
@@ -185,54 +130,20 @@ impl<'a> BlankNodeRef<'a> {
     /// [`BlankNodeRef::new`) is a safe version of this constructor and should be used for untrusted data.
     #[inline]
     pub fn new_unchecked(id: &'a str) -> Self {
-        if let Some(numerical_id) = to_integer_id(id) {
-            Self(BlankNodeRefContent::Anonymous {
-                id: numerical_id.to_ne_bytes(),
-                str: id,
-            })
-        } else {
-            Self(BlankNodeRefContent::Named(id))
-        }
+        Self { id }
     }
 
     /// Returns the underlying ID of this blank node.
     #[inline]
     pub const fn as_str(self) -> &'a str {
-        match self.0 {
-            BlankNodeRefContent::Named(id) => id,
-            BlankNodeRefContent::Anonymous { str, .. } => str,
-        }
-    }
-
-    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`].
-    ///
-    /// ```
-    /// use oxrdf::BlankNode;
-    ///
-    /// assert_eq!(
-    ///     BlankNode::new_from_unique_id(128).as_ref().unique_id(),
-    ///     Some(128)
-    /// );
-    /// assert_eq!(BlankNode::new("foo")?.as_ref().unique_id(), None);
-    /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
-    /// ```
-    #[inline]
-    pub const fn unique_id(&self) -> Option<u128> {
-        match self.0 {
-            BlankNodeRefContent::Named(_) => None,
-            BlankNodeRefContent::Anonymous { id, .. } => Some(u128::from_ne_bytes(id)),
-        }
+        self.id
     }
 
     #[inline]
     pub fn into_owned(self) -> BlankNode {
-        BlankNode(match self.0 {
-            BlankNodeRefContent::Named(id) => BlankNodeContent::Named(OxString::new_owned(id)),
-            BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
-                id,
-                str: IdStr::new(u128::from_ne_bytes(id)),
-            },
-        })
+        BlankNode {
+            id: OxString::new_owned(self.id),
+        }
     }
 }
 
@@ -268,24 +179,6 @@ impl PartialEq<BlankNodeRef<'_>> for BlankNode {
     #[inline]
     fn eq(&self, other: &BlankNodeRef<'_>) -> bool {
         self.as_ref() == *other
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
-struct IdStr([u8; 32]);
-
-impl IdStr {
-    #[inline]
-    fn new(id: u128) -> Self {
-        let mut str = [0; 32];
-        write!(&mut str[..], "{id:x}").unwrap();
-        Self(str)
-    }
-
-    #[inline]
-    fn as_str(&self) -> &str {
-        let len = self.0.iter().position(|x| x == &0).unwrap_or(32);
-        str::from_utf8(&self.0[..len]).unwrap()
     }
 }
 
@@ -348,26 +241,6 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
     }
 }
 
-#[inline]
-fn to_integer_id(id: &str) -> Option<u128> {
-    let digits = id.as_bytes();
-    let mut value: u128 = 0;
-    if let None | Some(b'0') = digits.first() {
-        return None; // No empty string or leading zeros
-    }
-    for digit in digits {
-        value = value.checked_mul(16)?.checked_add(
-            match *digit {
-                b'0'..=b'9' => digit - b'0',
-                b'a'..=b'f' => digit - b'a' + 10,
-                _ => return None,
-            }
-            .into(),
-        )?;
-    }
-    Some(value)
-}
-
 /// An error raised during [`BlankNode`] IDs validation.
 #[derive(Debug, thiserror::Error)]
 #[error("The blank node identifier is invalid")]
@@ -413,20 +286,6 @@ impl<'de> Deserialize<'de> for BlankNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(not(target_family = "wasm"))]
-    use std::mem::{align_of, size_of};
-
-    #[test]
-    fn as_str_partial() {
-        let b = BlankNode::new_from_unique_id(0x42);
-        assert_eq!(b.as_str(), "42");
-    }
-
-    #[test]
-    fn as_str_full() {
-        let b = BlankNode::new_from_unique_id(0x7777_6666_5555_4444_3333_2222_1111_0000);
-        assert_eq!(b.as_str(), "77776666555544443333222211110000");
-    }
 
     #[test]
     fn new_validation() {
@@ -440,18 +299,6 @@ mod tests {
     }
 
     #[test]
-    fn new_numerical() {
-        assert_eq!(
-            BlankNode::new("100a").unwrap(),
-            BlankNode::new_from_unique_id(0x100a),
-        );
-        assert_ne!(
-            BlankNode::new("100A").unwrap(),
-            BlankNode::new_from_unique_id(0x100a)
-        );
-    }
-
-    #[test]
     fn test_equals() {
         assert_eq!(
             BlankNode::new("100a").unwrap(),
@@ -461,15 +308,6 @@ mod tests {
             BlankNode::new("zzz").unwrap(),
             BlankNodeRef::new("zzz").unwrap()
         );
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn test_size_and_alignment() {
-        assert_eq!(size_of::<BlankNode>(), 56);
-        assert_eq!(size_of::<BlankNodeRef<'_>>(), 32);
-        assert_eq!(align_of::<BlankNode>(), 8);
-        assert_eq!(align_of::<BlankNodeRef<'_>>(), 8);
     }
 
     #[test]

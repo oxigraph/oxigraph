@@ -414,7 +414,8 @@ impl SliceJsonSolutionsParser<'_> {
     }
 }
 
-#[cfg_attr(feature = "sparql-12", expect(clippy::large_enum_variant))]
+#[expect(clippy::allow_attributes)]
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
