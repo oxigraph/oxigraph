@@ -451,11 +451,34 @@ impl Optimizer {
                 GraphPattern::reduced(Self::push_filters(*inner, filters, input_types))
             }
             GraphPattern::Project { inner, variables } => {
-                GraphPattern::project(Self::push_filters(*inner, filters, input_types), variables)
+                let mut inner_filters = Vec::new();
+                let mut final_filters = Vec::new();
+                for filter in filters {
+                    if filter
+                        .used_variables()
+                        .into_iter()
+                        .all(|variable| variables.contains(variable))
+                    {
+                        inner_filters.push(filter);
+                    } else {
+                        // Variables not projected by a subquery are not in scope outside of it.
+                        // Pushing such a filter would make the subquery's hidden bindings visible
+                        // to the filter, in particular for correlated EXISTS expressions.
+                        final_filters.push(filter);
+                    }
+                }
+                GraphPattern::filter(
+                    GraphPattern::project(
+                        Self::push_filters(*inner, inner_filters, input_types),
+                        variables,
+                    ),
+                    Expression::and_all(final_filters),
+                )
             }
-            GraphPattern::OrderBy { inner, expression } => {
-                GraphPattern::order_by(Self::push_filters(*inner, filters, input_types), expression)
-            }
+            GraphPattern::OrderBy { inner, expression } => GraphPattern::order_by(
+                Self::push_filters(*inner, filters, input_types),
+                expression,
+            ),
             GraphPattern::Service { .. } => {
                 // TODO: we can be smart and push some filters
                 // But we need to check the behavior of SILENT that can transform no results into a singleton
