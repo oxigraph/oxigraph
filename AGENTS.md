@@ -32,6 +32,8 @@ When feasible, prefer adding a test case under `testsuite/oxigraph-tests/` over 
 - `sparopt`: `sparql-optimization`
 - `sparesults`: `sparql-results`
 
+Do not forget to `git add` the new test files.
+
 ## Fuzz testing
 
 When modifying one of the crates listed below, run each of its relevant fuzz targets for one minute with:

@@ -46,6 +46,7 @@
     :merged_default_graph
     :merged_default_graph_join
     :merged_default_graph_update
+    :delete_insert_solution_order
     :repeated_blank_node
     ) .
 
@@ -69,6 +70,14 @@
         ut:data <merged_default_graph_update.ttl> ;
         ut:graphData <merged_graph_1.ttl>, <merged_graph_2.ttl>
     ] .
+
+:delete_insert_solution_order rdf:type mf:UpdateEvaluationTest ;
+    mf:name "DELETE/INSERT applies all deletes before all inserts" ;
+    mf:action [
+        ut:request <delete_insert_solution_order.ru> ;
+        ut:data <delete_insert_solution_order_input.ttl>
+    ] ;
+    mf:result [ ut:data <delete_insert_solution_order_result.ttl> ] .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
     mf:name "Multibytes character at the end of a unicode escape sequence" ;
