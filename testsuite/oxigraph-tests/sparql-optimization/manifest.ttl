@@ -31,6 +31,7 @@
     :bgp_join_reordering
     :nested_bind_lateral_reordering
     :lateral_optional_service
+    :filter_projection_scope
     ) .
 
 
@@ -148,3 +149,8 @@
     mf:name "LATERAL preserves OPTIONAL SERVICE error handling" ;
     mf:action <lateral_optional_service_input.rq> ;
     mf:result <lateral_optional_service_output.rq> .
+
+:filter_projection_scope rdf:type ox:QueryOptimizationTest ;
+    mf:name "Filter pushdown preserves subquery projection scope" ;
+    mf:action <filter_projection_scope_input.rq> ;
+    mf:result <filter_projection_scope_output.rq> .
