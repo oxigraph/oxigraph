@@ -885,6 +885,9 @@ impl<R> InternalRdfXmlParser<R> {
                     self.text_buffer.clear();
                     self.parse_text_event(text)?;
                 }
+                if !matches!(self.state.as_slice(), &[RdfXmlState::Doc { .. }]) {
+                    return Err(RdfXmlSyntaxError::msg("Unexpected end of file").into());
+                }
                 Ok(())
             }
         }
