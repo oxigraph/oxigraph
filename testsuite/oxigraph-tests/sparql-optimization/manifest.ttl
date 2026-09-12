@@ -29,6 +29,7 @@
     :push_filter
     :push_optional_filter
     :empty_union
+    :implicit_grouping_on_empty
     :bgp_join_reordering
     :optional_lateral_reordering
     :nested_bind_lateral_reordering
@@ -139,6 +140,11 @@
     mf:name "empty UNION" ;
     mf:action <empty_union_input.rq> ;
     mf:result <empty_union_output.rq> .
+
+:implicit_grouping_on_empty rdf:type ox:QueryOptimizationTest ;
+    mf:name "Implicit grouping on empty input" ;
+    mf:action <implicit_grouping_on_empty_input.rq> ;
+    mf:result <implicit_grouping_on_empty_output.rq> .
 
 :bgp_join_reordering rdf:type ox:QueryOptimizationTest ;
     mf:name "BGP join reordering" ;
