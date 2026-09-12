@@ -339,13 +339,20 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     }
 
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
-        eval_load(
+        let quads = eval_load(
             from,
             to,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q.as_ref()),
-        )
+        )?;
+        // Parse the full document before making changes, including for LOAD SILENT.
+        if let GraphName::NamedNode(graph_name) = to {
+            self.transaction.insert_named_graph(graph_name.into());
+        }
+        for quad in quads {
+            self.transaction.insert(quad.as_ref());
+        }
+        Ok(())
     }
 
     fn eval_create(
@@ -567,13 +574,20 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
     }
 
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
-        eval_load(
+        let quads = eval_load(
             from,
             to,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q.as_ref()),
-        )
+        )?;
+        // Parse the full document before making changes, including for LOAD SILENT.
+        if let GraphName::NamedNode(graph_name) = to {
+            self.transaction.insert_named_graph(graph_name.into());
+        }
+        for quad in quads {
+            self.transaction.insert(quad.as_ref());
+        }
+        Ok(())
     }
 
     fn eval_create(
@@ -644,8 +658,7 @@ fn eval_load(
     from: &NamedNode,
     to: &GraphName,
     client: &Client,
-    mut insert: impl FnMut(OxQuad),
-) -> Result<(), UpdateEvaluationError> {
+) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
     let (content_type, body) = client
         .get(
             from.as_str(),
@@ -680,18 +693,14 @@ fn eval_load(
                     .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?,
             })
         });
-    for q in parser {
-        insert(q?);
-    }
-    Ok(())
+    Ok(parser.collect::<Result<Vec<_>, _>>()?)
 }
 
 #[cfg(not(feature = "http-client"))]
 fn eval_load(
     _from: &NamedNode,
     _to: &GraphName,
-    _insert: impl FnMut(OxQuad),
-) -> Result<(), UpdateEvaluationError> {
+) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
     Err(UpdateEvaluationError::Unexpected(
         "HTTP client is not available. Enable the feature 'http-client'".into(),
     ))
