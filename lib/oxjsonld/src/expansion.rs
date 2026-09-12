@@ -2261,6 +2261,11 @@ impl JsonLdExpansionConverter {
                     if let Some(parent_context) = &map_context.previous_context {
                         map_context = Arc::clone(parent_context);
                     }
+                    if let Some(scoped_context) =
+                        self.new_scoped_context(&map_context, key.as_ref(), false, true, errors)
+                    {
+                        map_context = Arc::new(scoped_context);
+                    }
                     let extra_node = if self
                         .expand_iri(&active_context, OxString::new_owned(&key), false, true)
                         .is_none_or(|k| k != "@none")
