@@ -32,6 +32,7 @@
     :bgp_join_reordering
     :optional_lateral_reordering
     :nested_bind_lateral_reordering
+    :filter_projection_scope
     ) .
 
 
@@ -154,3 +155,8 @@
     mf:name "Nested BGP below BIND is converted to LATERAL" ;
     mf:action <nested_bind_lateral_reordering_input.rq> ;
     mf:result <nested_bind_lateral_reordering_output.rq> .
+
+:filter_projection_scope rdf:type ox:QueryOptimizationTest ;
+    mf:name "Filter pushdown preserves subquery projection scope" ;
+    mf:action <filter_projection_scope_input.rq> ;
+    mf:result <filter_projection_scope_output.rq> .
