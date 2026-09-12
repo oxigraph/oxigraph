@@ -199,7 +199,7 @@ impl fmt::Display for Double {
         } else if self.value.is_nan() {
             f.write_str("NaN")
         } else {
-            format_finite_float::<310>(self.value, f)
+            format_finite_float::<326>(self.value, f)
         }
     }
 }
@@ -445,5 +445,6 @@ mod tests {
             Double::from(f64::EPSILON).to_string(),
             "2.220446049250313E-16"
         );
+        assert_eq!(Double::from(f64::from_bits(1)).to_string(), "5.0E-324");
     }
 }

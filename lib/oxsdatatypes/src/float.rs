@@ -189,7 +189,7 @@ impl fmt::Display for Float {
         } else if self.value.is_nan() {
             f.write_str("NaN")
         } else {
-            format_finite_float::<40>(self.value, f)
+            format_finite_float::<47>(self.value, f)
         }
     }
 }
@@ -321,5 +321,6 @@ mod tests {
         assert_eq!(Float::from(f32::MIN).to_string(), "-3.4028235E38");
         assert_eq!(Float::from(f32::MAX).to_string(), "3.4028235E38");
         assert_eq!(Float::from(f32::EPSILON).to_string(), "1.1920929E-7");
+        assert_eq!(Float::from(f32::from_bits(1)).to_string(), "1.0E-45");
     }
 }
