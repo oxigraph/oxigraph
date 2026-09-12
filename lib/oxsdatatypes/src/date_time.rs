@@ -1906,24 +1906,17 @@ fn since_unix_epoch() -> Duration {
 
 /// The [normalizeMonth](https://www.w3.org/TR/xmlschema11-2/#f-dt-normMo) function
 fn normalize_month(yr: i64, mo: i64) -> Option<(i64, u8)> {
-    if mo >= 0 {
-        let yr = yr.checked_add(mo.checked_sub(1)?.checked_div(12)?)?;
-        let mo = u8::try_from(mo.checked_sub(1)?.checked_rem(12)?.abs().checked_add(1)?).ok()?;
-        Some((yr, mo))
-    } else {
-        // Needed to make it work with negative durations
-        let yr = yr.checked_add(mo.checked_sub(1)?.checked_div(12)?.checked_sub(1)?)?;
-        let mo = u8::try_from(
-            12_i64
-                .checked_add(mo.checked_sub(1)?.checked_rem(12)?)?
-                .checked_add(1)?,
-        )
+    let yr = yr.checked_add(mo.checked_sub(1)?.checked_div_euclid(12)?)?;
+    let mo = mo
+        .checked_sub(1)?
+        .checked_rem_euclid(12)?
+        .checked_add(1)?
+        .try_into()
         .ok()?;
-        Some((yr, mo))
-    }
+    Some((yr, mo))
 }
 
-/// The [normalizeDa](https://www.w3.org/TR/xmlschema11-2/#f-dt-normDa) function
+/// The [normalizeDay](https://www.w3.org/TR/xmlschema11-2/#f-dt-normDay) function
 fn normalize_day(yr: i64, mo: i64, mut da: i64) -> Option<(i64, u8, u8)> {
     let (mut yr, mut mo) = normalize_month(yr, mo)?;
     loop {
@@ -1938,19 +1931,19 @@ fn normalize_day(yr: i64, mo: i64, mut da: i64) -> Option<(i64, u8, u8)> {
             yr = yr2;
             mo = mo2;
         } else {
-            return Some((yr, mo, u8::try_from(da).ok()?));
+            return Some((yr, mo, da.try_into().ok()?));
         }
     }
 }
 
 /// The [normalizeMinute](https://www.w3.org/TR/xmlschema11-2/#f-dt-normMi) function
 fn normalize_minute(yr: i64, mo: i64, da: i64, hr: i64, mi: i64) -> Option<(i64, u8, u8, u8, u8)> {
-    let hr = hr.checked_add(mi.checked_div(60)?)?;
-    let mi = mi.checked_rem(60)?;
-    let da = da.checked_add(hr.checked_div(24)?)?;
-    let hr = hr.checked_rem(24)?;
+    let hr = hr.checked_add(mi.checked_div_euclid(60)?)?;
+    let mi = mi.checked_rem_euclid(60)?;
+    let da = da.checked_add(hr.checked_div_euclid(24)?)?;
+    let hr = hr.checked_rem_euclid(24)?;
     let (yr, mo, da) = normalize_day(yr, mo, da)?;
-    Some((yr, mo, da, u8::try_from(hr).ok()?, u8::try_from(mi).ok()?))
+    Some((yr, mo, da, hr.try_into().ok()?, mi.try_into().ok()?))
 }
 
 /// The [normalizeSecond](https://www.w3.org/TR/xmlschema11-2/#f-dt-normSe) function
@@ -1962,8 +1955,8 @@ fn normalize_second(
     mi: i64,
     se: Decimal,
 ) -> Option<(i64, u8, u8, u8, u8, Decimal)> {
-    let mi = mi.checked_add(i64::try_from(se.as_i128().checked_div(60)?).ok()?)?; // TODO: good idea?
-    let se = se.checked_rem(60)?;
+    let mi = mi.checked_add(se.as_i128().checked_div_euclid(60)?.try_into().ok()?)?; // TODO: good idea?
+    let se = se.checked_rem_euclid(60)?;
     let (yr, mo, da, hr, mi) = normalize_minute(yr, mo, da, hr, mi)?;
     Some((yr, mo, da, hr, mi, se))
 }
@@ -3035,6 +3028,16 @@ mod tests {
             Time::from_str("08:20:00-05:00")?
                 .checked_sub_duration(Duration::from_str("P23DT10H10M")?),
             Some(Time::from_str("22:10:00-05:00")?)
+        );
+        assert_eq!(
+            DateTime::from_str("2024-01-15T00:00:00Z")?
+                .checked_sub_year_month_duration(YearMonthDuration::from_str("P1M")?),
+            Some(DateTime::from_str("2023-12-15T00:00:00Z")?)
+        );
+        assert_eq!(
+            DateTime::from_str("2024-01-15T00:00:00Z")?
+                .checked_sub_year_month_duration(YearMonthDuration::from_str("P13M")?),
+            Some(DateTime::from_str("2022-12-15T00:00:00Z")?)
         );
         Ok(())
     }
