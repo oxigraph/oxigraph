@@ -4,10 +4,12 @@ use crate::model::Triple;
 use crate::model::vocab::rdf;
 use crate::model::{GraphName, NamedOrBlankNode, Quad, Term};
 use crate::storage::binary_encoder::{
-    QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
-    encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
-    write_gspo_quad, write_osp_quad, write_ospg_quad, write_pos_quad, write_posg_quad,
-    write_spo_quad, write_spog_quad, write_term,
+    QuadEncoding, TYPE_DATE_LITERAL, TYPE_DATE_TIME_LITERAL, TYPE_G_DAY_LITERAL,
+    TYPE_G_MONTH_DAY_LITERAL, TYPE_G_MONTH_LITERAL, TYPE_G_YEAR_LITERAL, TYPE_G_YEAR_MONTH_LITERAL,
+    TYPE_STAR_TRIPLE, TYPE_TIME_LITERAL, TYPE_TRIPLE, TermReader, WRITTEN_TERM_MAX_SIZE,
+    decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
+    write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
+    write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term,
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
@@ -37,7 +39,7 @@ use std::thread::JoinHandle;
 use std::{io, thread};
 
 const BATCH_SIZE: usize = 100_000;
-const LATEST_STORAGE_VERSION: u64 = 2;
+const LATEST_STORAGE_VERSION: u64 = 3;
 const ID2STR_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
 const POSG_CF: &str = "posg";
@@ -197,13 +199,13 @@ impl RocksDbStorage {
 
     fn migrate(&self) -> Result<(), StorageError> {
         let mut version = self.ensure_version()?;
+        if version != LATEST_STORAGE_VERSION && !self.db.is_writable() {
+            return Err(StorageError::Other(
+                "It is not possible to upgrade read-only Oxigraph instances to newer Oxigraph versions, please open in read-write regular mode to upgrade.".into(),
+            ));
+        }
         if version == 0 {
             // We migrate to v1
-            if !self.db.is_writable() {
-                return Err(StorageError::Other(
-                    "It is not possible to upgrade read-only Oxigraph instances to newer Oxigraph versions, please open in read-write regular mode to upgrade.".into(),
-                ));
-            }
             let mut graph_names = FxHashSet::default();
             for quad in self.snapshot().quads() {
                 let quad = quad?;
@@ -273,11 +275,6 @@ impl RocksDbStorage {
                 Ok(encoded_reifier)
             }
 
-            if !self.db.is_writable() {
-                return Err(StorageError::Other(
-                    "It is not possible to upgrade read-only Oxigraph instances to newer Oxigraph versions, please open in read-write regular mode to upgrade.".into(),
-                ));
-            }
             let snapshot = self.snapshot();
             #[cfg_attr(not(feature = "rdf-12"), expect(clippy::never_loop))]
             for quad in snapshot
@@ -317,12 +314,84 @@ impl RocksDbStorage {
                             &mut w,
                         )?;
                     }
-                    w.insert(snapshot.decode_quad(&new_quad)?);
                     w.remove_encoded(&quad);
+                    w.insert(snapshot.decode_quad(&new_quad)?);
                     w.commit()?;
                 }
             }
             version = 2;
+            self.update_version(version)?;
+        }
+        if version == 2 {
+            // We migrate to v3
+            // It is a fix of calendar offset serialization
+            // We change the "no-timezone" from [u8::MAX,u8::MAX] (clashing with -00:01) to i16::MIN
+
+            fn update_calendar_timezone_and_return_true_if_change(
+                object: &mut EncodedTerm,
+                buffer: &mut Vec<u8>,
+            ) -> Result<bool, StorageError> {
+                match object {
+                    EncodedTerm::DateTimeLiteral(_)
+                    | EncodedTerm::TimeLiteral(_)
+                    | EncodedTerm::DateLiteral(_)
+                    | EncodedTerm::GYearMonthLiteral(_)
+                    | EncodedTerm::GYearLiteral(_)
+                    | EncodedTerm::GMonthDayLiteral(_)
+                    | EncodedTerm::GDayLiteral(_)
+                    | EncodedTerm::GMonthLiteral(_) => {
+                        buffer.clear();
+                        write_term(buffer, object);
+                        Ok(if buffer.ends_with(&[u8::MAX, u8::MAX]) {
+                            // This is old marker for no timezone, we update it
+                            let buffer_len = buffer.len();
+                            buffer[buffer_len - 2..].copy_from_slice(&i16::MIN.to_be_bytes());
+                            *object = buffer.as_slice().read_term()?;
+                            true
+                        } else {
+                            false
+                        })
+                    }
+                    #[cfg(feature = "rdf-12")]
+                    EncodedTerm::Triple(t) => update_calendar_timezone_and_return_true_if_change(
+                        &mut Arc::make_mut(t).object,
+                        buffer,
+                    ),
+                    _ => Ok(false),
+                }
+            }
+
+            let snapshot = self.snapshot();
+            let mut buffer = Vec::new();
+            for prefix in [
+                TYPE_DATE_TIME_LITERAL,
+                TYPE_TIME_LITERAL,
+                TYPE_DATE_LITERAL,
+                TYPE_G_YEAR_MONTH_LITERAL,
+                TYPE_G_YEAR_LITERAL,
+                TYPE_G_MONTH_DAY_LITERAL,
+                TYPE_G_DAY_LITERAL,
+                TYPE_G_MONTH_LITERAL,
+                TYPE_TRIPLE,
+            ] {
+                for quad in snapshot
+                    .ospg_quads(&[prefix])
+                    .chain(snapshot.dosp_quads(&[prefix]))
+                {
+                    let quad = quad?;
+                    let mut new_quad = quad.clone();
+                    if update_calendar_timezone_and_return_true_if_change(
+                        &mut new_quad.object,
+                        &mut buffer,
+                    )? {
+                        let mut w = self.start_transaction()?;
+                        w.remove_encoded(&quad);
+                        w.insert(snapshot.decode_quad(&new_quad)?);
+                        w.commit()?;
+                    }
+                }
+            }
+            version = 3;
             self.update_version(version)?;
         }
 
