@@ -26,6 +26,8 @@
         <#escaped_trailing_dot_trig>
         <#string_line_jump_ttl>
         <#xml_multiple_objects>
+		<#xml_unclosed_description>
+		<#xml_unclosed_rdf>
         <#slightly_invalid_escape_sequence_nt>
         <#slightly_invalid_escape_sequence_ttl>
         <#decimal_dot_vs_triple_dot>
@@ -145,6 +147,16 @@
 	rdf:type rdft:TestXMLNegativeSyntax ;
 	mf:name "both a string and a node as values of the same predicate" ;
 	mf:action <xml_multiple_objects.rdf> .
+
+<#xml_unclosed_description>
+	rdf:type rdft:TestXMLNegativeSyntax ;
+	mf:name "unclosed RDF description" ;
+	mf:action <xml_unclosed_description.rdf> .
+
+<#xml_unclosed_rdf>
+	rdf:type rdft:TestXMLNegativeSyntax ;
+	mf:name "unclosed RDF root element" ;
+	mf:action <xml_unclosed_rdf.rdf> .
 
 <#slightly_invalid_escape_sequence_nt>
 	rdf:type rdft:TestNTriplesNegativeSyntax ;
