@@ -515,10 +515,31 @@ impl Optimizer {
             QueryExpression::Reduced { inner } => {
                 QueryExpression::reduced(Self::push_filters(*inner, filters, input_types))
             }
-            QueryExpression::Project { inner, variables } => QueryExpression::project(
-                Self::push_filters(*inner, filters, input_types),
-                variables,
-            ),
+            QueryExpression::Project { inner, variables } => {
+                let mut inner_filters = Vec::new();
+                let mut final_filters = Vec::new();
+                for filter in filters {
+                    if filter
+                        .used_variables()
+                        .into_iter()
+                        .all(|variable| variables.contains(variable))
+                    {
+                        inner_filters.push(filter);
+                    } else {
+                        // Variables not projected by a subquery are not in scope outside of it.
+                        // Pushing such a filter would make the subquery's hidden bindings visible
+                        // to the filter, in particular for correlated EXISTS expressions.
+                        final_filters.push(filter);
+                    }
+                }
+                QueryExpression::filter(
+                    QueryExpression::project(
+                        Self::push_filters(*inner, inner_filters, input_types),
+                        variables,
+                    ),
+                    Expression::and_all(final_filters),
+                )
+            }
             QueryExpression::OrderBy { inner, expression } => QueryExpression::order_by(
                 Self::push_filters(*inner, filters, input_types),
                 expression,
