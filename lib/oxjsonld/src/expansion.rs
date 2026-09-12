@@ -1,6 +1,6 @@
 use crate::context::{
     JsonLdContext, JsonLdContextProcessor, JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
-    has_keyword_form, is_keyword, json_node_from_events,
+    JsonNode, has_keyword_form, is_keyword, json_node_from_events, json_slice_to_node,
 };
 use crate::error::JsonLdErrorCode;
 use crate::profile::JsonLdProcessingMode;
@@ -49,6 +49,9 @@ pub enum JsonLdValue {
 }
 
 enum JsonLdExpansionState {
+    Initialize {
+        expand_context: JsonLdRemoteDocument,
+    },
     Element {
         active_property: Option<OxString>,
         active_context: Arc<JsonLdContext>,
@@ -248,18 +251,24 @@ impl JsonLdExpansionConverter {
         streaming: bool,
         lenient: bool,
         processing_mode: JsonLdProcessingMode,
+        expand_context: Option<JsonLdRemoteDocument>,
     ) -> Self {
         let root_context = Arc::new(JsonLdContext::new_empty(base_url.clone()));
+        let element_state = JsonLdExpansionState::Element {
+            active_property: None,
+            active_context: Arc::clone(&root_context),
+            is_array: false,
+            container: &[],
+            reverse: false,
+            in_included: false,
+            extra_node: None,
+        };
         Self {
-            state: vec![JsonLdExpansionState::Element {
-                active_property: None,
-                active_context: Arc::clone(&root_context),
-                is_array: false,
-                container: &[],
-                reverse: false,
-                in_included: false,
-                extra_node: None,
-            }],
+            state: if let Some(expand_context) = expand_context {
+                vec![JsonLdExpansionState::Initialize { expand_context }]
+            } else {
+                vec![element_state]
+            },
             is_end: false,
             streaming,
             lenient,
@@ -311,6 +320,19 @@ impl JsonLdExpansionConverter {
         // Large hack to fetch the last state but keep it if we are in an array
         let state = self.state.pop().expect("Empty stack");
         match state {
+            JsonLdExpansionState::Initialize { expand_context } => {
+                self.apply_expand_context(expand_context, errors);
+                self.state.push(JsonLdExpansionState::Element {
+                    active_property: None,
+                    active_context: Arc::clone(&self.root_context),
+                    is_array: false,
+                    container: &[],
+                    reverse: false,
+                    in_included: false,
+                    extra_node: None,
+                });
+                self.convert_event(event, results, errors);
+            }
             JsonLdExpansionState::Element {
                 active_property,
                 mut active_context,
@@ -2258,8 +2280,17 @@ impl JsonLdExpansionConverter {
                 JsonEvent::ObjectKey(key) => {
                     // Events for the @index
                     let mut map_context = Arc::clone(&active_context);
-                    if let Some(parent_context) = &map_context.previous_context {
-                        map_context = Arc::clone(parent_context);
+                    if container.contains(&"@id") || container.contains(&"@type") {
+                        if let Some(parent_context) = &map_context.previous_context {
+                            map_context = Arc::clone(parent_context);
+                        }
+                    }
+                    if container.contains(&"@type") {
+                        if let Some(scoped_context) =
+                            self.new_scoped_context(&map_context, key.as_ref(), false, true, errors)
+                        {
+                            map_context = Arc::new(scoped_context);
+                        }
                     }
                     let extra_node = if self
                         .expand_iri(&active_context, OxString::new_owned(&key), false, true)
@@ -2689,6 +2720,34 @@ impl JsonLdExpansionConverter {
         }
     }
 
+    fn apply_expand_context(
+        &mut self,
+        expand_context: JsonLdRemoteDocument,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        let context_base = Iri::parse(expand_context.document_url).ok();
+        let local_context = match json_slice_to_node(&expand_context.document) {
+            Ok(JsonNode::Object(mut context)) => context
+                .remove("@context")
+                .unwrap_or(JsonNode::Object(context)),
+            Ok(context) => context,
+            Err(error) => {
+                errors.push(error.into());
+                return;
+            }
+        };
+        self.root_context = Arc::new(self.context_processor.process_context(
+            &self.root_context,
+            local_context,
+            context_base.as_ref().or(self.base_url.as_ref()),
+            &mut Vec::new(),
+            false,
+            true,
+            true,
+            errors,
+        ));
+    }
+
     /// [IRI Expansion](https://www.w3.org/TR/json-ld-api/#iri-expansion)
     ///
     /// `local context` is always `null`
@@ -3038,7 +3097,8 @@ impl JsonLdExpansionConverter {
                 | JsonLdExpansionState::NestStart { active_context, .. } => {
                     return active_context;
                 }
-                JsonLdExpansionState::Index
+                JsonLdExpansionState::Initialize { .. }
+                | JsonLdExpansionState::Index
                 | JsonLdExpansionState::Graph
                 | JsonLdExpansionState::RootGraph
                 | JsonLdExpansionState::Included

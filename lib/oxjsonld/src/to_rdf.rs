@@ -66,6 +66,7 @@ pub struct JsonLdParser {
     lenient: bool,
     profile: JsonLdProfileSet,
     base: Option<Iri<OxString>>,
+    expand_context: Option<JsonLdRemoteDocument>,
 }
 
 impl JsonLdParser {
@@ -141,6 +142,15 @@ impl JsonLdParser {
     pub fn with_base_iri(mut self, base_iri: &str) -> Result<Self, IriParseError> {
         self.base = Some(Iri::parse(OxString::new_owned(base_iri))?);
         Ok(self)
+    }
+
+    /// Sets a context to apply before expanding the input document.
+    ///
+    /// It corresponds to the [`expandContext` option from the algorithm specification](https://www.w3.org/TR/json-ld11-api/#dom-jsonldoptions-expandcontext).
+    #[inline]
+    pub fn with_expand_context(mut self, expand_context: JsonLdRemoteDocument) -> Self {
+        self.expand_context = Some(expand_context);
+        self
     }
 
     /// Parses a JSON-LD file from a [`Read`] implementation.
@@ -287,6 +297,7 @@ impl JsonLdParser {
                 self.profile.contains(JsonLdProfile::Streaming),
                 self.lenient,
                 self.processing_mode,
+                self.expand_context,
             ),
             expended_events: Vec::new(),
             to_rdf: JsonLdToRdfConverter {

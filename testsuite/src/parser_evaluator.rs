@@ -199,14 +199,22 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
             None
         }
     });
+    let expand_context = test.option.get(&jld::EXPAND_CONTEXT).and_then(|t| {
+        if let Term::NamedNode(i) = t {
+            Some(i.as_str())
+        } else {
+            None
+        }
+    });
     if test
         .kinds
         .iter()
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = parse_json_ld(action, profile, processing_mode, base_url)?
-            .with_context(|| format!("Parse error on file {action}"))?;
+        let mut actual_dataset =
+            parse_json_ld(action, profile, processing_mode, base_url, expand_context)?
+                .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
         let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false, false)
@@ -224,7 +232,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = parse_json_ld(action, profile, processing_mode, base_url)?;
+        let result = parse_json_ld(action, profile, processing_mode, base_url, expand_context)?;
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
@@ -245,7 +253,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        parse_json_ld(action, profile, processing_mode, base_url)?
+        parse_json_ld(action, profile, processing_mode, base_url, expand_context)?
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
@@ -350,11 +358,19 @@ fn parse_json_ld(
     profile: JsonLdProfileSet,
     processing_mode: JsonLdProcessingMode,
     base_url: Option<&str>,
+    expand_context: Option<&str>,
 ) -> Result<Result<Dataset, JsonLdSyntaxError>> {
-    Ok(JsonLdParser::new()
+    let mut parser = JsonLdParser::new()
         .with_profile(profile)
         .with_processing_mode(processing_mode)
-        .with_base_iri(base_url.unwrap_or(url))?
+        .with_base_iri(base_url.unwrap_or(url))?;
+    if let Some(expand_context) = expand_context {
+        parser = parser.with_expand_context(JsonLdRemoteDocument {
+            document: read_file_to_string(expand_context)?.into(),
+            document_url: OxString::new_owned(expand_context),
+        });
+    }
+    Ok(parser
         .for_slice(&read_file_to_string(url)?)
         .with_load_document_callback(|url, _| {
             Ok(JsonLdRemoteDocument {

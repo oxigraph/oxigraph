@@ -153,10 +153,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-api/tests/toRdf-manifest.jsonld",
         &[
-            // Weird @base IRI support
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli12",
-            // expandContext
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te077",
             // produceGeneralizedRdf
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0118",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te075",
@@ -174,9 +170,7 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi10",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi11",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tdi12",
-            // Scoped contexts somehow propagate to elements inside containers?
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tc013",
-            // specVersion json-ld-1.0
+            // JSON-LD 1.0 compatibility edge cases are intentionally not supported.
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te026",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te071",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te115",
@@ -198,8 +192,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv017",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv019",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv021",
-            // expandContext option
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te077",
             // normative option
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi09",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi10",
@@ -207,7 +199,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi12",
             // produceGeneralizedRdf option
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0118",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te068",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te075",
             // rdfDirection option
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi09",
@@ -223,8 +214,7 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi05",
             #[cfg(feature = "rdf-12")]
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tdi06",
-            // specVersion json-ld-1.0
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te026",
+            // JSON-LD 1.0 compatibility edge cases are intentionally not supported.
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te071",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te115",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te116",
@@ -232,9 +222,8 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter03",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter24",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter32",
-            // Scoped contexts somehow propagate to elements inside containers?
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tc013",
             // something is before @type
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te026",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te038",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te014",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tin06",
