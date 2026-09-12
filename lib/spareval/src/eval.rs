@@ -2155,13 +2155,18 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
     fn build_exists(
         &mut self,
         plan: &QueryExpression,
-    ) -> Result<impl Fn(&InternalTuple<D::InternalTerm>) -> bool + 'a, QueryEvaluationError> {
+    ) -> Result<
+        impl Fn(&InternalTuple<D::InternalTerm>) -> Result<bool, Self::Error> + 'a,
+        QueryEvaluationError,
+    > {
         let (eval, stats) = self
             .evaluator
             .query_expression_evaluator(plan, self.encoded_variables);
         self.stat_children.push(stats);
         let eval = eval?;
-        Ok(move |tuple: &InternalTuple<D::InternalTerm>| eval(tuple.clone()).next().is_some())
+        Ok(move |tuple: &InternalTuple<D::InternalTerm>| {
+            Ok(eval(tuple.clone()).next().transpose()?.is_some())
+        })
     }
 
     fn internalize_named_node(

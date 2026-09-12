@@ -46,7 +46,7 @@ pub trait ExpressionEvaluatorContext<'a> {
     fn build_exists(
         &mut self,
         plan: &QueryExpression,
-    ) -> Result<impl Fn(&Self::Tuple) -> bool + 'a, Self::Error>;
+    ) -> Result<impl Fn(&Self::Tuple) -> Result<bool, Self::Error> + 'a, Self::Error>;
     fn internalize_named_node(&mut self, term: &NamedNode) -> Result<Self::Term, Self::Error>;
     fn internalize_literal(&mut self, term: &Literal) -> Result<Self::Term, Self::Error>;
     fn build_internalize_expression_term(
@@ -122,7 +122,7 @@ where
             let exists = context
                 .build_exists(plan)
                 .map_err(ExpressionEvaluationError::Context)?;
-            Rc::new(move |tuple| Ok(Some(exists(tuple).into())))
+            Rc::new(move |tuple| Ok(Some(exists(tuple)?.into())))
         }
         Expression::Or(children) => {
             let children = children
