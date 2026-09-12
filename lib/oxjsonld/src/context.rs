@@ -318,14 +318,13 @@ impl JsonLdContextProcessor {
                         }
                         // 5.7.3) and 5.7.4)
                         JsonNode::String(value) => {
-                            match self.resolve_iri(
-                                value,
-                                result.base_iri.as_ref(),
-                                JsonLdErrorCode::InvalidBaseIri,
-                            ) {
-                                Ok(base_iri) => result.base_iri = Some(base_iri),
-                                Err(e) => errors.push(e),
-                            }
+                            result.base_iri = self
+                                .resolve_iri(
+                                    value,
+                                    result.base_iri.as_ref(),
+                                    JsonLdErrorCode::InvalidBaseIri,
+                                )
+                                .ok();
                         }
                         _ => errors.push(JsonLdSyntaxError::msg_and_code(
                             "@base value must be a string",
