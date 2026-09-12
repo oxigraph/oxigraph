@@ -797,7 +797,7 @@ impl QueryExpression {
         variables: Vec<Variable>,
         aggregates: Vec<(Variable, AggregateExpression)>,
     ) -> Self {
-        if inner.is_empty() {
+        if inner.is_empty() && !variables.is_empty() {
             return Self::empty();
         }
         Self::Group {
