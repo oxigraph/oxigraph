@@ -41,6 +41,7 @@
     :ask_join_error_right
     :duplicated_values_var
     :order_by_rand
+    :delete_insert_solution_order
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -202,3 +203,11 @@
     mf:name "ORDER BY RAND() do not panic" ;
     mf:action [ qt:query <order_by_rand.rq> ] ;
     mf:result  <order_by_rand.srx> .
+
+:delete_insert_solution_order rdf:type mf:UpdateEvaluationTest ;
+    mf:name "DELETE/INSERT applies all deletes before all inserts" ;
+    mf:action [
+        ut:request <delete_insert_solution_order.ru> ;
+        ut:data <delete_insert_solution_order_input.ttl>
+    ] ;
+    mf:result [ ut:data <delete_insert_solution_order_result.ttl> ] .

@@ -325,10 +325,14 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
         let mutations = prepared
             .execute(DatasetView::new(self.transaction.reader()))?
             .collect::<Result<Vec<_>, _>>()?;
+        for mutation in &mutations {
+            if let DeleteInsertQuad::Delete(quad) = mutation {
+                self.transaction.remove(quad.as_ref());
+            }
+        }
         for mutation in mutations {
-            match mutation {
-                DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
-                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
+            if let DeleteInsertQuad::Insert(quad) = mutation {
+                self.transaction.insert(quad.as_ref());
             }
         }
         Ok(())
@@ -549,10 +553,14 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
         let mutations = prepared
             .execute(DatasetView::new(storage.snapshot()))?
             .collect::<Result<Vec<_>, _>>()?;
+        for mutation in &mutations {
+            if let DeleteInsertQuad::Delete(quad) = mutation {
+                self.transaction.remove(quad.as_ref());
+            }
+        }
         for mutation in mutations {
-            match mutation {
-                DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
-                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
+            if let DeleteInsertQuad::Insert(quad) = mutation {
+                self.transaction.insert(quad.as_ref());
             }
         }
         Ok(())
