@@ -1476,20 +1476,6 @@ impl TimezoneOffset {
             })
         }
     }
-
-    #[inline]
-    #[must_use]
-    pub fn from_be_bytes(bytes: [u8; 2]) -> Self {
-        Self {
-            offset: i16::from_be_bytes(bytes),
-        }
-    }
-
-    #[inline]
-    #[must_use]
-    pub fn to_be_bytes(self) -> [u8; 2] {
-        self.offset.to_be_bytes()
-    }
 }
 
 impl TryFrom<DayTimeDuration> for TimezoneOffset {
@@ -1658,14 +1644,15 @@ impl Timestamp {
 
     #[inline]
     fn from_be_bytes(bytes: [u8; 18]) -> Self {
+        let timezone_offset = i16::from_be_bytes(bytes[16..18].try_into().unwrap());
         Self {
             value: Decimal::from_be_bytes(bytes[0..16].try_into().unwrap()),
-            timezone_offset: if bytes[16..18] == [u8::MAX; 2] {
+            timezone_offset: if timezone_offset == i16::MIN {
                 None
             } else {
-                Some(TimezoneOffset::from_be_bytes(
-                    bytes[16..18].try_into().unwrap(),
-                ))
+                Some(TimezoneOffset {
+                    offset: timezone_offset,
+                })
             },
         }
     }
@@ -1844,10 +1831,12 @@ impl Timestamp {
     fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
-        bytes[16..18].copy_from_slice(&match &self.timezone_offset {
-            Some(timezone_offset) => timezone_offset.to_be_bytes(),
-            None => [u8::MAX; 2],
-        });
+        bytes[16..18].copy_from_slice(
+            &self
+                .timezone_offset
+                .map_or(i16::MIN, |tz| tz.offset)
+                .to_be_bytes(),
+        );
         bytes
     }
 
