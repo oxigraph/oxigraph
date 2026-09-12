@@ -153,8 +153,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-api/tests/toRdf-manifest.jsonld",
         &[
-            // Weird @base IRI support
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli12",
             // expandContext
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te077",
             // produceGeneralizedRdf
