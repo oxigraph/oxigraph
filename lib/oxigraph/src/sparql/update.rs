@@ -319,15 +319,29 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     }
 
     fn eval_load(&mut self, operation: &LoadOperation) -> Result<(), UpdateEvaluationError> {
-        if let Err(error) = eval_load(
+        match eval_load(
             operation,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q),
         ) {
-            if operation.silent { Ok(()) } else { Err(error) }
-        } else {
-            Ok(())
+            Ok(quads) => {
+                // We insert the named graph explicitly to work even if the input is empty
+                if let GraphName::NamedNode(graph_name) = &operation.destination {
+                    self.transaction
+                        .insert_named_graph(graph_name.clone().into());
+                }
+                for quad in quads {
+                    self.transaction.insert(quad);
+                }
+                Ok(())
+            }
+            Err(error) => {
+                if operation.silent {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
         }
     }
 
@@ -513,15 +527,29 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
     }
 
     fn eval_load(&mut self, operation: &LoadOperation) -> Result<(), UpdateEvaluationError> {
-        if let Err(error) = eval_load(
+        match eval_load(
             operation,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q),
         ) {
-            if operation.silent { Ok(()) } else { Err(error) }
-        } else {
-            Ok(())
+            Ok(quads) => {
+                // We insert the named graph explicitly to work even if the input is empty
+                if let GraphName::NamedNode(graph_name) = &operation.destination {
+                    self.transaction
+                        .insert_named_graph(graph_name.clone().into());
+                }
+                for quad in quads {
+                    self.transaction.insert(quad);
+                }
+                Ok(())
+            }
+            Err(error) => {
+                if operation.silent {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
         }
     }
 
@@ -581,8 +609,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
 fn eval_load(
     operation: &LoadOperation,
     client: &HttpClient,
-    mut insert: impl FnMut(OxQuad),
-) -> Result<(), UpdateEvaluationError> {
+) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
     let (content_type, body) = client
         .get(
             operation.source.as_str(),
@@ -595,7 +622,7 @@ fn eval_load(
         GraphName::NamedNode(graph_name) => graph_name.clone().into(),
         GraphName::DefaultGraph => OxGraphName::DefaultGraph,
     };
-    let parser = RdfParser::from_format(format)
+    Ok(RdfParser::from_format(format)
         .rename_blank_nodes()
         .without_named_graphs()
         .with_default_graph(to_graph_name)
@@ -606,18 +633,12 @@ fn eval_load(
             )
         })?
         .for_reader(body)
-        .with_document_loader(DocumentLoader::new().with_http_client(client.clone()));
-    for q in parser {
-        insert(q?);
-    }
-    Ok(())
+        .with_document_loader(DocumentLoader::new().with_http_client(client.clone()))
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 #[cfg(not(feature = "http-client"))]
-fn eval_load(
-    _operation: &LoadOperation,
-    _insert: impl FnMut(OxQuad),
-) -> Result<(), UpdateEvaluationError> {
+fn eval_load(_operation: &LoadOperation) -> Result<Vec<OxQuad>, UpdateEvaluationError> {
     Err(UpdateEvaluationError::Unexpected(
         "HTTP client is not available. Enable the feature 'http-client'".into(),
     ))

@@ -104,7 +104,7 @@ impl oxrdfio::DocumentLoader for DocumentLoader {
                 };
                 let accept = accepted_formats
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|f| f.media_type())
                     .collect::<Vec<_>>()
                     .join(", ");
                 let (content_type, mut body) = client.get(url, &accept)?;
