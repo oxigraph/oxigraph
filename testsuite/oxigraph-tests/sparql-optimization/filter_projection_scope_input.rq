@@ -1,0 +1,8 @@
+SELECT ?x WHERE {
+    {
+        SELECT ?x WHERE {
+            VALUES (?x ?hidden) { (1 1) }
+        }
+    }
+    FILTER(?hidden = 1)
+}
