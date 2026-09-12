@@ -365,9 +365,11 @@ impl QueryEvaluator {
             fn build_exists(
                 &mut self,
                 _: &QueryExpression,
-            ) -> Result<impl Fn(&HashMap<&'a Variable, Term>) -> bool + 'a, QueryEvaluationError>
-            {
-                Err::<fn(&HashMap<&'a Variable, Term>) -> bool, _>(
+            ) -> Result<
+                impl Fn(&HashMap<&'a Variable, Term>) -> Result<bool, QueryEvaluationError> + 'a,
+                QueryEvaluationError,
+            > {
+                Err::<fn(&HashMap<&'a Variable, Term>) -> Result<bool, QueryEvaluationError>, _>(
                     QueryEvaluationError::Unexpected(
                         "EXISTS is not supported by the SPARQL expression evaluator".into(),
                     ),
@@ -886,9 +888,7 @@ impl QueryDatasetSpecification {
     /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
     /// let evaluator = QueryEvaluator::new();
     /// let mut prepared = evaluator.prepare(&query);
-    /// prepared
-    ///     .dataset_mut()
-    ///     .set_default_graph_as_union();
+    /// prepared.dataset_mut().set_default_graph_as_union();
     /// if let QueryResults::Solutions(mut solutions) = prepared.execute(&dataset)? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("s"),
