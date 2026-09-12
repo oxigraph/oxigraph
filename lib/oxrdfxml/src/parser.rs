@@ -22,6 +22,7 @@ use std::str;
 use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 
 const MAX_ENTITY_NESTING: usize = 1024;
+const MAX_ENTITY_SIZE: usize = 1024 * 1024;
 
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) streaming parser.
 ///
@@ -915,6 +916,11 @@ impl<R> InternalRdfXmlParser<R> {
                 // Resolves custom entities within the current entity definition.
                 let entity_value = unescape_with(entity_value, |e| self.custom_entities.resolve(e))
                     .map_err(Error::from)?;
+                if entity_value.len() > MAX_ENTITY_SIZE {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "The unescaped entity declaration is too long, it is capped at {MAX_ENTITY_SIZE} bytes"
+                    )).into());
+                }
                 self.custom_entities
                     .0
                     .insert(entity_name.to_owned(), entity_value.to_string());
