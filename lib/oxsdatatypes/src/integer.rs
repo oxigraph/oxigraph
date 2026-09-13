@@ -1,4 +1,4 @@
-use crate::{Boolean, Decimal, Double, Float};
+use crate::{Boolean, Double, Float};
 use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -242,10 +242,14 @@ impl TryFrom<Float> for Integer {
     type Error = TooLargeForIntegerError;
 
     #[inline]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn try_from(value: Float) -> Result<Self, Self::Error> {
-        Decimal::try_from(value)
-            .map_err(|_| TooLargeForIntegerError)?
-            .try_into()
+        let value = f32::from(value);
+        if (i64::MIN as f32..=i64::MAX as f32).contains(&value) {
+            Ok(Self::from(value.trunc() as i64))
+        } else {
+            Err(TooLargeForIntegerError)
+        }
     }
 }
 
@@ -253,10 +257,14 @@ impl TryFrom<Double> for Integer {
     type Error = TooLargeForIntegerError;
 
     #[inline]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn try_from(value: Double) -> Result<Self, Self::Error> {
-        Decimal::try_from(value)
-            .map_err(|_| TooLargeForIntegerError)?
-            .try_into()
+        let value = f64::from(value);
+        if (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
+            Ok(Self::from(value.trunc() as i64))
+        } else {
+            Err(TooLargeForIntegerError)
+        }
     }
 }
 
@@ -271,6 +279,7 @@ pub struct TooLargeForIntegerError;
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use crate::Decimal;
     use std::error::Error;
 
     #[test]
@@ -283,6 +292,7 @@ mod tests {
         Ok(())
     }
 
+    #[expect(clippy::cast_precision_loss)]
     #[test]
     fn from_float() -> Result<(), Box<dyn Error>> {
         assert_eq!(
@@ -297,22 +307,25 @@ mod tests {
             Integer::try_from(Float::from(-123.1)).ok(),
             Some(Integer::from_str("-123")?)
         );
+        assert_eq!(
+            Integer::try_from(Float::from(i64::MIN as f32))?,
+            Integer::MIN
+        );
+        assert_eq!(
+            Integer::try_from(Float::from(i64::MAX as f32))?,
+            Integer::MAX
+        );
+        Integer::try_from(Float::from((i64::MIN as f32).next_down())).unwrap_err();
+        Integer::try_from(Float::from((i64::MAX as f32).next_up())).unwrap_err();
         Integer::try_from(Float::from(f32::NAN)).unwrap_err();
         Integer::try_from(Float::from(f32::INFINITY)).unwrap_err();
         Integer::try_from(Float::from(f32::NEG_INFINITY)).unwrap_err();
         Integer::try_from(Float::from(f32::MIN)).unwrap_err();
         Integer::try_from(Float::from(f32::MAX)).unwrap_err();
-        assert!(
-            Integer::try_from(Float::from(1_672_507_300_000.))?
-                .checked_sub(Integer::from_str("1672507300000")?)
-                .unwrap()
-                .checked_abs()
-                .unwrap()
-                < Integer::from(1_000_000)
-        );
         Ok(())
     }
 
+    #[expect(clippy::cast_precision_loss)]
     #[test]
     fn from_double() -> Result<(), Box<dyn Error>> {
         assert_eq!(
@@ -327,14 +340,16 @@ mod tests {
             Integer::try_from(Double::from(-123.1)).ok(),
             Some(Integer::from_str("-123")?)
         );
-        assert!(
-            Integer::try_from(Double::from(1_672_507_300_000.))?
-                .checked_sub(Integer::from_str("1672507300000")?)
-                .unwrap()
-                .checked_abs()
-                .unwrap()
-                < Integer::from(10)
+        assert_eq!(
+            Integer::try_from(Double::from(i64::MIN as f64))?,
+            Integer::MIN
         );
+        assert_eq!(
+            Integer::try_from(Double::from(i64::MAX as f64))?,
+            Integer::MAX
+        );
+        Integer::try_from(Double::from((i64::MIN as f64).next_down())).unwrap_err();
+        Integer::try_from(Double::from((i64::MAX as f64).next_up())).unwrap_err();
         Integer::try_from(Double::from(f64::NAN)).unwrap_err();
         Integer::try_from(Double::from(f64::INFINITY)).unwrap_err();
         Integer::try_from(Double::from(f64::NEG_INFINITY)).unwrap_err();
