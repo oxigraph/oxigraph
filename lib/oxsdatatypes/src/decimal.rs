@@ -265,6 +265,12 @@ impl Decimal {
     pub(super) const fn as_i128(self) -> i128 {
         self.value / DECIMAL_PART_POW
     }
+
+    #[inline]
+    #[must_use]
+    pub(super) const fn as_i128_floor(self) -> i128 {
+        self.value.div_euclid(DECIMAL_PART_POW)
+    }
 }
 
 impl From<bool> for Decimal {
