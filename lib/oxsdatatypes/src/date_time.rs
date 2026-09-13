@@ -1661,7 +1661,7 @@ impl Timestamp {
     #[inline]
     #[must_use]
     fn year_month_day(&self) -> (i64, u8, u8) {
-        let mut days = (self.value.as_i128()
+        let mut days = (self.value.as_i128_floor()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .div_euclid(86400)
             + 366;
@@ -1735,7 +1735,7 @@ impl Timestamp {
     #[inline]
     #[must_use]
     fn hour(&self) -> u8 {
-        (((self.value.as_i128()
+        (((self.value.as_i128_floor()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .rem_euclid(86400))
             / 3600) as u8
@@ -1745,7 +1745,7 @@ impl Timestamp {
     #[inline]
     #[must_use]
     fn minute(&self) -> u8 {
-        (((self.value.as_i128()
+        (((self.value.as_i128_floor()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .rem_euclid(3600))
             / 60) as u8
@@ -1944,7 +1944,7 @@ fn normalize_second(
     mi: i64,
     se: Decimal,
 ) -> Option<(i64, u8, u8, u8, u8, Decimal)> {
-    let mi = mi.checked_add(se.as_i128().checked_div_euclid(60)?.try_into().ok()?)?; // TODO: good idea?
+    let mi = mi.checked_add(se.as_i128_floor().checked_div_euclid(60)?.try_into().ok()?)?;
     let se = se.checked_rem_euclid(60)?;
     let (yr, mo, da, hr, mi) = normalize_minute(yr, mo, da, hr, mi)?;
     Some((yr, mo, da, hr, mi, se))
@@ -2442,6 +2442,10 @@ mod tests {
         assert_eq!(
             DateTime::from_str("0001-01-01T00:00:00")?.to_string(),
             "0001-01-01T00:00:00"
+        );
+        assert_eq!(
+            DateTime::from_str("0000-12-31T23:59:59.5Z")?.to_string(),
+            "0000-12-31T23:59:59.5Z"
         );
         assert_eq!(
             DateTime::from_str("1000000000-01-01T00:00:00")?.to_string(),
