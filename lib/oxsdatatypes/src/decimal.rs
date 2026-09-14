@@ -84,32 +84,30 @@ impl Decimal {
     #[inline]
     #[must_use]
     pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
-        // Idea: we shift right as much as possible to keep as much precision as possible
-        // Do the multiplication and do the required left shift
         let mut left = self.value;
-        let mut shift_left = 0_u32;
-        if left != 0 {
-            while left % 10 == 0 {
-                left /= 10;
-                shift_left += 1;
-            }
-        }
-
         let mut right = rhs.into().value;
-        let mut shift_right = 0_u32;
-        if right != 0 {
-            while right % 10 == 0 {
-                right /= 10;
-                shift_right += 1;
+        if left == 0 || right == 0 {
+            return Some(Self { value: 0 });
+        }
+
+        // Cancel 10^18 as 2^18 * 5^18 before multiplying to avoid intermediate overflow.
+        for factor in [2, 5] {
+            let mut remaining = DECIMAL_PART_DIGITS;
+            while remaining > 0 && left % factor == 0 {
+                left /= factor;
+                remaining -= 1;
+            }
+            while remaining > 0 && right % factor == 0 {
+                right /= factor;
+                remaining -= 1;
+            }
+            if remaining > 0 {
+                return None;
             }
         }
 
-        // We do multiplication + shift
-        let shift = (shift_left + shift_right).checked_sub(DECIMAL_PART_DIGITS)?;
         Some(Self {
-            value: left
-                .checked_mul(right)?
-                .checked_mul(10_i128.checked_pow(shift)?)?,
+            value: left.checked_mul(right)?,
         })
     }
 
@@ -739,6 +737,15 @@ mod tests {
             Decimal::from_str("0.1")?.checked_mul(Decimal::from_str("0.01")?),
             Some(Decimal::from_str("0.001")?)
         );
+        assert_eq!(
+            Decimal::from(0).checked_mul(Decimal::from_str("0.1")?),
+            Some(Decimal::from(0))
+        );
+        assert_eq!(
+            Decimal::from_str("0.000000000000000002")?.checked_mul(Decimal::from_str("0.5")?),
+            Some(Decimal::from_str("0.000000000000000001")?)
+        );
+        assert_eq!(Decimal::STEP.checked_mul(Decimal::from_str("0.1")?), None);
         assert_eq!(Decimal::from(0).checked_mul(1), Some(Decimal::from(0)));
         assert_eq!(Decimal::from(1).checked_mul(0), Some(Decimal::from(0)));
         assert_eq!(Decimal::MAX.checked_mul(1), Some(Decimal::MAX));
