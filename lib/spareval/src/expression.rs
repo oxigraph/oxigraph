@@ -972,16 +972,16 @@ where
                     let (source, language) =
                         try_or_ok!(to_string_and_language(try_or_ok!(source(tuple)?)));
 
-                    let starting_location: usize = if let ExpressionTerm::IntegerLiteral(v) =
+                    let starting_location = if let ExpressionTerm::IntegerLiteral(v) =
                         try_or_ok!(starting_loc(tuple)?)
                     {
-                        try_or_ok!(usize::try_from(i64::from(v)).ok())
+                        v.into()
                     } else {
                         return Ok(None);
                     };
                     let length = if let Some(length) = &length {
                         if let ExpressionTerm::IntegerLiteral(v) = try_or_ok!(length(tuple)?) {
-                            Some(try_or_ok!(usize::try_from(i64::from(v)).ok()))
+                            Some(v.into())
                         } else {
                             return Ok(None);
                         }
@@ -989,25 +989,11 @@ where
                         None
                     };
 
-                    // We want to slice on char indices, not byte indices
-                    let mut start_iter = source
-                        .char_indices()
-                        .skip(try_or_ok!(starting_location.checked_sub(1)))
-                        .peekable();
-                    let result = if let Some((start_position, _)) = start_iter.peek().copied() {
-                        OxString::new_owned(if let Some(length) = length {
-                            let mut end_iter = start_iter.skip(length).peekable();
-                            if let Some((end_position, _)) = end_iter.peek() {
-                                &source[start_position..*end_position]
-                            } else {
-                                &source[start_position..]
-                            }
-                        } else {
-                            &source[start_position..]
-                        })
-                    } else {
-                        OxString::default()
-                    };
+                    let result = OxString::new_owned(try_or_ok!(substring(
+                        &source,
+                        starting_location,
+                        length
+                    )));
                     Ok(Some(build_plain_literal(result, language)))
                 }));
             }
@@ -2863,6 +2849,27 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
     }
 }
 
+fn substring(source_string: &str, start: i64, length: Option<i64>) -> Option<&str> {
+    // We make start and end zero-based
+    let start = start.checked_sub(1)?;
+    let end = if let Some(length) = length {
+        Some(start.checked_add(length)?)
+    } else {
+        None
+    };
+    let mut start_position = None;
+    // We want to slice on char indices, not byte indices
+    for (position, (byte_position, _)) in source_string.char_indices().enumerate() {
+        let position = i64::try_from(position).ok()?;
+        if start <= position && end.is_none_or(|end| position < end) {
+            start_position.get_or_insert(byte_position);
+        } else if let Some(start_position) = start_position {
+            return Some(&source_string[start_position..byte_position]);
+        }
+    }
+    Some(start_position.map_or("", |start_position| &source_string[start_position..]))
+}
+
 fn extract_parameters<'a, E, const N: usize>(
     function_name: &NamedNode,
     parameters: &'a [Expression],
@@ -2879,6 +2886,20 @@ fn extract_parameters<'a, E, const N: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn substr() {
+        assert_eq!(substring("motor car", 6, None), Some(" car"));
+        assert_eq!(substring("metadata", 4, Some(3)), Some("ada"));
+        assert_eq!(substring("12345", 0, Some(3)), Some("12"));
+        assert_eq!(substring("12345", 5, Some(-3)), Some(""));
+        assert_eq!(substring("12345", -3, Some(5)), Some("1"));
+        assert_eq!(substring("", 1, Some(3)), Some(""));
+        assert_eq!(
+            substring("a\u{e9}\u{65e5}z", 2, Some(2)),
+            Some("\u{e9}\u{65e5}")
+        );
+    }
 
     #[test]
     fn uuid() {
