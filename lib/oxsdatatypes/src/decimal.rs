@@ -5,7 +5,6 @@ use std::str::FromStr;
 
 const DECIMAL_PART_DIGITS: u32 = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
-const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
 
 /// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal)
 ///
@@ -196,12 +195,16 @@ impl Decimal {
     #[inline]
     #[must_use]
     pub fn checked_round(self) -> Option<Self> {
-        let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
+        let integer_part = self.value / DECIMAL_PART_POW;
+        let fractional_part = self.value % DECIMAL_PART_POW;
+        let half = DECIMAL_PART_POW / 2;
         Some(Self {
-            value: if value >= 0 {
-                value / 10 + i128::from(value % 10 >= 5)
+            value: if fractional_part >= half {
+                integer_part + 1
+            } else if fractional_part < -half {
+                integer_part - 1
             } else {
-                value / 10 - i128::from(-value % 10 > 5)
+                integer_part
             }
             .checked_mul(DECIMAL_PART_POW)?,
         })
@@ -859,6 +862,14 @@ mod tests {
         assert_eq!(
             Decimal::from_str("-2.5")?.checked_round(),
             Some(Decimal::from(-2))
+        );
+        assert_eq!(
+            Decimal::from_str("-2.4999")?.checked_round(),
+            Some(Decimal::from(-2))
+        );
+        assert_eq!(
+            Decimal::from_str("-2.5001")?.checked_round(),
+            Some(Decimal::from(-3))
         );
         assert_eq!(Decimal::MAX.checked_round(), None);
         assert_eq!(
