@@ -65,7 +65,14 @@ impl Double {
     #[inline]
     #[must_use]
     pub fn round(self) -> Self {
-        self.value.round().into()
+        let mut result = self.value.round();
+        if self.value.fract() == -0.5 {
+            result += 1.;
+        }
+        if result == 0. && self.value.is_sign_negative() {
+            result = -0.;
+        }
+        result.into()
     }
 
     #[inline]
@@ -403,6 +410,30 @@ mod tests {
         assert!(Double::from(0.).is_identical_with(Double::from(0.)));
         assert!(Double::NAN.is_identical_with(Double::NAN));
         assert!(!Double::from(-0.).is_identical_with(Double::from(0.)));
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Double::from(2.5).round(), Double::from(3.));
+        assert_eq!(Double::from(2.499_999).round(), Double::from(2.));
+        assert_eq!(Double::from(-2.5).round(), Double::from(-2.));
+        assert_eq!(Double::from(-1.5).round(), Double::from(-1.));
+        assert!(
+            Double::from(-0.5)
+                .round()
+                .is_identical_with(Double::from(-0.))
+        );
+        assert!(
+            Double::from(-0.1)
+                .round()
+                .is_identical_with(Double::from(-0.))
+        );
+        assert!(
+            Double::from(-0.)
+                .round()
+                .is_identical_with(Double::from(-0.))
+        );
+        assert!(Double::from(0.).round().is_identical_with(Double::from(0.)));
     }
 
     #[test]
