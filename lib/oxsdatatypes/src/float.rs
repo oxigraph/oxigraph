@@ -65,7 +65,14 @@ impl Float {
     #[inline]
     #[must_use]
     pub fn round(self) -> Self {
-        self.value.round().into()
+        let mut result = self.value.round();
+        if self.value.fract() == -0.5 {
+            result += 1.;
+        }
+        if result == 0. && self.value.is_sign_negative() {
+            result = -0.;
+        }
+        result.into()
     }
 
     #[inline]
@@ -285,6 +292,26 @@ mod tests {
         assert!(Float::from(0.).is_identical_with(Float::from(0.)));
         assert!(Float::NAN.is_identical_with(Float::NAN));
         assert!(!Float::from(-0.).is_identical_with(Float::from(0.)));
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Float::from(2.5).round(), Float::from(3.));
+        assert_eq!(Float::from(2.499_999).round(), Float::from(2.));
+        assert_eq!(Float::from(-2.5).round(), Float::from(-2.));
+        assert_eq!(Float::from(-1.5).round(), Float::from(-1.));
+        assert!(
+            Float::from(-0.5)
+                .round()
+                .is_identical_with(Float::from(-0.))
+        );
+        assert!(
+            Float::from(-0.1)
+                .round()
+                .is_identical_with(Float::from(-0.))
+        );
+        assert!(Float::from(-0.).round().is_identical_with(Float::from(-0.)));
+        assert!(Float::from(0.).round().is_identical_with(Float::from(0.)));
     }
 
     #[test]
