@@ -1178,21 +1178,40 @@ fn is_path_fit_for_for_loop_join(
     object: &TermPattern,
     entry_types: &VariableTypes,
 ) -> bool {
+    // A zero-length path match binds the input term to itself, even if it does not
+    // appear in the graph. The for-loop join evaluates the path with the input
+    // bindings, so it would then return matches that a regular join, which evaluates
+    // the path independently, does not have.
+    if can_match_zero_length(path)
+        && (is_term_pattern_bound(subject, entry_types)
+            || is_term_pattern_bound(object, entry_types))
+    {
+        return false;
+    }
+    is_path_fit_for_for_loop_join_inner(subject, path, object, entry_types)
+}
+
+fn is_path_fit_for_for_loop_join_inner(
+    subject: &TermPattern,
+    path: &PropertyPathExpression,
+    object: &TermPattern,
+    entry_types: &VariableTypes,
+) -> bool {
     match path {
         PropertyPathExpression::Link(_)
         | PropertyPathExpression::OneOrMorePath(_)
         | PropertyPathExpression::Nps(_) => true,
         PropertyPathExpression::Inv(path) => {
-            is_path_fit_for_for_loop_join(object, path, subject, entry_types)
+            is_path_fit_for_for_loop_join_inner(object, path, subject, entry_types)
         }
         PropertyPathExpression::Seq(l, r) => {
             let whatever = Variable::new_unchecked("#intermediate#").into();
-            is_path_fit_for_for_loop_join(subject, l, &whatever, entry_types)
-                || is_path_fit_for_for_loop_join(&whatever, r, subject, entry_types)
+            is_path_fit_for_for_loop_join_inner(subject, l, &whatever, entry_types)
+                || is_path_fit_for_for_loop_join_inner(&whatever, r, subject, entry_types)
         }
         PropertyPathExpression::Alt(l, r) => {
-            is_path_fit_for_for_loop_join(subject, l, object, entry_types)
-                && is_path_fit_for_for_loop_join(subject, r, object, entry_types)
+            is_path_fit_for_for_loop_join_inner(subject, l, object, entry_types)
+                && is_path_fit_for_for_loop_join_inner(subject, r, object, entry_types)
         }
         PropertyPathExpression::ZeroOrMorePath(_) | PropertyPathExpression::ZeroOrOnePath(_) => {
             // We don't want to set the left or right side of the zero or ... path because it could be returned in the result set even if it is not supported in the graph
@@ -1204,6 +1223,21 @@ fn is_path_fit_for_for_loop_join(
             } else {
                 true
             }
+        }
+    }
+}
+
+/// Returns if the path can match a term to itself without traversing any triple.
+fn can_match_zero_length(path: &PropertyPathExpression) -> bool {
+    match path {
+        PropertyPathExpression::Link(_)
+        | PropertyPathExpression::OneOrMorePath(_)
+        | PropertyPathExpression::Nps(_) => false,
+        PropertyPathExpression::Inv(path) => can_match_zero_length(path),
+        PropertyPathExpression::Seq(l, r) => can_match_zero_length(l) && can_match_zero_length(r),
+        PropertyPathExpression::Alt(l, r) => can_match_zero_length(l) || can_match_zero_length(r),
+        PropertyPathExpression::ZeroOrMorePath(_) | PropertyPathExpression::ZeroOrOnePath(_) => {
+            true
         }
     }
 }
