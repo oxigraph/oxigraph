@@ -1,0 +1,8 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?a ?c ?s ?o WHERE {
+    ?a ex:p ?c .
+    ?s ex:r ?c .
+    ?s ex:q ?o .
+    FILTER(!sameTerm(ex:none, ?o))
+}

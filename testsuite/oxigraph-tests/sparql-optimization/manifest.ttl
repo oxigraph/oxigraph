@@ -33,6 +33,9 @@
     :bgp_join_reordering
     :optional_lateral_reordering
     :nested_bind_lateral_reordering
+    :union_lateral_reordering
+    :filter_lateral_reordering
+    :nested_union_lateral_reordering
     :filter_projection_scope
     ) .
 
@@ -161,6 +164,21 @@
     mf:name "Nested BGP below BIND is converted to LATERAL" ;
     mf:action <nested_bind_lateral_reordering_input.rq> ;
     mf:result <nested_bind_lateral_reordering_output.rq> .
+
+:union_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "UNION converted to LATERAL reorders inner BGP by bound input" ;
+    mf:action <union_lateral_reordering_input.rq> ;
+    mf:result <union_lateral_reordering_output.rq> .
+
+:filter_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "Filtered group converted to LATERAL reorders inner BGP by bound input" ;
+    mf:action <filter_lateral_reordering_input.rq> ;
+    mf:result <filter_lateral_reordering_output.rq> .
+
+:nested_union_lateral_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "Nested UNION converted to LATERAL reorders inner BGP by bound input" ;
+    mf:action <nested_union_lateral_reordering_input.rq> ;
+    mf:result <nested_union_lateral_reordering_output.rq> .
 
 :filter_projection_scope rdf:type ox:QueryOptimizationTest ;
     mf:name "Filter pushdown preserves subquery projection scope" ;
