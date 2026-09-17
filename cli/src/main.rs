@@ -5,7 +5,6 @@ use crate::service_description::{EndpointKind, generate_service_description};
 use anyhow::{Context, bail, ensure};
 use clap::Parser;
 use flate2::read::MultiGzDecoder;
-use oxhttp::Server;
 use oxhttp::model::header::{
     ACCEPT, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD,
@@ -13,6 +12,7 @@ use oxhttp::model::header::{
 };
 use oxhttp::model::uri::{Authority, PathAndQuery, Scheme};
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
+use oxhttp::{ConnectionWatch, Server};
 use oxigraph::io::{DocumentLoader, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
@@ -36,6 +36,7 @@ use std::os::unix::net::UnixDatagram;
 use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
@@ -1427,24 +1428,14 @@ fn evaluate_sparql_query(
     request: &Request<Body>,
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut evaluator = evaluator
+    let (cancellation_token, watch_guard) = watch_query(request, timeout)?;
+    let mut prepared = evaluator
         .clone()
         .with_base_iri(&base_url(request))
+        .map_err(bad_request)?
+        .with_cancellation_token(cancellation_token)
+        .parse_query(query)
         .map_err(bad_request)?;
-
-    if let Some(timeout) = timeout {
-        let cancellation_token = CancellationToken::new();
-        evaluator = evaluator.with_cancellation_token(cancellation_token.clone());
-        thread::Builder::new()
-            .name("SPARQL evaluation timeout".into())
-            .spawn(move || {
-                thread::sleep(timeout);
-                cancellation_token.cancel();
-            })
-            .map_err(internal_server_error)?;
-    }
-
-    let mut prepared = evaluator.parse_query(query).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -1483,12 +1474,13 @@ fn evaluate_sparql_query(
                         QueryResultsSerializer::from_format(format)
                             .serialize_solutions_to_writer(w, solutions.variables().to_vec())?,
                         solutions,
+                        watch_guard,
                     ))
                 },
-                |(mut serializer, mut solutions)| {
+                |(mut serializer, mut solutions, watch_guard)| {
                     Ok(if let Some(solution) = solutions.next() {
                         serializer.serialize(&solution.map_err(io::Error::other)?)?;
-                        Some((serializer, solutions))
+                        Some((serializer, solutions, watch_guard))
                     } else {
                         serializer.finish()?;
                         None
@@ -1511,11 +1503,17 @@ fn evaluate_sparql_query(
         QueryResults::Graph(triples) => {
             let format = rdf_content_negotiation(request)?;
             ReadForWrite::build_response(
-                move |w| Ok((RdfSerializer::from_format(format).for_writer(w), triples)),
-                |(mut serializer, mut triples)| {
+                move |w| {
+                    Ok((
+                        RdfSerializer::from_format(format).for_writer(w),
+                        triples,
+                        watch_guard,
+                    ))
+                },
+                |(mut serializer, mut triples, watch_guard)| {
                     Ok(if let Some(t) = triples.next() {
                         serializer.serialize_triple(&t.map_err(io::Error::other)?)?;
-                        Some((serializer, triples))
+                        Some((serializer, triples, watch_guard))
                     } else {
                         serializer.finish()?;
                         None
@@ -1525,6 +1523,73 @@ fn evaluate_sparql_query(
             )
         }
     }
+}
+
+/// Keeps the watcher thread started by [`watch_query`] alive.
+///
+/// The query keeps running while its results are streamed to the client, so the guard must live as long as the response body.
+struct QueryWatchGuard {
+    done: Arc<AtomicBool>,
+}
+
+impl Drop for QueryWatchGuard {
+    fn drop(&mut self) {
+        self.done.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Cancels the query when the client closes the connection or when the timeout elapses.
+///
+/// A thread waits on the [`ConnectionWatch`] given by OxHTTP and fires the returned [`CancellationToken`].
+/// It stops when the returned guard is dropped (with a delay of at most the HTTP global timeout).
+fn watch_query(
+    request: &Request<Body>,
+    timeout: Option<Duration>,
+) -> Result<(CancellationToken, QueryWatchGuard), HttpError> {
+    let cancellation_token = CancellationToken::new();
+    let done = Arc::new(AtomicBool::new(false));
+    let watch = request.extensions().get::<ConnectionWatch>().cloned();
+    if watch.is_none() && timeout.is_none() {
+        // Nothing to watch (e.g. tests)
+        return Ok((cancellation_token, QueryWatchGuard { done }));
+    }
+    let deadline = timeout.map(|timeout| Instant::now() + timeout);
+    thread::Builder::new()
+        .name("SPARQL query watcher".into())
+        .spawn({
+            let cancellation_token = cancellation_token.clone();
+            let done = Arc::clone(&done);
+            move || {
+                loop {
+                    if done.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let remaining =
+                        deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
+                    let closed = if let Some(watch) = &watch {
+                        watch.wait_closed(remaining)
+                    } else {
+                        thread::sleep(remaining.unwrap_or_default());
+                        false
+                    };
+                    if done.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    if closed {
+                        eprintln!("Cancelling a SPARQL query: the client closed the connection");
+                        cancellation_token.cancel();
+                        return;
+                    }
+                    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                        eprintln!("Cancelling a SPARQL query: the timeout elapsed");
+                        cancellation_token.cancel();
+                        return;
+                    }
+                }
+            }
+        })
+        .map_err(internal_server_error)?;
+    Ok((cancellation_token, QueryWatchGuard { done }))
 }
 
 fn configure_and_evaluate_sparql_update(
@@ -2170,9 +2235,13 @@ mod tests {
     use flate2::Compression;
     use flate2::write::GzEncoder;
     use oxhttp::model::header::ACCEPT;
+    use oxigraph::model::Quad;
     use predicates::prelude::*;
     use std::fs::remove_dir_all;
     use std::io::read_to_string;
+    use std::mem;
+    use std::net::{Ipv4Addr, TcpStream};
+    use std::sync::atomic::AtomicUsize;
     use url::Url;
 
     fn cli_command() -> Command {
@@ -3857,6 +3926,88 @@ mod tests {
             assert_eq!(&body, expected_body);
             Ok(())
         }
+    }
+
+    #[test]
+    fn cancel_query_on_client_disconnect() -> Result<()> {
+        // The query is cancelled when the client closes the connection while the results are being computed.
+        // We observe it through the drop of the response body: OxHTTP drops it once the request handling is over.
+        struct BodyGuard {
+            body: Body,
+            in_flight: Arc<AtomicUsize>,
+        }
+
+        impl Read for BodyGuard {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                self.body.read(buf)
+            }
+        }
+
+        impl Drop for BodyGuard {
+            fn drop(&mut self) {
+                self.in_flight.fetch_sub(1, Ordering::Relaxed);
+            }
+        }
+
+        let store = Store::new()?;
+        for i in 0..1000 {
+            store.insert(Quad::new(
+                NamedNode::new(format!("http://example.com/s{i}"))?,
+                NamedNode::new("http://example.com/p")?,
+                NamedNode::new(format!("http://example.com/o{}", i % 10))?,
+                GraphName::DefaultGraph,
+            ))?;
+        }
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let port = 7899;
+        Server::new({
+            let in_flight = Arc::clone(&in_flight);
+            move |request| {
+                in_flight.fetch_add(1, Ordering::Relaxed);
+                let mut response =
+                    handle_request(request, &store, &SparqlEvaluator::new(), false, false, None)
+                        .unwrap_or_else(|(status, message)| error(status, message));
+                let body = mem::take(response.body_mut());
+                *response.body_mut() = Body::from_read(BodyGuard {
+                    body,
+                    in_flight: Arc::clone(&in_flight),
+                });
+                response
+            }
+        })
+        .bind((Ipv4Addr::LOCALHOST, port))
+        .with_global_timeout(Duration::from_secs(1))
+        .spawn()?;
+        thread::sleep(Duration::from_millis(100)); // Makes sure the server is up
+
+        let query = "SELECT (COUNT(*) AS ?n) WHERE { ?a ?b ?c . ?d ?e ?f . ?g ?h ?i }";
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port))?;
+        write!(
+            stream,
+            "POST /query HTTP/1.1\r\nhost: localhost\r\ncontent-type: application/sparql-query\r\ncontent-length: {}\r\n\r\n{query}",
+            query.len()
+        )?;
+        thread::sleep(Duration::from_millis(500)); // The query is being evaluated
+        stream.set_read_timeout(Some(Duration::from_millis(100)))?;
+        let mut received = Vec::new();
+        let _ = stream.read_to_end(&mut received);
+        assert_eq!(
+            in_flight.load(Ordering::Relaxed),
+            1,
+            "Unexpected response: {}",
+            String::from_utf8_lossy(&received)
+        );
+        drop(stream);
+
+        let start = Instant::now();
+        while in_flight.load(Ordering::Relaxed) != 0 {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "The query was not cancelled after the client disconnected"
+            );
+            thread::sleep(Duration::from_millis(50));
+        }
+        Ok(())
     }
 
     #[test]
