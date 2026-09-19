@@ -339,6 +339,43 @@ impl Store {
         self.storage.snapshot().is_empty()
     }
 
+    /// Take a read snapshot of the store, pinned to the state at this instant.
+    ///
+    /// Added for open-ontologies. `Store` already snapshots internally for every
+    /// read, so `len` and two successive `quads_for_pattern` calls can each see
+    /// a different state. A certified run has to read a graph many times and
+    /// then say which graph it read, so it needs ONE state held across all of
+    /// them.
+    ///
+    /// The difference from [`Store::start_transaction`] is the reason this
+    /// exists. A transaction on the in-memory backend blocks every writer for
+    /// as long as it is open, because `Store::insert` opens a transaction of
+    /// its own and `MemoryStorage::start_transaction` waits for the reader. A
+    /// snapshot takes no lock: writers proceed, and the snapshot keeps showing
+    /// the state it was taken at.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let store = Store::new()?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph))?;
+    ///
+    /// let snapshot = store.snapshot();
+    /// // committed after the snapshot was taken
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone()))?;
+    /// assert_eq!(snapshot.len()?, 1);   // and not seen through it
+    /// assert_eq!(store.len()?, 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn snapshot(&self) -> StoreSnapshot {
+        StoreSnapshot {
+            reader: Arc::new(self.storage.snapshot()),
+        }
+    }
+
     /// Start a transaction.
     ///
     /// Transactions ensure the "repeatable read" isolation level: the store only exposes changes that have
@@ -857,6 +894,96 @@ impl IntoIterator for &Store {
         self.iter()
     }
 }
+
+/// A read view of a [`Store`] pinned to one state.
+///
+/// Returned by [`Store::snapshot`]. Every read on it sees the state the store
+/// was in when it was taken, whatever has been committed since. It holds no
+/// lock, so writers are not blocked while it lives.
+///
+/// The reader is behind an `Arc` rather than cloned per call on purpose:
+/// `rocksdb_wrapper::Reader` owns a `*mut rocksdb_readoptions_t` and frees it
+/// in `Drop`, so a derived `Clone` would double free. One reader, one `Drop`,
+/// shared ownership with the iterators it hands out.
+#[derive(Clone)]
+pub struct StoreSnapshot {
+    reader: Arc<StorageReader<'static>>,
+}
+
+impl StoreSnapshot {
+    /// The quads matching a pattern, as of the snapshot.
+    pub fn quads_for_pattern(
+        &self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
+    ) -> SnapshotQuadIter {
+        SnapshotQuadIter {
+            iter: self.reader.quads_for_pattern(
+                subject.map(EncodedTerm::from).as_ref(),
+                predicate.map(EncodedTerm::from).as_ref(),
+                object.map(EncodedTerm::from).as_ref(),
+                graph_name.map(EncodedTerm::from).as_ref(),
+            ),
+            reader: Arc::clone(&self.reader),
+        }
+    }
+
+    /// Every quad, as of the snapshot.
+    pub fn iter(&self) -> SnapshotQuadIter {
+        self.quads_for_pattern(None, None, None, None)
+    }
+
+    /// Whether the snapshot contains a quad.
+    pub fn contains(&self, quad: &Quad) -> Result<bool, StorageError> {
+        let quad = EncodedQuad::from(quad);
+        self.reader.contains(&quad)
+    }
+
+    /// The number of quads, as of the snapshot.
+    ///
+    /// <div class="warning">This function executes a full scan.</div>
+    pub fn len(&self) -> Result<usize, StorageError> {
+        self.reader.len()
+    }
+
+    /// Whether the snapshot is empty.
+    pub fn is_empty(&self) -> Result<bool, StorageError> {
+        self.reader.is_empty()
+    }
+}
+
+impl IntoIterator for &StoreSnapshot {
+    type IntoIter = SnapshotQuadIter;
+    type Item = Result<Quad, StorageError>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// Iterator over the quads of a [`StoreSnapshot`].
+///
+/// Keeps the snapshot's reader alive for as long as it runs, which is what the
+/// `Arc` is for.
+pub struct SnapshotQuadIter {
+    iter: DecodingQuadIterator<'static>,
+    reader: Arc<StorageReader<'static>>,
+}
+
+impl Iterator for SnapshotQuadIter {
+    type Item = Result<Quad, StorageError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(match self.iter.next()? {
+            Ok(quad) => self.reader.decode_quad(&quad),
+            Err(error) => Err(error),
+        })
+    }
+}
+
 
 /// An object to do operations during a transaction.
 ///
