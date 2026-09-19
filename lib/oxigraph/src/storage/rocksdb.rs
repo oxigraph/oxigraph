@@ -487,6 +487,7 @@ impl RocksDbStorage {
     }
 }
 
+#[derive(Clone)]
 #[must_use]
 pub struct RocksDbStorageReader<'a> {
     reader: Reader<'a>,
