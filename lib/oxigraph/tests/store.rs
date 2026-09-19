@@ -749,3 +749,78 @@ impl Drop for DirSaver {
         }
     }
 }
+
+#[test]
+fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
+    let ex = NamedNode::new("http://example.com")?;
+    let q1 = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
+    let q2 = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex.clone());
+    let store = Store::new()?;
+    store.insert(q1.clone())?;
+
+    let snapshot = store.snapshot();
+    assert_eq!(snapshot.len()?, 1);
+    assert!(!snapshot.is_empty()?);
+    assert!(snapshot.contains(&q1)?);
+
+    // Committed after the snapshot was taken, so the snapshot must not see it
+    // while the store must.
+    store.insert(q2.clone())?;
+    assert_eq!(snapshot.len()?, 1);
+    assert_eq!(store.len()?, 2);
+    assert!(!snapshot.contains(&q2)?);
+    assert!(store.contains(&q2)?);
+
+    // The same state through every accessor, not just len.
+    assert_eq!(snapshot.iter().count(), 1);
+    assert_eq!(
+        snapshot.quads_for_pattern(None, Some(&ex), None, None).count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn test_snapshot_does_not_block_writers() -> Result<(), Box<dyn Error>> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    let ex = NamedNode::new("http://example.com")?;
+    let store = Arc::new(Store::new()?);
+    store.insert(Quad::new(
+        ex.clone(),
+        ex.clone(),
+        ex.clone(),
+        GraphName::DefaultGraph,
+    ))?;
+
+    // This is the difference from a transaction. `Store::insert` opens a
+    // transaction of its own, and on the memory backend
+    // `MemoryStorage::start_transaction` waits for an open one, so a writer
+    // stalls for as long as a read transaction is held. A snapshot takes no
+    // lock, so the writer below has to finish while the snapshot is alive.
+    let snapshot = store.snapshot();
+    let done = Arc::new(AtomicBool::new(false));
+    let (w, d, e) = (Arc::clone(&store), Arc::clone(&done), ex.clone());
+    std::thread::spawn(move || {
+        for i in 0..20 {
+            let s = NamedNode::new(format!("http://example.com/{i}")).unwrap();
+            w.insert(Quad::new(s, e.clone(), e.clone(), GraphName::DefaultGraph))
+                .unwrap();
+        }
+        d.store(true, Ordering::SeqCst);
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !done.load(Ordering::SeqCst) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        done.load(Ordering::SeqCst),
+        "a writer was blocked while a snapshot was open; a snapshot must take no lock"
+    );
+    assert_eq!(snapshot.len()?, 1, "and the snapshot must still be pinned");
+    assert_eq!(store.len()?, 21);
+    Ok(())
+}
