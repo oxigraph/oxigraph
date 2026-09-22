@@ -42,6 +42,7 @@
     :duplicated_values_var
     :order_by_rand
     :delete_insert_solution_order
+    :if_condition_ebv_error
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -211,3 +212,8 @@
         ut:data <delete_insert_solution_order_input.ttl>
     ] ;
     mf:result [ ut:data <delete_insert_solution_order_result.ttl> ] .
+
+:if_condition_ebv_error rdf:type mf:QueryEvaluationTest ;
+    mf:name "IF condition EBV errors leave the result unbound" ;
+    mf:action [ qt:query <if_condition_ebv_error.rq> ] ;
+    mf:result <true.srx> .

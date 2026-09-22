@@ -1,0 +1,5 @@
+ASK {
+    VALUES ?condition { <urn:iri> }
+    BIND(IF(?condition, 1, 2) AS ?value)
+    FILTER(!BOUND(?value))
+}
