@@ -4037,11 +4037,7 @@ fn eval_node_label(node: &QueryExpression) -> String {
         QueryExpression::OrderBy { expression, .. } => {
             format!(
                 "Sort({})",
-                format_list(
-                    expression
-                        .iter()
-                        .map(spargebra::algebra::OrderExpression::from)
-                )
+                format_list(expression.iter().map(FormattableOrderExpression))
             )
         }
         QueryExpression::Path {
@@ -4109,6 +4105,21 @@ impl fmt::Display for FormattableExpression<'_> {
             f.write_char('?')?;
         }
         Ok(())
+    }
+}
+
+struct FormattableOrderExpression<'a>(&'a OrderExpression);
+
+impl fmt::Display for FormattableOrderExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            OrderExpression::Asc(expression) => {
+                write!(f, "ASC({})", FormattableExpression(expression))
+            }
+            OrderExpression::Desc(expression) => {
+                write!(f, "DESC({})", FormattableExpression(expression))
+            }
+        }
     }
 }
 

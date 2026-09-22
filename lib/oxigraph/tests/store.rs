@@ -774,7 +774,9 @@ fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
     // The same state through every accessor, not just len.
     assert_eq!(snapshot.iter().count(), 1);
     assert_eq!(
-        snapshot.quads_for_pattern(None, Some(&ex), None, None).count(),
+        snapshot
+            .quads_for_pattern(None, Some(&ex), None, None)
+            .count(),
         1
     );
     Ok(())

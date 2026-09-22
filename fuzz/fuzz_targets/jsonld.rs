@@ -125,7 +125,7 @@ fuzz_target!(|data: &[u8]| {
         .collect::<Result<Dataset, _>>()
         .map_err(|e| {
             format!(
-                "Error on {:?} from {quads:?} based on {:?}: {e}",
+                "Error on {:?} from {quads} based on {:?}: {e}",
                 String::from_utf8_lossy(&new_serialization),
                 String::from_utf8_lossy(data)
             )

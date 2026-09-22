@@ -347,7 +347,12 @@ impl Store {
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
-    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph))?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// ))?;
     ///
     /// let snapshot = store.snapshot();
     /// // committed after the snapshot was taken
