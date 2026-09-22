@@ -1178,32 +1178,32 @@ fn is_path_fit_for_for_loop_join(
     object: &TermPattern,
     entry_types: &VariableTypes,
 ) -> bool {
+    // We don't want to set the left or right side of a zero-length path from
+    // the input because it could be returned even if it is not a node in the
+    // active graph.
+    if let (TermPattern::Variable(subject), TermPattern::Variable(object)) = (subject, object) {
+        can_path_match_zero_length(path)
+            && entry_types.get(subject) == VariableType::UNDEF
+            && entry_types.get(object) == VariableType::UNDEF
+    } else {
+        true
+    }
+}
+
+fn can_path_match_zero_length(path: &PropertyPathExpression) -> bool {
     match path {
-        PropertyPathExpression::Link(_)
-        | PropertyPathExpression::OneOrMorePath(_)
-        | PropertyPathExpression::Nps(_) => true,
-        PropertyPathExpression::Inv(path) => {
-            is_path_fit_for_for_loop_join(object, path, subject, entry_types)
+        PropertyPathExpression::Link(_) | PropertyPathExpression::Nps(_) => false,
+        PropertyPathExpression::Inv(path) | PropertyPathExpression::OneOrMorePath(path) => {
+            can_path_match_zero_length(path)
         }
-        PropertyPathExpression::Seq(l, r) => {
-            let whatever = Variable::new_unchecked("#intermediate#").into();
-            is_path_fit_for_for_loop_join(subject, l, &whatever, entry_types)
-                || is_path_fit_for_for_loop_join(&whatever, r, subject, entry_types)
+        PropertyPathExpression::Seq(left, right) => {
+            can_path_match_zero_length(left) && can_path_match_zero_length(right)
         }
-        PropertyPathExpression::Alt(l, r) => {
-            is_path_fit_for_for_loop_join(subject, l, object, entry_types)
-                && is_path_fit_for_for_loop_join(subject, r, object, entry_types)
+        PropertyPathExpression::Alt(left, right) => {
+            can_path_match_zero_length(left) || can_path_match_zero_length(right)
         }
         PropertyPathExpression::ZeroOrMorePath(_) | PropertyPathExpression::ZeroOrOnePath(_) => {
-            // We don't want to set the left or right side of the zero or ... path because it could be returned in the result set even if it is not supported in the graph
-            if let (TermPattern::Variable(subject), TermPattern::Variable(object)) =
-                (subject, object)
-            {
-                entry_types.get(subject) == VariableType::UNDEF
-                    && entry_types.get(object) == VariableType::UNDEF
-            } else {
-                true
-            }
+            true
         }
     }
 }
