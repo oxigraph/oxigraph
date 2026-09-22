@@ -30,6 +30,7 @@
     :implicit_grouping_on_empty
     :bgp_join_reordering
     :nested_bind_lateral_reordering
+    :lateral_optional_service
     ) .
 
 
@@ -142,3 +143,8 @@
     mf:name "Nested BGP below BIND is converted to LATERAL" ;
     mf:action <nested_bind_lateral_reordering_input.rq> ;
     mf:result <nested_bind_lateral_reordering_output.rq> .
+
+:lateral_optional_service rdf:type ox:QueryOptimizationTest ;
+    mf:name "LATERAL preserves OPTIONAL SERVICE error handling" ;
+    mf:action <lateral_optional_service_input.rq> ;
+    mf:result <lateral_optional_service_output.rq> .
