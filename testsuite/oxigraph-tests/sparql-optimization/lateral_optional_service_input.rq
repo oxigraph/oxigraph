@@ -1,0 +1,7 @@
+SELECT * WHERE {
+    LATERAL {
+        OPTIONAL {
+            SERVICE <http://example.org/5> {}
+        }
+    }
+}
