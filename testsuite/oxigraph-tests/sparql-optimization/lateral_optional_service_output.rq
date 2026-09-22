@@ -1,0 +1,11 @@
+SELECT * WHERE {
+    VALUES () { () }
+    LATERAL {
+        VALUES () { () }
+        OPTIONAL {
+            SERVICE <http://example.org/5> {
+                VALUES () { () }
+            }
+        }
+    }
+}
