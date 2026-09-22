@@ -9,6 +9,7 @@ use oxrdf::vocab::rdf;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
+use std::cell::Cell;
 use std::cmp::{max, min};
 
 pub struct Optimizer;
@@ -18,7 +19,7 @@ impl Optimizer {
         let input_types = VariableTypes::default();
         let query_expression = Self::normalize_pattern(query_expression, &input_types);
         let query_expression = Self::push_graph(query_expression, None, &input_types);
-        let query_expression = Self::reorder_joins(query_expression, &input_types);
+        let query_expression = Self::reorder_joins(query_expression, &input_types, None);
         Self::push_filters(query_expression, Vec::new(), &input_types)
     }
 
@@ -807,9 +808,19 @@ impl Optimizer {
         }
     }
 
+    /// Reorders the joins of the query expression
+    ///
+    /// If `shortcuts` is set, the output is only going to be used to estimate costs:
+    /// the right sides of the LATERAL built from joins are then not reordered again
+    /// knowing the variables bound by their left sides.
+    /// The output is still a valid plan and is good enough to estimate costs.
+    /// It avoids an exponential complexity when joins are nested.
+    /// The cell is set if such a shortcut has been taken,
+    /// i.e. if a reordering without shortcut would give a different plan.
     fn reorder_joins(
         query_expression: QueryExpression,
         input_types: &VariableTypes,
+        shortcuts: Option<&Cell<bool>>,
     ) -> QueryExpression {
         match query_expression {
             QueryExpression::QuadPattern { .. }
@@ -817,16 +828,53 @@ impl Optimizer {
             | QueryExpression::Values { .. } => query_expression,
             QueryExpression::Join { left, right, .. } => {
                 // We flatten the join operation
-                let mut to_reorder = Vec::new();
+                let mut flattened = Vec::new();
                 let mut todo = vec![*right, *left];
                 while let Some(e) = todo.pop() {
                     if let QueryExpression::Join { left, right, .. } = e {
                         todo.push(*right);
                         todo.push(*left);
                     } else {
-                        to_reorder.push(Self::reorder_joins(e, input_types));
+                        flattened.push(e);
                     }
                 }
+                // We reorder each child on its own to estimate its cost
+                let mut to_reorder = Vec::with_capacity(flattened.len());
+                // Is that plan also the one a reordering without shortcut would give?
+                let mut to_reorder_is_final = Vec::with_capacity(flattened.len());
+                for child in &flattened {
+                    let child_shortcuts = Cell::new(false);
+                    to_reorder.push(Self::reorder_joins(
+                        child.clone(),
+                        input_types,
+                        Some(&child_shortcuts),
+                    ));
+                    to_reorder_is_final.push(!child_shortcuts.get());
+                }
+                // The plan of a child evaluated with only the join input variables bound
+                let child_plan = |id: usize| {
+                    if to_reorder_is_final[id] {
+                        to_reorder[id].clone()
+                    } else if let Some(shortcuts) = shortcuts {
+                        shortcuts.set(true);
+                        to_reorder[id].clone()
+                    } else {
+                        Self::reorder_joins(flattened[id].clone(), input_types, None)
+                    }
+                };
+                // The plan of a child evaluated as the right side of a LATERAL,
+                // knowing the variables bound by its left side
+                #[cfg(feature = "sep-0006")]
+                let lateral_child_plan = |id: usize, types: &VariableTypes| {
+                    if !is_reordering_binding_sensitive(&flattened[id]) {
+                        to_reorder[id].clone()
+                    } else if let Some(shortcuts) = shortcuts {
+                        shortcuts.set(true);
+                        to_reorder[id].clone()
+                    } else {
+                        Self::reorder_joins(flattened[id].clone(), types, None)
+                    }
+                };
 
                 // We do first type inference
                 let to_reorder_types = to_reorder
@@ -846,7 +894,7 @@ impl Optimizer {
                     .min_by_key(|i| estimate_query_expression_size(&to_reorder[*i], input_types))
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
-                    let mut output = to_reorder[next_entry_id].clone();
+                    let mut output = child_plan(next_entry_id);
                     let mut output_types = to_reorder_types[next_entry_id].clone();
                     // We look for an other child to join with that does not blow up the join cost
                     while let Some(next_id) = not_yet_reordered_ids
@@ -889,16 +937,29 @@ impl Optimizer {
                         })
                     {
                         not_yet_reordered_ids[next_id] = false; // It's now done
-                        let next = to_reorder[next_id].clone();
                         #[cfg(feature = "sep-0006")]
                         {
-                            output = if is_fit_for_for_loop_join(&next, input_types, &output_types)
-                            {
-                                QueryExpression::lateral(output, next)
+                            output = if is_fit_for_for_loop_join(
+                                &to_reorder[next_id],
+                                input_types,
+                                &output_types,
+                            ) {
+                                // The right side is evaluated with the variables bound by the left side
+                                // If reordering it knowing these variables makes it unfit for a for loop join
+                                // (e.g. it becomes a cartesian product), we keep the plan used for estimations
+                                let next = lateral_child_plan(next_id, &output_types);
+                                QueryExpression::lateral(
+                                    output,
+                                    if is_fit_for_for_loop_join(&next, input_types, &output_types) {
+                                        next
+                                    } else {
+                                        to_reorder[next_id].clone()
+                                    },
+                                )
                             } else {
                                 QueryExpression::join(
                                     output,
-                                    next,
+                                    child_plan(next_id),
                                     JoinAlgorithm::HashBuildLeftProbeRight {
                                         keys: join_key_variables(
                                             &output_types,
@@ -913,7 +974,7 @@ impl Optimizer {
                         {
                             output = QueryExpression::join(
                                 output,
-                                next,
+                                child_plan(next_id),
                                 JoinAlgorithm::HashBuildLeftProbeRight {
                                     keys: join_key_variables(
                                         &output_types,
@@ -957,8 +1018,8 @@ impl Optimizer {
             QueryExpression::Lateral { left, right } => {
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 QueryExpression::lateral(
-                    Self::reorder_joins(*left, input_types),
-                    Self::reorder_joins(*right, &left_types),
+                    Self::reorder_joins(*left, input_types, shortcuts),
+                    Self::reorder_joins(*right, &left_types, shortcuts),
                 )
             }
             QueryExpression::LeftJoin {
@@ -967,7 +1028,7 @@ impl Optimizer {
                 expression,
                 ..
             } => {
-                let left = Self::reorder_joins(*left, input_types);
+                let left = Self::reorder_joins(*left, input_types, shortcuts);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
@@ -986,7 +1047,7 @@ impl Optimizer {
 
                         if lateral_cost <= join_cost.saturating_mul(100) {
                             let right_for_lateral =
-                                Self::reorder_joins((*right).clone(), &left_types);
+                                Self::reorder_joins((*right).clone(), &left_types, shortcuts);
                             if is_fit_for_for_loop_join(
                                 &right_for_lateral,
                                 input_types,
@@ -1007,7 +1068,7 @@ impl Optimizer {
                         }
                     }
                 }
-                let right = Self::reorder_joins(*right, input_types);
+                let right = Self::reorder_joins(*right, input_types, shortcuts);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::left_join(
                     left,
@@ -1019,9 +1080,9 @@ impl Optimizer {
                 )
             }
             QueryExpression::Minus { left, right, .. } => {
-                let left = Self::reorder_joins(*left, input_types);
+                let left = Self::reorder_joins(*left, input_types, shortcuts);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
-                let right = Self::reorder_joins(*right, input_types);
+                let right = Self::reorder_joins(*right, input_types, shortcuts);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::minus(
                     left,
@@ -1031,43 +1092,51 @@ impl Optimizer {
                     },
                 )
             }
-            QueryExpression::Graph { graph_name, inner } => {
-                QueryExpression::graph(Self::reorder_joins(*inner, input_types), graph_name)
-            }
+            QueryExpression::Graph { graph_name, inner } => QueryExpression::graph(
+                Self::reorder_joins(*inner, input_types, shortcuts),
+                graph_name,
+            ),
             QueryExpression::Extend {
                 inner,
                 expression,
                 variable,
             } => QueryExpression::extend(
-                Self::reorder_joins(*inner, input_types),
+                Self::reorder_joins(*inner, input_types, shortcuts),
                 variable,
                 expression,
             ),
-            QueryExpression::Filter { inner, expression } => {
-                QueryExpression::filter(Self::reorder_joins(*inner, input_types), expression)
-            }
+            QueryExpression::Filter { inner, expression } => QueryExpression::filter(
+                Self::reorder_joins(*inner, input_types, shortcuts),
+                expression,
+            ),
             QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
-                    .map(|c| Self::reorder_joins(c, input_types)),
+                    .map(|c| Self::reorder_joins(c, input_types, shortcuts)),
             ),
             QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
-            } => QueryExpression::slice(Self::reorder_joins(*inner, input_types), offset, limit),
+            } => QueryExpression::slice(
+                Self::reorder_joins(*inner, input_types, shortcuts),
+                offset,
+                limit,
+            ),
             QueryExpression::Distinct { inner } => {
-                QueryExpression::distinct(Self::reorder_joins(*inner, input_types))
+                QueryExpression::distinct(Self::reorder_joins(*inner, input_types, shortcuts))
             }
             QueryExpression::Reduced { inner } => {
-                QueryExpression::reduced(Self::reorder_joins(*inner, input_types))
+                QueryExpression::reduced(Self::reorder_joins(*inner, input_types, shortcuts))
             }
-            QueryExpression::Project { inner, variables } => {
-                QueryExpression::project(Self::reorder_joins(*inner, input_types), variables)
-            }
-            QueryExpression::OrderBy { inner, expression } => {
-                QueryExpression::order_by(Self::reorder_joins(*inner, input_types), expression)
-            }
+            QueryExpression::Project { inner, variables } => QueryExpression::project(
+                Self::reorder_joins(*inner, input_types, shortcuts),
+                variables,
+            ),
+            QueryExpression::OrderBy { inner, expression } => QueryExpression::order_by(
+                Self::reorder_joins(*inner, input_types, shortcuts),
+                expression,
+            ),
             QueryExpression::Service { .. } => {
                 // We don't do join reordering inside of SERVICE calls, we don't know about cardinalities
                 query_expression
@@ -1077,11 +1146,40 @@ impl Optimizer {
                 variables,
                 aggregates,
             } => QueryExpression::group(
-                Self::reorder_joins(*inner, input_types),
+                Self::reorder_joins(*inner, input_types, shortcuts),
                 variables,
                 aggregates,
             ),
         }
+    }
+}
+
+/// Is the plan [`Optimizer::reorder_joins`] builds for this expression
+/// dependent on the variables already bound when it is evaluated?
+#[cfg(feature = "sep-0006")]
+fn is_reordering_binding_sensitive(query_expression: &QueryExpression) -> bool {
+    match query_expression {
+        QueryExpression::QuadPattern { .. }
+        | QueryExpression::Path { .. }
+        | QueryExpression::Values { .. }
+        | QueryExpression::Service { .. } => false,
+        QueryExpression::Join { .. }
+        | QueryExpression::LeftJoin { .. }
+        | QueryExpression::Minus { .. } => true,
+        #[cfg(feature = "sep-0006")]
+        QueryExpression::Lateral { left, right } => {
+            is_reordering_binding_sensitive(left) || is_reordering_binding_sensitive(right)
+        }
+        QueryExpression::Graph { inner, .. }
+        | QueryExpression::Filter { inner, .. }
+        | QueryExpression::Extend { inner, .. }
+        | QueryExpression::OrderBy { inner, .. }
+        | QueryExpression::Project { inner, .. }
+        | QueryExpression::Distinct { inner }
+        | QueryExpression::Reduced { inner }
+        | QueryExpression::Slice { inner, .. }
+        | QueryExpression::Group { inner, .. } => is_reordering_binding_sensitive(inner),
+        QueryExpression::Union { inner } => inner.iter().any(is_reordering_binding_sensitive),
     }
 }
 

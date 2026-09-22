@@ -1,0 +1,10 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?a ?c ?s ?o WHERE {
+    ?a ex:p ?c .
+    LATERAL {
+        { ?c ex:q ?o . }
+        UNION
+        { ?s ex:r ?c . ?s ex:q ?o . }
+    }
+}
