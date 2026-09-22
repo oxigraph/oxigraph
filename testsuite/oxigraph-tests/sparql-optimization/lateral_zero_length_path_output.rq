@@ -1,0 +1,6 @@
+SELECT * WHERE {
+    GRAPH ?g {
+        VALUES () { () }
+    }
+    ?s (a?/a? | a) ?g
+}
