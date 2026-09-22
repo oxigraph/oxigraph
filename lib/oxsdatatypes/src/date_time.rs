@@ -1905,7 +1905,7 @@ fn normalize_month(yr: i64, mo: i64) -> Option<(i64, u8)> {
     Some((yr, mo))
 }
 
-/// The [normalizeDay](https://www.w3.org/TR/xmlschema11-2/#f-dt-normDay) function
+/// The [normalizeDay](https://www.w3.org/TR/xmlschema11-2/#f-dt-normDa) function
 fn normalize_day(yr: i64, mo: i64, mut da: i64) -> Option<(i64, u8, u8)> {
     let (mut yr, mut mo) = normalize_month(yr, mo)?;
     loop {

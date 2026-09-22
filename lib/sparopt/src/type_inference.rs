@@ -318,12 +318,11 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         {
             VariableType::LITERAL | VariableType::UNDEF // TODO: add xsd: cast functions
         }
-        Expression::If(condition, then, els) => {
-            let mut t = infer_expression_type(then, types) | infer_expression_type(els, types);
-            if infer_expression_type(condition, types).undef {
-                t.undef = true;
-            }
-            t
+        Expression::If(_, then, els) => {
+            // The result is an error if the condition EBV returns and error
+            infer_expression_type(then, types)
+                | infer_expression_type(els, types)
+                | VariableType::UNDEF
         }
         Expression::Coalesce(inner) => {
             let mut t = VariableType::UNDEF;
