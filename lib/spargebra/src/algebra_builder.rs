@@ -3226,7 +3226,9 @@ impl<'a> FreshVariableAllocator<'a> {
                 && !self.allocated_variable_names.contains(name.as_str())
             {
                 // Not used, we can emit
-                return self.emit_fresh_variable(name);
+                let name = OxString::new_owned(&name);
+                self.allocated_variable_names.insert(name.clone());
+                return Variable::new_unchecked(name);
             }
         }
     }
@@ -3238,19 +3240,19 @@ impl<'a> FreshVariableAllocator<'a> {
         let var = if !self.used_variable_names.contains(name)
             && !self.allocated_variable_names.contains(name)
         {
-            // Not used, we can emit
-            self.emit_fresh_variable(OxString::new_owned(name))
+            // Not used, we can emit, but need to validate (blank node id grammar is more relaxed than variable names)
+            let name = OxString::new_owned(name);
+            if let Ok(variable) = Variable::new(name.clone()) {
+                self.allocated_variable_names.insert(name);
+                variable
+            } else {
+                self.fresh_variable("bn")
+            }
         } else {
-            self.fresh_variable(name)
+            self.fresh_variable("bn")
         };
         self.blank_node_mapping.insert(name, var.clone());
         var
-    }
-
-    fn emit_fresh_variable(&mut self, name: impl Into<OxString>) -> Variable {
-        let name = name.into();
-        self.allocated_variable_names.insert(name.clone());
-        Variable::new_unchecked(name)
     }
 }
 
