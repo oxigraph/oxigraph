@@ -1525,7 +1525,7 @@ fn evaluate_sparql_query(
     }
 }
 
-/// Keeps the watcher thread started by [`watch_query`] alive.
+/// Keeps the connection watcher thread started by [`watch_query`] alive.
 ///
 /// The query keeps running while its results are streamed to the client, so the guard must live as long as the response body.
 struct QueryWatchGuard {
@@ -1540,55 +1540,45 @@ impl Drop for QueryWatchGuard {
 
 /// Cancels the query when the client closes the connection or when the timeout elapses.
 ///
-/// A thread waits on the [`ConnectionWatch`] given by OxHTTP and fires the returned [`CancellationToken`].
-/// It stops when the returned guard is dropped (with a delay of at most the HTTP global timeout).
+/// One thread sleeps until the timeout and another waits on the [`ConnectionWatch`] given by OxHTTP.
+/// Both fire the returned [`CancellationToken`].
+/// The connection watcher stops when the returned guard is dropped (with a delay of at most the HTTP global timeout).
 fn watch_query(
     request: &Request<Body>,
     timeout: Option<Duration>,
 ) -> Result<(CancellationToken, QueryWatchGuard), HttpError> {
     let cancellation_token = CancellationToken::new();
     let done = Arc::new(AtomicBool::new(false));
-    let watch = request.extensions().get::<ConnectionWatch>().cloned();
-    if watch.is_none() && timeout.is_none() {
-        // Nothing to watch (e.g. tests)
-        return Ok((cancellation_token, QueryWatchGuard { done }));
+    if let Some(timeout) = timeout {
+        let cancellation_token = cancellation_token.clone();
+        thread::Builder::new()
+            .name("SPARQL evaluation timeout".into())
+            .spawn(move || {
+                thread::sleep(timeout);
+                cancellation_token.cancel();
+            })
+            .map_err(internal_server_error)?;
     }
-    let deadline = timeout.map(|timeout| Instant::now() + timeout);
-    thread::Builder::new()
-        .name("SPARQL query watcher".into())
-        .spawn({
-            let cancellation_token = cancellation_token.clone();
-            let done = Arc::clone(&done);
-            move || {
-                loop {
-                    if done.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    let remaining =
-                        deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
-                    let closed = if let Some(watch) = &watch {
-                        watch.wait_closed(remaining)
-                    } else {
-                        thread::sleep(remaining.unwrap_or_default());
-                        false
-                    };
-                    if done.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    if closed {
-                        eprintln!("Cancelling a SPARQL query: the client closed the connection");
-                        cancellation_token.cancel();
-                        return;
-                    }
-                    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                        eprintln!("Cancelling a SPARQL query: the timeout elapsed");
-                        cancellation_token.cancel();
+    if let Some(watch) = request.extensions().get::<ConnectionWatch>().cloned() {
+        let cancellation_token = cancellation_token.clone();
+        let done = Arc::clone(&done);
+        thread::Builder::new()
+            .name("SPARQL query connection watcher".into())
+            .spawn(move || {
+                while !done.load(Ordering::Relaxed) {
+                    if watch.wait_closed() {
+                        if !done.load(Ordering::Relaxed) {
+                            eprintln!(
+                                "Cancelling a SPARQL query: the client closed the connection"
+                            );
+                            cancellation_token.cancel();
+                        }
                         return;
                     }
                 }
-            }
-        })
-        .map_err(internal_server_error)?;
+            })
+            .map_err(internal_server_error)?;
+    }
     Ok((cancellation_token, QueryWatchGuard { done }))
 }
 
