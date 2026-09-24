@@ -1039,6 +1039,8 @@ mod tests {
     use spargebra::SparqlParser;
     use spargebra::vocab::sparql;
     use sparopt::algebra::{Expression, QueryExpression};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     struct FailingDataset {
         fail_reads: bool,
@@ -1145,6 +1147,49 @@ mod tests {
                 assert!(matches!(error, QueryEvaluationError::Dataset(_)));
                 assert_eq!(error.to_string(), "dataset read failed");
             }
+        }
+    }
+
+    #[test]
+    fn cancellation_is_honored_without_dataset_access() {
+        // Joins with a large build side produce many results without reading the dataset,
+        // so the cancellation token must also be checked by the join iterators.
+        let dataset = Dataset::from_iter((0..300).map(|i| {
+            Quad::new(
+                NamedNode::new_unchecked(format!("urn:s{i}")),
+                NamedNode::new_unchecked("urn:p"),
+                NamedNode::new_unchecked(format!("urn:o{}", i % 10)),
+                GraphName::DefaultGraph,
+            )
+        }));
+        for query in [
+            "SELECT (COUNT(*) AS ?n) WHERE { ?a ?b ?c . ?d ?e ?f . ?g ?h ?i }",
+            "SELECT * WHERE { ?a ?b ?c . ?d ?e ?f . ?g ?h ?i } ORDER BY ?a",
+            "SELECT (COUNT(*) AS ?n) WHERE { ?a ?p ?o . ?b ?p ?o . ?c ?p ?o }",
+            "SELECT (COUNT(*) AS ?n) WHERE { ?a ?p ?o . OPTIONAL { ?b ?p ?o . ?c ?p ?o } }",
+        ] {
+            let query = SparqlParser::new().parse_query(query).unwrap();
+            let cancellation_token = CancellationToken::new();
+            let evaluator =
+                QueryEvaluator::new().with_cancellation_token(cancellation_token.clone());
+            let token = cancellation_token.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(100));
+                token.cancel();
+            });
+            let start = Instant::now();
+            let results = evaluator.prepare(&query).execute(&dataset);
+            let error = if let Ok(QueryResults::Solutions(solutions)) = results {
+                solutions.collect::<Result<Vec<_>, _>>().unwrap_err()
+            } else {
+                results.err().unwrap()
+            };
+            assert!(matches!(error, QueryEvaluationError::Cancelled));
+            assert!(
+                start.elapsed() < Duration::from_secs(2),
+                "The query was not cancelled in time ({:?})",
+                start.elapsed()
+            );
         }
     }
 
