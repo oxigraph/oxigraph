@@ -55,7 +55,7 @@ Also, some parts of Oxigraph are available as standalone Rust crates to be reuse
 The library layers in Oxigraph. The elements above depend on the elements below:
 ![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)
 
-A preliminary benchmark [is provided](bench/README.md). There is also [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
+There is [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
 ## Help
 
