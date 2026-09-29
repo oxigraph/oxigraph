@@ -781,7 +781,7 @@ fn quads_not_triples<'src, E: CParserError<'src>>() -> impl CParser<
     'src,
     (
         Option<VarOrIri<'src>>,
-        Vec<(GraphNode<'src>, PropertyList<'src>)>,
+        Vec<(GraphNodePath<'src>, PropertyListPath<'src>)>,
     ),
     E,
 > {
@@ -794,8 +794,8 @@ fn quads_not_triples<'src, E: CParserError<'src>>() -> impl CParser<
 // [54]   	TriplesTemplate 	  ::=   	TriplesSameSubject ( '.' TriplesTemplate? )?
 // TripleTemplate is always optional, we allow it to be empty
 fn triples_template<'src, E: CParserError<'src>>()
--> impl CParser<'src, Vec<(GraphNode<'src>, PropertyList<'src>)>, E> {
-    triples_same_subject()
+-> impl CParser<'src, Vec<(GraphNodePath<'src>, PropertyListPath<'src>)>, E> {
+    triples_same_subject_path()
         .separated_by(operator("."))
         .allow_trailing()
         .collect::<Vec<_>>()
@@ -860,16 +860,6 @@ fn lateral_graph_pattern<'src, E: CParserError<'src>>(
     keyword("LATERAL")
         .ignore_then(group_graph_pattern)
         .map(|p| GraphPatternElement::Lateral(Box::new(p)))
-}
-
-// [58]   	ReifiedTripleBlock 	  ::=   	ReifiedTriple PropertyList
-#[cfg(feature = "sparql-12")]
-fn reified_triple_block<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>), E> {
-    reified_triple()
-        .map(GraphNode::ReifiedTriple)
-        .then(property_list(property_list_not_empty))
 }
 
 // [59]   	ReifiedTripleBlockPath 	  ::=   	ReifiedTriple PropertyListPath
@@ -1131,8 +1121,8 @@ fn expression_list<'src, E: CParserError<'src>>(
 // [80]   	ConstructTriples 	  ::=   	TriplesSameSubject ( '.' ConstructTriples? )?
 // also TriplesSameSubject ("." TriplesSameSubject?)*
 fn construct_template<'src, E: CParserError<'src>>()
--> impl CParser<'src, Spanned<Vec<(GraphNode<'src>, PropertyList<'src>)>>, E> {
-    triples_same_subject()
+-> impl CParser<'src, Spanned<Vec<(GraphNodePath<'src>, PropertyListPath<'src>)>>, E> {
+    triples_same_subject_path()
         .separated_by(operator("."))
         .allow_trailing()
         .collect::<Vec<_>>()
@@ -1141,50 +1131,8 @@ fn construct_template<'src, E: CParserError<'src>>()
         .boxed()
 }
 
-// [81]   	TriplesSameSubject 	  ::=   	VarOrTerm PropertyListNotEmpty | TriplesNode PropertyList | ReifiedTripleBlock
-fn triples_same_subject<'src, E: CParserError<'src>>()
--> impl CParser<'src, (GraphNode<'src>, PropertyList<'src>), E> {
-    let property_list_not_empty = property_list_not_empty();
-    choice((
-        var_or_term()
-            .map(GraphNode::VarOrTerm)
-            .then(property_list_not_empty.clone()),
-        triples_node(property_list_not_empty.clone())
-            .then(property_list(property_list_not_empty.clone())),
-        #[cfg(feature = "sparql-12")]
-        reified_triple_block(property_list_not_empty),
-    ))
-    .boxed()
-}
-
-// [82]   	PropertyList 	  ::=   	PropertyListNotEmpty?
-fn property_list<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, PropertyList<'src>, E> {
-    property_list_not_empty
-        .or_not()
-        .map(Option::unwrap_or_default)
-}
-
-// [83]   	PropertyListNotEmpty 	  ::=   	Verb ObjectList ( ';' ( Verb ObjectList )? )*
-fn property_list_not_empty<'src, E: CParserError<'src>>()
--> impl CParser<'src, PropertyList<'src>, E> {
-    recursive(|property_list_not_empty| {
-        let verb_object_list = verb().then(object_list(property_list_not_empty));
-        verb_object_list.clone().map(|v| vec![v]).foldl(
-            operator(";")
-                .ignore_then(verb_object_list.or_not())
-                .repeated(),
-            |mut acc, val| {
-                acc.extend(val);
-                acc
-            },
-        )
-    })
-    .boxed()
-}
-
 // [84]   	Verb 	  ::=   	VarOrIri | 'a'
+#[cfg(feature = "sparql-12")]
 fn verb<'src, E: CParserError<'src>>() -> impl CParser<'src, Verb<'src>, E> {
     var_or_iri()
         .map(|v| match v {
@@ -1192,36 +1140,6 @@ fn verb<'src, E: CParserError<'src>>() -> impl CParser<'src, Verb<'src>, E> {
             VarOrIri::Iri(v) => Verb::Iri(v),
         })
         .or(case_sensitive_keyword("a").to(Verb::A))
-}
-
-// [85]   	ObjectList 	  ::=   	Object ( ',' Object )*
-fn object_list<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, Vec<Object<'src>>, E> {
-    object(property_list_not_empty)
-        .separated_by(operator(","))
-        .at_least(1)
-        .collect()
-        .boxed()
-}
-// [86]   	Object 	  ::=   	GraphNode Annotation
-#[cfg(feature = "sparql-12")]
-fn object<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, Object<'src>, E> {
-    graph_node(triples_node(property_list_not_empty.clone()))
-        .then(annotation(property_list_not_empty))
-        .map(|(graph_node, annotations)| Object {
-            graph_node,
-            annotations,
-        })
-}
-
-#[cfg(not(feature = "sparql-12"))]
-fn object<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, Object<'src>, E> {
-    graph_node(triples_node(property_list_not_empty)).map(|graph_node| Object { graph_node })
 }
 
 // [87]   	TriplesSameSubjectPath 	  ::=   	VarOrTerm PropertyListPathNotEmpty | TriplesNodePath PropertyListPath | ReifiedTripleBlockPath
@@ -1271,7 +1189,7 @@ fn property_list_path_not_empty<'src, E: CParserError<'src>>()
 
 // [90]   	VerbPath 	  ::=   	Path
 fn verb_path<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrPath<'src>, E> {
-    path().map(VarOrPath::Path)
+    path().spanned().map(VarOrPath::Path)
 }
 
 // [91]   	VerbSimple 	  ::=   	Var
@@ -1343,7 +1261,8 @@ fn path_primary<'src, E: CParserError<'src>>(
         iri().map(Path::Iri),
         case_sensitive_keyword("a").to(Path::A),
         operator("!").ignore_then(path_negated_property_set()),
-        path.delimited_by(operator("("), operator(")")),
+        path.delimited_by(operator("("), operator(")"))
+            .map(|p| Path::Nested(Box::new(p))),
     ))
     .boxed()
 }
@@ -1373,26 +1292,6 @@ fn path_one_in_property_set<'src, E: CParserError<'src>>()
     .boxed()
 }
 
-// [103]   	TriplesNode 	  ::=   	Collection | BlankNodePropertyList
-fn triples_node<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, GraphNode<'src>, E> {
-    recursive(|triples_node| {
-        collection(triples_node).or(blank_node_property_list(property_list_not_empty))
-    })
-    .boxed()
-}
-
-// [104]   	BlankNodePropertyList 	  ::=   	'[' PropertyListNotEmpty ']'
-fn blank_node_property_list<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, GraphNode<'src>, E> {
-    property_list_not_empty
-        .delimited_by(operator("["), operator("]"))
-        .spanned()
-        .map(GraphNode::BlankNodePropertyList)
-}
-
 // [105]   	TriplesNodePath 	  ::=   	CollectionPath | BlankNodePropertyListPath
 fn triples_node_path<'src, E: CParserError<'src>>(
     property_list_path_not_empty: impl CParser<'src, PropertyListPath<'src>, E>,
@@ -1411,20 +1310,6 @@ fn blank_node_property_list_path<'src, E: CParserError<'src>>(
         .delimited_by(operator("["), operator("]"))
         .spanned()
         .map(GraphNodePath::BlankNodePropertyList)
-}
-
-// [107]   	Collection 	  ::=   	'(' GraphNode+ ')'
-fn collection<'src, E: CParserError<'src>>(
-    triples_node: impl CParser<'src, GraphNode<'src>, E>,
-) -> impl CParser<'src, GraphNode<'src>, E> {
-    graph_node(triples_node)
-        .repeated()
-        .at_least(1)
-        .collect()
-        .delimited_by(operator("("), operator(")"))
-        .spanned()
-        .map(GraphNode::Collection)
-        .boxed()
 }
 
 // [108]   	CollectionPath 	  ::=   	'(' GraphNodePath+ ')'
@@ -1464,41 +1349,6 @@ fn annotation_block_path<'src, E: CParserError<'src>>(
     property_list_path_not_empty.delimited_by(operator("{|"), operator("|}"))
 }
 
-// [111]   	Annotation 	  ::=   	( Reifier | AnnotationBlock )*
-#[cfg(feature = "sparql-12")]
-fn annotation<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, Vec<Spanned<Annotation<'src>>>, E> {
-    reifier()
-        .map(Annotation::Reifier)
-        .or(annotation_block(property_list_not_empty).map(Annotation::AnnotationBlock))
-        .spanned()
-        .repeated()
-        .collect()
-        .boxed()
-}
-
-// [112]   	AnnotationBlock 	  ::=   	'{|' PropertyListNotEmpty '|}'
-#[cfg(feature = "sparql-12")]
-fn annotation_block<'src, E: CParserError<'src>>(
-    property_list_not_empty: impl CParser<'src, PropertyList<'src>, E>,
-) -> impl CParser<'src, PropertyList<'src>, E> {
-    property_list_not_empty.delimited_by(operator("{|"), operator("|}"))
-}
-
-// [113]   	GraphNode 	  ::=   	VarOrTerm | TriplesNode | ReifiedTriple
-fn graph_node<'src, E: CParserError<'src>>(
-    triples_node: impl CParser<'src, GraphNode<'src>, E>,
-) -> impl CParser<'src, GraphNode<'src>, E> {
-    choice((
-        var_or_term().map(GraphNode::VarOrTerm),
-        triples_node,
-        #[cfg(feature = "sparql-12")]
-        reified_triple().map(GraphNode::ReifiedTriple),
-    ))
-    .boxed()
-}
-
 // [114]   	GraphNodePath 	  ::=   	VarOrTerm | TriplesNodePath | ReifiedTriple
 fn graph_node_path<'src, E: CParserError<'src>>(
     triples_node_path: impl CParser<'src, GraphNodePath<'src>, E>,
@@ -1517,9 +1367,9 @@ fn var_or_term<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrTerm<'s
     choice((
         var().map(VarOrTerm::Var),
         iri().map(VarOrTerm::Iri),
-        rdf_literal().map(VarOrTerm::Literal),
-        numeric_literal().map(VarOrTerm::Literal),
-        boolean_literal().map(VarOrTerm::Literal),
+        rdf_literal().spanned().map(VarOrTerm::Literal),
+        numeric_literal().spanned().map(VarOrTerm::Literal),
+        boolean_literal().spanned().map(VarOrTerm::Literal),
         blank_node().map(VarOrTerm::BlankNode),
         nil().to(VarOrTerm::Nil),
         #[cfg(feature = "sparql-12")]
@@ -1530,7 +1380,8 @@ fn var_or_term<'src, E: CParserError<'src>>() -> impl CParser<'src, VarOrTerm<'s
 
 // [116]   	ReifiedTriple 	  ::=   	'<<' ReifiedTripleSubject Verb ReifiedTripleObject Reifier? '>>'
 #[cfg(feature = "sparql-12")]
-fn reified_triple<'src, E: CParserError<'src>>() -> impl CParser<'src, ReifiedTriple<'src>, E> {
+fn reified_triple<'src, E: CParserError<'src>>()
+-> impl CParser<'src, Spanned<ReifiedTriple<'src>>, E> {
     recursive(|reified_triple| {
         reified_triple_subject_or_object(reified_triple.clone())
             .then(verb())
@@ -1543,6 +1394,7 @@ fn reified_triple<'src, E: CParserError<'src>>() -> impl CParser<'src, ReifiedTr
                 object,
                 reifier: reifier.flatten(),
             })
+            .spanned()
     })
 }
 
@@ -1550,14 +1402,20 @@ fn reified_triple<'src, E: CParserError<'src>>() -> impl CParser<'src, ReifiedTr
 // [118]   	ReifiedTripleObject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | ReifiedTriple | TripleTerm
 #[cfg(feature = "sparql-12")]
 fn reified_triple_subject_or_object<'src, E: CParserError<'src>>(
-    reified_triple: impl CParser<'src, ReifiedTriple<'src>, E>,
+    reified_triple: impl CParser<'src, Spanned<ReifiedTriple<'src>>, E>,
 ) -> impl CParser<'src, ReifiedTripleSubjectOrObject<'src>, E> {
     choice((
         var().map(ReifiedTripleSubjectOrObject::Var),
         iri().map(ReifiedTripleSubjectOrObject::Iri),
-        rdf_literal().map(ReifiedTripleSubjectOrObject::Literal),
-        numeric_literal().map(ReifiedTripleSubjectOrObject::Literal),
-        boolean_literal().map(ReifiedTripleSubjectOrObject::Literal),
+        rdf_literal()
+            .spanned()
+            .map(ReifiedTripleSubjectOrObject::Literal),
+        numeric_literal()
+            .spanned()
+            .map(ReifiedTripleSubjectOrObject::Literal),
+        boolean_literal()
+            .spanned()
+            .map(ReifiedTripleSubjectOrObject::Literal),
         blank_node().map(ReifiedTripleSubjectOrObject::BlankNode),
         reified_triple.map(|t| ReifiedTripleSubjectOrObject::ReifiedTriple(Box::new(t))),
         triple_term()
@@ -1569,7 +1427,7 @@ fn reified_triple_subject_or_object<'src, E: CParserError<'src>>(
 
 // [119]   	TripleTerm 	  ::=   	'<<(' TripleTermSubject Verb TripleTermObject ')>>'
 #[cfg(feature = "sparql-12")]
-fn triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, TripleTerm<'src>, E> {
+fn triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, Spanned<TripleTerm<'src>>, E> {
     recursive(|triple_term| {
         triple_term_subject_or_object(triple_term.clone())
             .then(verb())
@@ -1580,6 +1438,7 @@ fn triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, TripleTerm<'
                 predicate,
                 object,
             })
+            .spanned()
     })
     .boxed()
 }
@@ -1588,14 +1447,14 @@ fn triple_term<'src, E: CParserError<'src>>() -> impl CParser<'src, TripleTerm<'
 // [121]   	TripleTermObject 	  ::=   	Var | iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | TripleTerm
 #[cfg(feature = "sparql-12")]
 fn triple_term_subject_or_object<'src, E: CParserError<'src>>(
-    triple_term: impl CParser<'src, TripleTerm<'src>, E>,
+    triple_term: impl CParser<'src, Spanned<TripleTerm<'src>>, E>,
 ) -> impl CParser<'src, VarOrTerm<'src>, E> {
     choice((
         var().map(VarOrTerm::Var),
         iri().map(VarOrTerm::Iri),
-        rdf_literal().map(VarOrTerm::Literal),
-        numeric_literal().map(VarOrTerm::Literal),
-        boolean_literal().map(VarOrTerm::Literal),
+        rdf_literal().spanned().map(VarOrTerm::Literal),
+        numeric_literal().spanned().map(VarOrTerm::Literal),
+        boolean_literal().spanned().map(VarOrTerm::Literal),
         blank_node().map(VarOrTerm::BlankNode),
         triple_term.map(|t| VarOrTerm::TripleTerm(Box::new(t))),
     ))

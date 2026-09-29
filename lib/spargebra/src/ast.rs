@@ -60,7 +60,7 @@ pub enum SelectionOption {
 }
 
 pub struct ConstructQuery<'a> {
-    pub template: Spanned<Vec<(GraphNode<'a>, PropertyList<'a>)>>,
+    pub template: Spanned<Vec<(GraphNodePath<'a>, PropertyListPath<'a>)>>,
     pub dataset_clause: Vec<GraphClause<'a>>,
     pub where_clause: Option<GraphPattern<'a>>,
     pub solution_modifier: SolutionModifier<'a>,
@@ -163,8 +163,8 @@ pub enum VarOrReifierId<'a> {
 }
 
 pub type PropertyListPath<'a> = Vec<(VarOrPath<'a>, Vec<ObjectPath<'a>>)>;
-pub type PropertyList<'a> = Vec<(Verb<'a>, Vec<Object<'a>>)>;
 
+#[cfg(feature = "sparql-12")]
 #[derive(Clone, Copy)]
 pub enum Verb<'a> {
     Var(Spanned<Var<'a>>),
@@ -175,7 +175,7 @@ pub enum Verb<'a> {
 #[derive(Clone)]
 pub enum VarOrPath<'a> {
     Var(Spanned<Var<'a>>),
-    Path(Path<'a>),
+    Path(Spanned<Path<'a>>),
 }
 
 #[derive(Clone)]
@@ -183,13 +183,6 @@ pub struct ObjectPath<'a> {
     pub graph_node: GraphNodePath<'a>,
     #[cfg(feature = "sparql-12")]
     pub annotations: Vec<Spanned<AnnotationPath<'a>>>,
-}
-
-#[derive(Clone)]
-pub struct Object<'a> {
-    pub graph_node: GraphNode<'a>,
-    #[cfg(feature = "sparql-12")]
-    pub annotations: Vec<Spanned<Annotation<'a>>>,
 }
 
 #[derive(Clone)]
@@ -203,6 +196,7 @@ pub enum Path<'a> {
     Iri(Iri<'a>),
     A,
     NegatedPropertySet(Vec<PathOneInPropertySet<'a>>),
+    Nested(Box<Self>),
 }
 
 #[derive(Clone, Copy)]
@@ -213,22 +207,14 @@ pub enum PathOneInPropertySet<'a> {
     InverseA,
 }
 
+#[allow(clippy::allow_attributes, clippy::large_enum_variant)]
 #[derive(Clone)]
 pub enum GraphNodePath<'a> {
     VarOrTerm(VarOrTerm<'a>),
     Collection(Spanned<Vec<GraphNodePath<'a>>>),
     BlankNodePropertyList(Spanned<PropertyListPath<'a>>),
     #[cfg(feature = "sparql-12")]
-    ReifiedTriple(ReifiedTriple<'a>),
-}
-
-#[derive(Clone)]
-pub enum GraphNode<'a> {
-    VarOrTerm(VarOrTerm<'a>),
-    Collection(Spanned<Vec<GraphNode<'a>>>),
-    BlankNodePropertyList(Spanned<PropertyList<'a>>),
-    #[cfg(feature = "sparql-12")]
-    ReifiedTriple(ReifiedTriple<'a>),
+    ReifiedTriple(Spanned<ReifiedTriple<'a>>),
 }
 
 #[cfg(feature = "sparql-12")]
@@ -236,13 +222,6 @@ pub enum GraphNode<'a> {
 pub enum AnnotationPath<'a> {
     Reifier(Option<VarOrReifierId<'a>>),
     AnnotationBlock(PropertyListPath<'a>),
-}
-
-#[cfg(feature = "sparql-12")]
-#[derive(Clone)]
-pub enum Annotation<'a> {
-    Reifier(Option<VarOrReifierId<'a>>),
-    AnnotationBlock(PropertyList<'a>),
 }
 
 #[derive(Clone, Copy)]
@@ -256,11 +235,11 @@ pub enum VarOrIri<'a> {
 pub enum VarOrTerm<'a> {
     Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
-    Literal(Literal<'a>),
+    Literal(Spanned<Literal<'a>>),
     BlankNode(Spanned<BlankNode<'a>>),
     Nil,
     #[cfg(feature = "sparql-12")]
-    TripleTerm(Box<TripleTerm<'a>>),
+    TripleTerm(Box<Spanned<TripleTerm<'a>>>),
 }
 
 #[cfg(feature = "sparql-12")]
@@ -309,12 +288,12 @@ pub struct ReifiedTriple<'a> {
 pub enum ReifiedTripleSubjectOrObject<'a> {
     Var(Spanned<Var<'a>>),
     Iri(Iri<'a>),
-    Literal(Literal<'a>),
+    Literal(Spanned<Literal<'a>>),
     BlankNode(Spanned<BlankNode<'a>>),
     #[cfg(feature = "sparql-12")]
-    ReifiedTriple(Box<ReifiedTriple<'a>>),
+    ReifiedTriple(Box<Spanned<ReifiedTriple<'a>>>),
     #[cfg(feature = "sparql-12")]
-    TripleTerm(Box<TripleTerm<'a>>),
+    TripleTerm(Box<Spanned<TripleTerm<'a>>>),
 }
 
 #[derive(Clone)]
@@ -561,7 +540,10 @@ pub enum Update1<'a> {
     },
 }
 
-pub type QuadPatterns<'a> = Vec<(Option<VarOrIri<'a>>, Vec<(GraphNode<'a>, PropertyList<'a>)>)>;
+pub type QuadPatterns<'a> = Vec<(
+    Option<VarOrIri<'a>>,
+    Vec<(GraphNodePath<'a>, PropertyListPath<'a>)>,
+)>;
 
 #[derive(Clone, Copy)]
 pub enum GraphRefAll<'a> {

@@ -53,21 +53,6 @@ impl From<GroundTriple> for GroundTerm {
     }
 }
 
-impl TryFrom<Term> for GroundTerm {
-    type Error = ();
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        match term {
-            Term::NamedNode(t) => Ok(t.into()),
-            Term::BlankNode(_) => Err(()),
-            Term::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "sparql-12")]
-            Term::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
-        }
-    }
-}
-
 impl From<GroundTerm> for Term {
     #[inline]
     fn from(term: GroundTerm) -> Self {
@@ -109,23 +94,6 @@ impl fmt::Display for GroundTriple {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.subject, self.predicate, self.object)
-    }
-}
-
-impl TryFrom<Triple> for GroundTriple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: Triple) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: if let NamedOrBlankNode::NamedNode(s) = triple.subject {
-                s
-            } else {
-                return Err(());
-            },
-            predicate: triple.predicate,
-            object: triple.object.try_into()?,
-        })
     }
 }
 
@@ -174,19 +142,6 @@ impl From<NamedNode> for GraphName {
     #[inline]
     fn from(node: NamedNode) -> Self {
         Self::NamedNode(node)
-    }
-}
-
-impl TryFrom<GraphNamePattern> for GraphName {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: GraphNamePattern) -> Result<Self, Self::Error> {
-        match pattern {
-            GraphNamePattern::NamedNode(t) => Ok(t.into()),
-            GraphNamePattern::DefaultGraph => Ok(Self::DefaultGraph),
-            GraphNamePattern::Variable(_) => Err(()),
-        }
     }
 }
 
@@ -251,20 +206,6 @@ impl fmt::Display for Quad {
     }
 }
 
-impl TryFrom<QuadTemplate> for Quad {
-    type Error = ();
-
-    #[inline]
-    fn try_from(quad: QuadTemplate) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: quad.subject.try_into()?,
-            predicate: quad.predicate.try_into()?,
-            object: quad.object.try_into()?,
-            graph_name: quad.graph_name.try_into()?,
-        })
-    }
-}
-
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) without blank nodes.
 ///
 /// The default string formatter is returning a N-Quads representation.
@@ -326,24 +267,6 @@ impl fmt::Display for GroundQuad {
     }
 }
 
-impl TryFrom<Quad> for GroundQuad {
-    type Error = ();
-
-    #[inline]
-    fn try_from(quad: Quad) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: if let NamedOrBlankNode::NamedNode(s) = quad.subject {
-                s
-            } else {
-                return Err(());
-            },
-            predicate: quad.predicate,
-            object: quad.object.try_into()?,
-            graph_name: quad.graph_name,
-        })
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NamedNodePattern {
@@ -382,18 +305,6 @@ impl From<Variable> for NamedNodePattern {
     #[inline]
     fn from(var: Variable) -> Self {
         Self::Variable(var)
-    }
-}
-
-impl TryFrom<NamedNodePattern> for NamedNode {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: NamedNodePattern) -> Result<Self, Self::Error> {
-        match pattern {
-            NamedNodePattern::NamedNode(t) => Ok(t),
-            NamedNodePattern::Variable(_) => Err(()),
-        }
     }
 }
 
@@ -481,22 +392,6 @@ impl From<NamedNodePattern> for TermPattern {
             NamedNodePattern::NamedNode(node) => node.into(),
             NamedNodePattern::Variable(var) => var.into(),
         }
-    }
-}
-
-impl TryFrom<TermTemplate> for TermPattern {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: TermTemplate) -> Result<Self, Self::Error> {
-        Ok(match pattern {
-            TermTemplate::NamedNode(named_node) => named_node.into(),
-            TermTemplate::BlankNode(_) => return Err(()),
-            TermTemplate::Literal(literal) => literal.into(),
-            #[cfg(feature = "sparql-12")]
-            TermTemplate::Triple(triple) => TriplePattern::try_from(*triple)?.into(),
-            TermTemplate::Variable(variable) => variable.into(),
-        })
     }
 }
 
@@ -622,37 +517,6 @@ impl From<TermPattern> for TermTemplate {
     }
 }
 
-impl TryFrom<TermTemplate> for NamedOrBlankNode {
-    type Error = ();
-
-    #[inline]
-    fn try_from(term: TermTemplate) -> Result<Self, Self::Error> {
-        match term {
-            TermTemplate::NamedNode(t) => Ok(t.into()),
-            TermTemplate::BlankNode(t) => Ok(t.into()),
-            #[cfg(feature = "sparql-12")]
-            TermTemplate::Triple(_) => Err(()),
-            TermTemplate::Literal(_) | TermTemplate::Variable(_) => Err(()),
-        }
-    }
-}
-
-impl TryFrom<TermTemplate> for Term {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: TermTemplate) -> Result<Self, Self::Error> {
-        match pattern {
-            TermTemplate::NamedNode(t) => Ok(t.into()),
-            TermTemplate::BlankNode(t) => Ok(t.into()),
-            TermTemplate::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "sparql-12")]
-            TermTemplate::Triple(t) => Ok(Triple::try_from(*t)?.into()),
-            TermTemplate::Variable(_) => Err(()),
-        }
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GraphNamePattern {
@@ -771,20 +635,6 @@ impl From<GroundTriple> for TriplePattern {
     }
 }
 
-#[cfg(feature = "sparql-12")]
-impl TryFrom<TripleTemplate> for TriplePattern {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: TripleTemplate) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
 /// A triple with variables.
 ///
 /// It is used in [`ConstructQuery`](crate::query::ConstructQuery).
@@ -850,19 +700,6 @@ impl From<TriplePattern> for TripleTemplate {
     }
 }
 
-impl TryFrom<TripleTemplate> for Triple {
-    type Error = ();
-
-    #[inline]
-    fn try_from(triple: TripleTemplate) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: triple.subject.try_into()?,
-            predicate: triple.predicate.try_into()?,
-            object: triple.object.try_into()?,
-        })
-    }
-}
-
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QuadPattern {
@@ -906,20 +743,6 @@ impl fmt::Display for QuadPattern {
                 self.graph_name, self.subject, self.predicate, self.object
             )
         }
-    }
-}
-
-impl TryFrom<QuadTemplate> for QuadPattern {
-    type Error = ();
-
-    #[inline]
-    fn try_from(pattern: QuadTemplate) -> Result<Self, Self::Error> {
-        Ok(Self {
-            subject: pattern.subject.try_into()?,
-            predicate: pattern.predicate,
-            object: pattern.object.try_into()?,
-            graph_name: pattern.graph_name,
-        })
     }
 }
 
