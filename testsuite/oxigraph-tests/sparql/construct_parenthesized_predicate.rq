@@ -1,0 +1,1 @@
+CONSTRUCT { ?s (<urn:p>) ?o } WHERE { ?s <urn:p> ?o }

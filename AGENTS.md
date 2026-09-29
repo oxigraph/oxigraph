@@ -36,7 +36,7 @@ Do not forget to `git add` the new test files.
 
 ## Fuzz testing
 
-When modifying one of the crates listed below, run each of its relevant fuzz targets for one minute with:
+When modifying one of the crates listed below, you can run each of its relevant fuzz targets for one minute with:
 ```shell
 cargo fuzz run <target> --sanitizer none -- -max_total_time=60
 ```
