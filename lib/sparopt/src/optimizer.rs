@@ -843,7 +843,12 @@ impl Optimizer {
                     .enumerate()
                     .filter(|(_, v)| **v)
                     .map(|(i, _)| i)
-                    .min_by_key(|i| estimate_query_expression_size(&to_reorder[*i], input_types))
+                    .min_by_key(|i| {
+                        (
+                            is_service(&to_reorder[*i]),
+                            estimate_query_expression_size(&to_reorder[*i], input_types),
+                        )
+                    })
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
                     let mut output = to_reorder[next_entry_id].clone();
@@ -859,13 +864,12 @@ impl Optimizer {
                         })
                         .min_by_key(|i| {
                             // Estimation of the join cost
-                            if cfg!(feature = "sep-0006")
+                            let cost = if cfg!(feature = "sep-0006")
                                 && is_fit_for_for_loop_join(
                                     &to_reorder[*i],
                                     input_types,
                                     &output_types,
-                                )
-                            {
+                                ) {
                                 estimate_lateral_cost(
                                     &output,
                                     &output_types,
@@ -885,7 +889,8 @@ impl Optimizer {
                                     },
                                     input_types,
                                 )
-                            }
+                            };
+                            (is_service(&to_reorder[*i]), cost)
                         })
                     {
                         not_yet_reordered_ids[next_id] = false; // It's now done
@@ -1082,6 +1087,16 @@ impl Optimizer {
                 aggregates,
             ),
         }
+    }
+}
+
+/// SERVICE calls are joined last so that the evaluator can send them the bindings of the other operands.
+fn is_service(expression: &QueryExpression) -> bool {
+    match expression {
+        QueryExpression::Service { .. } => true,
+        QueryExpression::Filter { inner, .. } => is_service(inner),
+        QueryExpression::Union { inner } => inner.iter().all(is_service),
+        _ => false,
     }
 }
 
