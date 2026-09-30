@@ -1145,6 +1145,25 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
+        // A SERVICE joined with anything is evaluated as a bind join
+        if let Some(services) = peel_services(right) {
+            return self.service_bind_join_evaluator(
+                left,
+                services,
+                None,
+                encoded_variables,
+                stat_children,
+            );
+        }
+        if let Some(services) = peel_services(left) {
+            return self.service_bind_join_evaluator(
+                right,
+                services,
+                None,
+                encoded_variables,
+                stat_children,
+            );
+        }
         let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
         stat_children.push(left_stats);
         let (right, right_stats) = self.query_expression_evaluator(right, encoded_variables);
@@ -1341,6 +1360,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
+        // OPTIONAL { SERVICE ... } is evaluated as a bind left join
+        if let Some(services) = peel_services(right) {
+            return self.service_bind_join_evaluator(
+                left,
+                services,
+                Some(expression),
+                encoded_variables,
+                stat_children,
+            );
+        }
         let (left, left_stats) = self.query_expression_evaluator(left, encoded_variables);
         stat_children.push(left_stats);
         let (right, right_stats) = self.query_expression_evaluator(right, encoded_variables);
@@ -1791,6 +1820,304 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         Ok(self.encode_bindings(variables, iter))
     }
 
+    /// Builds `outer ⋈ services`, or `outer ⟕ services` when `left_join_expression` is set, as a bind join.
+    ///
+    /// `services` are the SERVICE branches of a UNION, or a single SERVICE. `outer` is
+    /// evaluated once. For each branch its tuples are grouped by service name, so
+    /// `SERVICE ?g` works when `outer` binds `?g`, then by their values of the variables in
+    /// scope in the SERVICE body. Each batch of groups is sent as one `VALUES` block whose
+    /// rows carry their group index, and each result joins back to its own group only, so
+    /// solution multiplicities are the same as with a plain join.
+    fn service_bind_join_evaluator(
+        &self,
+        outer: &QueryExpression,
+        services: Vec<(&QueryExpression, Vec<&Expression>)>,
+        left_join_expression: Option<&Expression>,
+        encoded_variables: &mut Vec<Variable>,
+        stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
+    ) -> Result<InternalTupleEvaluator<'a, D::InternalTerm>, QueryEvaluationError> {
+        let (outer, outer_stats) = self.query_expression_evaluator(outer, encoded_variables);
+        stat_children.push(outer_stats);
+        let outer = outer?;
+        let expression = left_join_expression
+            .map(|e| {
+                self.effective_boolean_value_expression_evaluator(
+                    e,
+                    encoded_variables,
+                    stat_children,
+                )
+            })
+            .transpose()?;
+        let branches = services
+            .into_iter()
+            .map(|(service, filters)| {
+                self.service_bind_join_branch(service, filters, encoded_variables)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let join = Rc::new(ServiceBindJoin {
+            branches,
+            variables: Rc::from(encoded_variables.as_slice()),
+            expression,
+        });
+        let eval = self.clone();
+        Ok(Rc::new(move |from| {
+            Box::new(
+                eval.evaluate_service_bind_join(&join, outer(from))
+                    .into_iter(),
+            )
+        }))
+    }
+
+    fn service_bind_join_branch(
+        &self,
+        service: &QueryExpression,
+        filters: Vec<&Expression>,
+        encoded_variables: &mut Vec<Variable>,
+    ) -> Result<ServiceBindJoinBranch<D::InternalTerm>, QueryEvaluationError> {
+        let QueryExpression::Service {
+            name,
+            inner,
+            silent,
+        } = service
+        else {
+            unreachable!("peel_service only returns SERVICE patterns")
+        };
+        let service_name =
+            TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset)?;
+        // FILTERs over a non-SILENT SERVICE are evaluated remotely, inside the SERVICE scope
+        let mut body = spargebra::algebra::QueryExpression::from(inner.as_ref());
+        for filter in filters {
+            body = spargebra::algebra::QueryExpression::Filter {
+                expr: filter.into(),
+                inner: Box::new(body),
+            };
+        }
+        let mut shared = Vec::new();
+        body.on_in_scope_variable(|v| {
+            if !shared.contains(v) {
+                shared.push(v.clone());
+            }
+        });
+        let shared_slots = shared
+            .iter()
+            .map(|v| encode_variable(encoded_variables, v))
+            .collect::<Vec<_>>();
+        inner.lookup_used_variables(&mut |v| {
+            encode_variable(encoded_variables, v);
+        });
+        Ok(ServiceBindJoinBranch {
+            service_name,
+            body,
+            shared,
+            shared_slots,
+            silent: *silent,
+        })
+    }
+
+    fn evaluate_service_bind_join(
+        &self,
+        join: &ServiceBindJoin<'a, D::InternalTerm>,
+        outer: InternalTuplesIterator<'a, D::InternalTerm>,
+    ) -> Vec<Result<InternalTuple<D::InternalTerm>, QueryEvaluationError>> {
+        let mut output = Vec::new();
+        let outer = outer
+            .filter_map(|tuple| match tuple {
+                Ok(tuple) => Some(tuple),
+                Err(error) => {
+                    output.push(Err(error));
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if outer.is_empty() {
+            return output;
+        }
+        let mut matched = vec![false; outer.len()];
+        for branch in &join.branches {
+            // Service name -> groups of outer tuple ids, each keyed by its shared variable values
+            let mut services = Vec::<(NamedNode, Vec<Vec<usize>>)>::new();
+            let mut service_ids = FxHashMap::<NamedNode, usize>::default();
+            let mut group_ids = Vec::<FxHashMap<Vec<Option<D::InternalTerm>>, usize>>::new();
+            for (id, tuple) in outer.iter().enumerate() {
+                let service_name = match self.bind_join_service_name(branch, tuple) {
+                    Ok(service_name) => service_name,
+                    Err(error) => {
+                        if branch.silent && error.can_be_silent() {
+                            // SILENT turns the failure into the empty solution
+                            join.output(
+                                tuple,
+                                &[InternalTuple::with_capacity(0)],
+                                &mut matched[id],
+                                &mut output,
+                            );
+                        } else {
+                            output.push(Err(error));
+                        }
+                        continue;
+                    }
+                };
+                let service_id = *service_ids.entry(service_name.clone()).or_insert_with(|| {
+                    services.push((service_name, Vec::new()));
+                    group_ids.push(FxHashMap::default());
+                    services.len() - 1
+                });
+                let key = branch
+                    .shared_slots
+                    .iter()
+                    .map(|slot| tuple.get(*slot).cloned())
+                    .collect::<Vec<_>>();
+                let groups = &mut services[service_id].1;
+                let group_id = *group_ids[service_id].entry(key).or_insert_with(|| {
+                    groups.push(Vec::new());
+                    groups.len() - 1
+                });
+                groups[group_id].push(id);
+            }
+            for (service_name, groups) in services {
+                for batch in groups.chunks(SERVICE_BIND_JOIN_BATCH_SIZE) {
+                    let results =
+                        match self.bind_join_request(join, branch, &service_name, batch, &outer) {
+                            Ok(results) => results,
+                            Err(error) if branch.silent && error.can_be_silent() => {
+                                vec![vec![InternalTuple::with_capacity(0)]; batch.len()]
+                            }
+                            Err(error) => {
+                                output.push(Err(error));
+                                continue;
+                            }
+                        };
+                    for (group, results) in batch.iter().zip(results) {
+                        for id in group {
+                            join.output(&outer[*id], &results, &mut matched[*id], &mut output);
+                        }
+                    }
+                }
+            }
+        }
+        if join.expression.is_some() {
+            // Left join: the outer tuples no branch joined with are kept as they are
+            output.extend(
+                outer
+                    .into_iter()
+                    .zip(matched)
+                    .filter(|(_, matched)| !matched)
+                    .map(|(tuple, _)| Ok(tuple)),
+            );
+        }
+        output
+    }
+
+    fn bind_join_service_name(
+        &self,
+        branch: &ServiceBindJoinBranch<D::InternalTerm>,
+        tuple: &InternalTuple<D::InternalTerm>,
+    ) -> Result<NamedNode, QueryEvaluationError> {
+        let service_name = branch
+            .service_name
+            .get_pattern_value(
+                tuple,
+                #[cfg(feature = "sparql-12")]
+                &self.dataset,
+            )?
+            .ok_or(QueryEvaluationError::UnboundService)?;
+        match self.dataset.externalize_term(service_name)? {
+            Term::NamedNode(service_name) => Ok(service_name),
+            term => Err(QueryEvaluationError::InvalidServiceName(term)),
+        }
+    }
+
+    /// Sends one batch of groups (ids into `outer`) to `service_name` and returns each group's results.
+    fn bind_join_request(
+        &self,
+        join: &ServiceBindJoin<'a, D::InternalTerm>,
+        branch: &ServiceBindJoinBranch<D::InternalTerm>,
+        service_name: &NamedNode,
+        batch: &[Vec<usize>],
+        outer: &[InternalTuple<D::InternalTerm>],
+    ) -> Result<Vec<Vec<InternalTuple<D::InternalTerm>>>, QueryEvaluationError> {
+        let row_variable = Variable::new_unchecked(SERVICE_BIND_JOIN_ROW_VARIABLE);
+        // Blank nodes can't be sent: those values stay UNDEF and are checked on the way back
+        let rows = batch
+            .iter()
+            .map(|group| {
+                branch
+                    .shared_slots
+                    .iter()
+                    .map(|slot| {
+                        Ok(match outer[group[0]].get(*slot) {
+                            Some(term) => match self.dataset.externalize_term(term.clone())? {
+                                Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
+                                Term::Literal(literal) => Some(GroundTerm::Literal(literal)),
+                                _ => None,
+                            },
+                            None => None,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, QueryEvaluationError>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Only the columns bound in some row are sent
+        let columns = (0..branch.shared.len())
+            .filter(|i| rows.iter().any(|row| row[*i].is_some()))
+            .collect::<Vec<_>>();
+        let values = spargebra::algebra::QueryExpression::Values {
+            variables: once(row_variable.clone())
+                .chain(columns.iter().map(|i| branch.shared[*i].clone()))
+                .collect(),
+            bindings: rows
+                .iter()
+                .enumerate()
+                .map(|(id, row)| {
+                    once(Some(GroundTerm::Literal(Literal::new_typed_literal(
+                        id.to_string(),
+                        oxrdf::vocab::xsd::INTEGER,
+                    ))))
+                    .chain(columns.iter().map(|i| row[*i].clone()))
+                    .collect()
+                })
+                .collect(),
+        };
+        let pattern = spargebra::algebra::QueryExpression::Join {
+            left: Box::new(values),
+            right: Box::new(branch.body.clone()),
+        };
+        let solutions =
+            self.service_handler
+                .handle(service_name, &pattern, self.base_iri.as_ref())?;
+        let mut results = vec![Vec::new(); batch.len()];
+        for solution in solutions {
+            let solution = solution?;
+            let mut tuple = InternalTuple::with_capacity(join.variables.len());
+            let mut id = None;
+            for (variable, term) in &solution {
+                if *variable == row_variable {
+                    id = match term {
+                        Term::Literal(literal) => literal.value().parse::<usize>().ok(),
+                        _ => None,
+                    };
+                } else {
+                    put_variable_value(
+                        variable,
+                        &join.variables,
+                        self.dataset.internalize_term(term.clone())?,
+                        &mut tuple,
+                    );
+                }
+            }
+            id.and_then(|id| results.get_mut(id))
+                .ok_or_else(|| {
+                    QueryEvaluationError::Service(
+                        format!(
+                            "The service {service_name} returned a solution without a valid ?{SERVICE_BIND_JOIN_ROW_VARIABLE}"
+                        )
+                        .into(),
+                    )
+                })?
+                .push(tuple);
+        }
+        Ok(results)
+    }
+
     fn accumulator_builder(
         &self,
         expression: &AggregateExpression,
@@ -2230,6 +2557,80 @@ fn decode_bindings<'a, D: QueryableDataset<'a>>(
             Ok(result)
         })),
     )
+}
+
+/// Number of outer groups sent per SERVICE request by a bind join.
+const SERVICE_BIND_JOIN_BATCH_SIZE: usize = 100;
+/// Variable carrying a group's index in the `VALUES` block a bind join sends.
+const SERVICE_BIND_JOIN_ROW_VARIABLE: &str = "__oxigraph_bind_join_row";
+
+/// SERVICE calls joined with the tuples of another pattern (see `service_bind_join_evaluator`).
+struct ServiceBindJoin<'a, T> {
+    branches: Vec<ServiceBindJoinBranch<T>>,
+    variables: Rc<[Variable]>,
+    expression: Option<ExpressionEvaluator<'a, InternalTuple<T>, bool, QueryEvaluationError>>,
+}
+
+impl<T: Clone + Eq> ServiceBindJoin<'_, T> {
+    /// Joins `tuple` with its group's `results`, setting `matched` if any joined tuple is output.
+    fn output(
+        &self,
+        tuple: &InternalTuple<T>,
+        results: &[InternalTuple<T>],
+        matched: &mut bool,
+        output: &mut Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
+    ) {
+        for joined in results.iter().filter_map(|r| tuple.combine_with(r)) {
+            match self
+                .expression
+                .as_ref()
+                .map_or(Ok(Some(true)), |e| e(&joined))
+            {
+                Ok(Some(true)) => output.push(Ok(joined)),
+                Ok(Some(false) | None) => continue,
+                Err(error) => output.push(Err(error)),
+            }
+            *matched = true;
+        }
+    }
+}
+
+/// One SERVICE of a bind join, with the variables in scope in its body.
+struct ServiceBindJoinBranch<T> {
+    service_name: TupleSelector<T>,
+    body: spargebra::algebra::QueryExpression,
+    shared: Vec<Variable>,
+    shared_slots: Vec<usize>,
+    silent: bool,
+}
+
+/// The SERVICE under `pattern`'s FILTERs, and those FILTERs' expressions.
+///
+/// FILTERs are only peeled off a non-SILENT SERVICE: SILENT can turn an error into a
+/// solution the FILTER must still see.
+fn peel_service(pattern: &QueryExpression) -> Option<(&QueryExpression, Vec<&Expression>)> {
+    let mut filters = Vec::new();
+    let mut current = pattern;
+    loop {
+        match current {
+            QueryExpression::Service { silent, .. } => {
+                return (!silent || filters.is_empty()).then_some((current, filters));
+            }
+            QueryExpression::Filter { inner, expression } => {
+                filters.push(expression);
+                current = inner;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// `pattern`'s SERVICEs (see `peel_service`) if it is one, or a UNION of them.
+fn peel_services(pattern: &QueryExpression) -> Option<Vec<(&QueryExpression, Vec<&Expression>)>> {
+    match pattern {
+        QueryExpression::Union { inner } => inner.iter().map(peel_service).collect(),
+        _ => Some(vec![peel_service(pattern)?]),
+    }
 }
 
 fn encode_initial_bindings<'a, D: QueryableDataset<'a>>(

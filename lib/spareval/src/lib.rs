@@ -1369,4 +1369,225 @@ mod tests {
         let result = evaluator.evaluate_expression(&expr, std::iter::empty());
         assert!(result.is_none());
     }
+
+    /// Answers each SERVICE call from its own dataset and records the queries it receives.
+    #[derive(Default)]
+    struct RecordingServiceHandler {
+        services: HashMap<NamedNode, Dataset>,
+        calls: std::sync::Mutex<Vec<(NamedNode, String)>>,
+    }
+
+    impl RecordingServiceHandler {
+        fn with_service(mut self, name: &str, triples: &[(&str, &str, Term)]) -> Self {
+            let mut dataset = Dataset::new();
+            for (s, p, o) in triples {
+                dataset.insert(Quad::new(
+                    NamedNode::new_unchecked(s.to_string()),
+                    NamedNode::new_unchecked(p.to_string()),
+                    o.clone(),
+                    GraphName::DefaultGraph,
+                ));
+            }
+            self.services
+                .insert(NamedNode::new_unchecked(name.to_owned()), dataset);
+            self
+        }
+
+        fn calls(&self) -> Vec<(NamedNode, String)> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl DefaultServiceHandler for &'static RecordingServiceHandler {
+        type Error = QueryEvaluationError;
+
+        fn handle(
+            &self,
+            service_name: &NamedNode,
+            expression: &spargebra::algebra::QueryExpression,
+            base_iri: Option<&Iri<OxString>>,
+        ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
+            let query = Query::from(spargebra::query::SelectQuery {
+                dataset: None,
+                expression: expression.clone(),
+                base_iri: base_iri.cloned(),
+            });
+            self.calls
+                .lock()
+                .map_err(|e| QueryEvaluationError::Service(e.to_string().into()))?
+                .push((service_name.clone(), query.to_string()));
+            let dataset = self.services.get(service_name).ok_or_else(|| {
+                QueryEvaluationError::Service(format!("Service {service_name} not found").into())
+            })?;
+            let QueryResults::Solutions(solutions) =
+                QueryEvaluator::new().prepare(&query).execute(dataset)?
+            else {
+                unreachable!("a SELECT query returns solutions")
+            };
+            Ok(QuerySolutionIter::new(
+                solutions.variables().into(),
+                solutions.collect::<Vec<_>>(),
+            ))
+        }
+    }
+
+    fn evaluate_with_services(
+        handler: &'static RecordingServiceHandler,
+        query: &str,
+    ) -> Vec<Vec<Option<String>>> {
+        let query = SparqlParser::new().parse_query(query).unwrap();
+        let dataset = Dataset::new();
+        let QueryResults::Solutions(solutions) = QueryEvaluator::new()
+            .with_default_service_handler(handler)
+            .prepare(&query)
+            .execute(&dataset)
+            .unwrap()
+        else {
+            unreachable!("a SELECT query returns solutions")
+        };
+        let variables = solutions.variables().to_vec();
+        let mut rows = solutions
+            .map(|solution| {
+                let solution = solution.unwrap();
+                variables
+                    .iter()
+                    .map(|v| solution.get(v).map(Term::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        rows.sort();
+        rows
+    }
+
+    fn ages() -> RecordingServiceHandler {
+        RecordingServiceHandler::default().with_service(
+            "http://example.com/ages",
+            &[
+                (
+                    "http://example.com/a",
+                    "http://example.com/age",
+                    Literal::from(30).into(),
+                ),
+                (
+                    "http://example.com/a",
+                    "http://example.com/age",
+                    Literal::from(31).into(),
+                ),
+                (
+                    "http://example.com/b",
+                    "http://example.com/age",
+                    Literal::from(40).into(),
+                ),
+                (
+                    "http://example.com/c",
+                    "http://example.com/age",
+                    Literal::from(50).into(),
+                ),
+            ],
+        )
+    }
+
+    fn leak(handler: RecordingServiceHandler) -> &'static RecordingServiceHandler {
+        Box::leak(Box::new(handler))
+    }
+
+    #[test]
+    fn service_bind_join_sends_outer_bindings() {
+        let handler = leak(ages());
+        let rows = evaluate_with_services(
+            handler,
+            "SELECT ?s ?age WHERE {
+                VALUES ?s { <http://example.com/a> <http://example.com/b> }
+                SERVICE <http://example.com/ages> { ?s <http://example.com/age> ?age }
+            }",
+        );
+        assert_eq!(rows.len(), 3);
+        let calls = handler.calls();
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].1.contains("VALUES"), "{}", calls[0].1);
+        assert!(
+            calls[0].1.contains("<http://example.com/b>"),
+            "{}",
+            calls[0].1
+        );
+    }
+
+    #[test]
+    fn service_bind_join_resolves_variable_service_names() {
+        let handler = leak(ages().with_service(
+            "http://example.com/names",
+            &[(
+                "http://example.com/a",
+                "http://example.com/age",
+                Literal::from("unknown").into(),
+            )],
+        ));
+        let rows = evaluate_with_services(
+            handler,
+            "SELECT ?g ?age WHERE {
+                VALUES ?g { <http://example.com/ages> <http://example.com/names> }
+                SERVICE ?g { <http://example.com/a> <http://example.com/age> ?age }
+            }",
+        );
+        assert_eq!(rows.len(), 3);
+        assert_eq!(handler.calls().len(), 2);
+    }
+
+    #[test]
+    fn service_bind_join_keeps_duplicate_solutions() {
+        let handler = leak(ages());
+        let rows = evaluate_with_services(
+            handler,
+            "SELECT ?s ?age WHERE {
+                VALUES (?s ?k) { (<http://example.com/a> 1) (<http://example.com/a> 2) (<http://example.com/a> 1) }
+                SERVICE <http://example.com/ages> { ?s <http://example.com/age> ?age }
+            }",
+        );
+        // 3 outer solutions x 2 ages, from a single VALUES row sent
+        assert_eq!(rows.len(), 6);
+        assert_eq!(handler.calls().len(), 1);
+    }
+
+    #[test]
+    fn service_bind_join_optional_union() {
+        let handler = leak(ages().with_service("http://example.com/empty", &[]));
+        let rows = evaluate_with_services(
+            handler,
+            "SELECT ?s ?age WHERE {
+                VALUES ?s { <http://example.com/b> <http://example.com/z> }
+                OPTIONAL {
+                    { SERVICE <http://example.com/ages> { ?s <http://example.com/age> ?age } }
+                    UNION
+                    { SERVICE <http://example.com/empty> { ?s <http://example.com/age> ?age } }
+                }
+            }",
+        );
+        assert_eq!(
+            rows,
+            [
+                vec![
+                    Some("<http://example.com/b>".to_owned()),
+                    Some(Literal::from(40).to_string())
+                ],
+                vec![Some("<http://example.com/z>".to_owned()), None],
+            ]
+        );
+        assert_eq!(handler.calls().len(), 2);
+    }
+
+    #[test]
+    fn service_bind_join_silent_keeps_outer_solutions() {
+        let handler = leak(RecordingServiceHandler::default());
+        let rows = evaluate_with_services(
+            handler,
+            "SELECT ?s ?o WHERE {
+                VALUES ?s { <http://example.com/a> }
+                SERVICE SILENT <http://example.com/missing> { ?s ?p ?o }
+            }",
+        );
+        assert_eq!(
+            rows,
+            [vec![Some("<http://example.com/a>".to_owned()), None]]
+        );
+    }
 }
