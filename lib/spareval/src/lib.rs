@@ -1590,4 +1590,39 @@ mod tests {
             [vec![Some("<http://example.com/a>".to_owned()), None]]
         );
     }
+
+    #[test]
+    fn service_bind_join_empty_outer_still_reports_service_errors() {
+        let handler = leak(RecordingServiceHandler::default());
+        let query = SparqlParser::new()
+            .parse_query(
+                "SELECT * WHERE {
+                    ?s <http://example.com/p> ?v .
+                    SERVICE <http://example.com/missing> { ?s ?p ?o }
+                }",
+            )
+            .unwrap();
+        let dataset = Dataset::new();
+        for evaluator in [
+            QueryEvaluator::new(),
+            QueryEvaluator::new().without_optimizations(),
+        ] {
+            let QueryResults::Solutions(mut solutions) = evaluator
+                .with_default_service_handler(handler)
+                .prepare(&query)
+                .execute(&dataset)
+                .unwrap()
+            else {
+                unreachable!("a SELECT query returns solutions")
+            };
+            assert!(matches!(
+                solutions.next(),
+                Some(Err(QueryEvaluationError::Service(_)))
+            ));
+        }
+        // The service is called with an empty VALUES block, not with the unrestricted pattern
+        let calls = handler.calls();
+        assert_eq!(calls.len(), 2);
+        assert!(calls[0].1.contains("VALUES"), "{}", calls[0].1);
+    }
 }

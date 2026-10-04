@@ -1930,6 +1930,20 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             })
             .collect::<Vec<_>>();
         if outer.is_empty() {
+            // The join is empty, but a failing non-SILENT SERVICE must still fail the query:
+            // each one with a constant name is called once with an empty VALUES block
+            for branch in join.branches.iter().filter(|branch| !branch.silent) {
+                if let Err(error) = self
+                    .bind_join_service_name(branch, &InternalTuple::with_capacity(0))
+                    .and_then(|service_name| {
+                        self.bind_join_request(join, branch, &service_name, &[], &outer)
+                    })
+                {
+                    if !matches!(error, QueryEvaluationError::UnboundService) {
+                        output.push(Err(error));
+                    }
+                }
+            }
             return output;
         }
         let mut matched = vec![false; outer.len()];
@@ -2036,7 +2050,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         outer: &[InternalTuple<D::InternalTerm>],
     ) -> Result<Vec<Vec<InternalTuple<D::InternalTerm>>>, QueryEvaluationError> {
         let row_variable = Variable::new_unchecked(SERVICE_BIND_JOIN_ROW_VARIABLE);
-        // Blank nodes can't be sent: those values stay UNDEF and are checked on the way back
+        // Blank nodes (even nested in triple terms) can't be sent: those values stay UNDEF and are checked on the way back
         let rows = batch
             .iter()
             .map(|group| {
@@ -2045,11 +2059,10 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     .iter()
                     .map(|slot| {
                         Ok(match outer[group[0]].get(*slot) {
-                            Some(term) => match self.dataset.externalize_term(term.clone())? {
-                                Term::NamedNode(node) => Some(GroundTerm::NamedNode(node)),
-                                Term::Literal(literal) => Some(GroundTerm::Literal(literal)),
-                                _ => None,
-                            },
+                            Some(term) => {
+                                GroundTerm::try_from(self.dataset.externalize_term(term.clone())?)
+                                    .ok()
+                            }
                             None => None,
                         })
                     })
