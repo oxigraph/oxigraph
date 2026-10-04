@@ -845,7 +845,7 @@ impl Optimizer {
                     .map(|(i, _)| i)
                     .min_by_key(|i| {
                         (
-                            is_service(&to_reorder[*i]),
+                            !is_service_name_bound(&to_reorder[*i], input_types),
                             estimate_query_expression_size(&to_reorder[*i], input_types),
                         )
                     })
@@ -854,45 +854,62 @@ impl Optimizer {
                     let mut output = to_reorder[next_entry_id].clone();
                     let mut output_types = to_reorder_types[next_entry_id].clone();
                     // We look for an other child to join with that does not blow up the join cost
-                    while let Some(next_id) = not_yet_reordered_ids
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, v)| **v)
-                        .map(|(i, _)| i)
-                        .filter(|i| {
-                            has_common_variables(&output_types, &to_reorder_types[*i], input_types)
-                        })
-                        .min_by_key(|i| {
-                            // Estimation of the join cost
-                            let cost = if cfg!(feature = "sep-0006")
-                                && is_fit_for_for_loop_join(
-                                    &to_reorder[*i],
-                                    input_types,
+                    loop {
+                        // The name variables of the SERVICEs still waiting for them to be bound
+                        let pending_names = not_yet_reordered_ids
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, v)| **v)
+                            .flat_map(|(i, _)| unbound_service_names(&to_reorder[i], &output_types))
+                            .collect::<Vec<_>>();
+                        let Some(next_id) = not_yet_reordered_ids
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, v)| **v)
+                            .map(|(i, _)| i)
+                            .filter(|i| {
+                                has_common_variables(
                                     &output_types,
-                                ) {
-                                estimate_lateral_cost(
-                                    &output,
-                                    &output_types,
-                                    &to_reorder[*i],
+                                    &to_reorder_types[*i],
                                     input_types,
-                                )
-                            } else {
-                                estimate_join_cost(
-                                    &output,
-                                    &to_reorder[*i],
-                                    &JoinAlgorithm::HashBuildLeftProbeRight {
-                                        keys: join_key_variables(
-                                            &output_types,
-                                            &to_reorder_types[*i],
-                                            input_types,
-                                        ),
-                                    },
-                                    input_types,
-                                )
-                            };
-                            (is_service(&to_reorder[*i]), cost)
-                        })
-                    {
+                                ) || pending_names.iter().any(|name| {
+                                    is_named_node_pattern_bound(name, &to_reorder_types[*i])
+                                })
+                            })
+                            .min_by_key(|i| {
+                                // Estimation of the join cost
+                                let cost = if cfg!(feature = "sep-0006")
+                                    && is_fit_for_for_loop_join(
+                                        &to_reorder[*i],
+                                        input_types,
+                                        &output_types,
+                                    ) {
+                                    estimate_lateral_cost(
+                                        &output,
+                                        &output_types,
+                                        &to_reorder[*i],
+                                        input_types,
+                                    )
+                                } else {
+                                    estimate_join_cost(
+                                        &output,
+                                        &to_reorder[*i],
+                                        &JoinAlgorithm::HashBuildLeftProbeRight {
+                                            keys: join_key_variables(
+                                                &output_types,
+                                                &to_reorder_types[*i],
+                                                input_types,
+                                            ),
+                                        },
+                                        input_types,
+                                    )
+                                };
+                                // A SERVICE waits for the operand binding its name
+                                (!is_service_name_bound(&to_reorder[*i], &output_types), cost)
+                            })
+                        else {
+                            break;
+                        };
                         not_yet_reordered_ids[next_id] = false; // It's now done
                         let next = to_reorder[next_id].clone();
                         #[cfg(feature = "sep-0006")]
@@ -1090,13 +1107,77 @@ impl Optimizer {
     }
 }
 
-/// SERVICE calls are joined last so that the evaluator can send them the bindings of the other operands.
-fn is_service(expression: &QueryExpression) -> bool {
+/// Whether `expression`, if it is a SERVICE (or a FILTER, BIND or UNION of them), can be
+/// called: its name is an IRI or a variable bound by `types`.
+fn is_service_name_bound(expression: &QueryExpression, types: &VariableTypes) -> bool {
     match expression {
-        QueryExpression::Service { .. } => true,
-        QueryExpression::Filter { inner, .. } => is_service(inner),
-        QueryExpression::Union { inner } => inner.iter().all(is_service),
-        _ => false,
+        QueryExpression::Service { name, .. } => is_named_node_pattern_bound(name, types),
+        QueryExpression::Filter { inner, .. } | QueryExpression::Extend { inner, .. } => {
+            is_service_name_bound(inner, types)
+        }
+        QueryExpression::Union { inner } => inner.iter().all(|i| is_service_name_bound(i, types)),
+        _ => true,
+    }
+}
+
+/// The name variables of `expression`'s SERVICEs (see `is_service_name_bound`) unbound in `types`.
+fn unbound_service_names(
+    expression: &QueryExpression,
+    types: &VariableTypes,
+) -> Vec<NamedNodePattern> {
+    match expression {
+        QueryExpression::Service { name, .. } if !is_named_node_pattern_bound(name, types) => {
+            vec![name.clone()]
+        }
+        QueryExpression::Filter { inner, .. } | QueryExpression::Extend { inner, .. } => {
+            unbound_service_names(inner, types)
+        }
+        QueryExpression::Union { inner } => inner
+            .iter()
+            .flat_map(|i| unbound_service_names(i, types))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A SERVICE's size, by its most selective pattern: the remote endpoint joins its body
+/// itself, so a body anchored on a constant is small however many patterns it has.
+///
+/// Its join cost would rank a selective multi-pattern body after a single broad pattern,
+/// e.g. `{ ex:c ex:p ?d . ?x ex:q ex:c . ?x ex:r ?y }` after `{ ?y a ex:C }`.
+fn estimate_service_size(inner: &QueryExpression, input_types: &VariableTypes) -> u64 {
+    let mut sizes = Vec::new();
+    collect_entry_pattern_sizes(inner, input_types, &mut sizes);
+    sizes
+        .into_iter()
+        .min()
+        .unwrap_or_else(|| estimate_query_expression_size(inner, input_types))
+}
+
+/// The sizes of the patterns every solution of `expression` matches: those of its joins,
+/// filters, extensions and left join left sides.
+fn collect_entry_pattern_sizes(
+    expression: &QueryExpression,
+    input_types: &VariableTypes,
+    sizes: &mut Vec<u64>,
+) {
+    match expression {
+        QueryExpression::QuadPattern { .. }
+        | QueryExpression::Path { .. }
+        | QueryExpression::Values { .. } => {
+            sizes.push(estimate_query_expression_size(expression, input_types))
+        }
+        QueryExpression::Join { left, right, .. } => {
+            collect_entry_pattern_sizes(left, input_types, sizes);
+            collect_entry_pattern_sizes(right, input_types, sizes);
+        }
+        QueryExpression::LeftJoin { left, .. } => {
+            collect_entry_pattern_sizes(left, input_types, sizes)
+        }
+        QueryExpression::Filter { inner, .. } | QueryExpression::Extend { inner, .. } => {
+            collect_entry_pattern_sizes(inner, input_types, sizes)
+        }
+        _ => sizes.push(estimate_query_expression_size(expression, input_types)),
     }
 }
 
@@ -1376,10 +1457,10 @@ fn estimate_query_expression_size(
         | QueryExpression::Project { inner, .. }
         | QueryExpression::Distinct { inner, .. }
         | QueryExpression::Reduced { inner, .. }
-        | QueryExpression::Group { inner, .. }
-        | QueryExpression::Service { inner, .. } => {
+        | QueryExpression::Group { inner, .. } => {
             estimate_query_expression_size(inner, input_types)
         }
+        QueryExpression::Service { inner, .. } => estimate_service_size(inner, input_types),
         QueryExpression::Slice {
             inner,
             offset,
