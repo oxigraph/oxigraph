@@ -1831,7 +1831,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     fn service_bind_join_evaluator(
         &self,
         outer: &QueryExpression,
-        services: Vec<(&QueryExpression, Vec<&Expression>)>,
+        services: Vec<(&QueryExpression, Vec<ServiceWrapper<'_>>)>,
         left_join_expression: Option<&Expression>,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
@@ -1871,7 +1871,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     fn service_bind_join_branch(
         &self,
         service: &QueryExpression,
-        filters: Vec<&Expression>,
+        wrappers: Vec<ServiceWrapper<'_>>,
         encoded_variables: &mut Vec<Variable>,
     ) -> Result<ServiceBindJoinBranch<D::InternalTerm>, QueryEvaluationError> {
         let QueryExpression::Service {
@@ -1884,12 +1884,22 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         };
         let service_name =
             TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset)?;
-        // FILTERs over a non-SILENT SERVICE are evaluated remotely, inside the SERVICE scope
+        // FILTERs and BINDs over a non-SILENT SERVICE are evaluated remotely, inside the
+        // SERVICE scope, innermost first
         let mut body = spargebra::algebra::QueryExpression::from(inner.as_ref());
-        for filter in filters {
-            body = spargebra::algebra::QueryExpression::Filter {
-                expr: filter.into(),
-                inner: Box::new(body),
+        for wrapper in wrappers.into_iter().rev() {
+            body = match wrapper {
+                ServiceWrapper::Filter(expression) => spargebra::algebra::QueryExpression::Filter {
+                    expr: expression.into(),
+                    inner: Box::new(body),
+                },
+                ServiceWrapper::Extend(variable, expression) => {
+                    spargebra::algebra::QueryExpression::Extend {
+                        inner: Box::new(body),
+                        variable: variable.clone(),
+                        expression: expression.into(),
+                    }
+                }
             };
         }
         let mut shared = Vec::new();
@@ -2617,20 +2627,48 @@ struct ServiceBindJoinBranch<T> {
     silent: bool,
 }
 
-/// The SERVICE under `pattern`'s FILTERs, and those FILTERs' expressions.
+/// A FILTER or BIND over a SERVICE, evaluated remotely inside the SERVICE scope.
+#[derive(Clone, Copy)]
+enum ServiceWrapper<'b> {
+    Filter(&'b Expression),
+    Extend(&'b Variable, &'b Expression),
+}
+
+/// The SERVICE under `pattern`'s FILTERs and BINDs, and those wrappers, outermost first.
 ///
-/// FILTERs are only peeled off a non-SILENT SERVICE: SILENT can turn an error into a
-/// solution the FILTER must still see.
-fn peel_service(pattern: &QueryExpression) -> Option<(&QueryExpression, Vec<&Expression>)> {
-    let mut filters = Vec::new();
+/// Wrappers are only peeled off a non-SILENT SERVICE: SILENT can turn an error into a
+/// solution they must still see. A BIND is peeled only if its expression reads nothing
+/// but the SERVICE's own variables.
+fn peel_service(pattern: &QueryExpression) -> Option<(&QueryExpression, Vec<ServiceWrapper<'_>>)> {
+    let mut wrappers = Vec::new();
     let mut current = pattern;
     loop {
         match current {
-            QueryExpression::Service { silent, .. } => {
-                return (!silent || filters.is_empty()).then_some((current, filters));
+            QueryExpression::Service { silent, inner, .. } => {
+                let mut inner_variables = Vec::new();
+                inner.lookup_used_variables(&mut |v| inner_variables.push(v.clone()));
+                let extends_are_local = wrappers.iter().all(|w| match w {
+                    ServiceWrapper::Extend(_, expression) => {
+                        let mut local = true;
+                        expression
+                            .lookup_used_variables(&mut |v| local &= inner_variables.contains(v));
+                        local
+                    }
+                    ServiceWrapper::Filter(_) => true,
+                });
+                return ((!silent || wrappers.is_empty()) && extends_are_local)
+                    .then_some((current, wrappers));
             }
             QueryExpression::Filter { inner, expression } => {
-                filters.push(expression);
+                wrappers.push(ServiceWrapper::Filter(expression));
+                current = inner;
+            }
+            QueryExpression::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
+                wrappers.push(ServiceWrapper::Extend(variable, expression));
                 current = inner;
             }
             _ => return None,
@@ -2639,7 +2677,9 @@ fn peel_service(pattern: &QueryExpression) -> Option<(&QueryExpression, Vec<&Exp
 }
 
 /// `pattern`'s SERVICEs (see `peel_service`) if it is one, or a UNION of them.
-fn peel_services(pattern: &QueryExpression) -> Option<Vec<(&QueryExpression, Vec<&Expression>)>> {
+fn peel_services(
+    pattern: &QueryExpression,
+) -> Option<Vec<(&QueryExpression, Vec<ServiceWrapper<'_>>)>> {
     match pattern {
         QueryExpression::Union { inner } => inner.iter().map(peel_service).collect(),
         _ => Some(vec![peel_service(pattern)?]),
