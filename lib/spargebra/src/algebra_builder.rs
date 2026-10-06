@@ -269,6 +269,10 @@ impl<'a> AlgebraBuilder<'a> {
     ) -> Result<QueryExpression, AlgebraBuilderError> {
         find_graph_pattern_blank_node_ids_and_validate_syntax_restrictions(&where_clause)?;
         let mut p = self.build_graph_pattern(where_clause)?;
+        let mut in_scope_variables = HashSet::new();
+        p.on_in_scope_variable(|v| {
+            in_scope_variables.insert(v.clone());
+        });
 
         // We build some elements to collect aggregates
         let mut aggregates = Vec::new();
@@ -291,13 +295,14 @@ impl<'a> AlgebraBuilder<'a> {
                                     variable.clone(),
                                     self.build_aggregate(span.make_wrapped(aggregate))?,
                                 ));
-                                (None, variable)
+                                (None, variable, true)
                             } else {
                                 (
                                     expression
                                         .map(|e| self.build_expression(e, &mut aggregates))
                                         .transpose()?,
                                     variable,
+                                    false,
                                 )
                             },
                         ))
@@ -350,6 +355,16 @@ impl<'a> AlgebraBuilder<'a> {
                     variables.push(variable);
                 }
             }
+            // After group by the grouping variables are in scope
+            in_scope_variables = variables
+                .iter()
+                .chain(aggregates.iter().map(|(v, _)| v).filter(|v| {
+                    self.variable_allocator
+                        .allocated_variable_names
+                        .contains(v.as_str())
+                }))
+                .cloned()
+                .collect();
             p = QueryExpression::Group {
                 inner: Box::new(p),
                 variables,
@@ -367,31 +382,32 @@ impl<'a> AlgebraBuilder<'a> {
 
         // VALUES
         if let Some(values_clause) = values_clause {
-            p = new_join(p, self.build_values_clause(values_clause)?);
+            let values = self.build_values_clause(values_clause)?;
+            values.on_in_scope_variable(|v| {
+                in_scope_variables.insert(v.clone());
+            });
+            p = new_join(p, values);
         }
 
         // SELECT
         let mut projection_variables = Vec::new();
         if let Some(select_expressions) = select_expressions {
-            let mut visible = HashSet::new();
-            p.on_in_scope_variable(|v| {
-                visible.insert(v.clone());
-            });
             for binding in select_expressions {
-                let (expression, variable) = binding.inner;
+                let (expression, variable, is_aggregate) = binding.inner;
+                if (expression.is_some() || is_aggregate) && in_scope_variables.contains(&variable)
+                {
+                    // We disallow to override an existing variable with an expression
+                    return Err(AlgebraBuilderError::new(
+                        binding.span,
+                        format!(
+                            "The SELECT overrides {variable} using an expression even if it's already used"
+                        ),
+                    ));
+                }
                 if let Some(expression) = expression {
-                    if visible.contains(&variable) {
-                        // We disallow to override an existing variable with an expression
-                        return Err(AlgebraBuilderError::new(
-                            binding.span,
-                            format!(
-                                "The SELECT overrides {variable} using an expression even if it's already used"
-                            ),
-                        ));
-                    }
                     if with_aggregate {
                         // We validate projection variables if there is an aggregate
-                        if let Some(v) = find_unbound_variable(&expression, &visible) {
+                        if let Some(v) = find_unbound_variable(&expression, &in_scope_variables) {
                             return Err(AlgebraBuilderError::new(
                                 binding.span,
                                 format!("The variable {v} is unbound in a SELECT expression"),
@@ -403,7 +419,8 @@ impl<'a> AlgebraBuilder<'a> {
                         variable: variable.clone(),
                         expression,
                     };
-                } else if with_aggregate && !visible.contains(&variable) {
+                } else if with_aggregate && !is_aggregate && !in_scope_variables.contains(&variable)
+                {
                     // We validate projection variables if there is an aggregate
                     return Err(AlgebraBuilderError::new(
                         binding.span,
@@ -416,6 +433,7 @@ impl<'a> AlgebraBuilder<'a> {
                         format!("{variable} is declared twice in SELECT"),
                     ));
                 }
+                in_scope_variables.insert(variable.clone());
                 projection_variables.push(variable)
             }
         } else {
