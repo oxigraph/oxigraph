@@ -284,7 +284,7 @@ impl<'a> From<&'a str> for Literal {
 impl From<String> for Literal {
     #[inline]
     fn from(value: String) -> Self {
-        OxString::new_owned(&value).into()
+        Self::new_simple_literal(value)
     }
 }
 
@@ -309,7 +309,7 @@ impl From<i128> for Literal {
     #[inline]
     fn from(value: i128) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -319,7 +319,7 @@ impl From<i64> for Literal {
     #[inline]
     fn from(value: i64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -329,7 +329,7 @@ impl From<i32> for Literal {
     #[inline]
     fn from(value: i32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -339,7 +339,7 @@ impl From<i16> for Literal {
     #[inline]
     fn from(value: i16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -349,7 +349,7 @@ impl From<u64> for Literal {
     #[inline]
     fn from(value: u64) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -359,7 +359,7 @@ impl From<u32> for Literal {
     #[inline]
     fn from(value: u32) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -369,7 +369,7 @@ impl From<u16> for Literal {
     #[inline]
     fn from(value: u16) -> Self {
         Self(LiteralContent::TypedLiteral {
-            value: OxString::new_owned(&value.to_string()),
+            value: value.to_string().into(),
             datatype: xsd::INTEGER,
         })
     }
@@ -382,7 +382,7 @@ impl From<f32> for Literal {
             value: {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    OxString::new_owned(&Float::from(value).to_string())
+                    Float::from(value).to_string().into()
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f32::INFINITY {
@@ -390,7 +390,7 @@ impl From<f32> for Literal {
                 } else if value == f32::NEG_INFINITY {
                     OxString::new("-INF")
                 } else {
-                    OxString::new_owned(&value.to_string())
+                    value.to_string().into()
                 }
             },
             datatype: xsd::FLOAT,
@@ -405,7 +405,7 @@ impl From<f64> for Literal {
             value: {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    OxString::new_owned(&Double::from(value).to_string())
+                    Double::from(value).to_string().into()
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f64::INFINITY {
@@ -413,7 +413,7 @@ impl From<f64> for Literal {
                 } else if value == f64::NEG_INFINITY {
                     OxString::new("-INF")
                 } else {
-                    OxString::new_owned(&value.to_string())
+                    value.to_string().into()
                 }
             },
             datatype: xsd::DOUBLE,
@@ -433,7 +433,7 @@ impl From<Boolean> for Literal {
 impl From<Float> for Literal {
     #[inline]
     fn from(value: Float) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::FLOAT)
+        Self::new_typed_literal(value.to_string(), xsd::FLOAT)
     }
 }
 
@@ -441,7 +441,7 @@ impl From<Float> for Literal {
 impl From<Double> for Literal {
     #[inline]
     fn from(value: Double) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::DOUBLE)
+        Self::new_typed_literal(value.to_string(), xsd::DOUBLE)
     }
 }
 
@@ -449,7 +449,7 @@ impl From<Double> for Literal {
 impl From<Integer> for Literal {
     #[inline]
     fn from(value: Integer) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::INTEGER)
+        Self::new_typed_literal(value.to_string(), xsd::INTEGER)
     }
 }
 
@@ -457,7 +457,7 @@ impl From<Integer> for Literal {
 impl From<Decimal> for Literal {
     #[inline]
     fn from(value: Decimal) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::DECIMAL)
+        Self::new_typed_literal(value.to_string(), xsd::DECIMAL)
     }
 }
 
@@ -465,7 +465,7 @@ impl From<Decimal> for Literal {
 impl From<DateTime> for Literal {
     #[inline]
     fn from(value: DateTime) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::DATE_TIME)
+        Self::new_typed_literal(value.to_string(), xsd::DATE_TIME)
     }
 }
 
@@ -473,7 +473,7 @@ impl From<DateTime> for Literal {
 impl From<Time> for Literal {
     #[inline]
     fn from(value: Time) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::TIME)
+        Self::new_typed_literal(value.to_string(), xsd::TIME)
     }
 }
 
@@ -481,7 +481,7 @@ impl From<Time> for Literal {
 impl From<Date> for Literal {
     #[inline]
     fn from(value: Date) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::DATE)
+        Self::new_typed_literal(value.to_string(), xsd::DATE)
     }
 }
 
@@ -489,7 +489,7 @@ impl From<Date> for Literal {
 impl From<GYearMonth> for Literal {
     #[inline]
     fn from(value: GYearMonth) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::G_YEAR_MONTH)
+        Self::new_typed_literal(value.to_string(), xsd::G_YEAR_MONTH)
     }
 }
 
@@ -497,7 +497,7 @@ impl From<GYearMonth> for Literal {
 impl From<GYear> for Literal {
     #[inline]
     fn from(value: GYear) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::G_YEAR)
+        Self::new_typed_literal(value.to_string(), xsd::G_YEAR)
     }
 }
 
@@ -505,7 +505,7 @@ impl From<GYear> for Literal {
 impl From<GMonthDay> for Literal {
     #[inline]
     fn from(value: GMonthDay) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::G_MONTH_DAY)
+        Self::new_typed_literal(value.to_string(), xsd::G_MONTH_DAY)
     }
 }
 
@@ -513,7 +513,7 @@ impl From<GMonthDay> for Literal {
 impl From<GMonth> for Literal {
     #[inline]
     fn from(value: GMonth) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::G_MONTH)
+        Self::new_typed_literal(value.to_string(), xsd::G_MONTH)
     }
 }
 
@@ -521,7 +521,7 @@ impl From<GMonth> for Literal {
 impl From<GDay> for Literal {
     #[inline]
     fn from(value: GDay) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::G_DAY)
+        Self::new_typed_literal(value.to_string(), xsd::G_DAY)
     }
 }
 
@@ -529,7 +529,7 @@ impl From<GDay> for Literal {
 impl From<Duration> for Literal {
     #[inline]
     fn from(value: Duration) -> Self {
-        Self::new_typed_literal(OxString::new_owned(&value.to_string()), xsd::DURATION)
+        Self::new_typed_literal(value.to_string(), xsd::DURATION)
     }
 }
 
@@ -537,10 +537,7 @@ impl From<Duration> for Literal {
 impl From<YearMonthDuration> for Literal {
     #[inline]
     fn from(value: YearMonthDuration) -> Self {
-        Self::new_typed_literal(
-            OxString::new_owned(&value.to_string()),
-            xsd::YEAR_MONTH_DURATION,
-        )
+        Self::new_typed_literal(value.to_string(), xsd::YEAR_MONTH_DURATION)
     }
 }
 
@@ -548,10 +545,7 @@ impl From<YearMonthDuration> for Literal {
 impl From<DayTimeDuration> for Literal {
     #[inline]
     fn from(value: DayTimeDuration) -> Self {
-        Self::new_typed_literal(
-            OxString::new_owned(&value.to_string()),
-            xsd::DAY_TIME_DURATION,
-        )
+        Self::new_typed_literal(value.to_string(), xsd::DAY_TIME_DURATION)
     }
 }
 

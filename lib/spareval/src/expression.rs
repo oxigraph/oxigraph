@@ -808,9 +808,7 @@ where
                                 NamedNode::new_unchecked(if iri.is_absolute() {
                                     iri.into_inner()
                                 } else if let Some(base_iri) = &base_iri {
-                                    OxString::new_owned(
-                                        &try_or_ok!(base_iri.resolve(&iri).ok()).into_inner(),
-                                    )
+                                    try_or_ok!(base_iri.resolve(&iri).ok()).into_inner().into()
                                 } else {
                                     return Ok(None);
                                 })
@@ -946,7 +944,7 @@ where
                         args.push(value);
                     }
                     Ok(Some(build_plain_literal(
-                        OxString::concat(args),
+                        OxString::concat(args.iter().map(OxString::as_str).collect::<Vec<_>>()),
                         language.flatten(),
                     )))
                 }));
@@ -1032,7 +1030,7 @@ where
                         };
                         Ok(Some(build_plain_literal(
                             match regex.replace_all(text.as_str(), replacement.as_str()) {
-                                Cow::Owned(replaced) => OxString::new_owned(&replaced),
+                                Cow::Owned(replaced) => replaced.into(),
                                 Cow::Borrowed(_) => text,
                             },
                             language,
@@ -1066,7 +1064,7 @@ where
                     };
                     Ok(Some(build_plain_literal(
                         match regex.replace_all(text.as_str(), replacement.as_str()) {
-                            Cow::Owned(replaced) => OxString::new_owned(&replaced),
+                            Cow::Owned(replaced) => replaced.into(),
                             Cow::Borrowed(_) => text,
                         },
                         language,
@@ -1083,7 +1081,7 @@ where
                         value.make_mut().make_ascii_uppercase();
                         value
                     } else {
-                        OxString::new_owned(&value.to_uppercase())
+                        value.to_uppercase().into()
                     };
                     Ok(Some(build_plain_literal(value, language)))
                 }));
@@ -1098,7 +1096,7 @@ where
                         value.make_mut().make_ascii_lowercase();
                         value
                     } else {
-                        OxString::new_owned(&value.to_lowercase())
+                        value.to_lowercase().into()
                     };
                     Ok(Some(build_plain_literal(value, language)))
                 }));
@@ -1341,7 +1339,7 @@ where
                     #[cfg(not(feature = "sep-0002"))]
                     {
                         Ok(Some(ExpressionTerm::OtherTypedLiteral {
-                            value: OxString::new_owned(&result.to_string()),
+                            value: result.to_string().into(),
                             datatype: xsd::DAY_TIME_DURATION,
                         }))
                     }
@@ -1372,9 +1370,7 @@ where
                         _ => return Ok(None),
                     };
                     Ok(Some(ExpressionTerm::StringLiteral(
-                        timezone_offset.map_or_else(OxString::default, |o| {
-                            OxString::new_owned(o.to_string().as_str())
-                        }),
+                        timezone_offset.map_or_else(OxString::default, |o| o.to_string().into()),
                     )))
                 }));
             }
@@ -1444,21 +1440,19 @@ where
             }
             if *function == sparql::UUID {
                 return Ok(Rc::new(move |_| {
-                    let mut buffer = String::with_capacity(44);
+                    let mut buffer = String::with_capacity(44 + 2 * size_of::<usize>());
                     buffer.push_str("urn:uuid:");
                     generate_uuid(&mut buffer);
                     Ok(Some(ExpressionTerm::NamedNode(NamedNode::new_unchecked(
-                        OxString::new_owned(&buffer),
+                        buffer,
                     ))))
                 }));
             }
             if *function == sparql::STRUUID {
                 return Ok(Rc::new(move |_| {
-                    let mut buffer = String::with_capacity(36);
+                    let mut buffer = String::with_capacity(36 + 2 * size_of::<usize>());
                     generate_uuid(&mut buffer);
-                    Ok(Some(ExpressionTerm::StringLiteral(OxString::new_owned(
-                        &buffer,
-                    ))))
+                    Ok(Some(ExpressionTerm::StringLiteral(buffer.into())))
                 }));
             }
             if *function == sparql::MD5 {
@@ -1760,7 +1754,7 @@ where
                                     && value.abs() < Float::from(1_000_000.)
                                     || Float::from(-0.) <= value && value <= Float::from(0.)
                                 {
-                                    OxString::new_owned(&f32::from(value).to_string())
+                                    f32::from(value).to_string().into()
                                 } else {
                                     Literal::from(value).into_value()
                                 }
@@ -1770,7 +1764,7 @@ where
                                     && value.abs() < Double::from(1_000_000.)
                                     || Double::from(-0.) <= value && value <= Double::from(0.)
                                 {
-                                    OxString::new_owned(&f64::from(value).to_string())
+                                    f64::from(value).to_string().into()
                                 } else {
                                     Literal::from(value).into_value()
                                 }
@@ -2170,9 +2164,7 @@ where
             return Ok(None);
         };
         let hash = hex::encode(H::new().chain_update(input.as_str()).finalize());
-        Ok(Some(ExpressionTerm::StringLiteral(OxString::new_owned(
-            &hash,
-        ))))
+        Ok(Some(ExpressionTerm::StringLiteral(hash.into())))
     }))
 }
 

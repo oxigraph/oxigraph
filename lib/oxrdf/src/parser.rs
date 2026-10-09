@@ -5,7 +5,7 @@ use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
     NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
 };
-use oxstr::OxString;
+use oxstr::{OxStr, OxString};
 use std::borrow::Cow;
 use std::char;
 use std::str::{Chars, FromStr};
@@ -238,12 +238,9 @@ impl FromStr for Variable {
                 "Variable serialization should start with ? or $",
             ));
         }
-        Self::new(OxString::new_owned(&s[1..])).map_err(|error| {
-            TermParseError(TermParseErrorKind::Variable {
-                value: s.to_owned(),
-                error,
-            })
-        })
+        let value = OxString::new_owned(&s[1..]);
+        Self::new(value.clone())
+            .map_err(|error| TermParseError(TermParseErrorKind::Variable { value, error }))
     }
 }
 
@@ -256,7 +253,7 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
         let (value, remain) = remain.split_at(end);
         let remain = &remain[1..];
         let value = if value.contains('\\') {
-            let mut escaped = String::with_capacity(value.len());
+            let mut escaped = String::with_capacity(value.len() + 2 * size_of::<usize>());
             let mut chars = value.chars();
             while let Some(c) = chars.next() {
                 if c == '\\' {
@@ -277,12 +274,9 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
         } else {
             Cow::Borrowed(value)
         };
-        let term = NamedNode::new(OxString::new_owned(&value)).map_err(|error| {
-            TermParseError(TermParseErrorKind::Iri {
-                value: value.into_owned(),
-                error,
-            })
-        })?;
+        let value = OxStr::from(value).into_owned();
+        let term = NamedNode::new(value.clone())
+            .map_err(|error| TermParseError(TermParseErrorKind::Iri { value, error }))?;
         Ok((term, remain))
     } else {
         Err(TermParseError::msg(
@@ -324,12 +318,9 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
             end -= 1;
         }
         let (value, remain) = remain.split_at(end);
-        let term = BlankNode::new(OxString::new_owned(value)).map_err(|error| {
-            TermParseError(TermParseErrorKind::BlankNode {
-                value: value.to_owned(),
-                error,
-            })
-        })?;
+        let value = OxString::new_owned(value);
+        let term = BlankNode::new(value.clone())
+            .map_err(|error| TermParseError(TermParseErrorKind::BlankNode { value, error }))?;
         Ok((term, remain))
     } else {
         Err(TermParseError::msg(
@@ -341,7 +332,7 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
 fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
     let s = s.trim();
     if let Some(s) = s.strip_prefix('"') {
-        let mut value = String::with_capacity(s.len());
+        let mut value = String::with_capacity(s.len() + 2 * size_of::<usize>());
         let mut chars = s.chars();
         while let Some(c) = chars.next() {
             match c {
@@ -354,15 +345,16 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         let (language, remain) = remain.split_at(end);
                         #[cfg(feature = "rdf-12")]
                         if let Some((language, direction)) = language.split_once("--") {
+                            let language = OxString::new_owned(language);
                             return Ok((
-                                Literal::new_directional_language_tagged_literal(OxString::new_owned(&value), OxString::new_owned(language), match direction {
+                                Literal::new_directional_language_tagged_literal(value, language.clone(), match direction {
                                     "ltr" => BaseDirection::Ltr,
                                     "rtl" => BaseDirection::Rtl,
                                     _ => return Err(TermParseError(TermParseErrorKind::Msg(format!("The only two possible base directions are 'rtl' and 'ltr', found '{direction}'"))))
                                 }).map_err(
                                     |error| {
                                         TermParseError(TermParseErrorKind::LanguageTag {
-                                            value: language.to_owned(),
+                                            value: language,
                                             error,
                                         })
                                     },
@@ -370,30 +362,23 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                                 remain,
                             ));
                         }
+                        let language = OxString::new_owned(language);
                         Ok((
-                            Literal::new_language_tagged_literal(
-                                OxString::new_owned(&value),
-                                OxString::new_owned(language),
-                            )
-                            .map_err(|error| {
-                                TermParseError(TermParseErrorKind::LanguageTag {
-                                    value: language.to_owned(),
-                                    error,
-                                })
-                            })?,
+                            Literal::new_language_tagged_literal(value, language.clone()).map_err(
+                                |error| {
+                                    TermParseError(TermParseErrorKind::LanguageTag {
+                                        value: language,
+                                        error,
+                                    })
+                                },
+                            )?,
                             remain,
                         ))
                     } else if let Some(remain) = remain.strip_prefix("^^") {
                         let (datatype, remain) = read_named_node(remain)?;
-                        Ok((
-                            Literal::new_typed_literal(OxString::new_owned(&value), datatype),
-                            remain,
-                        ))
+                        Ok((Literal::new_typed_literal(value, datatype), remain))
                     } else {
-                        Ok((
-                            Literal::new_simple_literal(OxString::new_owned(&value)),
-                            remain,
-                        ))
+                        Ok((Literal::new_simple_literal(value), remain))
                     };
                 }
                 '\\' => {
@@ -594,21 +579,24 @@ pub struct TermParseError(#[from] TermParseErrorKind);
 #[derive(Debug, thiserror::Error)]
 enum TermParseErrorKind {
     #[error("Error while parsing the named node '{value}': {error}")]
-    Iri { error: IriParseError, value: String },
+    Iri {
+        error: IriParseError,
+        value: OxString,
+    },
     #[error("Error while parsing the blank node '{value}': {error}")]
     BlankNode {
         error: BlankNodeIdParseError,
-        value: String,
+        value: OxString,
     },
     #[error("Error while parsing the language tag '{value}': {error}")]
     LanguageTag {
         error: LanguageTagParseError,
-        value: String,
+        value: OxString,
     },
     #[error("Error while parsing the variable '{value}': {error}")]
     Variable {
         error: VariableNameParseError,
-        value: String,
+        value: OxString,
     },
     #[error("{0}")]
     Msg(String),

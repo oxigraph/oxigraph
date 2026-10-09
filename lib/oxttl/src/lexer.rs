@@ -394,7 +394,7 @@ impl N3Lexer {
                 if name.is_empty() {
                     Err((0..consumed, "A variable name is not allowed to be empty").into())
                 } else {
-                    Ok(N3Token::Variable(OxString::new_owned(&name)))
+                    Ok(N3Token::Variable(name.into_owned()))
                 }
             }),
         ))

@@ -6,7 +6,7 @@ use oxiri::{Iri, IriParseError, IriRef};
 use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
-use oxstr::OxString;
+use oxstr::{OxStr, OxString, oxformat};
 use quick_xml::escape::{EscapeError, resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -999,7 +999,7 @@ impl<R> InternalRdfXmlParser<R> {
             {
                 match attribute.key.local_name().into_inner() {
                     "lang" => {
-                        let mut tag = OxString::new_owned(&self.convert_attribute(&attribute)?);
+                        let mut tag = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         tag.make_mut().make_ascii_lowercase();
                         language = Some(if self.lenient {
                             tag
@@ -1012,7 +1012,7 @@ impl<R> InternalRdfXmlParser<R> {
                         });
                     }
                     "base" => {
-                        let iri = OxString::new_owned(&self.convert_attribute(&attribute)?);
+                        let iri = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         base_iri = Some(if self.lenient {
                             Iri::parse_unchecked(iri)
                         } else {
@@ -1068,7 +1068,7 @@ impl<R> InternalRdfXmlParser<R> {
                         ))
                         .into());
                     }
-                    node_id_attr = Some(BlankNode::new_unchecked(OxString::new_owned(&id)));
+                    node_id_attr = Some(BlankNode::new_unchecked(OxStr::from(id).into_owned()));
                 } else if *attribute_url == *RDF_ABOUT {
                     about_attr = Some(attribute);
                 } else if *attribute_url == *RDF_RESOURCE {
@@ -1110,7 +1110,7 @@ impl<R> InternalRdfXmlParser<R> {
                 } else {
                     property_attrs.push((
                         self.parse_iri(attribute_url)?,
-                        OxString::new_owned(&self.convert_attribute(&attribute)?),
+                        OxStr::from(self.convert_attribute(&attribute)?).into_owned(),
                     ));
                 }
             }
@@ -1189,7 +1189,7 @@ impl<R> InternalRdfXmlParser<R> {
                 ))
                 .into());
             }
-            Some(BlankNode::new_unchecked(OxString::new_owned(&id)))
+            Some(BlankNode::new_unchecked(OxStr::from(id).into_owned()))
         } else {
             None
         };
@@ -1286,9 +1286,9 @@ impl<R> InternalRdfXmlParser<R> {
                         .into());
                     };
                     *li_counter += 1;
-                    NamedNode::new_unchecked(OxString::new_owned(&format!(
+                    NamedNode::new_unchecked(oxformat!(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#_{li_counter}"
-                    )))
+                    ))
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name)
                     || *tag_name == *RDF_DESCRIPTION
                 {
@@ -1518,7 +1518,7 @@ impl<R> InternalRdfXmlParser<R> {
                     match unescape_with(&value, |e| self.custom_entities.resolve(e))
                         .map_err(Error::from)?
                     {
-                        Cow::Owned(value) => OxString::new_owned(&value),
+                        Cow::Owned(value) => value.into(),
                         Cow::Borrowed(_) => value, // Not changed, no need to reallocate
                     },
                 )
@@ -1745,11 +1745,11 @@ impl<R> InternalRdfXmlParser<R> {
                         subject,
                         iri,
                         Literal::new_typed_literal(
-                            OxString::new_owned(&String::from_utf8(object).map_err(|_| {
+                            String::from_utf8(object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
                                 )
-                            })?),
+                            })?,
                             rdf::XML_LITERAL,
                         ),
                     );
