@@ -3,7 +3,7 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
-use oxstr::OxString;
+use oxstr::{OxStr, OxString};
 use quick_xml::escape::{EscapeError, resolve_xml_entity};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;
@@ -537,9 +537,10 @@ impl XmlInnerQueryResultsParser {
                                 )
                             })?;
                         let name = name.normalized_value(self.xml_version)?;
-                        let variable = Variable::new(OxString::new_owned(&name)).map_err(|e| {
-                            QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}"))
-                        })?;
+                        let variable =
+                            Variable::new(OxStr::from(name).into_owned()).map_err(|e| {
+                                QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}"))
+                            })?;
                         if self.variables.contains(&variable) {
                             return Err(QueryResultsSyntaxError::msg(format!(
                                 "The variable {variable} is declared twice"
@@ -777,9 +778,9 @@ impl XmlInnerSolutionsParser {
                                 )
                                 .into());
                             };
-                            self.current_var = Some(OxString::new_owned(
-                                &attr.normalized_value(self.xml_version)?,
-                            ));
+                            self.current_var = Some(
+                                OxStr::from(attr.normalized_value(self.xml_version)?).into_owned(),
+                            );
                             self.state_stack.push(State::Binding);
                             Ok(None)
                         } else {
@@ -807,18 +808,19 @@ impl XmlInnerSolutionsParser {
                             for attr in event.attributes() {
                                 let attr = attr.map_err(Error::from)?;
                                 if attr.key.into_inner() == "xml:lang" {
-                                    self.lang = Some(OxString::new_owned(
-                                        &attr.normalized_value(self.xml_version)?,
-                                    ));
+                                    self.lang = Some(
+                                        OxStr::from(attr.normalized_value(self.xml_version)?)
+                                            .into_owned(),
+                                    );
                                 } else if attr.key.local_name().into_inner() == "datatype" {
-                                    let iri = attr.normalized_value(self.xml_version)?;
-                                    self.datatype = Some(
-                                        NamedNode::new(OxString::new_owned(&iri)).map_err(|e| {
+                                    let iri = OxStr::from(attr.normalized_value(self.xml_version)?)
+                                        .into_owned();
+                                    self.datatype =
+                                        Some(NamedNode::new(iri.clone()).map_err(|e| {
                                             QueryResultsSyntaxError::msg(format!(
                                                 "Invalid datatype IRI '{iri}': {e}"
                                             ))
-                                        })?,
-                                    );
+                                        })?);
                                 }
                                 #[cfg(feature = "sparql-12")]
                                 if attr.key.into_inner() == "its:dir" {

@@ -2577,7 +2577,7 @@ impl Accumulator for GroupConcatAccumulator {
     fn finish(&mut self) -> Option<ExpressionTerm> {
         self.concat
             .take()
-            .map(|result| ExpressionTerm::StringLiteral(OxString::new_owned(&result)))
+            .map(|result| ExpressionTerm::StringLiteral(result.into()))
     }
 }
 

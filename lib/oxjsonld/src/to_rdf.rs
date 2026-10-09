@@ -1447,7 +1447,7 @@ fn canonicalize_xsd_number(value: &str, always_double: bool) -> Option<RdfJsonNu
     }
 
     // We serialize
-    let mut buffer = String::with_capacity(value.len());
+    let mut buffer = String::with_capacity(value.len() + 2 * size_of::<usize>());
     if is_negative && !(decimal_part.is_empty() && integer_part == "0") {
         buffer.push('-');
     }

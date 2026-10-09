@@ -24,7 +24,7 @@ use oxrdf::BaseDirection;
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Variable};
-use oxstr::OxString;
+use oxstr::{OxStr, OxString, oxformat};
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -158,8 +158,7 @@ impl<'a> AlgebraBuilder<'a> {
                 // We generate a variable
                 let variable = loop {
                     counter += 1;
-                    let variable =
-                        Variable::new_unchecked(OxString::new_owned(&format!("v{counter}")));
+                    let variable = Variable::new_unchecked(oxformat!("v{counter}"));
                     // We look for name conflicts
                     let mut found_conflict = false;
                     pattern.on_in_scope_variable(|v| {
@@ -1723,7 +1722,7 @@ impl<'a> AlgebraBuilder<'a> {
             AlgebraBuilderError::new(iri.span, format!("Invalid IRI '{iri_value}': {e}"))
         })?;
         if iri_ref.is_absolute() {
-            Ok(OxString::new_owned(&iri_ref.into_inner()))
+            Ok(iri_ref.into_inner().into_owned())
         } else if let Some(base_iri) = &self.base_iri {
             self.buffer.clear();
             base_iri
@@ -2532,7 +2531,7 @@ fn add_defined_variables<'a>(pattern: &'a QueryExpression, set: &mut HashSet<&'a
     }
 }
 
-fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<Cow<'_, str>, AlgebraBuilderError> {
+fn unescape_iriref(mut input: &str, span: SimpleSpan) -> Result<OxStr<'_>, AlgebraBuilderError> {
     let mut output = None;
     while let Some((before, after)) = input.split_once('\\') {
         let output: &mut String = output.get_or_insert_default();
@@ -2616,7 +2615,7 @@ fn unescape_string(mut input: &str, span: SimpleSpan) -> Result<OxString, Algebr
     }
     Ok(if let Some(mut output) = output {
         output.push_str(input);
-        OxString::new_owned(&output)
+        output.into()
     } else {
         OxString::new_owned(input)
     })
@@ -3301,7 +3300,7 @@ impl<'a> FreshVariableAllocator<'a> {
                 && !self.allocated_variable_names.contains(name.as_str())
             {
                 // Not used, we can emit
-                let name = OxString::new_owned(&name);
+                let name: OxString = name.into();
                 self.allocated_variable_names.insert(name.clone());
                 return Variable::new_unchecked(name);
             }

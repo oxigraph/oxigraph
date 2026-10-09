@@ -31,7 +31,7 @@
 
 use crate::interning::*;
 use crate::*;
-use oxstr::OxString;
+use oxstr::{OxString, oxformat};
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
 use std::collections::hash_map::Entry;
@@ -805,16 +805,17 @@ impl Dataset {
                         .insert(issued_identifier.clone())
                     {
                         i += 1;
-                        issued_identifier =
-                            BlankNode::new_unchecked(OxString::new_owned(&format!("{hash}{i}")));
+                        issued_identifier = BlankNode::new_unchecked(oxformat!("{hash}{i}"));
                     }
                     entry.insert(issued_identifier.clone());
                     issuer.issued_identifier_order.push(blank_node);
                     issued_identifier
                 } else {
                     // 2)
-                    let issued_identifier = BlankNode::new_unchecked(OxString::new_owned(
-                        &format!("{}{}", issuer.identifier_prefix, issuer.identifier_counter),
+                    let issued_identifier = BlankNode::new_unchecked(oxformat!(
+                        "{}{}",
+                        issuer.identifier_prefix,
+                        issuer.identifier_counter
                     ));
                     // 3)
                     entry.insert(issued_identifier.clone());

@@ -6,7 +6,7 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJson
 use json_event_parser::{TokioAsyncReaderJsonParser, TokioAsyncWriterJsonSerializer};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
-use oxstr::OxString;
+use oxstr::{OxStr, OxString};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::mem::take;
@@ -595,7 +595,8 @@ impl JsonInnerReader {
             }
             JsonInnerReaderState::InVars => match event {
                 JsonEvent::String(variable) => {
-                    match Variable::new(OxString::new_owned(&variable)) {
+                    let variable = OxStr::from(variable).into_owned();
+                    match Variable::new(variable.clone()) {
                         Ok(var) => {
                             if self.variables.contains(&var) {
                                 return Err(QueryResultsSyntaxError::msg(format!(
@@ -725,7 +726,7 @@ impl JsonInnerReader {
                 JsonEvent::ObjectKey(key) => {
                     self.state = JsonInnerReaderState::Term {
                         reader: JsonInnerTermReader::default(),
-                        variable: OxString::new_owned(&key),
+                        variable: OxStr::from(key).into_owned(),
                     };
                     Ok(None)
                 }
@@ -1135,7 +1136,7 @@ impl JsonInnerTermReader {
             }
             JsonInnerTermReaderState::Value => match event {
                 JsonEvent::String(value) => {
-                    self.value = Some(OxString::new_owned(&value));
+                    self.value = Some(OxStr::from(value).into_owned());
                     self.state = JsonInnerTermReaderState::Middle;
                     Ok(None)
                 }
@@ -1152,7 +1153,7 @@ impl JsonInnerTermReader {
             JsonInnerTermReaderState::Lang => {
                 self.state = JsonInnerTermReaderState::Middle;
                 if let JsonEvent::String(value) = event {
-                    self.lang = Some(OxString::new_owned(&value));
+                    self.lang = Some(OxStr::from(value).into_owned());
                     Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Term lang must be strings"))
@@ -1181,7 +1182,7 @@ impl JsonInnerTermReader {
             JsonInnerTermReaderState::Datatype => {
                 self.state = JsonInnerTermReaderState::Middle;
                 if let JsonEvent::String(value) = event {
-                    match NamedNode::new(OxString::new_owned(&value)) {
+                    match NamedNode::new(OxStr::from(value).into_owned()) {
                         Ok(datatype) => {
                             self.datatype = Some(datatype);
                             Ok(None)
