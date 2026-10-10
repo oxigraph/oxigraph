@@ -1156,6 +1156,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
                 let build = left;
                 let probe = right;
+                let cancellation_token = self.dataset.cancellation_token.clone();
                 if keys.is_empty() {
                     // Cartesian product
                     Ok(Rc::new(move |from| {
@@ -1179,6 +1180,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                 probe_tuple: None,
                                 built: built_values,
                                 built_offset: 0,
+                                cancellation_token: cancellation_token.clone(),
                             }),
                             Err(error) => Box::new(once(Err(error))),
                         }
@@ -1212,6 +1214,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             probe_iter,
                             built: built_values,
                             buffered_results: Vec::new(),
+                            cancellation_token: cancellation_token.clone(),
                         })
                     }))
                 }
@@ -1360,6 +1363,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     .iter()
                     .map(|v| encode_variable(encoded_variables, v))
                     .collect::<Vec<_>>();
+                let cancellation_token = self.dataset.cancellation_token.clone();
                 Ok(Rc::new(move |from| {
                     let mut right_values = InternalTupleSet::new(keys.clone());
                     if let Err(error) = right_values.extend(right(from.clone())) {
@@ -1373,6 +1377,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         right: right_values,
                         buffered_results: Vec::new(),
                         expression: Rc::clone(&expression),
+                        cancellation_token: cancellation_token.clone(),
                     })
                 }))
             }
@@ -3212,6 +3217,7 @@ struct CartesianProductJoinIterator<'a, T> {
     probe_tuple: Option<InternalTuple<T>>,
     built: Vec<InternalTuple<T>>,
     built_offset: usize,
+    cancellation_token: CancellationToken,
 }
 
 impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
@@ -3222,6 +3228,10 @@ impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
             while let (Some(probe_tuple), Some(built_tuple)) =
                 (&self.probe_tuple, self.built.get(self.built_offset))
             {
+                // The results might be built for a long time without any dataset access
+                if let Err(e) = self.cancellation_token.ensure_alive() {
+                    return Some(Err(e));
+                }
                 self.built_offset += 1;
                 if let Some(result_tuple) = probe_tuple.combine_with(built_tuple) {
                     return Some(Ok(result_tuple));
@@ -3248,6 +3258,7 @@ struct HashJoinIterator<'a, T> {
     probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
+    cancellation_token: CancellationToken,
 }
 
 impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<'_, T> {
@@ -3256,6 +3267,10 @@ impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<'_, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
+                // The results might be built for a long time without any dataset access
+                if let Err(e) = self.cancellation_token.ensure_alive() {
+                    return Some(Err(e));
+                }
                 return Some(result);
             }
             let probe_tuple = match self.probe_iter.next()? {
@@ -3287,6 +3302,7 @@ struct HashLeftJoinIterator<'a, T> {
     right: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
     expression: Rc<dyn Fn(&InternalTuple<T>) -> Result<Option<bool>, QueryEvaluationError> + 'a>,
+    cancellation_token: CancellationToken,
 }
 
 impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<'_, T> {
@@ -3295,6 +3311,10 @@ impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<'_, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
+                // The results might be built for a long time without any dataset access
+                if let Err(e) = self.cancellation_token.ensure_alive() {
+                    return Some(Err(e));
+                }
                 return Some(result);
             }
             let left_tuple = match self.left_iter.next()? {

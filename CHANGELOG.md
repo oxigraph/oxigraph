@@ -4,6 +4,8 @@
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
 
 ### Fixed
+- CLI: the HTTP server cancels a SPARQL query when the client closes the connection before the results are complete.
+- SPARQL: the `CancellationToken` is also checked by the join iterators, so a cancelled query stops even when it builds results from memory without reading the dataset.
 - SPARQL: avoid counting shared triples multiple times when merging default graphs with `FROM`, `USING`, or the union-default-graph option. RocksDB-backed stores use their ordered indexes to perform this merge without retaining all matched triples.
 
 
