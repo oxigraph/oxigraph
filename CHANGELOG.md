@@ -4,6 +4,7 @@
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
 
 ### Fixed
+- SPARQL: a signed numeric literal directly after an operand is now its own step of the `AdditiveExpression` grammar rule. It takes the `*` and `/` operands that follow it, so `?a+2*3` is `?a + (+2*3)` and no longer `(?a + +2) * 3`, and it is never absorbed into the right operand of a preceding `+` or `-`, so `10 - 2 -3` is 5 and no longer `10 - (2 + -3)`, which is 11.
 - SPARQL: avoid counting shared triples multiple times when merging default graphs with `FROM`, `USING`, or the union-default-graph option. RocksDB-backed stores use their ordered indexes to perform this merge without retaining all matched triples.
 
 
