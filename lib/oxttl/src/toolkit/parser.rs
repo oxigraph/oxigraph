@@ -31,6 +31,8 @@ pub trait RuleRecognizer: Sized {
     fn lexer_options(
         context: &Self::Context,
     ) -> &<Self::TokenRecognizer as TokenRecognizer>::Options;
+
+    fn reuse_output(&mut self, _output: Self::Output) {}
 }
 
 pub struct RuleRecognizerError {
@@ -202,6 +204,12 @@ impl<RR: RuleRecognizer> Parser<RR> {
         self.state = None;
         self.results.clear();
         self.errors.clear();
+    }
+
+    pub fn reuse_output(&mut self, output: RR::Output) {
+        if let Some(state) = &mut self.state {
+            state.reuse_output(output);
+        }
     }
 }
 
