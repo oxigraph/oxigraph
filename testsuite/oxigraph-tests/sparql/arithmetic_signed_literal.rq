@@ -1,0 +1,15 @@
+# A signed numeric literal directly after an operand starts an additive step that takes the following '*' and '/' operands (AdditiveExpression production)
+ASK {
+    FILTER(8-3-2 = 3)
+    FILTER(1 -2*3 = -5)
+    FILTER(1 +2*3 = 7)
+    FILTER(10 -4/2 = 8)
+    FILTER(1 -2*3 -4 = -9)
+    FILTER(1 -2*3*2 = -11)
+    FILTER(20 -12/2/3 = 18)
+    FILTER(1 -0.5*4 = -1)
+    FILTER(1 +1.0e0/4 = 1.25)
+    FILTER(1+2*3 = 7)
+    FILTER(10-4/2 = 8)
+    FILTER(10 - 2 -3*2 = 2)
+}

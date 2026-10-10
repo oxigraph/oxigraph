@@ -1518,7 +1518,71 @@ fn expression<'src, E: CParserError<'src>>(
     group_graph_pattern: impl CParser<'src, GraphPattern<'src>, E>,
 ) -> impl CParser<'src, Spanned<Expression<'src>>, E> {
     recursive(|expression| {
-        primary_expression(expression.clone(), group_graph_pattern).pratt((
+        let primary_expression = primary_expression(expression.clone(), group_graph_pattern);
+        // [135]   	UnaryExpression 	  ::=   	  '!' UnaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
+        let unary_expression = primary_expression
+            .pratt((
+                prefix(1, operator("!"), |(), a, c| Spanned {
+                    inner: Expression::Not(Box::new(a)),
+                    span: c.span(),
+                }),
+                prefix(1, operator("+"), |(), a, c| Spanned {
+                    inner: Expression::UnaryPlus(Box::new(a)),
+                    span: c.span(),
+                }),
+                prefix(1, operator("-"), |(), a, c| Spanned {
+                    inner: Expression::UnaryMinus(Box::new(a)),
+                    span: c.span(),
+                }),
+            ))
+            .boxed();
+        // [134]   	MultiplicativeExpression 	  ::=   	UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
+        // The '*' and '/' steps are folded to the left.
+        let multiplicative_step = choice((
+            operator("*").to(MultiplicativeOperator::Multiply),
+            operator("/").to(MultiplicativeOperator::Divide),
+        ))
+        .then(unary_expression.clone());
+        let multiplicative_expression = unary_expression
+            .foldl_with(multiplicative_step.clone().repeated(), |l, (op, r), c| {
+                Spanned {
+                    inner: op.apply(l, r),
+                    span: c.span(),
+                }
+            })
+            .boxed();
+        // [133]   	AdditiveExpression 	  ::=   	MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
+        // The steps are folded to the left. A signed numeric literal directly after an operand
+        // is a step of its own: it takes the '*' and '/' operands that follow it, and the result
+        // is added to the left operand.
+        let additive_step = choice((
+            operator("+")
+                .ignore_then(multiplicative_expression.clone())
+                .map(|r| (true, r)),
+            operator("-")
+                .ignore_then(multiplicative_expression.clone())
+                .map(|r| (false, r)),
+            numeric_literal_positive_or_negative()
+                .map(Expression::Literal)
+                .spanned()
+                .foldl_with(multiplicative_step.repeated(), |l, (op, r), c| Spanned {
+                    inner: op.apply(l, r),
+                    span: c.span(),
+                })
+                .map(|r| (true, r)),
+        ));
+        // [132]   	NumericExpression 	  ::=   	AdditiveExpression
+        let numeric_expression = multiplicative_expression
+            .foldl_with(additive_step.repeated(), |l, (is_add, r), c| Spanned {
+                inner: if is_add {
+                    Expression::Add(Box::new(l), Box::new(r))
+                } else {
+                    Expression::Subtract(Box::new(l), Box::new(r))
+                },
+                span: c.span(),
+            })
+            .boxed();
+        numeric_expression.pratt((
             // [127]   	Expression 	  ::=   	ConditionalOrExpression
 
             // [128]   	ConditionalOrExpression 	  ::=   	ConditionalAndExpression ( '||' ConditionalAndExpression )*
@@ -1575,51 +1639,28 @@ fn expression<'src, E: CParserError<'src>>(
                     span: c.span(),
                 },
             ),
-            // [132]   	NumericExpression 	  ::=   	AdditiveExpression
-            // [133]   	AdditiveExpression 	  ::=   	MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
-            infix(left(4), operator("+"), |l, (), r, c| Spanned {
-                inner: Expression::Add(Box::new(l), Box::new(r)),
-                span: c.span(),
-            }),
-            infix(left(4), operator("-"), |l, (), r, c| Spanned {
-                inner: Expression::Subtract(Box::new(l), Box::new(r)),
-                span: c.span(),
-            }),
-            postfix(
-                4,
-                numeric_literal_positive_or_negative()
-                    .map(Expression::Literal)
-                    .spanned(),
-                |l, r, c| Spanned {
-                    inner: Expression::Add(Box::new(l), Box::new(r)),
-                    span: c.span(),
-                },
-            ),
-            // [134]   	MultiplicativeExpression 	  ::=   	UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
-            infix(left(5), operator("*"), |l, (), r, c| Spanned {
-                inner: Expression::Multiply(Box::new(l), Box::new(r)),
-                span: c.span(),
-            }),
-            infix(left(5), operator("/"), |l, (), r, c| Spanned {
-                inner: Expression::Divide(Box::new(l), Box::new(r)),
-                span: c.span(),
-            }),
-            // [135]   	UnaryExpression 	  ::=   	  '!' UnaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
-            prefix(6, operator("!"), |(), a, c| Spanned {
-                inner: Expression::Not(Box::new(a)),
-                span: c.span(),
-            }),
-            prefix(6, operator("+"), |(), a, c| Spanned {
-                inner: Expression::UnaryPlus(Box::new(a)),
-                span: c.span(),
-            }),
-            prefix(6, operator("-"), |(), a, c| Spanned {
-                inner: Expression::UnaryMinus(Box::new(a)),
-                span: c.span(),
-            }),
         ))
     })
     .boxed()
+}
+
+#[derive(Clone, Copy)]
+enum MultiplicativeOperator {
+    Multiply,
+    Divide,
+}
+
+impl MultiplicativeOperator {
+    fn apply<'src>(
+        self,
+        left: Spanned<Expression<'src>>,
+        right: Spanned<Expression<'src>>,
+    ) -> Expression<'src> {
+        match self {
+            Self::Multiply => Expression::Multiply(Box::new(left), Box::new(right)),
+            Self::Divide => Expression::Divide(Box::new(left), Box::new(right)),
+        }
+    }
 }
 
 // [136]   	PrimaryExpression 	  ::=   	BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var | ExprTripleTerm

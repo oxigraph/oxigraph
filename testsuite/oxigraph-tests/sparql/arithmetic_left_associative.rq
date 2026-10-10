@@ -1,0 +1,16 @@
+# Operators of equal precedence are grouped from left to right, as XPath 3.1 section 3.5 states for AdditiveExpr and MultiplicativeExpr, also when a signed literal follows an infix operator
+ASK {
+    FILTER(7 / 20 * 1000 = 350)
+    FILTER(7/20*1000 = 350)
+    FILTER(6 / 20 * 0.8 / 1.0 * 100 = 24)
+    FILTER(8 - 3 - 2 = 3)
+    FILTER(1 - 2 + 3 = 2)
+    FILTER(2 * 3 / 4 = 1.5)
+    FILTER(12 / 2 / 3 = 2)
+    FILTER(10 - 2 -3 = 5)
+    FILTER(10 - 2-3 = 5)
+    FILTER(10 - 2 +3 = 11)
+    FILTER(10 - 2 -3*2 = 2)
+    FILTER(1 - 1 -1 -1 = -2)
+    FILTER(24 / 4 -2 = 4)
+}
