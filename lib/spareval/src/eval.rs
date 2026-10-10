@@ -1614,7 +1614,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             .collect::<Rc<[(usize, usize)]>>();
         Ok(Rc::new(move |from| {
             let mapping = Rc::clone(&mapping);
-            let mut input_tuple = InternalTuple::with_capacity(mapping.len());
+            let mut input_tuple = InternalTuple::with_capacity(inner_encoded_variables.len());
             for (input_key, output_key) in &*mapping {
                 if let Some(value) = from.get(*output_key) {
                     input_tuple.set(*input_key, value.clone());
