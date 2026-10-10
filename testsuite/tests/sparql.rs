@@ -37,10 +37,7 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
 fn sparql11_federation_w3c_evaluation_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-fed.ttl",
-        &[
-            // Problem during service evaluation order
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5",
-        ],
+        &[],
     )
 }
 
