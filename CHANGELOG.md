@@ -1,3 +1,9 @@
+# Unreleased
+
+### Changed
+- SPARQL: fix arithmetic grouping around signed numeric literals and group operators of equal precedence from left to right.
+
+
 # [0.5.11] - 2026-09-02
 
 ### Changed

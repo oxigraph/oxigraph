@@ -43,6 +43,8 @@
     :order_by_rand
     :delete_insert_solution_order
     :if_condition_ebv_error
+    :arithmetic_left_associative
+    :arithmetic_signed_literal
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -217,3 +219,13 @@
     mf:name "IF condition EBV errors leave the result unbound" ;
     mf:action [ qt:query <if_condition_ebv_error.rq> ] ;
     mf:result <true.srx> .
+
+:arithmetic_left_associative rdf:type mf:QueryEvaluationTest ;
+    mf:name "Chains of '+', '-', '*' and '/' associate to the left" ;
+    mf:action [ qt:query <arithmetic_left_associative.rq> ] ;
+    mf:result  <true.srx> .
+
+:arithmetic_signed_literal rdf:type mf:QueryEvaluationTest ;
+    mf:name "A signed numeric literal after an operand is added to the result of the following '*' and '/' operations" ;
+    mf:action [ qt:query <arithmetic_signed_literal.rq> ] ;
+    mf:result  <true.srx> .
