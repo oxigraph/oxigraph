@@ -15,7 +15,7 @@
         "@types/rdfjs__data-model": "^2.0.9",
         "fzstd": "^0.1.1",
         "typescript": "~7.0",
-        "vitest": "^4.0.0",
+        "vitest": "^5.0.1",
         "vite-plugin-wasm": "^3.6.0"
     },
     "scripts": {
