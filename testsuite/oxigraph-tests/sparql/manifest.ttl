@@ -62,6 +62,8 @@
     :merged_default_graph_update
     :delete_insert_solution_order
     :repeated_blank_node
+    :arithmetic_left_associative
+    :arithmetic_signed_literal
     ) .
 
 :merged_default_graph rdf:type mf:QueryEvaluationTest ;
@@ -329,3 +331,13 @@
     mf:name "same blank node multiple times in the query" ;
     mf:action [ qt:query <repeated_blank_node.rq> ; qt:data <repeated_blank_node.ttl> ] ;
     mf:result  <repeated_blank_node.srx> .
+
+:arithmetic_left_associative rdf:type mf:QueryEvaluationTest ;
+    mf:name "Chains of '+', '-', '*' and '/' associate to the left" ;
+    mf:action [ qt:query <arithmetic_left_associative.rq> ] ;
+    mf:result  <true.srx> .
+
+:arithmetic_signed_literal rdf:type mf:QueryEvaluationTest ;
+    mf:name "A signed numeric literal after an operand is added to the result of the following '*' and '/' operations" ;
+    mf:action [ qt:query <arithmetic_signed_literal.rq> ] ;
+    mf:result  <true.srx> .
