@@ -2163,23 +2163,25 @@ parser! {
 
         rule NumericExpression() -> Expression = AdditiveExpression()
 
-        rule AdditiveExpression() -> Expression = a:MultiplicativeExpression() _ o:AdditiveExpression_inner()? { match o {
-            Some(("+", b)) => Expression::Add(Box::new(a), Box::new(b)),
-            Some(("-", b)) => Expression::Subtract(Box::new(a), Box::new(b)),
-            Some(_) => unreachable!(),
-            None => a,
-        } }
-        rule AdditiveExpression_inner() -> (&'input str, Expression) = s: $("+" / "-") _ e:AdditiveExpression() {
+        rule AdditiveExpression() -> Expression = a:MultiplicativeExpression() _ o:AdditiveExpression_inner()* {
+            o.into_iter().fold(a, |a, (operator, b)| match operator {
+                "+" => Expression::Add(Box::new(a), Box::new(b)),
+                "-" => Expression::Subtract(Box::new(a), Box::new(b)),
+                _ => unreachable!(),
+            })
+        }
+        rule AdditiveExpression_inner() -> (&'input str, Expression) = s: $("+" / "-") _ e:MultiplicativeExpression() _ {
             (s, e)
         }
 
-        rule MultiplicativeExpression() -> Expression = a:UnaryExpression() _ o: MultiplicativeExpression_inner()? { match o {
-            Some(("*", b)) => Expression::Multiply(Box::new(a), Box::new(b)),
-            Some(("/", b)) => Expression::Divide(Box::new(a), Box::new(b)),
-            Some(_) => unreachable!(),
-            None => a
-        } }
-        rule MultiplicativeExpression_inner() -> (&'input str, Expression) = s: $("*" / "/") _ e:MultiplicativeExpression() {
+        rule MultiplicativeExpression() -> Expression = a:UnaryExpression() _ o:MultiplicativeExpression_inner()* {
+            o.into_iter().fold(a, |a, (operator, b)| match operator {
+                "*" => Expression::Multiply(Box::new(a), Box::new(b)),
+                "/" => Expression::Divide(Box::new(a), Box::new(b)),
+                _ => unreachable!(),
+            })
+        }
+        rule MultiplicativeExpression_inner() -> (&'input str, Expression) = s: $("*" / "/") _ e:UnaryExpression() _ {
             (s, e)
         }
 
