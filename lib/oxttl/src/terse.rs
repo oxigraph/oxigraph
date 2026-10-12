@@ -147,7 +147,8 @@ impl RuleRecognizer for TriGRecognizer {
                 }
                 TriGState::BaseExpectIri => {
                     if let N3Token::IriRef(iri) = token {
-                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                        context.lexer_options.base_iri =
+                            Some(Iri::parse_unchecked(iri.into_owned()));
                     } else {
                         self.error(errors, "The BASE keyword should be followed by an IRI")
                     }
@@ -165,7 +166,9 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::PrefixExpectIri { name } => {
                     if let N3Token::IriRef(iri) = token {
-                        context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                        context
+                            .prefixes
+                            .insert(name, Iri::parse_unchecked(iri.into_owned()));
                     } else {
                         self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
                     }
@@ -182,7 +185,7 @@ impl RuleRecognizer for TriGRecognizer {
                     N3Token::IriRef(iri) => {
                         self.stack
                             .push(TriGState::WrappedGraphOrPredicateObjectList {
-                                term: NamedNode::new_unchecked(iri).into(),
+                                term: NamedNode::new_unchecked(iri.into_owned()).into(),
                             });
                     }
                     N3Token::PrefixedName {
@@ -353,7 +356,8 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(TriGState::TriplesBlankNodePropertyListCurrent);
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::new_unchecked(iri).into());
+                        self.cur_subject
+                            .push(NamedNode::new_unchecked(iri.into_owned()).into());
                         self.stack.push(TriGState::PredicateObjectList);
                     }
                     N3Token::PrefixedName {
@@ -406,7 +410,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [7]  labelOrSubject  ::=  iri | BlankNode
                 TriGState::GraphName => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_graph = NamedNode::new_unchecked(iri).into();
+                        self.cur_graph = NamedNode::new_unchecked(iri.into_owned()).into();
                     }
                     N3Token::PrefixedName {
                         prefix,
@@ -561,7 +565,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(rdf::TYPE);
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_predicate.push(NamedNode::new_unchecked(iri));
+                        self.cur_predicate
+                            .push(NamedNode::new_unchecked(iri.into_owned()));
                     }
                     N3Token::PrefixedName {
                         prefix,
@@ -593,7 +598,8 @@ impl RuleRecognizer for TriGRecognizer {
                 // [32] BlankNode 	::= 	BLANK_NODE_LABEL | ANON
                 TriGState::Object => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::new_unchecked(iri).into());
+                        self.cur_object
+                            .push(NamedNode::new_unchecked(iri.into_owned()).into());
                         self.emit_quad(results);
                     }
                     N3Token::PrefixedName {
@@ -625,8 +631,10 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::ObjectCollectionBeginning);
                     }
                     N3Token::String(value) | N3Token::LongString(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: true });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into_owned(),
+                            emit: true,
+                        });
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
@@ -785,16 +793,19 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::LiteralExpectDatatype { value, emit } => match token {
                     N3Token::IriRef(datatype) => {
-                        if !self.lenient && datatype == rdf::LANG_STRING.as_str() {
+                        if !self.lenient && datatype.as_str() == rdf::LANG_STRING.as_str() {
                             errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
                         }
                         #[cfg(feature = "rdf-12")]
-                        if !self.lenient && datatype == rdf::DIR_LANG_STRING.as_str() {
+                        if !self.lenient && datatype.as_str() == rdf::DIR_LANG_STRING.as_str() {
                             errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
                         }
                         self.cur_object.push(
-                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
-                                .into(),
+                            Literal::new_typed_literal(
+                                value,
+                                NamedNode::new_unchecked(datatype.into_owned()),
+                            )
+                            .into(),
                         );
                         if emit {
                             self.emit_quad(results);
@@ -900,7 +911,7 @@ impl RuleRecognizer for TriGRecognizer {
                 #[cfg(feature = "rdf-12")]
                 TriGState::Reifier { triple } => match token {
                     N3Token::IriRef(iri) => {
-                        let reifier = NamedNode::new_unchecked(iri);
+                        let reifier = NamedNode::new_unchecked(iri.into_owned());
                         results.push(Quad::new(
                             reifier.clone(),
                             rdf::REIFIES,
@@ -971,7 +982,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedAnonEnd);
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::new_unchecked(iri).into());
+                        self.cur_subject
+                            .push(NamedNode::new_unchecked(iri.into_owned()).into());
                     }
                     N3Token::PrefixedName {
                         prefix,
@@ -1015,7 +1027,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedAnonEnd);
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::new_unchecked(iri).into());
+                        self.cur_object
+                            .push(NamedNode::new_unchecked(iri.into_owned()).into());
                     }
                     N3Token::PrefixedName {
                         prefix,
@@ -1037,8 +1050,10 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(BlankNode::new_unchecked(OxString::new_owned(label)).into());
                     }
                     N3Token::String(value) => {
-                        self.stack
-                            .push(TriGState::LiteralPossibleSuffix { value, emit: false });
+                        self.stack.push(TriGState::LiteralPossibleSuffix {
+                            value: value.into_owned(),
+                            emit: false,
+                        });
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
