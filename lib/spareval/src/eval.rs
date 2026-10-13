@@ -420,6 +420,7 @@ pub struct SimpleEvaluator<'a, D: QueryableDataset<'a>> {
     custom_functions: Rc<CustomFunctionRegistry>,
     custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
     run_stats: bool,
+    explain: bool,
 }
 
 impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
@@ -432,6 +433,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         cancellation_token: CancellationToken,
         dataset_spec: QueryDatasetSpecification,
         run_stats: bool,
+        explain: bool,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(Self {
             dataset: EvalDataset::new(dataset, dataset_spec, cancellation_token)?,
@@ -441,6 +443,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             custom_functions,
             custom_aggregate_functions,
             run_stats,
+            explain,
         })
     }
 
@@ -605,7 +608,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let evaluator =
             self.build_graph_pattern_evaluator(pattern, encoded_variables, &mut stat_children);
         let stats = Rc::new(EvalNodeWithStats {
-            label: eval_node_label(pattern),
+            // Formatting recurses per IN item, so only when explaining.
+            label: if self.explain {
+                eval_node_label(pattern)
+            } else {
+                String::new()
+            },
             children: stat_children,
             exec_count: Cell::new(0),
             exec_duration: Cell::new(self.run_stats.then(DayTimeDuration::default)),
@@ -2109,6 +2117,7 @@ impl<'a, D: QueryableDataset<'a>> Clone for SimpleEvaluator<'a, D> {
             custom_functions: Rc::clone(&self.custom_functions),
             custom_aggregate_functions: Rc::clone(&self.custom_aggregate_functions),
             run_stats: self.run_stats,
+            explain: self.explain,
         }
     }
 }
