@@ -1,6 +1,7 @@
 # Unreleased
 
 ### Changed
+- `spareval`: the explanation labels are only formatted by `explain`, no longer on every evaluation. Formatting them recurses once per `IN` list item and overflowed the stack on long lists.
 - SPARQL: fix arithmetic grouping around signed numeric literals and group operators of equal precedence from left to right.
 
 

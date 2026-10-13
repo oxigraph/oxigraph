@@ -565,6 +565,7 @@ impl QueryEvaluator {
         dataset: D,
         dataset_spec: QueryDatasetSpecification,
         base_iri: &Option<Iri<String>>,
+        explain: bool,
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
         SimpleEvaluator::new(
             dataset,
@@ -575,6 +576,7 @@ impl QueryEvaluator {
             self.cancellation_token.clone().unwrap_or_default(),
             dataset_spec,
             self.run_stats,
+            explain,
         )
     }
 }
@@ -663,12 +665,23 @@ impl PreparedQuery<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<QueryResults<'b>, QueryEvaluationError> {
-        self.explain(dataset).0
+        self.evaluate(dataset, false).0
     }
 
     pub fn explain<'b>(
         self,
         dataset: impl QueryableDataset<'b>,
+    ) -> (
+        Result<QueryResults<'b>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
+        self.evaluate(dataset, true)
+    }
+
+    fn evaluate<'b>(
+        self,
+        dataset: impl QueryableDataset<'b>,
+        explain: bool,
     ) -> (
         Result<QueryResults<'b>, QueryEvaluationError>,
         QueryExplanation,
@@ -686,7 +699,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, base_iri, explain)
                     {
                         Ok(evaluator) => evaluator.evaluate_select(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -708,7 +721,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, base_iri, explain)
                     {
                         Ok(evaluator) => evaluator.evaluate_ask(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -733,7 +746,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, base_iri, explain)
                     {
                         Ok(evaluator) => {
                             evaluator.evaluate_construct(&pattern, template, self.substitutions)
@@ -757,7 +770,7 @@ impl PreparedQuery<'_> {
                 let (results, explanation) =
                     match self
                         .evaluator
-                        .simple_evaluator(dataset, self.dataset, base_iri)
+                        .simple_evaluator(dataset, self.dataset, base_iri, explain)
                     {
                         Ok(evaluator) => evaluator.evaluate_describe(&pattern, self.substitutions),
                         Err(e) => (Err(e), Rc::new(EvalNodeWithStats::empty())),
@@ -864,7 +877,7 @@ impl PreparedDeleteInsertUpdate<'_> {
         }
         let (solutions, _) = self
             .evaluator
-            .simple_evaluator(dataset, self.dataset, &self.base_iri)?
+            .simple_evaluator(dataset, self.dataset, &self.base_iri, false)?
             .evaluate_select(&pattern, []);
         Ok(DeleteInsertIter::new(solutions?, self.delete, self.insert))
     }
@@ -1080,7 +1093,8 @@ impl fmt::Debug for QueryExplanation {
 mod tests {
     use super::*;
     use oxrdf::vocab::xsd;
-    use oxrdf::{Literal, Term};
+    use oxrdf::{Dataset, Literal, Term};
+    use spargebra::SparqlParser;
     use sparopt::algebra::{Expression, GraphPattern};
 
     #[test]
@@ -1261,5 +1275,45 @@ mod tests {
         );
         let result = evaluator.evaluate_expression(&expr, std::iter::empty());
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn execute_does_not_format_long_expressions() {
+        // Overflows the stack if execute() builds the labels.
+        let query = SparqlParser::new()
+            .parse_query(&format!(
+                "SELECT * WHERE {{ ?s ?p ?o FILTER(?o IN ({})) }}",
+                (0..50_000)
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+            .unwrap();
+        std::thread::Builder::new()
+            .stack_size(2 << 20)
+            .spawn(move || {
+                let dataset = Dataset::new();
+                let results = QueryEvaluator::new()
+                    .prepare(&query)
+                    .execute(&dataset)
+                    .unwrap();
+                if let QueryResults::Solutions(solutions) = results {
+                    assert_eq!(solutions.count(), 0);
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn explain_formats_expressions() {
+        let query = SparqlParser::new()
+            .parse_query("SELECT * WHERE { ?s ?p ?o FILTER(?o IN (1, 2)) }")
+            .unwrap();
+        let (_, explanation) = QueryEvaluator::new()
+            .prepare(&query)
+            .explain(&Dataset::new());
+        assert!(format!("{explanation:?}").contains("Filter("));
     }
 }
