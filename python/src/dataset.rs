@@ -14,9 +14,6 @@ use std::fmt;
 ///
 /// Use :py:class:`Store` if you need on-disk persistence or SPARQL.
 ///
-/// Warning: It interns the strings and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.
-///
 /// :param quads: some quads to initialize the dataset with.
 /// :type quads: collections.abc.Iterable[Quad] or None, optional
 ///
