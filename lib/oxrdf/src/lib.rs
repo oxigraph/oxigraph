@@ -7,7 +7,6 @@
 mod blank_node;
 pub mod dataset;
 pub mod graph;
-mod interning;
 mod literal;
 mod named_node;
 mod parser;

@@ -12,11 +12,11 @@
 //! dataset.insert(quad.clone());
 //!
 //! // simple filter
-//! let results: Vec<_> = dataset.quads_for_subject(&ex).collect();
+//! let results = dataset.quads_for_subject(&ex).collect::<Vec<_>>();
 //! assert_eq!(vec![quad], results);
 //!
 //! // direct access to a dataset graph
-//! let results: Vec<_> = dataset.graph(&ex).iter().collect();
+//! let results = dataset.graph(&ex).iter().collect::<Vec<_>>();
 //! assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
 //!
 //! // Print
@@ -27,25 +27,44 @@
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
-//! See also [`Graph`] if you only care about plain triples.
+//! See also [`Graph`](crate::Graph) if you only care about plain triples.
 
-use crate::interning::*;
-use crate::*;
+use crate::{
+    BlankNode, BlankNodeRef, GraphName, GraphNameRef, NamedNode, NamedNodeRef, NamedOrBlankNode,
+    NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef, Triple, TripleRef,
+};
 use oxstr::{OxString, oxformat};
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, btree_set};
 use std::fmt;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{BuildHasher, DefaultHasher, Hash, Hasher};
 use std::mem::take;
+use std::num::NonZeroUsize;
+use std::ops::RangeInclusive;
+
+// Component numbers are S, P, O, G. Every binding mask has an index prefix.
+const ORDERS: [[usize; 4]; 6] = [
+    [3, 0, 1, 2],
+    [3, 1, 2, 0],
+    [3, 2, 0, 1],
+    [0, 1, 2, 3],
+    [1, 2, 0, 3],
+    [2, 0, 1, 3],
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+struct TermId(u32);
+
+impl TermId {
+    const MIN: Self = Self(0); // Also the default graph; never a dictionary ID.
+    const MAX: Self = Self(u32::MAX); // Reserved exclusively for range bounds.
+}
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// It can accommodate a fairly large number of quads (in the few millions).
-///
-/// <div class="warning">It interns the strings and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
 ///
 /// Usage example:
 /// ```
@@ -67,45 +86,10 @@ use std::mem::take;
 /// assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Dataset {
-    interner: Interner,
-    gspo: BTreeSet<(
-        InternedGraphName,
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-    )>,
-    gpos: BTreeSet<(
-        InternedGraphName,
-        InternedNamedNode,
-        InternedTerm,
-        InternedNamedOrBlankNode,
-    )>,
-    gosp: BTreeSet<(
-        InternedGraphName,
-        InternedTerm,
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-    )>,
-    spog: BTreeSet<(
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )>,
-    posg: BTreeSet<(
-        InternedNamedNode,
-        InternedTerm,
-        InternedNamedOrBlankNode,
-        InternedGraphName,
-    )>,
-    ospg: BTreeSet<(
-        InternedTerm,
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedGraphName,
-    )>,
+    dictionary: Dictionary,
+    indexes: [BTreeSet<[TermId; 4]>; 6],
 }
 
 impl Dataset {
@@ -128,12 +112,9 @@ impl Dataset {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn graph<'a, 'b>(&'a self, graph_name: impl Into<GraphNameRef<'b>>) -> GraphView<'a> {
-        let graph_name = self
-            .encoded_graph_name(graph_name)
-            .unwrap_or_else(InternedGraphName::impossible);
         GraphView {
             dataset: self,
-            graph_name,
+            graph_name: self.graph_id(graph_name.into()),
         }
     }
 
@@ -165,385 +146,217 @@ impl Dataset {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn graph_mut(&mut self, graph_name: impl Into<GraphName>) -> GraphViewMut<'_> {
-        let graph_name = InternedGraphName::encoded_into(graph_name.into(), &mut self.interner);
         GraphViewMut {
             dataset: self,
-            graph_name,
+            graph_name: graph_name.into(),
         }
     }
 
     /// Returns all the quads contained by the dataset.
     pub fn iter(&self) -> Iter<'_> {
-        let iter = self.spog.iter();
         Iter {
             dataset: self,
-            inner: iter,
+            inner: self.indexes[3].iter(),
         }
     }
 
-    pub fn quads_for_subject<'a, 'b>(
+    pub fn quads_for_subject<'a, 'b, S: Into<NamedOrBlankNodeRef<'b>>>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = Quad> + 'a {
-        let subject = self
-            .encoded_named_or_blank_node(subject)
-            .unwrap_or_else(InternedNamedOrBlankNode::impossible);
-        self.interned_quads_for_subject(&subject)
-            .map(move |q| self.decode_spog(q))
+        subject: S,
+    ) -> impl Iterator<Item = Quad> + 'a + use<'a, S> {
+        self.quads_for_pattern(Some(subject.into()), None, None, None)
     }
 
-    fn interned_quads_for_subject<'a>(
+    pub fn quads_for_predicate<'a, 'b, P: Into<NamedNodeRef<'b>>>(
         &'a self,
-        subject: &InternedNamedOrBlankNode,
-    ) -> impl Iterator<
-        Item = (
-            &'a InternedNamedOrBlankNode,
-            &'a InternedNamedNode,
-            &'a InternedTerm,
-            &'a InternedGraphName,
-        ),
-    > + use<'a> {
-        self.spog
-            .range(
-                &(
-                    *subject,
-                    InternedNamedNode::first(),
-                    InternedTerm::first(),
-                    InternedGraphName::first(),
-                )
-                    ..&(
-                        subject.next(),
-                        InternedNamedNode::first(),
-                        InternedTerm::first(),
-                        InternedGraphName::first(),
-                    ),
-            )
-            .map(|(s, p, o, g)| (s, p, o, g))
+        predicate: P,
+    ) -> impl Iterator<Item = Quad> + 'a + use<'a, P> {
+        self.quads_for_pattern(None, Some(predicate.into()), None, None)
     }
 
-    pub fn quads_for_predicate<'a, 'b>(
+    pub fn quads_for_object<'a, 'b, O: Into<TermRef<'b>>>(
         &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Quad> + 'a {
-        let predicate = self
-            .encoded_named_node(predicate)
-            .unwrap_or_else(InternedNamedNode::impossible);
-        self.interned_quads_for_predicate(predicate)
-            .map(move |q| self.decode_spog(q))
+        object: O,
+    ) -> impl Iterator<Item = Quad> + 'a + use<'a, O> {
+        self.quads_for_pattern(None, None, Some(object.into()), None)
     }
 
-    fn interned_quads_for_predicate(
-        &self,
-        predicate: InternedNamedNode,
-    ) -> impl Iterator<
-        Item = (
-            &InternedNamedOrBlankNode,
-            &InternedNamedNode,
-            &InternedTerm,
-            &InternedGraphName,
-        ),
-    > + '_ {
-        self.posg
-            .range(
-                &(
-                    predicate,
-                    InternedTerm::first(),
-                    InternedNamedOrBlankNode::first(),
-                    InternedGraphName::first(),
-                )
-                    ..&(
-                        predicate.next(),
-                        InternedTerm::first(),
-                        InternedNamedOrBlankNode::first(),
-                        InternedGraphName::first(),
-                    ),
-            )
-            .map(|(p, o, s, g)| (s, p, o, g))
-    }
-
-    pub fn quads_for_object<'a, 'b>(
+    pub fn quads_for_graph_name<'a, 'b, G: Into<GraphNameRef<'b>>>(
         &'a self,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = Quad> + 'a {
-        let object = self
-            .encoded_term(object)
-            .unwrap_or_else(InternedTerm::impossible);
-
-        self.interned_quads_for_object(&object)
-            .map(move |q| self.decode_spog(q))
-    }
-
-    fn interned_quads_for_object<'a>(
-        &'a self,
-        object: &InternedTerm,
-    ) -> impl Iterator<
-        Item = (
-            &'a InternedNamedOrBlankNode,
-            &'a InternedNamedNode,
-            &'a InternedTerm,
-            &'a InternedGraphName,
-        ),
-    > + use<'a> {
-        self.ospg
-            .range(
-                &(
-                    object.clone(),
-                    InternedNamedOrBlankNode::first(),
-                    InternedNamedNode::first(),
-                    InternedGraphName::first(),
-                )
-                    ..&(
-                        object.next(),
-                        InternedNamedOrBlankNode::first(),
-                        InternedNamedNode::first(),
-                        InternedGraphName::first(),
-                    ),
-            )
-            .map(|(o, s, p, g)| (s, p, o, g))
-    }
-
-    pub fn quads_for_graph_name<'a, 'b>(
-        &'a self,
-        graph_name: impl Into<GraphNameRef<'b>>,
-    ) -> impl Iterator<Item = Quad> + 'a {
-        let graph_name = self
-            .encoded_graph_name(graph_name)
-            .unwrap_or_else(InternedGraphName::impossible);
-
-        self.interned_quads_for_graph_name(&graph_name)
-            .map(move |q| self.decode_spog(q))
-    }
-
-    fn interned_quads_for_graph_name<'a>(
-        &'a self,
-        graph_name: &InternedGraphName,
-    ) -> impl Iterator<
-        Item = (
-            &'a InternedNamedOrBlankNode,
-            &'a InternedNamedNode,
-            &'a InternedTerm,
-            &'a InternedGraphName,
-        ),
-    > + use<'a> {
-        self.gspo
-            .range(
-                &(
-                    *graph_name,
-                    InternedNamedOrBlankNode::first(),
-                    InternedNamedNode::first(),
-                    InternedTerm::first(),
-                )
-                    ..&(
-                        graph_name.next(),
-                        InternedNamedOrBlankNode::first(),
-                        InternedNamedNode::first(),
-                        InternedTerm::first(),
-                    ),
-            )
-            .map(|(g, s, p, o)| (s, p, o, g))
+        graph_name: G,
+    ) -> impl Iterator<Item = Quad> + 'a + use<'a, G> {
+        self.quads_for_pattern(None, None, None, Some(graph_name.into()))
     }
 
     /// Retrieves quads with a filter on each quad component
     pub fn quads_for_pattern<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-        graph_name: Option<GraphNameRef<'a>>,
-    ) -> impl Iterator<Item = Quad> + 'a {
-        let iter: Box<dyn Iterator<Item = _>> = if let Some(subject) = subject {
-            Box::new(self.quads_for_subject(subject).filter(move |q| {
-                predicate.as_ref().is_none_or(|p| *p == q.predicate)
-                    && object.as_ref().is_none_or(|o| *o == q.object.as_ref())
-                    && graph_name
-                        .as_ref()
-                        .is_none_or(|g| *g == q.graph_name.as_ref())
-            }))
-        } else if let Some(object) = object {
-            Box::new(self.quads_for_object(object).filter(move |q| {
-                predicate.as_ref().is_none_or(|p| *p == q.predicate)
-                    && graph_name
-                        .as_ref()
-                        .is_none_or(|g| *g == q.graph_name.as_ref())
-            }))
-        } else if let Some(predicate) = predicate {
-            Box::new(self.quads_for_predicate(predicate).filter(move |q| {
-                graph_name
-                    .as_ref()
-                    .is_none_or(|g| *g == q.graph_name.as_ref())
-            }))
-        } else if let Some(graph_name) = graph_name {
-            Box::new(self.quads_for_graph_name(graph_name))
-        } else {
-            Box::new(self.iter())
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Quad> + use<'a> {
+        self.matching_ids(self.encode_pattern(subject, predicate, object, graph_name))
+            .map(|ids| self.decode(ids))
+    }
+
+    fn matching_ids(&self, ids: Option<[Option<TermId>; 4]>) -> Matches<'_> {
+        let mut result = Matches {
+            order: 3,
+            inner: None,
         };
-        iter
+        let Some(ids) = ids else {
+            return result;
+        };
+        let bound = ids.iter().filter(|id| id.is_some()).count();
+        let order = ORDERS
+            .iter()
+            .position(|order| {
+                order[..bound]
+                    .iter()
+                    .all(|component| ids[*component].is_some())
+            })
+            .unwrap();
+        let prefix = ORDERS[order].map(|component| ids[component].unwrap_or(TermId::MIN));
+        result.order = order;
+        result.inner = Some(self.indexes[order].range(prefix_range(&prefix[..bound])));
+        result
     }
 
     /// Checks if the dataset contains the given quad
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> bool {
-        if let Some(q) = self.encoded_quad(quad.into()) {
-            self.spog.contains(&q)
-        } else {
-            false
-        }
+        self.encoded_quad(quad.into())
+            .is_some_and(|q| self.indexes[3].contains(&q))
     }
 
     /// Returns the number of quads in this dataset.
     pub fn len(&self) -> usize {
-        self.gspo.len()
+        self.indexes[3].len()
     }
 
     /// Checks if this dataset contains a quad.
     pub fn is_empty(&self) -> bool {
-        self.gspo.is_empty()
+        self.indexes[3].is_empty()
     }
 
     /// Adds a quad to the dataset.
+    ///
+    /// Panics if more than `u32::MAX - 1` distinct term are in the dataset.
     pub fn insert(&mut self, quad: impl Into<Quad>) -> bool {
-        let quad = self.encode_quad(quad.into());
-        self.insert_encoded(quad)
-    }
-
-    fn insert_encoded(
-        &mut self,
-        quad: (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-    ) -> bool {
-        let (s, p, o, g) = quad;
-        self.gspo.insert((g, s, p, o.clone()));
-        self.gpos.insert((g, p, o.clone(), s));
-        self.gosp.insert((g, o.clone(), s, p));
-        self.spog.insert((s, p, o.clone(), g));
-        self.posg.insert((p, o.clone(), s, g));
-        self.ospg.insert((o, s, p, g))
+        let quad = quad.into();
+        let ids = [
+            self.dictionary.acquire(quad.subject.into()),
+            self.dictionary.acquire(quad.predicate.into()),
+            self.dictionary.acquire(quad.object),
+            match quad.graph_name {
+                GraphName::DefaultGraph => TermId::MIN,
+                GraphName::NamedNode(n) => self.dictionary.acquire(n.into()),
+                GraphName::BlankNode(n) => self.dictionary.acquire(n.into()),
+            },
+        ];
+        if !self.indexes[3].insert(ids) {
+            for id in ids {
+                self.dictionary.release(id);
+            }
+            return false;
+        }
+        for (order, index) in self.indexes.iter_mut().enumerate() {
+            index.insert(reorder(ids, order));
+        }
+        true
     }
 
     /// Removes a concrete quad from the dataset.
     pub fn remove<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
-        if let Some(quad) = self.encoded_quad(quad.into()) {
-            self.remove_encoded(quad)
-        } else {
-            false
+        let Some(ids) = self.encoded_quad(quad.into()) else {
+            return false;
+        };
+        if !self.indexes[3].remove(&ids) {
+            return false;
         }
-    }
-
-    fn remove_encoded(
-        &mut self,
-        quad: (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-    ) -> bool {
-        let (s, p, o, g) = quad;
-        self.gspo.remove(&(g, s, p, o.clone()));
-        self.gpos.remove(&(g, p, o.clone(), s));
-        self.gosp.remove(&(g, o.clone(), s, p));
-        self.spog.remove(&(s, p, o.clone(), g));
-        self.posg.remove(&(p, o.clone(), s, g));
-        self.ospg.remove(&(o, s, p, g))
+        for order in [0, 1, 2, 4, 5] {
+            self.indexes[order].remove(&reorder(ids, order));
+        }
+        // Only recycle IDs after every index has stopped referring to them.
+        for id in ids {
+            self.dictionary.release(id);
+        }
+        true
     }
 
     /// Clears the dataset.
     pub fn clear(&mut self) {
-        self.gspo.clear();
-        self.gpos.clear();
-        self.gosp.clear();
-        self.spog.clear();
-        self.posg.clear();
-        self.ospg.clear();
+        *self = Self::default();
     }
 
-    fn encode_quad(
-        &mut self,
-        quad: Quad,
-    ) -> (
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    ) {
-        (
-            InternedNamedOrBlankNode::encoded_into(quad.subject, &mut self.interner),
-            InternedNamedNode::encoded_into(quad.predicate, &mut self.interner),
-            InternedTerm::encoded_into(quad.object, &mut self.interner),
-            InternedGraphName::encoded_into(quad.graph_name, &mut self.interner),
-        )
-    }
-
-    fn encoded_quad(
+    fn encode_pattern<'a>(
         &self,
-        quad: QuadRef<'_>,
-    ) -> Option<(
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )> {
-        Some((
-            self.encoded_named_or_blank_node(quad.subject)?,
-            self.encoded_named_node(quad.predicate)?,
-            self.encoded_term(quad.object)?,
-            self.encoded_graph_name(quad.graph_name)?,
-        ))
+        subject: Option<NamedOrBlankNodeRef<'a>>,
+        predicate: Option<NamedNodeRef<'a>>,
+        object: Option<TermRef<'a>>,
+        graph_name: Option<GraphNameRef<'a>>,
+    ) -> Option<[Option<TermId>; 4]> {
+        let find = |term| self.dictionary.find(term).map(Some);
+        Some([
+            subject.map_or(Some(None), |s| find(s.into()))?,
+            predicate.map_or(Some(None), |p| find(p.into()))?,
+            object.map_or(Some(None), find)?,
+            graph_name.map_or(Some(None), |g| match g {
+                GraphNameRef::DefaultGraph => Some(Some(TermId::MIN)),
+                GraphNameRef::NamedNode(n) => find(n.into()),
+                GraphNameRef::BlankNode(n) => find(n.into()),
+            })?,
+        ])
     }
 
-    pub(super) fn encoded_named_node<'a>(
-        &self,
-        node: impl Into<NamedNodeRef<'a>>,
-    ) -> Option<InternedNamedNode> {
-        InternedNamedNode::encoded_from(node.into(), &self.interner)
+    fn encoded_quad(&self, quad: QuadRef<'_>) -> Option<[TermId; 4]> {
+        Some([
+            self.dictionary.find(quad.subject.into())?,
+            self.dictionary.find(quad.predicate.into())?,
+            self.dictionary.find(quad.object)?,
+            match quad.graph_name {
+                GraphNameRef::DefaultGraph => TermId::MIN,
+                GraphNameRef::NamedNode(n) => self.dictionary.find(n.into())?,
+                GraphNameRef::BlankNode(n) => self.dictionary.find(n.into())?,
+            },
+        ])
     }
 
-    pub(super) fn encoded_named_or_blank_node<'a>(
-        &self,
-        node: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Option<InternedNamedOrBlankNode> {
-        InternedNamedOrBlankNode::encoded_from(node.into(), &self.interner)
-    }
-
-    pub(super) fn encoded_term<'a>(&self, term: impl Into<TermRef<'a>>) -> Option<InternedTerm> {
-        InternedTerm::encoded_from(term.into(), &self.interner)
-    }
-
-    pub(super) fn encoded_graph_name<'a>(
-        &self,
-        graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> Option<InternedGraphName> {
-        InternedGraphName::encoded_from(graph_name.into(), &self.interner)
-    }
-
-    fn decode_spog(
-        &self,
-        quad: (
-            &InternedNamedOrBlankNode,
-            &InternedNamedNode,
-            &InternedTerm,
-            &InternedGraphName,
-        ),
-    ) -> Quad {
-        Quad {
-            subject: quad.0.decode_from(&self.interner),
-            predicate: quad.1.decode_from(&self.interner),
-            object: quad.2.decode_from(&self.interner),
-            graph_name: quad.3.decode_from(&self.interner),
+    fn subject(&self, id: TermId) -> NamedOrBlankNode {
+        match self.dictionary.term(id) {
+            Term::NamedNode(n) => NamedOrBlankNode::NamedNode(n.clone()),
+            Term::BlankNode(n) => NamedOrBlankNode::BlankNode(n.clone()),
+            Term::Literal(_) => unreachable!("quad subjects are named or blank nodes"),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => unreachable!("quad subjects are named or blank nodes"),
         }
     }
 
-    fn decode_spo(
-        &self,
-        triple: (&InternedNamedOrBlankNode, &InternedNamedNode, &InternedTerm),
-    ) -> Triple {
-        Triple {
-            subject: triple.0.decode_from(&self.interner),
-            predicate: triple.1.decode_from(&self.interner),
-            object: triple.2.decode_from(&self.interner),
+    fn predicate(&self, id: TermId) -> NamedNode {
+        let Term::NamedNode(n) = self.dictionary.term(id) else {
+            unreachable!("quad predicates are named nodes")
+        };
+        n.clone()
+    }
+
+    fn graph_id(&self, graph: GraphNameRef<'_>) -> Option<TermId> {
+        match graph {
+            GraphNameRef::DefaultGraph => Some(TermId::MIN),
+            GraphNameRef::NamedNode(n) => self.dictionary.find(n.into()),
+            GraphNameRef::BlankNode(n) => self.dictionary.find(n.into()),
+        }
+    }
+
+    fn decode(&self, ids: [TermId; 4]) -> Quad {
+        Quad {
+            subject: self.subject(ids[0]),
+            predicate: self.predicate(ids[1]),
+            object: self.dictionary.term(ids[2]).clone(),
+            graph_name: if ids[3] == TermId::MIN {
+                GraphName::DefaultGraph
+            } else {
+                self.subject(ids[3]).into()
+            },
         }
     }
 
@@ -584,12 +397,17 @@ impl Dataset {
     ///     See [the RDFC specification section about it](https://www.w3.org/TR/rdf-canon/#dataset-poisoning).
     /// </div>
     pub fn canonicalize(&mut self, algorithm: CanonicalizationAlgorithm) {
-        let bnode_mapping = self.canonicalize_interned_blank_nodes(algorithm);
-        let new_quads = self.map_blank_nodes(&bnode_mapping);
+        let quads: Vec<_> = self.iter().collect();
+        let mapping = canonicalize_blank_nodes(&quads, algorithm);
         self.clear();
-        for quad in new_quads {
-            self.insert_encoded(quad);
-        }
+        self.extend(quads.into_iter().map(|mut quad| {
+            quad.subject = map_subject(quad.subject, &mapping);
+            quad.object = map_term(quad.object, &mapping);
+            if let GraphName::BlankNode(node) = &quad.graph_name {
+                quad.graph_name = mapping[node].clone().into();
+            }
+            quad
+        }));
     }
 
     /// Returns a map between the current dataset blank node and the canonicalized blank node
@@ -600,16 +418,138 @@ impl Dataset {
         &self,
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<BlankNode, BlankNode> {
-        self.canonicalize_interned_blank_nodes(algorithm)
-            .into_iter()
-            .map(|(from, to)| (from.decode_from(&self.interner), to))
-            .collect()
+        canonicalize_blank_nodes(&self.iter().collect::<Vec<_>>(), algorithm)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct TermEntry {
+    term: Term,
+    references: NonZeroUsize,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Dictionary {
+    // Most buckets contain one ID. Collisions are resolved by term equality,
+    // not by changing IDs or assuming hashes uniquely identify terms.
+    by_hash: HashMap<u64, Vec<TermId>>, // TODO: avoid the nested Vec?
+    entries: Vec<Option<TermEntry>>,
+    free: Vec<TermId>,
+}
+
+impl Dictionary {
+    fn term(&self, id: TermId) -> &Term {
+        &self.entries[(id.0 - 1) as usize].as_ref().unwrap().term
     }
 
-    fn canonicalize_interned_blank_nodes(
+    fn hash(&self, term: TermRef<'_>) -> u64 {
+        self.by_hash.hasher().hash_one(term)
+    }
+
+    fn find(&self, term: TermRef<'_>) -> Option<TermId> {
+        self.by_hash
+            .get(&self.hash(term))?
+            .iter()
+            .copied()
+            .find(|id| self.term(*id).as_ref() == term)
+    }
+
+    fn acquire(&mut self, term: Term) -> TermId {
+        #[expect(clippy::expect_used)]
+        if let Some(id) = self.find(term.as_ref()) {
+            let entry = self.entries[(id.0 - 1) as usize].as_mut().unwrap();
+            entry.references = entry
+                .references
+                .checked_add(1)
+                .expect("term reference count overflow");
+            return id;
+        }
+        let hash = self.hash(term.as_ref());
+        let id = self.free.pop().unwrap_or_else(|| {
+            let id = TermId(u32::try_from(self.entries.len() + 1).unwrap());
+            assert!(id < TermId::MAX, "term dictionary exhausted its IDs");
+            self.entries.push(None);
+            id
+        });
+        self.entries[(id.0 - 1) as usize] = Some(TermEntry {
+            term,
+            references: NonZeroUsize::MIN,
+        });
+        self.by_hash.entry(hash).or_default().push(id);
+        id
+    }
+
+    fn release(&mut self, id: TermId) {
+        if id == TermId::MIN {
+            return;
+        } // The default graph has no owned term.
+        let slot = &mut self.entries[(id.0 - 1) as usize];
+        let entry = slot.as_mut().unwrap();
+        if let Some(references) = NonZeroUsize::new(entry.references.get() - 1) {
+            entry.references = references;
+            return;
+        }
+        // We have 0 referenvces, we GC
+        let entry = slot.take().unwrap();
+        let hash = self.hash(entry.term.as_ref());
+        let bucket = self.by_hash.get_mut(&hash).unwrap();
+        bucket.swap_remove(
+            bucket
+                .iter()
+                .position(|candidate| *candidate == id)
+                .unwrap(),
+        );
+        if bucket.is_empty() {
+            self.by_hash.remove(&hash);
+        }
+        self.free.push(id);
+    }
+}
+
+fn reorder(quad: [TermId; 4], order: usize) -> [TermId; 4] {
+    ORDERS[order].map(|component| quad[component])
+}
+
+fn prefix_range(prefix: &[TermId]) -> RangeInclusive<[TermId; 4]> {
+    let mut lower = [TermId::MIN; 4];
+    let mut upper = [TermId::MAX; 4];
+    lower[..prefix.len()].copy_from_slice(prefix);
+    upper[..prefix.len()].copy_from_slice(prefix);
+    lower..=upper
+}
+
+fn canonicalize_blank_nodes(
+    quads: &[Quad],
+    algorithm: CanonicalizationAlgorithm,
+) -> HashMap<BlankNode, BlankNode> {
+    Canonicalization {
+        quads: quads
+            .iter()
+            .map(|q| {
+                (
+                    q.subject.as_ref(),
+                    q.predicate.as_ref(),
+                    q.object.as_ref(),
+                    q.graph_name.as_ref(),
+                )
+            })
+            .collect(),
+    }
+    .canonicalize_blank_nodes(algorithm)
+    .into_iter()
+    .map(|(from, to)| (from.into_owned(), to))
+    .collect()
+}
+
+struct Canonicalization<'a> {
+    quads: Vec<QuadTerms<'a>>,
+}
+
+impl<'a> Canonicalization<'a> {
+    fn canonicalize_blank_nodes(
         &self,
         algorithm: CanonicalizationAlgorithm,
-    ) -> HashMap<InternedBlankNode, BlankNode> {
+    ) -> HashMap<BlankNodeRef<'a>, BlankNode> {
         let hash_algorithm = match algorithm {
             CanonicalizationAlgorithm::Unstable | CanonicalizationAlgorithm::UnstableHashedIds => {
                 None
@@ -625,15 +565,15 @@ impl Dataset {
             canonical_issuer: IdentifierIssuer::new("c14n"),
         };
         // 2)
-        for quad in &self.spog {
-            if let InternedNamedOrBlankNode::BlankNode(bnode) = quad.0 {
+        for quad in &self.quads {
+            if let NamedOrBlankNodeRef::BlankNode(bnode) = quad.0 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     bnode,
                     quad,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
-            if let InternedTerm::BlankNode(bnode) = &quad.2 {
+            if let TermRef::BlankNode(bnode) = &quad.2 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     *bnode,
                     quad,
@@ -641,14 +581,14 @@ impl Dataset {
                 );
             }
             #[cfg(feature = "rdf-12")]
-            if let InternedTerm::Triple(t) = &quad.2 {
+            if let TermRef::Triple(t) = &quad.2 {
                 Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
                     t,
                     quad,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
-            if let InternedGraphName::BlankNode(bnode) = &quad.3 {
+            if let GraphNameRef::BlankNode(bnode) = &quad.3 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     *bnode,
                     quad,
@@ -659,7 +599,7 @@ impl Dataset {
         // 3)
         for n in canonicalization_state.blank_node_to_quads_map.keys() {
             // 3.1)
-            let hash = self.hash_first_degree_quads(&canonicalization_state, *n, hash_algorithm);
+            let hash = Self::hash_first_degree_quads(&canonicalization_state, *n, hash_algorithm);
             // 3.2)
             canonicalization_state
                 .hash_to_blank_nodes_map
@@ -709,7 +649,7 @@ impl Dataset {
                 // 5.2.3)
                 Self::issue_identifier(&mut temporary_issuer, n, algorithm, &hash);
                 // 5.2.4)
-                hash_path_list.push(self.hash_n_degree_quads(
+                hash_path_list.push(Self::hash_n_degree_quads(
                     &canonicalization_state,
                     n,
                     &temporary_issuer,
@@ -738,30 +678,25 @@ impl Dataset {
     }
 
     #[cfg(feature = "rdf-12")]
-    fn add_quad_to_blank_node_to_quads_map_based_on_triple<'a>(
-        triple: &InternedTriple,
-        quad: &'a (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
+    fn add_quad_to_blank_node_to_quads_map_based_on_triple(
+        triple: &'a Triple,
+        quad: &QuadTerms<'a>,
         blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
     ) {
-        if let InternedNamedOrBlankNode::BlankNode(bnode) = triple.subject {
+        if let NamedOrBlankNodeRef::BlankNode(bnode) = triple.subject.as_ref() {
             Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                 bnode,
                 quad,
                 blank_node_to_quads_map,
             );
         }
-        if let InternedTerm::BlankNode(bnode) = &triple.object {
+        if let TermRef::BlankNode(bnode) = &triple.object.as_ref() {
             Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                 *bnode,
                 quad,
                 blank_node_to_quads_map,
             );
-        } else if let InternedTerm::Triple(t) = &triple.object {
+        } else if let TermRef::Triple(t) = &triple.object.as_ref() {
             Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
                 t,
                 quad,
@@ -770,26 +705,21 @@ impl Dataset {
         }
     }
 
-    fn add_quad_to_blank_node_to_quads_map_for_blank_node<'a>(
-        bnode: InternedBlankNode,
-        quad: &'a (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
+    fn add_quad_to_blank_node_to_quads_map_for_blank_node(
+        bnode: BlankNodeRef<'a>,
+        quad: &QuadTerms<'a>,
         blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
     ) {
         let entry = blank_node_to_quads_map.entry(bnode).or_default();
-        if !entry.ends_with(&[quad]) {
-            entry.push(quad);
+        if !entry.ends_with(&[*quad]) {
+            entry.push(*quad);
         }
     }
 
     /// RDFC [Issue Identifier Algorithm](https://www.w3.org/TR/rdf-canon/#issue-identifier)
     fn issue_identifier(
-        issuer: &mut IdentifierIssuer,
-        blank_node: InternedBlankNode,
+        issuer: &mut IdentifierIssuer<'a>,
+        blank_node: BlankNodeRef<'a>,
         algorithm: CanonicalizationAlgorithm,
         hash: &str,
     ) -> BlankNode {
@@ -831,9 +761,8 @@ impl Dataset {
 
     /// RDFC [Hash First Degree Quads](https://www.w3.org/TR/rdf-canon/#hash-1d-quads)
     fn hash_first_degree_quads(
-        &self,
-        canonicalization_state: &CanonicalizationState<'_>,
-        reference_blank_node_identifier: InternedBlankNode,
+        canonicalization_state: &CanonicalizationState<'a>,
+        reference_blank_node_identifier: BlankNodeRef<'a>,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
     ) -> String {
         // 1)
@@ -844,14 +773,14 @@ impl Dataset {
         // 3)
         for (subject, predicate, object, graph_name) in quads {
             // 3.1)
-            let subject = self.hash_first_degree_quads_decode_named_or_blank_node(
+            let subject = Self::hash_first_degree_quads_decode_named_or_blank_node(
                 subject,
                 reference_blank_node_identifier,
             );
-            let predicate = predicate.decode_from(&self.interner);
+            let predicate = predicate.into_owned();
             let object =
-                self.hash_first_degree_quads_decode_term(object, reference_blank_node_identifier);
-            let graph_name = self.hash_first_degree_quads_decode_graph_name(
+                Self::hash_first_degree_quads_decode_term(object, reference_blank_node_identifier);
+            let graph_name = Self::hash_first_degree_quads_decode_graph_name(
                 graph_name,
                 reference_blank_node_identifier,
             );
@@ -868,13 +797,12 @@ impl Dataset {
     }
 
     fn hash_first_degree_quads_decode_named_or_blank_node(
-        &self,
-        term: &InternedNamedOrBlankNode,
-        reference_blank_node_identifier: InternedBlankNode,
+        term: &NamedOrBlankNodeRef<'a>,
+        reference_blank_node_identifier: BlankNodeRef<'a>,
     ) -> NamedOrBlankNode {
         match term {
-            InternedNamedOrBlankNode::NamedNode(t) => t.decode_from(&self.interner).into(),
-            InternedNamedOrBlankNode::BlankNode(t) => {
+            NamedOrBlankNodeRef::NamedNode(t) => t.into_owned().into(),
+            NamedOrBlankNodeRef::BlankNode(t) => {
                 BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
@@ -886,13 +814,12 @@ impl Dataset {
     }
 
     fn hash_first_degree_quads_decode_term(
-        &self,
-        term: &InternedTerm,
-        reference_blank_node_identifier: InternedBlankNode,
+        term: &TermRef<'a>,
+        reference_blank_node_identifier: BlankNodeRef<'a>,
     ) -> Term {
         match term {
-            InternedTerm::NamedNode(t) => t.decode_from(&self.interner).into(),
-            InternedTerm::BlankNode(t) => {
+            TermRef::NamedNode(t) => t.into_owned().into(),
+            TermRef::BlankNode(t) => {
                 BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
@@ -900,16 +827,16 @@ impl Dataset {
                 })
                 .into()
             }
-            InternedTerm::Literal(t) => t.decode_from(&self.interner).into(),
+            TermRef::Literal(t) => t.into_owned().into(),
             #[cfg(feature = "rdf-12")]
-            InternedTerm::Triple(t) => Triple::new(
-                self.hash_first_degree_quads_decode_named_or_blank_node(
-                    &t.subject,
+            TermRef::Triple(t) => Triple::new(
+                Self::hash_first_degree_quads_decode_named_or_blank_node(
+                    &t.subject.as_ref(),
                     reference_blank_node_identifier,
                 ),
-                t.predicate.decode_from(&self.interner),
-                self.hash_first_degree_quads_decode_term(
-                    &t.object,
+                t.predicate.clone(),
+                Self::hash_first_degree_quads_decode_term(
+                    &t.object.as_ref(),
                     reference_blank_node_identifier,
                 ),
             )
@@ -918,13 +845,12 @@ impl Dataset {
     }
 
     fn hash_first_degree_quads_decode_graph_name(
-        &self,
-        term: &InternedGraphName,
-        reference_blank_node_identifier: InternedBlankNode,
+        term: &GraphNameRef<'a>,
+        reference_blank_node_identifier: BlankNodeRef<'a>,
     ) -> GraphName {
         match term {
-            InternedGraphName::NamedNode(t) => t.decode_from(&self.interner).into(),
-            InternedGraphName::BlankNode(t) => {
+            GraphNameRef::NamedNode(t) => t.into_owned().into(),
+            GraphNameRef::BlankNode(t) => {
                 BlankNodeRef::new_unchecked(if *t == reference_blank_node_identifier {
                     "a"
                 } else {
@@ -932,22 +858,16 @@ impl Dataset {
                 })
                 .into()
             }
-            InternedGraphName::DefaultGraph => GraphName::DefaultGraph,
+            GraphNameRef::DefaultGraph => GraphName::DefaultGraph,
         }
     }
 
     /// RDFC [Hash Related Blank Node](https://www.w3.org/TR/rdf-canon/#hash-related-blank-node)
     fn hash_related_blank_node(
-        &self,
-        canonicalization_state: &CanonicalizationState<'_>,
-        related: InternedBlankNode,
-        quad: &(
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-        issuer: &IdentifierIssuer,
+        canonicalization_state: &CanonicalizationState<'a>,
+        related: BlankNodeRef<'a>,
+        quad: &QuadTerms<'a>,
+        issuer: &IdentifierIssuer<'a>,
         position: &str,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
     ) -> String {
@@ -956,7 +876,7 @@ impl Dataset {
         // 2)
         if position != "g" {
             input.push('<');
-            input.push_str(quad.1.decode_from(&self.interner).as_str());
+            input.push_str(quad.1.into_owned().as_str());
             input.push('>');
         }
         // 3)
@@ -970,7 +890,7 @@ impl Dataset {
             input.push_str(id.as_str());
         } else {
             // 4)
-            input.push_str(&self.hash_first_degree_quads(
+            input.push_str(&Self::hash_first_degree_quads(
                 canonicalization_state,
                 related,
                 hash_algorithm,
@@ -982,13 +902,12 @@ impl Dataset {
 
     /// RDFC [Hash N Degree Quads](https://www.w3.org/TR/rdf-canon/#hash-nd-quads)
     fn hash_n_degree_quads(
-        &self,
-        canonicalization_state: &CanonicalizationState<'_>,
-        identifier: InternedBlankNode,
-        issuer: &IdentifierIssuer,
+        canonicalization_state: &CanonicalizationState<'a>,
+        identifier: BlankNodeRef<'a>,
+        issuer: &IdentifierIssuer<'a>,
         algorithm: CanonicalizationAlgorithm,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
-    ) -> (IdentifierIssuer, String) {
+    ) -> (IdentifierIssuer<'a>, String) {
         let mut issuer = issuer.clone();
         // 1)
         let mut h_n = BTreeMap::<_, HashSet<_>>::new();
@@ -997,8 +916,8 @@ impl Dataset {
         // 3)
         for quad in quads {
             // 3.1)
-            if let InternedNamedOrBlankNode::BlankNode(component) = quad.0 {
-                self.hash_related_blank_node_on_possible_component(
+            if let NamedOrBlankNodeRef::BlankNode(component) = quad.0 {
+                Self::hash_related_blank_node_on_possible_component(
                     canonicalization_state,
                     component,
                     identifier,
@@ -1009,8 +928,8 @@ impl Dataset {
                     hash_algorithm,
                 );
             }
-            if let InternedTerm::BlankNode(component) = quad.2 {
-                self.hash_related_blank_node_on_possible_component(
+            if let TermRef::BlankNode(component) = quad.2 {
+                Self::hash_related_blank_node_on_possible_component(
                     canonicalization_state,
                     component,
                     identifier,
@@ -1022,8 +941,8 @@ impl Dataset {
                 );
             }
             #[cfg(feature = "rdf-12")]
-            if let InternedTerm::Triple(t) = &quad.2 {
-                self.hash_related_blank_node_on_possible_triple(
+            if let TermRef::Triple(t) = &quad.2 {
+                Self::hash_related_blank_node_on_possible_triple(
                     canonicalization_state,
                     t,
                     identifier,
@@ -1033,8 +952,8 @@ impl Dataset {
                     hash_algorithm,
                 );
             }
-            if let InternedGraphName::BlankNode(component) = quad.3 {
-                self.hash_related_blank_node_on_possible_component(
+            if let GraphNameRef::BlankNode(component) = quad.3 {
+                Self::hash_related_blank_node_on_possible_component(
                     canonicalization_state,
                     component,
                     identifier,
@@ -1101,7 +1020,7 @@ impl Dataset {
                 // 5.4.5)
                 for related in recursion_list {
                     // 5.4.5.1)
-                    let (result_identifier_issuer, result_hash) = self.hash_n_degree_quads(
+                    let (result_identifier_issuer, result_hash) = Self::hash_n_degree_quads(
                         canonicalization_state,
                         related,
                         &issuer_copy,
@@ -1144,22 +1063,16 @@ impl Dataset {
 
     #[cfg(feature = "rdf-12")]
     fn hash_related_blank_node_on_possible_triple(
-        &self,
-        canonicalization_state: &CanonicalizationState<'_>,
-        triple: &InternedTriple,
-        identifier: InternedBlankNode,
-        quad: &(
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-        issuer: &IdentifierIssuer,
-        h_n: &mut BTreeMap<String, HashSet<InternedBlankNode>>,
+        canonicalization_state: &CanonicalizationState<'a>,
+        triple: &'a Triple,
+        identifier: BlankNodeRef<'a>,
+        quad: &QuadTerms<'a>,
+        issuer: &IdentifierIssuer<'a>,
+        h_n: &mut BTreeMap<String, HashSet<BlankNodeRef<'a>>>,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
     ) {
-        if let InternedNamedOrBlankNode::BlankNode(component) = triple.subject {
-            self.hash_related_blank_node_on_possible_component(
+        if let NamedOrBlankNodeRef::BlankNode(component) = triple.subject.as_ref() {
+            Self::hash_related_blank_node_on_possible_component(
                 canonicalization_state,
                 component,
                 identifier,
@@ -1170,8 +1083,8 @@ impl Dataset {
                 hash_algorithm,
             );
         }
-        if let InternedTerm::BlankNode(component) = &triple.object {
-            self.hash_related_blank_node_on_possible_component(
+        if let TermRef::BlankNode(component) = &triple.object.as_ref() {
+            Self::hash_related_blank_node_on_possible_component(
                 canonicalization_state,
                 *component,
                 identifier,
@@ -1185,24 +1098,18 @@ impl Dataset {
     }
 
     fn hash_related_blank_node_on_possible_component(
-        &self,
-        canonicalization_state: &CanonicalizationState<'_>,
-        component: InternedBlankNode,
-        identifier: InternedBlankNode,
-        quad: &(
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-        issuer: &IdentifierIssuer,
+        canonicalization_state: &CanonicalizationState<'a>,
+        component: BlankNodeRef<'a>,
+        identifier: BlankNodeRef<'a>,
+        quad: &QuadTerms<'a>,
+        issuer: &IdentifierIssuer<'a>,
         position: &str,
-        h_n: &mut BTreeMap<String, HashSet<InternedBlankNode>>,
+        h_n: &mut BTreeMap<String, HashSet<BlankNodeRef<'a>>>,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
     ) {
         if component != identifier {
             // 3.1.1)
-            let hash = self.hash_related_blank_node(
+            let hash = Self::hash_related_blank_node(
                 canonicalization_state,
                 component,
                 quad,
@@ -1232,106 +1139,41 @@ impl Dataset {
             }
         }
     }
+}
 
-    #[expect(clippy::needless_collect)]
-    fn map_blank_nodes(
-        &mut self,
-        bnode_mapping: &HashMap<InternedBlankNode, BlankNode>,
-    ) -> Vec<(
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )> {
-        let old_quads: Vec<_> = self.spog.iter().cloned().collect();
-        old_quads
-            .into_iter()
-            .map(|(s, p, o, g)| {
-                (
-                    match s {
-                        InternedNamedOrBlankNode::NamedNode(_) => s,
-                        InternedNamedOrBlankNode::BlankNode(bnode) => {
-                            InternedNamedOrBlankNode::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].clone(),
-                                &mut self.interner,
-                            ))
-                        }
-                    },
-                    p,
-                    match o {
-                        InternedTerm::NamedNode(_) | InternedTerm::Literal(_) => o,
-                        InternedTerm::BlankNode(bnode) => {
-                            InternedTerm::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].clone(),
-                                &mut self.interner,
-                            ))
-                        }
-                        #[cfg(feature = "rdf-12")]
-                        InternedTerm::Triple(triple) => {
-                            InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
-                                self.map_triple_blank_nodes(&triple, bnode_mapping),
-                                &mut self.interner,
-                            )))
-                        }
-                    },
-                    match g {
-                        InternedGraphName::NamedNode(_) | InternedGraphName::DefaultGraph => g,
-                        InternedGraphName::BlankNode(bnode) => {
-                            InternedGraphName::BlankNode(InternedBlankNode::encoded_into(
-                                bnode_mapping[&bnode].clone(),
-                                &mut self.interner,
-                            ))
-                        }
-                    },
-                )
-            })
-            .collect()
+fn map_subject(
+    subject: NamedOrBlankNode,
+    mapping: &HashMap<BlankNode, BlankNode>,
+) -> NamedOrBlankNode {
+    match subject {
+        NamedOrBlankNode::BlankNode(node) => mapping[&node].clone().into(),
+        node @ NamedOrBlankNode::NamedNode(_) => node,
     }
+}
 
-    #[cfg(feature = "rdf-12")]
-    fn map_triple_blank_nodes(
-        &mut self,
-        triple: &InternedTriple,
-        bnode_mapping: &HashMap<InternedBlankNode, BlankNode>,
-    ) -> Triple {
-        Triple {
-            subject: if let InternedNamedOrBlankNode::BlankNode(bnode) = &triple.subject {
-                bnode_mapping[bnode].clone().into()
-            } else {
-                triple.subject.decode_from(&self.interner)
-            },
-            predicate: triple.predicate.decode_from(&self.interner),
-            object: if let InternedTerm::BlankNode(bnode) = &triple.object {
-                bnode_mapping[bnode].clone().into()
-            } else if let InternedTerm::Triple(t) = &triple.object {
-                self.map_triple_blank_nodes(t, bnode_mapping).into()
-            } else {
-                triple.object.decode_from(&self.interner)
-            },
+fn map_term(term: Term, mapping: &HashMap<BlankNode, BlankNode>) -> Term {
+    match term {
+        Term::BlankNode(node) => mapping[&node].clone().into(),
+        #[cfg(feature = "rdf-12")]
+        Term::Triple(mut triple) => {
+            triple.subject = map_subject(triple.subject, mapping);
+            triple.object = map_term(triple.object, mapping);
+            Term::Triple(triple)
         }
+        other => other,
     }
 }
 
 impl PartialEq for Dataset {
     fn eq(&self, other: &Self) -> bool {
-        if self.len() != other.len() {
-            return false;
-        }
-        for q in self {
-            if !other.contains(&q) {
-                return false;
-            }
-        }
-        true
+        self.len() == other.len() && self.iter().all(|q| other.contains(&q))
     }
 }
-
 impl Eq for Dataset {}
 
 impl<'a> IntoIterator for &'a Dataset {
     type Item = Quad;
     type IntoIter = Iter<'a>;
-
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -1339,24 +1181,24 @@ impl<'a> IntoIterator for &'a Dataset {
 
 impl<Q: Into<Quad>> FromIterator<Q> for Dataset {
     fn from_iter<I: IntoIterator<Item = Q>>(iter: I) -> Self {
-        let mut g = Self::new();
-        g.extend(iter);
-        g
+        let mut result = Self::new();
+        result.extend(iter);
+        result
     }
 }
 
 impl<Q: Into<Quad>> Extend<Q> for Dataset {
     fn extend<I: IntoIterator<Item = Q>>(&mut self, iter: I) {
-        for q in iter {
-            self.insert(q);
+        for quad in iter {
+            self.insert(quad);
         }
     }
 }
 
 impl fmt::Display for Dataset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self {
-            writeln!(f, "{t} .")?;
+        for quad in self {
+            writeln!(f, "{quad} .")?;
         }
         Ok(())
     }
@@ -1381,98 +1223,37 @@ impl fmt::Display for Dataset {
 #[derive(Clone, Debug)]
 pub struct GraphView<'a> {
     dataset: &'a Dataset,
-    graph_name: InternedGraphName,
+    graph_name: Option<TermId>,
 }
 
 impl<'a> GraphView<'a> {
     /// Returns all the triples contained by the graph.
     pub fn iter(&self) -> GraphViewIter<'a> {
-        let iter = self.dataset.gspo.range(
-            &(
-                self.graph_name,
-                InternedNamedOrBlankNode::first(),
-                InternedNamedNode::first(),
-                InternedTerm::first(),
-            )
-                ..&(
-                    self.graph_name.next(),
-                    InternedNamedOrBlankNode::first(),
-                    InternedNamedNode::first(),
-                    InternedTerm::first(),
-                ),
-        );
         GraphViewIter {
             dataset: self.dataset,
-            inner: iter,
+            inner: self.matching(None, None, None),
         }
     }
 
-    pub fn triples_for_subject<'b>(
+    pub fn triples_for_subject<'b, S: Into<NamedOrBlankNodeRef<'b>>>(
         &self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
+        subject: S,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, S> {
+        self.triples_for_pattern(Some(subject.into()), None, None)
     }
 
-    pub(super) fn triples_for_interned_subject(
+    pub fn objects_for_subject_predicate<
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        P: Into<NamedNodeRef<'b>>,
+    >(
         &self,
-        subject: Option<InternedNamedOrBlankNode>,
-    ) -> impl Iterator<Item = Triple> + use<'a> {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gspo
-            .range(
-                &(
-                    self.graph_name,
-                    subject,
-                    InternedNamedNode::first(),
-                    InternedTerm::first(),
-                )
-                    ..&(
-                        self.graph_name,
-                        subject.next(),
-                        InternedNamedNode::first(),
-                        InternedTerm::first(),
-                    ),
-            )
-            .map(move |q| {
-                let (_, s, p, o) = q;
-                ds.decode_spo((s, p, o))
-            })
-    }
-
-    pub fn objects_for_subject_predicate<'b>(
-        &self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Term> + 'a {
-        self.objects_for_interned_subject_predicate(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_named_node(predicate),
-        )
-    }
-
-    pub(super) fn objects_for_interned_subject_predicate(
-        &self,
-        subject: Option<InternedNamedOrBlankNode>,
-        predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = Term> + use<'a> {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
-        let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gspo
-            .range(
-                &(self.graph_name, subject, predicate, InternedTerm::first())
-                    ..&(
-                        self.graph_name,
-                        subject,
-                        predicate.next(),
-                        InternedTerm::first(),
-                    ),
-            )
-            .map(move |q| q.3.decode_from(&ds.interner))
+        subject: S,
+        predicate: P,
+    ) -> impl Iterator<Item = Term> + 'a + use<'a, S, P> {
+        let dataset = self.dataset;
+        self.matching(Some(subject.into()), Some(predicate.into()), None)
+            .map(move |ids| dataset.dictionary.term(ids[2]).clone())
     }
 
     pub fn object_for_subject_predicate<'b>(
@@ -1484,112 +1265,35 @@ impl<'a> GraphView<'a> {
             .next()
     }
 
-    pub fn predicates_for_subject_object<'b>(
+    pub fn predicates_for_subject_object<
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        O: Into<TermRef<'b>>,
+    >(
         &self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedNode> + 'a {
-        self.predicates_for_interned_subject_object(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_term(object),
-        )
+        subject: S,
+        object: O,
+    ) -> impl Iterator<Item = NamedNode> + 'a + use<'a, S, O> {
+        let dataset = self.dataset;
+        self.matching(Some(subject.into()), None, Some(object.into()))
+            .map(move |ids| dataset.predicate(ids[1]))
     }
 
-    pub(super) fn predicates_for_interned_subject_object(
+    pub fn triples_for_predicate<'b, P: Into<NamedNodeRef<'b>>>(
         &self,
-        subject: Option<InternedNamedOrBlankNode>,
-        object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedNode> + use<'a> {
-        let subject = subject.unwrap_or_else(InternedNamedOrBlankNode::impossible);
-        let object = object.unwrap_or_else(InternedTerm::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gosp
-            .range(
-                &(
-                    self.graph_name,
-                    object.clone(),
-                    subject,
-                    InternedNamedNode::first(),
-                )
-                    ..&(
-                        self.graph_name,
-                        object,
-                        subject.next(),
-                        InternedNamedNode::first(),
-                    ),
-            )
-            .map(move |q| q.3.decode_from(&ds.interner))
+        predicate: P,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, P> {
+        self.triples_for_pattern(None, Some(predicate.into()), None)
     }
 
-    pub fn triples_for_predicate<'b>(
+    pub fn subjects_for_predicate_object<'b, P: Into<NamedNodeRef<'b>>, O: Into<TermRef<'b>>>(
         &self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
-    }
-
-    pub(super) fn triples_for_interned_predicate(
-        &self,
-        predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = Triple> + use<'a> {
-        let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gpos
-            .range(
-                &(
-                    self.graph_name,
-                    predicate,
-                    InternedTerm::first(),
-                    InternedNamedOrBlankNode::first(),
-                )
-                    ..&(
-                        self.graph_name,
-                        predicate.next(),
-                        InternedTerm::first(),
-                        InternedNamedOrBlankNode::first(),
-                    ),
-            )
-            .map(move |(_, p, o, s)| ds.decode_spo((s, p, o)))
-    }
-
-    pub fn subjects_for_predicate_object<'b>(
-        &self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a {
-        self.subjects_for_interned_predicate_object(
-            self.dataset.encoded_named_node(predicate),
-            self.dataset.encoded_term(object),
-        )
-    }
-
-    pub(super) fn subjects_for_interned_predicate_object(
-        &self,
-        predicate: Option<InternedNamedNode>,
-        object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedOrBlankNode> + use<'a> {
-        let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
-        let object = object.unwrap_or_else(InternedTerm::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gpos
-            .range(
-                &(
-                    self.graph_name,
-                    predicate,
-                    object.clone(),
-                    InternedNamedOrBlankNode::first(),
-                )
-                    ..&(
-                        self.graph_name,
-                        predicate,
-                        object.next(),
-                        InternedNamedOrBlankNode::first(),
-                    ),
-            )
-            .map(move |q| q.3.decode_from(&ds.interner))
+        predicate: P,
+        object: O,
+    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a + use<'a, P, O> {
+        let dataset = self.dataset;
+        self.matching(None, Some(predicate.into()), Some(object.into()))
+            .map(move |ids| dataset.subject(ids[0]))
     }
 
     pub fn subject_for_predicate_object<'b>(
@@ -1600,82 +1304,39 @@ impl<'a> GraphView<'a> {
         self.subjects_for_predicate_object(predicate, object).next()
     }
 
-    pub fn triples_for_object<'b>(
+    pub fn triples_for_object<'b, O: Into<TermRef<'b>>>(
         &self,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.triples_for_interned_object(self.dataset.encoded_term(object))
-    }
-
-    pub(super) fn triples_for_interned_object(
-        &self,
-        object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = Triple> + use<'a> {
-        let object = object.unwrap_or_else(InternedTerm::impossible);
-        let ds = self.dataset;
-        self.dataset
-            .gosp
-            .range(
-                &(
-                    self.graph_name,
-                    object.clone(),
-                    InternedNamedOrBlankNode::first(),
-                    InternedNamedNode::first(),
-                )
-                    ..&(
-                        self.graph_name,
-                        object.next(),
-                        InternedNamedOrBlankNode::first(),
-                        InternedNamedNode::first(),
-                    ),
-            )
-            .map(move |(_, o, s, p)| ds.decode_spo((s, p, o)))
+        object: O,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, O> {
+        self.triples_for_pattern(None, None, Some(object.into()))
     }
 
     /// Retrieves triples with a filter on each triple component
     pub fn triples_for_pattern(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        let iter: Box<dyn Iterator<Item = _>> = match (subject, predicate, object) {
-            (Some(subject), Some(predicate), Some(object)) => {
-                let triple = Triple::new(subject, predicate, object);
-                Box::new(self.contains(&triple).then_some(triple).into_iter())
-            }
-            (Some(subject), Some(predicate), None) => Box::new(
-                self.objects_for_subject_predicate(subject, predicate)
-                    .map(move |object| Triple::new(subject, predicate, object)),
-            ),
-            (Some(subject), None, Some(object)) => Box::new(
-                self.predicates_for_subject_object(subject, object)
-                    .map(move |predicate| Triple::new(subject, predicate, object)),
-            ),
-            (Some(subject), None, None) => Box::new(self.triples_for_subject(subject)),
-            (None, Some(predicate), Some(object)) => Box::new(
-                self.subjects_for_predicate_object(predicate, object)
-                    .map(move |subject| Triple::new(subject, predicate, object)),
-            ),
-            (None, Some(predicate), None) => Box::new(self.triples_for_predicate(predicate)),
-            (None, None, Some(object)) => Box::new(self.triples_for_object(object)),
-            (None, None, None) => Box::new(self.iter()),
-        };
-        iter
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Triple> + use<'a> {
+        let dataset = self.dataset;
+        self.matching(subject, predicate, object)
+            .map(move |ids| Triple {
+                subject: dataset.subject(ids[0]),
+                predicate: dataset.predicate(ids[1]),
+                object: dataset.dictionary.term(ids[2]).clone(),
+            })
     }
 
     /// Checks if the graph contains the given triple.
     pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
-        if let Some(triple) = self.encoded_triple(triple.into()) {
-            self.dataset.gspo.contains(&(
-                self.graph_name,
-                triple.subject,
-                triple.predicate,
-                triple.object,
-            ))
-        } else {
-            false
-        }
+        let triple = triple.into();
+        self.matching(
+            Some(triple.subject),
+            Some(triple.predicate),
+            Some(triple.object),
+        )
+        .next()
+        .is_some()
     }
 
     /// Returns the number of triples in this graph.
@@ -1688,12 +1349,29 @@ impl<'a> GraphView<'a> {
         self.iter().next().is_none()
     }
 
-    fn encoded_triple(&self, triple: TripleRef<'_>) -> Option<InternedTriple> {
-        Some(InternedTriple {
-            subject: self.dataset.encoded_named_or_blank_node(triple.subject)?,
-            predicate: self.dataset.encoded_named_node(triple.predicate)?,
-            object: self.dataset.encoded_term(triple.object)?,
-        })
+    fn matching(
+        &self,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> Matches<'a> {
+        let ids = self.graph_name.and_then(|graph| {
+            let mut ids = self
+                .dataset
+                .encode_pattern(subject, predicate, object, None)?;
+            ids[3] = Some(graph);
+            Some(ids)
+        });
+        self.dataset.matching_ids(ids)
+    }
+}
+
+impl fmt::Display for GraphView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for triple in self {
+            writeln!(f, "{triple} .")?;
+        }
+        Ok(())
     }
 }
 
@@ -1712,15 +1390,6 @@ impl<'a> IntoIterator for &GraphView<'a> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
-    }
-}
-
-impl fmt::Display for GraphView<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self {
-            writeln!(f, "{t} .")?;
-        }
-        Ok(())
     }
 }
 
@@ -1757,136 +1426,128 @@ impl fmt::Display for GraphView<'_> {
 #[derive(Debug)]
 pub struct GraphViewMut<'a> {
     dataset: &'a mut Dataset,
-    graph_name: InternedGraphName,
+    graph_name: GraphName,
 }
-
-impl<'a> GraphViewMut<'a> {
+impl GraphViewMut<'_> {
     fn read(&self) -> GraphView<'_> {
-        GraphView {
-            dataset: self.dataset,
-            graph_name: self.graph_name,
-        }
+        self.dataset.graph(&self.graph_name)
     }
 
     /// Adds a triple to the graph.
     pub fn insert(&mut self, triple: impl Into<Triple>) -> bool {
-        let triple = self.encode_triple(triple.into());
-        self.dataset.insert_encoded((
-            triple.subject,
-            triple.predicate,
-            triple.object,
-            self.graph_name,
-        ))
+        let triple = triple.into();
+        self.dataset.insert(Quad {
+            subject: triple.subject,
+            predicate: triple.predicate,
+            object: triple.object,
+            graph_name: self.graph_name.clone(),
+        })
     }
 
     /// Removes a concrete triple from the graph.
-    pub fn remove<'b>(&mut self, triple: impl Into<TripleRef<'b>>) -> bool {
-        if let Some(triple) = self.read().encoded_triple(triple.into()) {
-            self.dataset.remove_encoded((
-                triple.subject,
-                triple.predicate,
-                triple.object,
-                self.graph_name,
-            ))
-        } else {
-            false
-        }
-    }
-
-    fn encode_triple(&mut self, triple: Triple) -> InternedTriple {
-        InternedTriple {
-            subject: InternedNamedOrBlankNode::encoded_into(
-                triple.subject,
-                &mut self.dataset.interner,
-            ),
-            predicate: InternedNamedNode::encoded_into(
-                triple.predicate,
-                &mut self.dataset.interner,
-            ),
-            object: InternedTerm::encoded_into(triple.object, &mut self.dataset.interner),
-        }
+    pub fn remove<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> bool {
+        let triple = triple.into();
+        self.dataset.remove(QuadRef {
+            subject: triple.subject,
+            predicate: triple.predicate,
+            object: triple.object,
+            graph_name: self.graph_name.as_ref(),
+        })
     }
 
     /// Returns all the triples contained by the graph
-    pub fn iter(&'a self) -> GraphViewIter<'a> {
+    pub fn iter(&self) -> GraphViewIter<'_> {
         self.read().iter()
     }
 
-    pub fn triples_for_subject<'b>(
+    pub fn triples_for_subject<'a, 'b, S: Into<NamedOrBlankNodeRef<'b>>>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.read()
-            .triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
+        subject: S,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, S> {
+        self.read().triples_for_subject(subject)
     }
 
-    pub fn objects_for_subject_predicate<'b>(
+    pub fn objects_for_subject_predicate<
+        'a,
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        P: Into<NamedNodeRef<'b>>,
+    >(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Term> + 'a {
-        self.read().objects_for_interned_subject_predicate(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_named_node(predicate),
-        )
+        subject: S,
+        predicate: P,
+    ) -> impl Iterator<Item = Term> + 'a + use<'a, S, P> {
+        self.read()
+            .objects_for_subject_predicate(subject, predicate)
     }
 
     pub fn object_for_subject_predicate<'b>(
-        &'a self,
+        &self,
         subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> Option<Term> {
         self.read().object_for_subject_predicate(subject, predicate)
     }
 
-    pub fn predicates_for_subject_object<'b>(
+    pub fn predicates_for_subject_object<
+        'a,
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        O: Into<TermRef<'b>>,
+    >(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedNode> + 'a {
-        self.read().predicates_for_interned_subject_object(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_term(object),
-        )
+        subject: S,
+        object: O,
+    ) -> impl Iterator<Item = NamedNode> + 'a + use<'a, S, O> {
+        self.read().predicates_for_subject_object(subject, object)
     }
 
-    pub fn triples_for_predicate<'b>(
+    pub fn triples_for_predicate<'a, 'b, P: Into<NamedNodeRef<'b>>>(
         &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.read()
-            .triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
+        predicate: P,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, P> {
+        self.read().triples_for_predicate(predicate)
     }
 
-    pub fn subjects_for_predicate_object<'b>(
+    pub fn subjects_for_predicate_object<
+        'a,
+        'b,
+        P: Into<NamedNodeRef<'b>>,
+        O: Into<TermRef<'b>>,
+    >(
         &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a {
-        self.read().subjects_for_interned_predicate_object(
-            self.dataset.encoded_named_node(predicate),
-            self.dataset.encoded_term(object),
-        )
+        predicate: P,
+        object: O,
+    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a + use<'a, P, O> {
+        self.read().subjects_for_predicate_object(predicate, object)
     }
 
     pub fn subject_for_predicate_object<'b>(
-        &'a self,
+        &self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> Option<NamedOrBlankNode> {
         self.read().subject_for_predicate_object(predicate, object)
     }
 
-    pub fn triples_for_object<'b>(
+    pub fn triples_for_object<'a, 'b, O: Into<TermRef<'b>>>(
         &'a self,
-        object: TermRef<'b>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.read()
-            .triples_for_interned_object(self.dataset.encoded_term(object))
+        object: O,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, O> {
+        self.read().triples_for_object(object)
+    }
+
+    pub fn triples_for_pattern<'a>(
+        &'a self,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Triple> + use<'a> {
+        self.read().triples_for_pattern(subject, predicate, object)
     }
 
     /// Checks if the graph contains the given triple.
-    pub fn contains<'b>(&self, triple: impl Into<TripleRef<'b>>) -> bool {
+    pub fn contains<'a>(&self, triple: impl Into<TripleRef<'a>>) -> bool {
         self.read().contains(triple)
     }
 
@@ -1903,13 +1564,19 @@ impl<'a> GraphViewMut<'a> {
 
 impl<T: Into<Triple>> Extend<T> for GraphViewMut<'_> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        for t in iter {
-            self.insert(t);
+        for triple in iter {
+            self.insert(triple);
         }
     }
 }
 
-impl<'a> IntoIterator for &'a GraphViewMut<'a> {
+impl fmt::Display for GraphViewMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.read().fmt(f)
+    }
+}
+
+impl<'a> IntoIterator for &'a GraphViewMut<'_> {
     type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
@@ -1918,76 +1585,55 @@ impl<'a> IntoIterator for &'a GraphViewMut<'a> {
     }
 }
 
-impl fmt::Display for GraphViewMut<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self {
-            writeln!(f, "{t}")?;
+struct Matches<'a> {
+    order: usize,
+    inner: Option<btree_set::Range<'a, [TermId; 4]>>,
+}
+
+impl Iterator for Matches<'_> {
+    type Item = [TermId; 4];
+    fn next(&mut self) -> Option<Self::Item> {
+        let indexed = self.inner.as_mut()?.next()?;
+        let mut ids = [TermId::MIN; 4];
+        for (position, component) in ORDERS[self.order].iter().enumerate() {
+            ids[*component] = indexed[position];
         }
-        Ok(())
+        Some(ids)
     }
 }
 
 /// Iterator returned by [`Dataset::iter`].
 pub struct Iter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Iter<
-        'a,
-        (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
-    >,
+    inner: btree_set::Iter<'a, [TermId; 4]>,
 }
-
 impl Iterator for Iter<'_> {
     type Item = Quad;
-
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(s, p, o, g)| self.dataset.decode_spog((s, p, o, g)))
+        self.inner.next().map(|ids| self.dataset.decode(*ids))
     }
 }
 
 /// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Range<
-        'a,
-        (
-            InternedGraphName,
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-        ),
-    >,
+    inner: Matches<'a>,
 }
 
 impl Iterator for GraphViewIter<'_> {
     type Item = Triple;
-
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(_, s, p, o)| self.dataset.decode_spo((s, p, o)))
+        self.inner.next().map(|ids| Triple {
+            subject: self.dataset.subject(ids[0]),
+            predicate: self.dataset.predicate(ids[1]),
+            object: self.dataset.dictionary.term(ids[2]).clone(),
+        })
     }
 }
 
-type QuadsPerBlankNode<'a> = HashMap<
-    InternedBlankNode,
-    Vec<&'a (
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )>,
->;
-
 /// An algorithm used to canonicalize graph and datasets.
 ///
-/// See [`Graph::canonicalize`] and [`Dataset::canonicalize`].
+/// See [`Graph::canonicalize`](crate::Graph::canonicalize) and [`Dataset::canonicalize`].
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum CanonicalizationAlgorithm {
@@ -2013,7 +1659,7 @@ pub enum CanonicalizationAlgorithm {
 
 /// The hash function to use to canonicalize graph and datasets.
 ///
-/// See [`Graph::canonicalize`] and [`Dataset::canonicalize`].
+/// See [`Graph::canonicalize`](crate::Graph::canonicalize) and [`Dataset::canonicalize`].
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum CanonicalizationHashAlgorithm {
@@ -2023,24 +1669,32 @@ pub enum CanonicalizationHashAlgorithm {
     Sha384,
 }
 
+type QuadTerms<'a> = (
+    NamedOrBlankNodeRef<'a>,
+    NamedNodeRef<'a>,
+    TermRef<'a>,
+    GraphNameRef<'a>,
+);
+type QuadsPerBlankNode<'a> = HashMap<BlankNodeRef<'a>, Vec<QuadTerms<'a>>>;
+
 /// A RDFC [canonicalization state](https://www.w3.org/TR/rdf-canon/#canon-state)
 struct CanonicalizationState<'a> {
     blank_node_to_quads_map: QuadsPerBlankNode<'a>,
-    hash_to_blank_nodes_map: BTreeMap<String, Vec<InternedBlankNode>>,
-    canonical_issuer: IdentifierIssuer,
+    hash_to_blank_nodes_map: BTreeMap<String, Vec<BlankNodeRef<'a>>>,
+    canonical_issuer: IdentifierIssuer<'a>,
 }
 
 /// A RDFC [identifier issuer](https://www.w3.org/TR/rdf-canon/#dfn-identifier-issuer)
 #[derive(Clone)]
-struct IdentifierIssuer {
+struct IdentifierIssuer<'a> {
     identifier_prefix: &'static str,
     identifier_counter: u32,
-    issued_identifier_map: HashMap<InternedBlankNode, BlankNode>,
-    issued_identifier_order: Vec<InternedBlankNode>, /* hack to know the insertion order in the hash map */
+    issued_identifier_map: HashMap<BlankNodeRef<'a>, BlankNode>,
+    issued_identifier_order: Vec<BlankNodeRef<'a>>, /* hack to know the insertion order in the hash map */
     already_issued_identifiers: HashSet<BlankNode>,
 }
 
-impl IdentifierIssuer {
+impl IdentifierIssuer<'_> {
     fn new(identifier_prefix: &'static str) -> Self {
         Self {
             identifier_prefix,
@@ -2069,11 +1723,302 @@ fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec
     current_output
 }
 
-#[cfg(feature = "rdfc-10")]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Literal, NamedOrBlankNode};
+    use std::collections::HashSet;
 
+    fn data() -> Vec<Quad> {
+        let subjects: Vec<NamedOrBlankNode> = vec![
+            NamedNode::new_unchecked("http://example.com/a").into(),
+            NamedNode::new_unchecked("http://example.com/b").into(),
+            BlankNode::new_unchecked("a").into(),
+        ];
+        let predicates = [
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/q"),
+        ];
+        let objects: Vec<Term> = vec![
+            NamedNode::new_unchecked("http://example.com/a").into(),
+            BlankNode::new_unchecked("a").into(),
+            Literal::new_simple_literal("a").into(),
+            Literal::new_language_tagged_literal_unchecked("a", "en").into(),
+            Literal::new_typed_literal("a", NamedNode::new_unchecked("http://example.com/type"))
+                .into(),
+        ];
+        #[cfg(feature = "rdf-12")]
+        let objects = {
+            let mut rdf12_objects = objects;
+            rdf12_objects.push(
+                Literal::new_directional_language_tagged_literal_unchecked(
+                    "a",
+                    "en",
+                    crate::BaseDirection::Ltr,
+                )
+                .into(),
+            );
+            rdf12_objects.push(
+                Triple::new(
+                    subjects[0].clone(),
+                    predicates[0].clone(),
+                    BlankNode::new_unchecked("nested"),
+                )
+                .into(),
+            );
+            rdf12_objects
+        };
+        let graphs = [
+            GraphName::DefaultGraph,
+            NamedNode::new_unchecked("http://example.com/a").into(),
+            BlankNode::new_unchecked("a").into(),
+        ];
+        let mut quads = Vec::new();
+        for subject in &subjects {
+            for predicate in &predicates {
+                for object in &objects {
+                    for graph in &graphs {
+                        quads.push(Quad::new(
+                            subject.clone(),
+                            predicate.clone(),
+                            object.clone(),
+                            graph.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+        quads
+    }
+
+    fn check(dataset: &Dataset, expected: &HashSet<Quad>, queries: &[Quad]) {
+        assert_eq!(dataset.len(), expected.len());
+        assert_eq!(dataset.iter().collect::<HashSet<_>>(), *expected);
+        let mut references = HashMap::new();
+        for ids in &dataset.indexes[3] {
+            for id in ids {
+                if *id != TermId::MIN {
+                    *references.entry(*id).or_insert(0) += 1;
+                }
+            }
+        }
+        assert_eq!(
+            references.len(),
+            dataset
+                .dictionary
+                .by_hash
+                .values()
+                .map(Vec::len)
+                .sum::<usize>()
+        );
+        for bucket in dataset.dictionary.by_hash.values() {
+            for id in bucket {
+                let entry = dataset.dictionary.entries[(id.0 - 1) as usize]
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(entry.references.get(), references[id]);
+                assert_eq!(dataset.dictionary.find(entry.term.as_ref()), Some(*id));
+            }
+        }
+        for order in 0..6 {
+            assert_eq!(dataset.indexes[order].len(), expected.len());
+            let expected_ids: BTreeSet<_> = dataset.indexes[3]
+                .iter()
+                .map(|ids| reorder(*ids, order))
+                .collect();
+            assert_eq!(dataset.indexes[order], expected_ids);
+        }
+        for query in queries {
+            for mask in 0_u8..16 {
+                let expected: HashSet<_> = expected
+                    .iter()
+                    .filter(|quad| {
+                        (mask & 1 == 0 || query.subject == quad.subject)
+                            && (mask & 2 == 0 || query.predicate == quad.predicate)
+                            && (mask & 4 == 0 || query.object == quad.object)
+                            && (mask & 8 == 0 || query.graph_name == quad.graph_name)
+                    })
+                    .cloned()
+                    .collect();
+                let iter = dataset.quads_for_pattern(
+                    (mask & 1 != 0).then_some(query.subject.as_ref()),
+                    (mask & 2 != 0).then_some(query.predicate.as_ref()),
+                    (mask & 4 != 0).then_some(query.object.as_ref()),
+                    (mask & 8 != 0).then_some(query.graph_name.as_ref()),
+                );
+                let actual: Vec<_> = iter.collect();
+                assert_eq!(actual.len(), expected.len());
+                assert_eq!(
+                    actual.into_iter().collect::<HashSet<_>>(),
+                    expected,
+                    "mask {mask}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn all_patterns_with_churn() {
+        let quads = data();
+        let missing = Quad::new(
+            NamedNode::new_unchecked("http://missing/s"),
+            NamedNode::new_unchecked("http://missing/p"),
+            Literal::new_simple_literal("missing"),
+            NamedNode::new_unchecked("http://missing/g"),
+        );
+        let queries = [
+            quads[0].clone(),
+            quads[quads.len() / 2].clone(),
+            quads[quads.len() - 1].clone(),
+            missing,
+        ];
+        let mut dataset = Dataset::new();
+        let mut expected = HashSet::new();
+        let mut random = 42_u64;
+        for _ in 0..600 {
+            random = random
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            let query = &quads[((random >> 32) as usize) % quads.len()];
+            if random.trailing_zeros() >= 2 {
+                assert_eq!(dataset.remove(query), expected.remove(query));
+            } else {
+                assert_eq!(
+                    dataset.insert(query.as_ref()),
+                    expected.insert(query.clone())
+                );
+            }
+            check(&dataset, &expected, &queries);
+        }
+        dataset.extend(quads.iter().cloned());
+        expected.extend(quads.iter().cloned());
+        check(&dataset.clone(), &expected, &quads);
+        for quad in &quads {
+            assert!(dataset.remove(quad));
+            expected.remove(quad);
+            check(&dataset, &expected, &queries);
+        }
+        assert!(dataset.dictionary.by_hash.is_empty());
+        assert!(dataset.dictionary.entries.iter().all(Option::is_none));
+        assert!(dataset.indexes.iter().all(BTreeSet::is_empty));
+        dataset.extend(quads.iter().cloned());
+        check(&dataset, &quads.iter().cloned().collect(), &queries);
+        dataset.clear();
+        assert!(dataset.dictionary.entries.is_empty());
+        assert!(dataset.dictionary.free.is_empty());
+        assert!(dataset.dictionary.by_hash.is_empty());
+    }
+
+    #[test]
+    fn graph_views() {
+        let quads = data();
+        let mut dataset: Dataset = quads.iter().cloned().collect();
+        for graph in [
+            GraphName::DefaultGraph,
+            quads[1].graph_name.clone(),
+            quads[2].graph_name.clone(),
+        ] {
+            let view = dataset.graph(&graph);
+            let reference: Vec<_> = quads
+                .iter()
+                .filter(|q| q.graph_name == graph)
+                .map(|q| Triple::new(q.subject.clone(), q.predicate.clone(), q.object.clone()))
+                .collect();
+            assert_eq!(view.len(), reference.len());
+            assert_eq!(
+                view.iter().collect::<HashSet<_>>(),
+                reference.iter().cloned().collect()
+            );
+            for quad in &quads {
+                let triple = Triple::new(
+                    quad.subject.clone(),
+                    quad.predicate.clone(),
+                    quad.object.clone(),
+                );
+                assert_eq!(view.contains(&triple), reference.contains(&triple));
+                assert_eq!(
+                    view.objects_for_subject_predicate(&quad.subject, &quad.predicate)
+                        .collect::<HashSet<_>>(),
+                    reference
+                        .iter()
+                        .filter(|t| t.subject == quad.subject && t.predicate == quad.predicate)
+                        .map(|t| t.object.clone())
+                        .collect()
+                );
+                assert_eq!(
+                    view.predicates_for_subject_object(&quad.subject, &quad.object)
+                        .collect::<HashSet<_>>(),
+                    reference
+                        .iter()
+                        .filter(|t| t.subject == quad.subject && t.object == quad.object)
+                        .map(|t| t.predicate.clone())
+                        .collect()
+                );
+                assert_eq!(
+                    view.subjects_for_predicate_object(&quad.predicate, &quad.object)
+                        .collect::<HashSet<_>>(),
+                    reference
+                        .iter()
+                        .filter(|t| t.predicate == quad.predicate && t.object == quad.object)
+                        .map(|t| t.subject.clone())
+                        .collect()
+                );
+            }
+        }
+        let graph_name = NamedNode::new_unchecked("http://example.com/new");
+        let triple = Triple::new(
+            BlankNode::new_unchecked("new"),
+            graph_name.clone(),
+            graph_name.clone(),
+        );
+        let mut view = dataset.graph_mut(graph_name);
+        assert!(view.is_empty());
+        assert!(view.insert(triple.clone()));
+        assert!(!view.insert(triple.clone()));
+        assert_eq!(view.iter().collect::<Vec<_>>(), vec![triple.clone()]);
+        assert!(view.remove(&triple));
+        assert!(view.is_empty());
+    }
+
+    #[test]
+    fn term_storage_is_shared_within_each_component() {
+        let mut dataset = Dataset::new();
+        let subject = "http://example.com/shared";
+        for i in 0..10 {
+            dataset.insert(Quad::new(
+                NamedNode::new_unchecked(subject.to_owned()),
+                NamedNode::new_unchecked("http://example.com/p".to_owned()),
+                Literal::new_simple_literal("shared value".to_owned()),
+                NamedNode::new_unchecked(format!("http://example.com/graph/{i}")),
+            ));
+        }
+        let quads: Vec<_> = dataset.iter().collect();
+        for q in &quads {
+            assert_eq!(
+                q.subject.as_ref().to_string(),
+                quads[0].subject.as_ref().to_string()
+            );
+            let NamedOrBlankNode::NamedNode(s) = &q.subject else {
+                unreachable!()
+            };
+            let NamedOrBlankNode::NamedNode(first) = &quads[0].subject else {
+                unreachable!()
+            };
+            assert_eq!(s.as_str().as_ptr(), first.as_str().as_ptr());
+            assert_eq!(
+                q.predicate.as_str().as_ptr(),
+                quads[0].predicate.as_str().as_ptr()
+            );
+            let Term::Literal(o) = &q.object else {
+                unreachable!()
+            };
+            let Term::Literal(first) = &quads[0].object else {
+                unreachable!()
+            };
+            assert_eq!(o.value().as_ptr(), first.value().as_ptr());
+        }
+    }
+    #[cfg(feature = "rdfc-10")]
     #[test]
     fn test_canon() {
         let p = NamedNode::new_unchecked("http://example.com/#p");

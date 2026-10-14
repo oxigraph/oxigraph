@@ -34,9 +34,6 @@ use std::fmt;
 ///
 /// It can accommodate a fairly large number of triples (in the few millions).
 ///
-/// <div class="warning">It interns the string and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
-///
 /// Usage example:
 /// ```
 /// use oxrdf::*;
@@ -79,23 +76,25 @@ impl Graph {
         }
     }
 
-    pub fn triples_for_subject<'a, 'b>(
+    pub fn triples_for_subject<'a, 'b, S: Into<NamedOrBlankNodeRef<'b>>>(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.graph()
-            .triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
+        subject: S,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, S> {
+        self.graph().triples_for_subject(subject)
     }
 
-    pub fn objects_for_subject_predicate<'a, 'b>(
+    pub fn objects_for_subject_predicate<
+        'a,
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        P: Into<NamedNodeRef<'b>>,
+    >(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Term> + 'a {
-        self.graph().objects_for_interned_subject_predicate(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_named_node(predicate),
-        )
+        subject: S,
+        predicate: P,
+    ) -> impl Iterator<Item = Term> + 'a + use<'a, S, P> {
+        self.graph()
+            .objects_for_subject_predicate(subject, predicate)
     }
 
     pub fn object_for_subject_predicate<'a, 'b>(
@@ -108,34 +107,38 @@ impl Graph {
             .next()
     }
 
-    pub fn predicates_for_subject_object<'a, 'b>(
+    pub fn predicates_for_subject_object<
+        'a,
+        'b,
+        S: Into<NamedOrBlankNodeRef<'b>>,
+        O: Into<TermRef<'b>>,
+    >(
         &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedNode> + 'a {
-        self.graph().predicates_for_interned_subject_object(
-            self.dataset.encoded_named_or_blank_node(subject),
-            self.dataset.encoded_term(object),
-        )
+        subject: S,
+        object: O,
+    ) -> impl Iterator<Item = NamedNode> + 'a + use<'a, S, O> {
+        self.graph().predicates_for_subject_object(subject, object)
     }
 
-    pub fn triples_for_predicate<'a, 'b>(
+    pub fn triples_for_predicate<'a, 'b, P: Into<NamedNodeRef<'b>>>(
         &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
+        predicate: P,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, P> {
+        self.graph().triples_for_predicate(predicate)
+    }
+
+    pub fn subjects_for_predicate_object<
+        'a,
+        'b,
+        P: Into<NamedNodeRef<'b>>,
+        O: Into<TermRef<'b>>,
+    >(
+        &'a self,
+        predicate: P,
+        object: O,
+    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a + use<'a, P, O> {
         self.graph()
-            .triples_for_interned_predicate(self.dataset.encoded_named_node(predicate))
-    }
-
-    pub fn subjects_for_predicate_object<'a, 'b>(
-        &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a {
-        self.graph().subjects_for_interned_predicate_object(
-            self.dataset.encoded_named_node(predicate),
-            self.dataset.encoded_term(object),
-        )
+            .subjects_for_predicate_object(predicate, object)
     }
 
     pub fn subject_for_predicate_object<'a, 'b>(
@@ -146,12 +149,11 @@ impl Graph {
         self.graph().subject_for_predicate_object(predicate, object)
     }
 
-    pub fn triples_for_object<'a, 'b>(
+    pub fn triples_for_object<'a, 'b, O: Into<TermRef<'b>>>(
         &'a self,
-        object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = Triple> + 'a {
-        self.graph()
-            .triples_for_interned_object(self.dataset.encoded_term(object))
+        object: O,
+    ) -> impl Iterator<Item = Triple> + 'a + use<'a, O> {
+        self.graph().triples_for_object(object)
     }
 
     /// Checks if the graph contains the given triple.
