@@ -275,12 +275,11 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
                 VariableType::LITERAL
             }
         }
-        Expression::If(condition, then, els) => {
-            let mut t = infer_expression_type(then, types) | infer_expression_type(els, types);
-            if infer_expression_type(condition, types).undef {
-                t.undef = true;
-            }
-            t
+        Expression::If(_, then, els) => {
+            // Computing the condition's effective boolean value can also fail.
+            infer_expression_type(then, types)
+                | infer_expression_type(els, types)
+                | VariableType::UNDEF
         }
         Expression::Coalesce(inner) => {
             let mut t = VariableType::UNDEF;

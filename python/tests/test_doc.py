@@ -1,6 +1,6 @@
 import inspect
 from doctest import DocTest, DocTestFinder, DocTestSuite
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from unittest import TestLoader, TestSuite
 
 import pyoxigraph
@@ -13,13 +13,13 @@ class ExtendedDocTestFinder(DocTestFinder):
 
     def _find(
         self,
-        tests: List[DocTest],
+        tests: list[DocTest],
         obj: Any,
         name: Any,
         module: Any,
         source_lines: Any,
         globs: Any,
-        seen: Dict[int, Any],
+        seen: dict[int, Any],
     ) -> None:
         # If we've already processed this object, then ignore it.
         if id(obj) in seen:

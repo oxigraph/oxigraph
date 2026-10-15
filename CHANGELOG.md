@@ -1,3 +1,19 @@
+# Unreleased
+
+### Removed
+- Python 3.8 and 3.13 free-threaded build variant support
+
+### Changed
+- SPARQL: fix arithmetic grouping around signed numeric literals and group operators of equal precedence from left to right.
+- SPARQL Update: apply all deletions before insertions and make `LOAD SILENT` atomic, including creation of empty destination graphs.
+- SPARQL: fix filter scope in nested `OPTIONAL` groups and propagation through subquery projections.
+- SPARQL: fix implicit aggregation over empty inputs, `IF` type inference, and simplification of `LATERAL` joins around `OPTIONAL`.
+- SPARQL: allow nonpositive `SUBSTR` starting positions.
+- SPARQL: avoid panics when explaining expressions that cannot be serialized as SPARQL.
+- Datatypes: fix rounding, decimal multiplication and formatting, month subtraction, and negative fractional timestamps.
+- RDF terms: fix parsing of numeric literals within triple terms.
+
+
 # [0.5.11] - 2026-09-02
 
 ### Changed

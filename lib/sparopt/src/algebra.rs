@@ -772,7 +772,12 @@ impl GraphPattern {
         if left.is_empty() || right.is_empty() {
             return Self::empty();
         }
-        if left.is_empty_singleton() {
+        if left.is_empty_singleton()
+            && !matches!(
+                &right,
+                Self::LeftJoin { left, .. } if left.is_empty_singleton()
+            )
+        {
             return right;
         }
         if right.is_empty_singleton() {
@@ -989,7 +994,7 @@ impl GraphPattern {
         variables: Vec<Variable>,
         aggregates: Vec<(Variable, AggregateExpression)>,
     ) -> Self {
-        if inner.is_empty() {
+        if inner.is_empty() && !variables.is_empty() {
             return Self::empty();
         }
         Self::Group {
