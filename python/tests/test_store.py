@@ -4,7 +4,7 @@ import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
-from typing import List, Union
+from typing import Union
 
 from pyoxigraph import (
     BlankNode,
@@ -223,7 +223,7 @@ class TestStore(unittest.TestCase):
     def test_select_query_with_custom_aggregate_function(self) -> None:
         class Aggregate:
             def __init__(self) -> None:
-                self.acc: List[Union[NamedNode, BlankNode, Literal, Triple]] = []
+                self.acc: list[Union[NamedNode, BlankNode, Literal, Triple]] = []
 
             def accumulate(self, element: Union[NamedNode, BlankNode, Literal, Triple]) -> None:
                 self.acc.append(element)
