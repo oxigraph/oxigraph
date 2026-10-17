@@ -259,11 +259,12 @@ where
                 let a = build_expression_evaluator(a, context)?;
                 let b = build_expression_evaluator(b, context)?;
                 return Ok(Rc::new(move |tuple| {
-                    Ok(Some(
-                        (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
-                            == Ordering::Greater)
-                            .into(),
-                    ))
+                    Ok(compare(
+                        &try_or_ok!(a(tuple)?),
+                        &try_or_ok!(b(tuple)?),
+                        Ordering::is_gt,
+                    )
+                    .map(Into::into))
                 }));
             }
             if *function == sparql::GREATER_THAN_OR_EQUAL {
@@ -271,16 +272,12 @@ where
                 let a = build_expression_evaluator(a, context)?;
                 let b = build_expression_evaluator(b, context)?;
                 return Ok(Rc::new(move |tuple| {
-                    Ok(Some(
-                        match try_or_ok!(partial_cmp(
-                            &try_or_ok!(a(tuple)?),
-                            &try_or_ok!(b(tuple)?)
-                        )) {
-                            Ordering::Greater | Ordering::Equal => true,
-                            Ordering::Less => false,
-                        }
-                        .into(),
-                    ))
+                    Ok(compare(
+                        &try_or_ok!(a(tuple)?),
+                        &try_or_ok!(b(tuple)?),
+                        Ordering::is_ge,
+                    )
+                    .map(Into::into))
                 }));
             }
             if *function == sparql::LESS_THAN {
@@ -288,11 +285,12 @@ where
                 let a = build_expression_evaluator(a, context)?;
                 let b = build_expression_evaluator(b, context)?;
                 return Ok(Rc::new(move |tuple| {
-                    Ok(Some(
-                        (try_or_ok!(partial_cmp(&try_or_ok!(a(tuple)?), &try_or_ok!(b(tuple)?)))
-                            == Ordering::Less)
-                            .into(),
-                    ))
+                    Ok(compare(
+                        &try_or_ok!(a(tuple)?),
+                        &try_or_ok!(b(tuple)?),
+                        Ordering::is_lt,
+                    )
+                    .map(Into::into))
                 }));
             }
             if *function == sparql::LESS_THAN_OR_EQUAL {
@@ -300,16 +298,12 @@ where
                 let a = build_expression_evaluator(a, context)?;
                 let b = build_expression_evaluator(b, context)?;
                 return Ok(Rc::new(move |tuple| {
-                    Ok(Some(
-                        match try_or_ok!(partial_cmp(
-                            &try_or_ok!(a(tuple)?),
-                            &try_or_ok!(b(tuple)?)
-                        )) {
-                            Ordering::Less | Ordering::Equal => true,
-                            Ordering::Greater => false,
-                        }
-                        .into(),
-                    ))
+                    Ok(compare(
+                        &try_or_ok!(a(tuple)?),
+                        &try_or_ok!(b(tuple)?),
+                        Ordering::is_le,
+                    )
+                    .map(Into::into))
                 }));
             }
             if *function == sparql::ADD {
@@ -2446,6 +2440,32 @@ fn triple_equals(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<bool> {
 }
 
 /// Comparison for <, >, <= and >= operators
+fn compare(
+    a: &ExpressionTerm,
+    b: &ExpressionTerm,
+    predicate: impl FnOnce(Ordering) -> bool,
+) -> Option<bool> {
+    let is_nan = |term: &ExpressionTerm| match term {
+        ExpressionTerm::FloatLiteral(value) => value.is_nan(),
+        ExpressionTerm::DoubleLiteral(value) => value.is_nan(),
+        _ => false,
+    };
+    if is_nan(a) || is_nan(b) {
+        let is_numeric = |term: &ExpressionTerm| {
+            matches!(
+                term,
+                ExpressionTerm::FloatLiteral(_)
+                    | ExpressionTerm::DoubleLiteral(_)
+                    | ExpressionTerm::IntegerLiteral(_)
+                    | ExpressionTerm::DecimalLiteral(_)
+            )
+        };
+        return (is_numeric(a) && is_numeric(b)).then_some(false);
+    }
+    partial_cmp(a, b).map(predicate)
+}
+
+/// Comparison for ordering
 pub(crate) fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
     if a == b {
         return Some(Ordering::Equal);
