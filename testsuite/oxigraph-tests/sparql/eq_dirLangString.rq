@@ -1,0 +1,12 @@
+ASK {
+    <http://example.org/a> <http://example.org/title> ?t .
+    FILTER(?t = ?t)
+    FILTER(?t = "hi"@en--ltr)
+    FILTER(?t = STRLANGDIR("hi", "en", "ltr"))
+    FILTER(STRLANGDIR("hi", "en", "ltr") = STRLANGDIR("hi", "en", "ltr"))
+    FILTER(?t != "bye"@en--ltr)
+    FILTER(?t != "hi"@fr--ltr)
+    FILTER(?t != "hi"@en--rtl)
+    FILTER(?t != "hi"@en)
+    FILTER(?t != "hi")
+}

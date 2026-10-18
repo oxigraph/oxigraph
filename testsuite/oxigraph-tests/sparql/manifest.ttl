@@ -24,6 +24,7 @@
     :values_in_filter_not_exists
     :subquery_in_filter_not_exists
     :cmp_langString
+    :eq_dirLangString
     :nested_path
     :nested_expression
     :order_terms
@@ -65,6 +66,11 @@
     :arithmetic_left_associative
     :arithmetic_signed_literal
     ) .
+
+:eq_dirLangString rdf:type mf:QueryEvaluationTest ;
+    mf:name "Directional language literal equality compares value, language and direction" ;
+    mf:action [ qt:query <eq_dirLangString.rq> ; qt:data <eq_dirLangString.ttl> ] ;
+    mf:result <true.srx> .
 
 :merged_default_graph rdf:type mf:QueryEvaluationTest ;
     mf:name "Merged default graphs deduplicate triples, not projected values" ;
