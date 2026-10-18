@@ -1,0 +1,25 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+ASK {
+    {
+        SELECT (COUNT(*) AS ?count) WHERE {
+            VALUES ?nan { "NaN"^^xsd:float "NaN"^^xsd:double }
+            VALUES ?value { "NaN"^^xsd:float "NaN"^^xsd:double 1 1.0 "1"^^xsd:float 1e0 }
+            FILTER(
+                (?nan < ?value) = false &&
+                (?nan <= ?value) = false &&
+                (?nan > ?value) = false &&
+                (?nan >= ?value) = false &&
+                (?value < ?nan) = false &&
+                (?value <= ?nan) = false &&
+                (?value > ?nan) = false &&
+                (?value >= ?nan) = false
+            )
+        }
+    }
+    FILTER(?count = 12)
+    BIND(0.0e0 / 0.0e0 AS ?computed)
+    FILTER((?computed <= ?computed) = false && (?computed < 1) = false)
+    BIND(?computed < "text" AS ?incompatible)
+    FILTER(!BOUND(?incompatible))
+}
