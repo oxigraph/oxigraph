@@ -309,6 +309,19 @@ impl PartialEq for ExpressionTerm {
                         language: rl,
                     },
                 ) => lv == rv && ll == rl,
+                #[cfg(feature = "sparql-12")]
+                (
+                    Self::DirLangStringLiteral {
+                        value: lv,
+                        language: ll,
+                        direction: ld,
+                    },
+                    Self::DirLangStringLiteral {
+                        value: rv,
+                        language: rl,
+                        direction: rd,
+                    },
+                ) => lv == rv && ll == rl && ld == rd,
                 (Self::BooleanLiteral(l), Self::BooleanLiteral(r)) => l == r,
                 (Self::IntegerLiteral(l), Self::IntegerLiteral(r)) => l == r,
                 (Self::DecimalLiteral(l), Self::DecimalLiteral(r)) => l == r,
