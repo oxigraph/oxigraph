@@ -456,6 +456,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         })
     }
 
+    /// Builds the evaluation plan without evaluating it
+    pub fn plan(&self, expression: &QueryExpression) -> Rc<EvalNodeWithStats> {
+        self.query_expression_evaluator(expression, &mut Vec::new())
+            .1
+    }
+
     pub fn evaluate_select(
         &self,
         expression: &QueryExpression,

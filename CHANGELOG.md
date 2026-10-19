@@ -2,6 +2,10 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `spareval`: `PreparedQuery::plan` and `oxigraph`: `BoundPreparedSparqlQuery::plan` to get the evaluation plan of a query without evaluating it.
+- CLI: `--explain-only` option to the `query` command to print the query plan, or write it to `--explain-file`, without evaluating the query.
+- CLI: the `query` command now also has a `--timeout-s` option (it was only available on `serve` and `serve-read-only`) to cancel the evaluation after the given number of seconds. The explanation requested with `--explain`, `--explain-file` or `--stats` is still written, with the statistics gathered so far.
+- HTTP server: non-standard `explain` parameter for SPARQL queries. `explain=plan` returns the query plan in JSON without evaluating the query, and `explain=stats` evaluates the query and returns the plan with the evaluation statistics in JSON, even if the evaluation fails, e.g. on timeout.
 
 ### Fixed
 - SPARQL: a signed numeric literal directly after an operand is now its own step of the `AdditiveExpression` grammar rule. It takes the `*` and `/` operands that follow it, so `?a+2*3` is `?a + (+2*3)` and no longer `(?a + +2) * 3`, and it is never absorbed into the right operand of a preceding `+` or `-`, so `10 - 2 -3` is 5 and no longer `10 - (2 + -3)`, which is 11.
