@@ -81,13 +81,16 @@ pub fn infer_query_expression_types(
             types
         }
         QueryExpression::Filter { inner, .. } => infer_query_expression_types(inner, types),
-        QueryExpression::Project { inner, variables } => VariableTypes {
-            inner: infer_query_expression_types(inner, types)
-                .inner
-                .into_iter()
-                .filter(|(v, _)| variables.contains(v))
-                .collect(),
-        },
+        QueryExpression::Project { inner, variables } => {
+            // Only the projected variables are given to the sub-query and the input bindings are kept
+            for (v, t) in infer_query_expression_types(inner, types.restricted_to(variables)).inner
+            {
+                if variables.contains(&v) {
+                    types.intersect_variable_with(v, t);
+                }
+            }
+            types
+        }
         QueryExpression::Distinct { inner }
         | QueryExpression::Reduced { inner }
         | QueryExpression::OrderBy { inner, .. }
@@ -369,6 +372,18 @@ impl VariableTypes {
         self.inner.iter()
     }
 
+    /// Only keeps the given variables, like a projection does
+    pub fn restricted_to(&self, variables: &[Variable]) -> Self {
+        Self {
+            inner: self
+                .inner
+                .iter()
+                .filter(|(v, _)| variables.contains(v))
+                .map(|(v, t)| (v.clone(), *t))
+                .collect(),
+        }
+    }
+
     pub fn intersect_with(&mut self, other: Self) {
         for (v, t) in other.inner {
             self.intersect_variable_with(v, t);
@@ -514,5 +529,51 @@ impl BitAnd for VariableType {
                 || (self.undef && rhs.triple)
                 || (self.triple && rhs.undef),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::NamedNode;
+
+    fn pattern(subject: &Variable, object: &Variable) -> QueryExpression {
+        QueryExpression::QuadPattern {
+            subject: TermPattern::Variable(subject.clone()),
+            predicate: NamedNode::new("http://example.com/p").unwrap().into(),
+            object: TermPattern::Variable(object.clone()),
+            graph_name: None,
+        }
+    }
+
+    #[test]
+    fn project_keeps_input_variables() {
+        let [a, b, c] = ["a", "b", "c"].map(|name| Variable::new(name).unwrap());
+        let input_types = infer_query_expression_types(&pattern(&a, &b), VariableTypes::default());
+        let types = infer_query_expression_types(
+            &QueryExpression::project(pattern(&b, &c), vec![b.clone(), c.clone()]),
+            input_types,
+        );
+        assert!(!types.get(&a).undef);
+        assert!(!types.get(&b).undef);
+        assert!(!types.get(&c).undef);
+    }
+
+    #[test]
+    fn project_hides_inner_variables() {
+        let [a, b, c] = ["a", "b", "c"].map(|name| Variable::new(name).unwrap());
+        let input_types = infer_query_expression_types(&pattern(&a, &c), VariableTypes::default());
+        let types = infer_query_expression_types(
+            &QueryExpression::project(pattern(&b, &c), vec![b.clone()]),
+            input_types,
+        );
+        // ?c of the sub-query is not the outer ?c
+        assert!(!types.get(&b).undef);
+        assert!(!types.get(&c).undef);
+        let types = infer_query_expression_types(
+            &QueryExpression::project(pattern(&b, &c), vec![b.clone()]),
+            VariableTypes::default(),
+        );
+        assert_eq!(types.get(&c), VariableType::UNDEF);
     }
 }
