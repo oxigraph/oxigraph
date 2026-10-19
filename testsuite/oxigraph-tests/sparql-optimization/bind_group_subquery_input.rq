@@ -1,0 +1,10 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?character ?trait WHERE {
+    ?a a ex:Attribution ;
+       ex:bearer ?c ;
+       ex:trait ?t ;
+       ex:basis "quote" .
+    BIND(STR(?t) AS ?trait)
+    { SELECT ?c (SAMPLE(?x) AS ?character) WHERE { ?c ex:name ?x } GROUP BY ?c }
+}

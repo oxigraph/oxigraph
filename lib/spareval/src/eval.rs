@@ -1164,72 +1164,70 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let left = left?;
         let right = right?;
 
-        match algorithm {
-            JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
-                let build = left;
-                let probe = right;
-                if keys.is_empty() {
-                    // Cartesian product
-                    let cancellation_token = self.dataset.cancellation_token.clone();
-                    Ok(Rc::new(move |from| {
-                        let built_values = build(from.clone()).collect::<Result<Vec<_>, _>>();
-                        if built_values.as_ref().is_err_and(|e| !e.can_be_silent()) {
-                            // We return non-silent errors proactively to abort execution
-                            return Box::new(built_values.err().into_iter().map(Err));
-                        }
-                        if built_values.as_ref().is_ok_and(Vec::is_empty) {
-                            // We don't bother to execute the other side
-                            return Box::new(empty());
-                        }
-                        let mut probe_iter = probe(from).peekable();
-                        if probe_iter.peek().is_none() {
-                            // We know it's empty and can discard errors
-                            return Box::new(empty());
-                        }
-                        match built_values {
-                            Ok(built_values) => Box::new(CartesianProductJoinIterator {
-                                probe_iter,
-                                probe_tuple: None,
-                                built: built_values,
-                                built_offset: 0,
-                                cancellation_token: cancellation_token.clone(),
-                            }),
-                            Err(error) => Box::new(once(Err(error))),
-                        }
-                    }))
-                } else {
-                    // Real hash join
-                    let keys = keys
-                        .iter()
-                        .map(|v| encode_variable(encoded_variables, v))
-                        .collect::<Vec<_>>();
-                    Ok(Rc::new(move |from| {
-                        let mut built_values = InternalTupleSet::new(keys.clone());
-                        let error = built_values.extend(build(from.clone())).err();
-                        if error.as_ref().is_some_and(|e| !e.can_be_silent()) {
-                            // We return non-silent errors proactively to abort execution
-                            return Box::new(error.into_iter().map(Err));
-                        }
-                        if built_values.is_empty() && error.is_none() {
-                            // We don't bother to execute the other side
-                            return Box::new(empty());
-                        }
-                        let mut probe_iter = probe(from).peekable();
-                        if probe_iter.peek().is_none() {
-                            // We know it's empty and can discard errors
-                            return Box::new(empty());
-                        }
-                        if let Some(error) = error {
-                            return Box::new(once(Err(error)));
-                        }
-                        Box::new(HashJoinIterator {
-                            probe_iter,
-                            built: built_values,
-                            buffered_results: Vec::new(),
-                        })
-                    }))
+        let (build, probe, keys) = match algorithm {
+            JoinAlgorithm::HashBuildLeftProbeRight { keys } => (left, right, keys),
+            JoinAlgorithm::HashBuildRightProbeLeft { keys } => (right, left, keys),
+        };
+        if keys.is_empty() {
+            // Cartesian product
+            let cancellation_token = self.dataset.cancellation_token.clone();
+            Ok(Rc::new(move |from| {
+                let built_values = build(from.clone()).collect::<Result<Vec<_>, _>>();
+                if built_values.as_ref().is_err_and(|e| !e.can_be_silent()) {
+                    // We return non-silent errors proactively to abort execution
+                    return Box::new(built_values.err().into_iter().map(Err));
                 }
-            }
+                if built_values.as_ref().is_ok_and(Vec::is_empty) {
+                    // We don't bother to execute the other side
+                    return Box::new(empty());
+                }
+                let mut probe_iter = probe(from).peekable();
+                if probe_iter.peek().is_none() {
+                    // We know it's empty and can discard errors
+                    return Box::new(empty());
+                }
+                match built_values {
+                    Ok(built_values) => Box::new(CartesianProductJoinIterator {
+                        probe_iter,
+                        probe_tuple: None,
+                        built: built_values,
+                        built_offset: 0,
+                        cancellation_token: cancellation_token.clone(),
+                    }),
+                    Err(error) => Box::new(once(Err(error))),
+                }
+            }))
+        } else {
+            // Real hash join
+            let keys = keys
+                .iter()
+                .map(|v| encode_variable(encoded_variables, v))
+                .collect::<Vec<_>>();
+            Ok(Rc::new(move |from| {
+                let mut built_values = InternalTupleSet::new(keys.clone());
+                let error = built_values.extend(build(from.clone())).err();
+                if error.as_ref().is_some_and(|e| !e.can_be_silent()) {
+                    // We return non-silent errors proactively to abort execution
+                    return Box::new(error.into_iter().map(Err));
+                }
+                if built_values.is_empty() && error.is_none() {
+                    // We don't bother to execute the other side
+                    return Box::new(empty());
+                }
+                let mut probe_iter = probe(from).peekable();
+                if probe_iter.peek().is_none() {
+                    // We know it's empty and can discard errors
+                    return Box::new(empty());
+                }
+                if let Some(error) = error {
+                    return Box::new(once(Err(error)));
+                }
+                Box::new(HashJoinIterator {
+                    probe_iter,
+                    built: built_values,
+                    buffered_results: Vec::new(),
+                })
+            }))
         }
     }
 
@@ -4016,6 +4014,10 @@ fn eval_node_label(node: &QueryExpression) -> String {
         QueryExpression::Join { algorithm, .. } => match algorithm {
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => format!(
                 "Join(HashBuildLeftProbeRight, keys = {})",
+                format_list(keys)
+            ),
+            JoinAlgorithm::HashBuildRightProbeLeft { keys } => format!(
+                "Join(HashBuildRightProbeLeft, keys = {})",
                 format_list(keys)
             ),
         },

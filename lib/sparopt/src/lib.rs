@@ -5,7 +5,10 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 pub use crate::optimizer::Optimizer;
+pub use crate::statistics::{GraphScope, NoStatistics, PredicateStatistics, Statistics};
 
 pub mod algebra;
+mod estimation;
 mod optimizer;
+mod statistics;
 mod type_inference;

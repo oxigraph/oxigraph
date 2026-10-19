@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?a ex:kind ?k ;
+       ex:holder ?h .
+    ?h ex:name ?n .
+    BIND(STR(?k) AS ?kind)
+    FILTER(?kind = "belief")
+}

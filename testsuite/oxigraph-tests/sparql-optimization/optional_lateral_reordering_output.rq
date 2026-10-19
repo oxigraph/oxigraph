@@ -4,9 +4,9 @@ SELECT * WHERE {
   ?c a schema:Person ;
      schema:addressCountry ?country ;
      ex:segment ?segment .
-  LATERAL { VALUES () { () } OPTIONAL {
-    ?order schema:customer ?c ;
-           a schema:Order ;
+  OPTIONAL {
+    ?order a schema:Order ;
+           schema:customer ?c ;
            schema:totalPrice ?total .
-  } }
+  }
 }

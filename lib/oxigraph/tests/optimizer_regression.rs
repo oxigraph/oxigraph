@@ -3,10 +3,9 @@
 //!
 //! Builds a small store with N persons and M orders per person, then runs the
 //! exact query shape that triggered the bug with execution statistics enabled.
-//! Inspects the explanation tree and asserts:
-//!   1. The OPTIONAL was rewritten to a `ForLoopLeftJoin` (Lateral form).
-//!   2. The max `exec_count` across QuadPattern nodes under that
-//!      ForLoopLeftJoin stays well below the quadratic floor.
+//! Inspects the explanation tree and asserts that the max `exec_count` across QuadPattern nodes
+//! stays well below the quadratic floor. The OPTIONAL is either a `ForLoopLeftJoin` (Lateral form)
+//! or a hash left join where its body is evaluated once.
 //!
 //! With the fix, the inner BGP is reordered so `?order schema:customer ?c`
 //! runs first as an indexed FK lookup, yielding ~N * ORDERS_PER_PERSON inner
@@ -146,9 +145,8 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
     let json: Value = serde_json::from_slice(&buf)?;
 
     let plan = &json["plan"];
-    let for_loop = find_label(plan, "ForLoopLeftJoin").unwrap_or_else(|| {
-        panic!("expected the OPTIONAL to be rewritten as ForLoopLeftJoin (Lateral); plan was:\n{plan:#}")
-    });
+    // Without statistics both sides look as big, so the optimizer might also pick a hash left join
+    let for_loop = find_label(plan, "ForLoopLeftJoin").unwrap_or(plan);
 
     // The inner BGP under the ForLoopLeftJoin is iterated per outer person.
     // With the FK-first reorder, each outer iteration's first inner pattern

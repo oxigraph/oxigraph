@@ -1,9 +1,9 @@
 use crate::algebra::{Expression, QueryExpression};
 use oxrdf::Variable;
 use oxrdf::vocab::xsd;
+use rustc_hash::FxHashMap;
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
-use std::collections::HashMap;
 use std::ops::{BitAnd, BitOr};
 
 pub fn infer_query_expression_types(
@@ -357,7 +357,7 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
 
 #[derive(Default, Clone, Debug)]
 pub struct VariableTypes {
-    inner: HashMap<Variable, VariableType>,
+    inner: FxHashMap<Variable, VariableType>,
 }
 
 impl VariableTypes {
@@ -416,7 +416,7 @@ impl VariableTypes {
 }
 
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Hash)]
 pub struct VariableType {
     pub undef: bool,
     pub named_node: bool,

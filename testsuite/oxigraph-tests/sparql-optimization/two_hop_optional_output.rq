@@ -1,0 +1,13 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?e a ex:Event .
+    ?e ex:position ?position .
+    LATERAL {
+        VALUES () { () }
+        OPTIONAL {
+            ?e ex:participant ?p .
+            ?p ex:name ?name .
+        }
+    }
+}

@@ -21,6 +21,7 @@ sep-0006 = ["spargebra/sep-0006"]
 oxrdf.workspace = true
 oxstr.workspace = true
 rand.workspace = true
+rustc-hash.workspace = true
 spargebra.workspace = true
 
 [lints]

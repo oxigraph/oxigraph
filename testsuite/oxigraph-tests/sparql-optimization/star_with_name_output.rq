@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?a ex:basis "quote" .
+    ?a a ex:Attribution .
+    ?a ex:bearer ?x .
+    ?x ex:name ?n .
+    ?a ex:trait ?t .
+}

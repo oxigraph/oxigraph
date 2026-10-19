@@ -1,10 +1,8 @@
 PREFIX : <ex:>
 
 SELECT ?t ?x WHERE {
+    ?a a :A ;
+       :hasT ?t .
     ?t a :T .
-    LATERAL {
-        ?a a :A ;
-           :hasT ?t .
-        BIND(?a AS ?x)
-    }
+    BIND(?a AS ?x)
 }

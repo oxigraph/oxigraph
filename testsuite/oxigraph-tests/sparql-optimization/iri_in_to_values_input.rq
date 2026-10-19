@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?r ex:predicate ?p ;
+       ex:subject ?s .
+    FILTER(?p IN (ex:a, ex:b, ex:a))
+}

@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?e a ex:Epithet .
+    ?e ex:of ?x .
+    ?e ex:refrain ?r .
+    ?x ex:name ?n .
+    LATERAL { VALUES () { () } OPTIONAL { ?r ex:in ?section } }
+}

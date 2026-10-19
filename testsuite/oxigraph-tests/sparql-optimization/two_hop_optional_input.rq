@@ -1,0 +1,10 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?e a ex:Event ;
+       ex:position ?position .
+    OPTIONAL {
+        ?p ex:name ?name .
+        ?e ex:participant ?p .
+    }
+}

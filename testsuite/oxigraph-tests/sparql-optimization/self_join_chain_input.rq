@@ -1,0 +1,11 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?r1 a ex:Reason ;
+        ex:partOf ?chapter ;
+        ex:start ?s1 .
+    ?r2 a ex:Reason ;
+        ex:partOf ?chapter ;
+        ex:end ?e2 .
+    FILTER(?r1 != ?r2 && ?s1 < ?e2)
+}

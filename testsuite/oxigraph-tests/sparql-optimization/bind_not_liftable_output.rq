@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?x ex:p ?y .
+    BIND(COALESCE(?z, ?y) AS ?w)
+    LATERAL { ?x ex:q ?z }
+}

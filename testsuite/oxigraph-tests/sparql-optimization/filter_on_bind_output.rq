@@ -1,0 +1,11 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    {
+        ?a ex:kind ?k .
+        BIND(STR(?k) AS ?kind)
+        FILTER("belief" = ?kind)
+    }
+    LATERAL { ?a ex:holder ?h }
+    LATERAL { ?h ex:name ?n }
+}

@@ -2,6 +2,15 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `sparopt`: `Statistics` trait (with `NoStatistics`, `GraphScope` and `PredicateStatistics`) and `Optimizer::optimize_query_expression_with` to estimate the cardinalities from statistics about the queried dataset. `Optimizer::optimize_query_expression` keeps using only the heuristics.
+- `sparopt`: `JoinAlgorithm::HashBuildRightProbeLeft`. Hash joins are now built from the side that is estimated to be the smallest.
+
+### Changed
+- `sparopt`: cost-based join reordering. A join operand that might be the right side of a for-loop join is planned again with the variables bound by the left side, and both the hash join and the for-loop join are costed at each step. For-loop joins that gain nothing from the left bindings are rejected. The join orders are searched exhaustively up to 10 operands and greedily from every operand up to 20, ties keep the written order. This removes the inverted nested loops where a large, unselective operand drove a for-loop join over a selective pattern planned without the outer bindings.
+- `sparopt`: the cost is separated from the cardinality and the filter selectivities are applied. The heuristic cardinalities changed: attributes are functional, a fully bound pattern is a filter, a variable bound in object position is a foreign key, and a constant or bound graph name restricts the pattern to one graph.
+- `sparopt`: BIND, FILTER and well-designed OPTIONAL are lifted out of the join operands, so that a group graph pattern is reordered as one join. For-loop joins into sub-queries are allowed, including GROUP BY sub-queries joined on group keys.
+- `sparopt`: `FILTER(?v IN (iri1, iri2, ...))` is rewritten into a join with `VALUES`.
+- `sparopt`: a BIND is computed just after its inputs when a filter uses it, and filters are pushed into a join side when the other side does not bind their variables.
 
 ### Fixed
 - SPARQL: a signed numeric literal directly after an operand is now its own step of the `AdditiveExpression` grammar rule. It takes the `*` and `/` operands that follow it, so `?a+2*3` is `?a + (+2*3)` and no longer `(?a + +2) * 3`, and it is never absorbed into the right operand of a preceding `+` or `-`, so `10 - 2 -3` is 5 and no longer `10 - (2 + -3)`, which is 11.

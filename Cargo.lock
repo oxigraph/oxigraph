@@ -2640,6 +2640,7 @@ dependencies = [
  "oxrdf",
  "oxstr",
  "rand",
+ "rustc-hash",
  "spargebra",
 ]
 

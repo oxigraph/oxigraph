@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    VALUES ?p { ex:a ex:b }
+    LATERAL { ?r ex:predicate ?p }
+    LATERAL { ?r ex:subject ?s }
+}

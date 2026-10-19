@@ -1246,6 +1246,7 @@ impl From<&QueryExpression> for AlQueryExpression {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum JoinAlgorithm {
     HashBuildLeftProbeRight { keys: Vec<Variable> },
+    HashBuildRightProbeLeft { keys: Vec<Variable> },
 }
 
 impl Default for JoinAlgorithm {

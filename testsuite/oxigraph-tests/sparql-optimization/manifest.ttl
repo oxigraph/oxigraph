@@ -36,6 +36,15 @@
     :lateral_optional_service
     :lateral_zero_length_path
     :filter_projection_scope
+    :star_with_name
+    :bind_group_subquery
+    :optional_in_group_middle
+    :two_hop_optional
+    :self_join_chain
+    :iri_in_to_values
+    :filter_on_bind
+    :optional_not_liftable
+    :bind_not_liftable
     :graph_minus_graph_variable
     :nested_optional_for_loop
     :nested_optional_bind_from_input
@@ -202,3 +211,48 @@
     mf:name "Nested OPTIONAL with a conflicting BIND from input is not converted to a for loop" ;
     mf:action <nested_optional_bind_from_input_input.rq> ;
     mf:result <nested_optional_bind_from_input_output.rq> .
+
+:star_with_name rdf:type ox:QueryOptimizationTest ;
+    mf:name "star BGP joined with a name lookup is evaluated from the selective anchor" ;
+    mf:action <star_with_name_input.rq> ;
+    mf:result <star_with_name_output.rq> .
+
+:bind_group_subquery rdf:type ox:QueryOptimizationTest ;
+    mf:name "BGP + BIND + GROUP BY sub-query joined on a group key" ;
+    mf:action <bind_group_subquery_input.rq> ;
+    mf:result <bind_group_subquery_output.rq> .
+
+:optional_in_group_middle rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL in the middle of a group is evaluated after the mandatory part" ;
+    mf:action <optional_in_group_middle_input.rq> ;
+    mf:result <optional_in_group_middle_output.rq> .
+
+:two_hop_optional rdf:type ox:QueryOptimizationTest ;
+    mf:name "two hop OPTIONAL planned with the outer bound variable" ;
+    mf:action <two_hop_optional_input.rq> ;
+    mf:result <two_hop_optional_output.rq> .
+
+:self_join_chain rdf:type ox:QueryOptimizationTest ;
+    mf:name "self join through a shared variable without cartesian product" ;
+    mf:action <self_join_chain_input.rq> ;
+    mf:result <self_join_chain_output.rq> .
+
+:iri_in_to_values rdf:type ox:QueryOptimizationTest ;
+    mf:name "IN with IRIs becomes a join with VALUES" ;
+    mf:action <iri_in_to_values_input.rq> ;
+    mf:result <iri_in_to_values_output.rq> .
+
+:filter_on_bind rdf:type ox:QueryOptimizationTest ;
+    mf:name "filter on a BIND variable is evaluated as early as possible" ;
+    mf:action <filter_on_bind_input.rq> ;
+    mf:result <filter_on_bind_output.rq> .
+
+:optional_not_liftable rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL that is not well designed stays inside its group" ;
+    mf:action <optional_not_liftable_input.rq> ;
+    mf:result <optional_not_liftable_output.rq> .
+
+:bind_not_liftable rdf:type ox:QueryOptimizationTest ;
+    mf:name "BIND using a variable bound by the rest of the group stays inside its group" ;
+    mf:action <bind_not_liftable_input.rq> ;
+    mf:result <bind_not_liftable_output.rq> .
