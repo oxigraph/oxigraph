@@ -1427,4 +1427,35 @@ mod tests {
             .explain(&Dataset::new());
         assert!(format!("{explanation:?}").contains("Filter("));
     }
+
+    #[test]
+    fn cancellation_without_dataset_reads() {
+        let cancellation_token = CancellationToken::new();
+        cancellation_token.cancel();
+        let dataset = Dataset::new();
+        for query in [
+            "SELECT * WHERE { VALUES ?x { 1 2 3 } VALUES ?y { 1 2 } }",
+            "SELECT (COUNT(*) AS ?c) WHERE { VALUES ?x { 1 2 3 } }",
+            "SELECT * WHERE { VALUES ?x { 3 1 2 } } ORDER BY ?x",
+            #[cfg(feature = "sep-0006")]
+            "SELECT * WHERE { VALUES ?x { 1 2 3 } LATERAL { VALUES ?y { 1 2 } } }",
+        ] {
+            let query = SparqlParser::new().parse_query(query).unwrap();
+            let results = QueryEvaluator::new()
+                .with_cancellation_token(cancellation_token.clone())
+                .prepare(&query)
+                .execute(&dataset);
+            let error = match results {
+                Ok(QueryResults::Solutions(solutions)) => {
+                    solutions.collect::<Result<Vec<_>, _>>().unwrap_err()
+                }
+                Ok(_) => unreachable!(),
+                Err(error) => error,
+            };
+            assert!(
+                matches!(error, QueryEvaluationError::Cancelled),
+                "{query}: {error}"
+            );
+        }
+    }
 }
