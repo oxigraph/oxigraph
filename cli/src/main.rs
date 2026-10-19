@@ -245,6 +245,8 @@ pub fn main() -> anyhow::Result<()> {
                     bail!("One or more files failed to load");
                 }
             }
+            eprintln!("Computing the statistics used by the SPARQL query optimizer");
+            store.update_statistics()?;
             eprintln!(
                 "If you plan to run a read-heavy workload, consider running `oxigraph optimize -l {}` before",
                 location.display()

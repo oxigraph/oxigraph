@@ -795,11 +795,37 @@ impl Store {
     /// Optimizes the database for future workload.
     ///
     /// Useful to call after a batch upload or another similar operation.
+    /// It also updates the statistics used by the SPARQL query optimizer (see [`update_statistics`](Self::update_statistics)).
     ///
     /// <div class="warning">Can take hours on huge databases.</div>
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn optimize(&self) -> Result<(), StorageError> {
-        self.storage.compact()
+        self.storage.compact()?;
+        self.storage.update_statistics()
+    }
+
+    /// Computes the statistics about the store content used by the SPARQL query optimizer.
+    ///
+    /// For on-disk stores, the statistics are saved in the database and are used by all the processes opening it later.
+    /// They are not updated automatically, so it is useful to call this method after loading or changing a lot of data.
+    /// [`optimize`](Self::optimize) also computes them.
+    /// It reads the full database, so it takes a few seconds for each ten million quads.
+    ///
+    /// In-memory stores compute their statistics on the fly, this method does nothing for them.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex, GraphName::DefaultGraph))?;
+    /// store.update_statistics()?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn update_statistics(&self) -> Result<(), StorageError> {
+        self.storage.update_statistics()
     }
 
     /// Creates database backup into the `target_directory`.

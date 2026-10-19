@@ -227,6 +227,66 @@ impl<'a> MemoryStorageReader<'a> {
         self.storage.id2str.contains_key(key)
     }
 
+    /// Estimates the number of quads matching the pattern, reading at most `max_read` quads
+    ///
+    /// The quads are counted if the shortest index list matching the pattern has at most `max_read` quads.
+    /// Otherwise its length is returned: the index lists also contain the quads of the other graphs and the removed quads.
+    ///
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph.
+    pub fn quad_count_estimate(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<Option<&EncodedTerm>>,
+        max_read: u64,
+    ) -> u64 {
+        fn index_size(
+            map: &DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+            term: Option<&EncodedTerm>,
+        ) -> u64 {
+            term.map_or(u64::MAX, |term| {
+                map.view(term, |_, (_, count)| *count).unwrap_or(0)
+            })
+        }
+
+        let graph_name_term = graph_name.map(|g| g.unwrap_or(&EncodedTerm::DefaultGraph));
+        let content = &self.storage.content;
+        let mut shortest = index_size(&content.last_quad_by_subject, subject)
+            .min(index_size(&content.last_quad_by_predicate, predicate))
+            .min(index_size(&content.last_quad_by_object, object))
+            .min(index_size(
+                &content.last_quad_by_graph_name,
+                graph_name_term,
+            ));
+        if shortest == u64::MAX {
+            shortest = content.quad_set.len().try_into().unwrap_or(u64::MAX);
+        }
+        if shortest > max_read {
+            return shortest;
+        }
+        // quads_for_pattern reads the shortest list
+        let mut count = 0;
+        for quad in self.quads_for_pattern(subject, predicate, object, graph_name_term) {
+            if graph_name.is_none() && quad.graph_name.is_default_graph() {
+                continue;
+            }
+            count += 1;
+        }
+        count
+    }
+
+    pub fn named_graph_count(&self) -> u64 {
+        self.storage
+            .content
+            .graphs
+            .iter()
+            .filter(|range| self.is_in_range(range))
+            .count()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+
     /// Validate that all the storage invariants held in the data
     #[expect(clippy::unwrap_in_result)]
     pub fn validate(&self) -> Result<(), StorageError> {

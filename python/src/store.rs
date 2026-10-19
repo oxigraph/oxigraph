@@ -794,6 +794,7 @@ impl PyStore {
     /// Optimizes the database for future workload.
     ///
     /// Useful to call after a batch upload or another similar operation.
+    /// It also updates the statistics used by the SPARQL query optimizer to choose the join order.
     ///
     /// :rtype: None
     /// :raises OSError: if an error happens during the optimization.

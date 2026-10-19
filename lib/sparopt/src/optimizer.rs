@@ -1670,7 +1670,12 @@ impl JoinReorderer<'_> {
         let hash_cost = hash_join_cost(left, hash_plan.estimate);
         let for_loop_cost = for_loop_join_cost(left, for_loop_plan.estimate);
         // The result is the same whatever the join algorithm is
-        let cardinality = state.cardinality * for_loop_plan.estimate.cardinality;
+        let cardinality = self.estimator.join_cardinality(
+            state.cardinality,
+            for_loop_plan.estimate.cardinality,
+            || hash_plan.estimate.cardinality,
+            || join_key_variables(&state.types, &operands[operand].types, input_types).len() == 1,
+        );
         if for_loop_plan.is_fit_for_for_loop_join
             && is_for_loop_join_useful(
                 left,

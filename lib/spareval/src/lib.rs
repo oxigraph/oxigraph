@@ -10,11 +10,14 @@ mod eval;
 mod expression;
 mod model;
 mod service;
+mod statistics;
 mod update;
 
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
-pub use crate::dataset::{ExpressionTerm, InternalQuad, InternalTriple, QueryableDataset};
+pub use crate::dataset::{
+    ExpressionTerm, InternalQuad, InternalTriple, PredicateStatistics, QueryableDataset,
+};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::CancellationToken;
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
@@ -24,6 +27,7 @@ use crate::expression::{
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
+use crate::statistics::DatasetStatistics;
 pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
@@ -537,6 +541,23 @@ impl QueryEvaluator {
             explain,
         )
     }
+
+    /// Optimizes the query expression using the dataset statistics
+    fn optimize<'a>(
+        &self,
+        pattern: QueryExpression,
+        dataset: &impl QueryableDataset<'a>,
+        dataset_spec: &QueryDatasetSpecification,
+    ) -> QueryExpression {
+        if self.without_optimizations {
+            pattern
+        } else {
+            Optimizer::optimize_query_expression_with(
+                pattern,
+                &DatasetStatistics::new(dataset, dataset_spec),
+            )
+        }
+    }
 }
 
 /// A prepared SPARQL query.
@@ -647,10 +668,11 @@ impl PreparedQuery<'_> {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match self.query {
             Query::Select(query) => {
-                let mut pattern = QueryExpression::from(&query.expression);
-                if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_query_expression(pattern);
-                }
+                let pattern = self.evaluator.optimize(
+                    QueryExpression::from(&query.expression),
+                    &dataset,
+                    &self.dataset,
+                );
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
                     dataset,
@@ -668,10 +690,11 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Ask(query) => {
-                let mut pattern = QueryExpression::from(&query.expression);
-                if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_query_expression(pattern);
-                }
+                let pattern = self.evaluator.optimize(
+                    QueryExpression::from(&query.expression),
+                    &dataset,
+                    &self.dataset,
+                );
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
                     dataset,
@@ -689,10 +712,11 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Construct(query) => {
-                let mut pattern = QueryExpression::from(&query.expression);
-                if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_query_expression(pattern);
-                }
+                let pattern = self.evaluator.optimize(
+                    QueryExpression::from(&query.expression),
+                    &dataset,
+                    &self.dataset,
+                );
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
                     dataset,
@@ -712,10 +736,11 @@ impl PreparedQuery<'_> {
                 )
             }
             Query::Describe(query) => {
-                let mut pattern = QueryExpression::from(&query.pattern);
-                if !self.evaluator.without_optimizations {
-                    pattern = Optimizer::optimize_query_expression(pattern);
-                }
+                let pattern = self.evaluator.optimize(
+                    QueryExpression::from(&query.pattern),
+                    &dataset,
+                    &self.dataset,
+                );
                 let planning_duration = start_planning.elapsed();
                 let (results, explanation) = match self.evaluator.simple_evaluator(
                     dataset,
@@ -815,10 +840,11 @@ impl<'a> PreparedDeleteInsertUpdate<'a> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<DeleteInsertIter<'b, 'a>, QueryEvaluationError> {
-        let mut pattern = QueryExpression::from(&*self.operation.pattern);
-        if !self.evaluator.without_optimizations {
-            pattern = Optimizer::optimize_query_expression(pattern);
-        }
+        let pattern = self.evaluator.optimize(
+            QueryExpression::from(&*self.operation.pattern),
+            &dataset,
+            &self.dataset,
+        );
         let (solutions, _) = self
             .evaluator
             .simple_evaluator(dataset, self.dataset, self.base_iri, false)?

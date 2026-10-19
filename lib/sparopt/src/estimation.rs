@@ -45,11 +45,18 @@ impl Estimate {
 #[derive(Clone, Copy)]
 pub struct Estimator<'a> {
     statistics: &'a dyn Statistics,
+    /// The statistics know the predicates: the estimates with bound variables are not only heuristics
+    has_predicate_statistics: bool,
 }
 
 impl<'a> Estimator<'a> {
     pub fn new(statistics: &'a dyn Statistics) -> Self {
-        Self { statistics }
+        Self {
+            statistics,
+            has_predicate_statistics: statistics
+                .distinct_predicate_count(GraphScope::DefaultGraph)
+                .is_some(),
+        }
     }
 
     /// Estimates the cardinality and cost of an expression evaluated with the variables bound in `input_types`.
@@ -115,7 +122,12 @@ impl<'a> Estimator<'a> {
                 let left_types = infer_query_expression_types(left, input_types.clone());
                 let right_estimate = self.estimate(right, input_types);
                 Estimate::new(
-                    left_estimate.cardinality * self.estimate(right, &left_types).cardinality,
+                    self.join_cardinality(
+                        left_estimate.cardinality,
+                        self.estimate(right, &left_types).cardinality,
+                        || right_estimate.cardinality,
+                        || is_single_key_join(&left_types, right, input_types),
+                    ),
                     left_estimate.cost
                         + right_estimate.cost
                         + left_estimate.cardinality
@@ -128,7 +140,12 @@ impl<'a> Estimator<'a> {
                 let left_types = infer_query_expression_types(left, input_types.clone());
                 let right_estimate = self.estimate_lateral_right(right, &left_types);
                 Estimate::new(
-                    left_estimate.cardinality * right_estimate.cardinality,
+                    self.join_cardinality(
+                        left_estimate.cardinality,
+                        right_estimate.cardinality,
+                        || self.estimate(right, input_types).cardinality,
+                        || is_single_key_join(&left_types, right, input_types),
+                    ),
                     left_estimate.cost
                         + left_estimate.cardinality * (SEEK_COST + right_estimate.cost),
                 )
@@ -210,6 +227,29 @@ impl<'a> Estimator<'a> {
                 };
                 Estimate::new(cardinality, inner.cost + inner.cardinality)
             }
+        }
+    }
+
+    /// Cardinality of a join where each of the `left` rows matches `per_left_row` rows of an operand that returns `alone` rows on its own
+    ///
+    /// With statistics, the estimates with bound variables assume that the bound values are random values of the dataset.
+    /// It underestimates the joins that filter the left rows on correlated values,
+    /// e.g. a type check of subjects that have a property only used with this type.
+    /// So, if the join has a single key, we also use the containment assumption
+    /// (the key values of the smaller side are key values of the bigger side) and keep the biggest estimate.
+    /// The heuristics already assume correlated values, e.g. a fully bound pattern keeps half of the rows.
+    pub fn join_cardinality(
+        &self,
+        left: f64,
+        per_left_row: f64,
+        alone: impl FnOnce() -> f64,
+        is_single_key: impl FnOnce() -> bool,
+    ) -> f64 {
+        let cardinality = left * per_left_row;
+        if self.has_predicate_statistics && per_left_row < 1. && is_single_key() {
+            cardinality.max(left.min(alone()))
+        } else {
+            cardinality
         }
     }
 
@@ -411,6 +451,23 @@ impl<'a> Estimator<'a> {
     }
 }
 
+/// Checks if `right` always binds a single variable always bound by the left side of a join and not by its input
+fn is_single_key_join(
+    left_types: &VariableTypes,
+    right: &QueryExpression,
+    input_types: &VariableTypes,
+) -> bool {
+    let right_types = infer_query_expression_types(right, input_types.clone());
+    left_types
+        .iter()
+        .filter(|(variable, left_type)| {
+            !left_type.undef && !right_types.get(variable).undef && input_types.get(variable).undef
+        })
+        .take(2)
+        .count()
+        == 1
+}
+
 /// The probability for a row to pass a filter
 pub fn filter_selectivity(expression: &Expression) -> f64 {
     match expression {
@@ -588,7 +645,9 @@ fn usize_to_f64(count: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::statistics::NoStatistics;
+    use crate::algebra::JoinAlgorithm;
+    use crate::statistics::{NoStatistics, PredicateStatistics};
+    use oxrdf::{NamedNode, NamedNodeRef, Variable};
 
     fn estimate_slice_size(offset: u64, limit: Option<u64>) -> f64 {
         Estimator::new(&NoStatistics)
@@ -608,5 +667,86 @@ mod tests {
         assert!((estimate_slice_size(2, Some(1)) - 1.).abs() < f64::EPSILON);
         assert!(estimate_slice_size(6, Some(1)).abs() < f64::EPSILON);
         assert!((estimate_slice_size(2, None) - 3.).abs() < f64::EPSILON);
+    }
+
+    /// 500 instances of ex:C, each with an ex:kind, among 100,000 typed resources
+    struct TypedStatistics;
+
+    impl Statistics for TypedStatistics {
+        fn quad_count(
+            &self,
+            subject: Option<TermRef<'_>>,
+            predicate: Option<NamedNodeRef<'_>>,
+            object: Option<TermRef<'_>>,
+            _graph: GraphScope<'_>,
+        ) -> Option<u64> {
+            match (subject, predicate, object) {
+                (None, Some(predicate), Some(TermRef::NamedNode(object)))
+                    if predicate == rdf::TYPE && object.as_str() == "http://example.com/C" =>
+                {
+                    Some(500)
+                }
+                (None, Some(predicate), None)
+                    if predicate.as_str() == "http://example.com/kind" =>
+                {
+                    Some(500)
+                }
+                _ => None,
+            }
+        }
+
+        fn predicate_statistics(
+            &self,
+            predicate: NamedNodeRef<'_>,
+            _graph: GraphScope<'_>,
+        ) -> Option<PredicateStatistics> {
+            Some(if predicate == rdf::TYPE {
+                PredicateStatistics {
+                    triples: 100_000,
+                    distinct_subjects: 100_000,
+                    distinct_objects: 10,
+                }
+            } else {
+                PredicateStatistics {
+                    triples: 500,
+                    distinct_subjects: 500,
+                    distinct_objects: 10,
+                }
+            })
+        }
+
+        fn distinct_predicate_count(&self, _graph: GraphScope<'_>) -> Option<u64> {
+            Some(2)
+        }
+    }
+
+    fn quad_pattern(predicate: NamedNode, object: TermPattern) -> QueryExpression {
+        QueryExpression::QuadPattern {
+            subject: Variable::new_unchecked("x").into(),
+            predicate: predicate.into(),
+            object,
+            graph_name: None,
+        }
+    }
+
+    #[test]
+    fn type_check_of_correlated_subjects_is_not_too_selective() {
+        // ?x ex:kind ?k . ?x a ex:C
+        let join = QueryExpression::join(
+            quad_pattern(
+                NamedNode::new_unchecked("http://example.com/kind"),
+                Variable::new_unchecked("k").into(),
+            ),
+            quad_pattern(
+                rdf::TYPE,
+                NamedNode::new_unchecked("http://example.com/C").into(),
+            ),
+            JoinAlgorithm::default(),
+        );
+        // Assuming that ?x is a random typed resource would give 500 * 500 / 100,000 = 2.5 rows
+        let cardinality = Estimator::new(&TypedStatistics)
+            .estimate(&join, &VariableTypes::default())
+            .cardinality;
+        assert!((cardinality - 500.).abs() < f64::EPSILON, "{cardinality}");
     }
 }

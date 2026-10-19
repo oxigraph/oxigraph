@@ -13,6 +13,7 @@ use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
 use oxsdatatypes::{GDay, GMonth, GMonthDay, GYear, GYearMonth};
 use oxstr::OxString;
 use rustc_hash::{FxBuildHasher, FxHashSet};
+pub use sparopt::PredicateStatistics;
 use std::convert::Infallible;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -147,6 +148,56 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         Ok(self
             .externalize_expression_term(term)?
             .effective_boolean_value())
+    }
+
+    // Optional statistics used by the query optimizer to choose the join order
+
+    /// Estimates the number of quads matching a pattern.
+    ///
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph (but not the default one!)
+    ///
+    /// It must be fast: implementations might count up to a cap and return an approximation if it is reached.
+    /// Returns `None` if no estimate is available (the default).
+    fn internal_quad_count_estimate(
+        &self,
+        _subject: Option<&Self::InternalTerm>,
+        _predicate: Option<&Self::InternalTerm>,
+        _object: Option<&Self::InternalTerm>,
+        _graph_name: Option<Option<&Self::InternalTerm>>,
+    ) -> Result<Option<u64>, Self::Error> {
+        Ok(None)
+    }
+
+    /// Returns approximate statistics about the triples using the given predicate.
+    ///
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph (but not the default one!)
+    ///
+    /// Returns `None` if no statistics are available (the default).
+    fn internal_predicate_statistics(
+        &self,
+        _predicate: &Self::InternalTerm,
+        _graph_name: Option<Option<&Self::InternalTerm>>,
+    ) -> Result<Option<PredicateStatistics>, Self::Error> {
+        Ok(None)
+    }
+
+    /// Estimates the number of distinct predicates.
+    ///
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph (but not the default one!)
+    ///
+    /// Returns `None` if no estimate is available (the default).
+    fn internal_distinct_predicate_count_estimate(
+        &self,
+        _graph_name: Option<Option<&Self::InternalTerm>>,
+    ) -> Result<Option<u64>, Self::Error> {
+        Ok(None)
+    }
+
+    /// Estimates the number of named graphs.
+    ///
+    /// Returns `None` if no estimate is available (the default).
+    fn internal_named_graph_count_estimate(&self) -> Result<Option<u64>, Self::Error> {
+        Ok(None)
     }
 }
 

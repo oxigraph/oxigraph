@@ -8,7 +8,9 @@ use oxsdatatypes::Boolean;
 use oxstr::OxString;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
-use spareval::{ExpressionTerm, InternalQuad, InternalTriple, QueryableDataset};
+use spareval::{
+    ExpressionTerm, InternalQuad, InternalTriple, PredicateStatistics, QueryableDataset,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -18,7 +20,8 @@ use std::sync::Arc;
 
 pub struct DatasetView<'a> {
     reader: StorageReader<'a>,
-    extra: RefCell<HashMap<StrHash, OxString, BuildHasherDefault<StrHashHasher>>>,
+    /// The strings that are not in the store, and `None` for the ones that are: they are looked up only once
+    extra: RefCell<HashMap<StrHash, Option<OxString>, BuildHasherDefault<StrHashHasher>>>,
 }
 
 impl<'a> DatasetView<'a> {
@@ -31,9 +34,7 @@ impl<'a> DatasetView<'a> {
 
     pub fn insert_str(&self, key: &StrHash, value: OxString) {
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
-            if !matches!(self.reader.contains_str(key), Ok(true)) {
-                e.insert(value);
-            }
+            e.insert((!matches!(self.reader.contains_str(key), Ok(true))).then_some(value));
         }
     }
 }
@@ -79,6 +80,43 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
 
     fn contains_internal_graph_name(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
         self.reader.contains_named_graph(graph_name)
+    }
+
+    fn internal_quad_count_estimate(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<Option<&EncodedTerm>>,
+    ) -> Result<Option<u64>, StorageError> {
+        self.reader
+            .quad_count_estimate(subject, predicate, object, graph_name)
+    }
+
+    fn internal_predicate_statistics(
+        &self,
+        predicate: &EncodedTerm,
+        graph_name: Option<Option<&EncodedTerm>>,
+    ) -> Result<Option<PredicateStatistics>, StorageError> {
+        Ok(self
+            .reader
+            .predicate_statistics(predicate, graph_name)
+            .map(|counts| PredicateStatistics {
+                triples: counts.triples,
+                distinct_subjects: counts.distinct_subjects,
+                distinct_objects: counts.distinct_objects,
+            }))
+    }
+
+    fn internal_distinct_predicate_count_estimate(
+        &self,
+        graph_name: Option<Option<&EncodedTerm>>,
+    ) -> Result<Option<u64>, StorageError> {
+        Ok(self.reader.distinct_predicate_count_estimate(graph_name))
+    }
+
+    fn internal_named_graph_count_estimate(&self) -> Result<Option<u64>, StorageError> {
+        self.reader.named_graph_count_estimate()
     }
 
     fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
@@ -214,7 +252,7 @@ impl From<EncodedTriple> for InternalTriple<EncodedTerm> {
 
 impl StrLookup for DatasetView<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<OxString>, StorageError> {
-        Ok(if let Some(value) = self.extra.borrow().get(key) {
+        Ok(if let Some(Some(value)) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
             self.reader.get_str(key)?

@@ -20,6 +20,7 @@ use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, DbOptions, Iter, ReadableTransaction, Reader,
     Transaction,
 };
+use crate::storage::statistics::{GraphStatistics, PredicateCounts, StorageStatistics};
 use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use oxstr::OxString;
 use rustc_hash::{FxBuildHasher, FxHashSet};
@@ -31,10 +32,11 @@ use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
 #[cfg(feature = "rdf-12")]
 use std::hash::Hash;
+use std::io::Read;
 use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::{io, thread};
 
@@ -52,6 +54,8 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+const STATISTICS_KEY: &[u8] = b"oxstats";
+const STATISTICS_VERSION: u8 = 1;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RocksDbStorageOptions {
@@ -84,6 +88,7 @@ pub struct RocksDbStorage {
     dpos_cf: ColumnFamily,
     dosp_cf: ColumnFamily,
     graphs_cf: ColumnFamily,
+    statistics: Arc<RwLock<Option<Arc<StorageStatistics>>>>,
 }
 
 impl RocksDbStorage {
@@ -191,10 +196,47 @@ impl RocksDbStorage {
             dpos_cf: db.column_family(DPOS_CF)?,
             dosp_cf: db.column_family(DOSP_CF)?,
             graphs_cf: db.column_family(GRAPHS_CF)?,
+            statistics: Arc::default(),
             db,
         };
         this.migrate()?;
+        this.load_statistics()?;
         Ok(this)
+    }
+
+    /// Loads the statistics summary saved by [`update_statistics`](Self::update_statistics)
+    fn load_statistics(&self) -> Result<(), StorageError> {
+        let statistics = if let Some(value) = self.db.get(&self.default_cf, STATISTICS_KEY)? {
+            // We ignore statistics we can't read, they are not essential
+            decode_statistics(&value).ok().map(Arc::new)
+        } else {
+            None
+        };
+        *self
+            .statistics
+            .write()
+            .map_err(|_| StorageError::Other("The statistics lock is poisoned".into()))? =
+            statistics;
+        Ok(())
+    }
+
+    /// Computes the statistics summary used by the query optimizer and saves it if the database is writable
+    pub fn update_statistics(&self) -> Result<(), StorageError> {
+        let statistics = self.snapshot().compute_statistics()?;
+        if self.db.is_writable() {
+            self.db.insert(
+                &self.default_cf,
+                STATISTICS_KEY,
+                &encode_statistics(&statistics),
+            )?;
+            self.db.flush()?;
+        }
+        *self
+            .statistics
+            .write()
+            .map_err(|_| StorageError::Other("The statistics lock is poisoned".into()))? =
+            Some(Arc::new(statistics));
+        Ok(())
     }
 
     fn migrate(&self) -> Result<(), StorageError> {
@@ -835,6 +877,70 @@ impl<'a> RocksDbStorageReader<'a> {
     pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
         self.reader
             .contains_key(&self.storage.graphs_cf, &encode_term(graph_name))
+    }
+
+    /// The statistics summary, if it has been computed
+    pub fn statistics(&self) -> Option<Arc<StorageStatistics>> {
+        self.storage.statistics.read().ok()?.clone()
+    }
+
+    pub fn compute_statistics(&self) -> Result<StorageStatistics, StorageError> {
+        let mut statistics = StorageStatistics::default();
+        statistics
+            .default_graph
+            .add_quads_sorted_by_subject_predicate(self.dspo_quads(&[]))?;
+        statistics
+            .default_graph
+            .add_quads_sorted_by_predicate_object(self.dpos_quads(&[]))?;
+        statistics
+            .named_graphs
+            .add_quads_sorted_by_subject_predicate(self.spog_quads(&[]))?;
+        statistics
+            .named_graphs
+            .add_quads_sorted_by_predicate_object(self.posg_quads(&[]))?;
+        statistics.named_graph_count = self
+            .reader
+            .len(&self.storage.graphs_cf)?
+            .try_into()
+            .unwrap_or(u64::MAX);
+        Ok(statistics)
+    }
+
+    /// Counts the quads matching the pattern up to `cap`
+    ///
+    /// For `graph_name`, `Some(None)` encodes the default graph, `Some(Some(_))` a named graph and `None` any named graph.
+    pub fn count_quads_up_to(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<Option<&EncodedTerm>>,
+        cap: u64,
+    ) -> Result<u64, StorageError> {
+        let mut count = 0;
+        if let Some(graph_name) = graph_name {
+            for quad in self.quads_for_pattern(
+                subject,
+                predicate,
+                object,
+                Some(graph_name.unwrap_or(&EncodedTerm::DefaultGraph)),
+            ) {
+                quad?;
+                count += 1;
+                if count >= cap {
+                    break;
+                }
+            }
+        } else {
+            for quad in self.quads_for_pattern_in_named_graphs(subject, predicate, object) {
+                quad?;
+                count += 1;
+                if count >= cap {
+                    break;
+                }
+            }
+        }
+        Ok(count)
     }
 
     fn spog_quads(&self, prefix: &[u8]) -> RocksDbDecodingQuadIterator<'a> {
@@ -1935,6 +2041,80 @@ impl<'a> FileBulkLoader<'a> {
             Ok(())
         }
     }
+}
+
+fn encode_statistics(statistics: &StorageStatistics) -> Vec<u8> {
+    fn encode_graph(sink: &mut Vec<u8>, statistics: &GraphStatistics) {
+        sink.extend_from_slice(&statistics.triples.to_be_bytes());
+        sink.extend_from_slice(
+            &u64::try_from(statistics.predicates.len())
+                .unwrap_or(u64::MAX)
+                .to_be_bytes(),
+        );
+        for (predicate, counts) in &statistics.predicates {
+            write_term(sink, predicate);
+            sink.extend_from_slice(&counts.triples.to_be_bytes());
+            sink.extend_from_slice(&counts.distinct_subjects.to_be_bytes());
+            sink.extend_from_slice(&counts.distinct_objects.to_be_bytes());
+        }
+        sink.extend_from_slice(
+            &u64::try_from(statistics.classes.len())
+                .unwrap_or(u64::MAX)
+                .to_be_bytes(),
+        );
+        for (class, count) in &statistics.classes {
+            write_term(sink, class);
+            sink.extend_from_slice(&count.to_be_bytes());
+        }
+    }
+
+    let mut sink = vec![STATISTICS_VERSION];
+    sink.extend_from_slice(&statistics.named_graph_count.to_be_bytes());
+    encode_graph(&mut sink, &statistics.default_graph);
+    encode_graph(&mut sink, &statistics.named_graphs);
+    sink
+}
+
+fn decode_statistics(mut buffer: &[u8]) -> Result<StorageStatistics, StorageError> {
+    fn read_u64(buffer: &mut &[u8]) -> Result<u64, StorageError> {
+        let mut value = [0; 8];
+        buffer.read_exact(&mut value)?;
+        Ok(u64::from_be_bytes(value))
+    }
+
+    fn decode_graph(buffer: &mut &[u8]) -> Result<GraphStatistics, StorageError> {
+        let mut statistics = GraphStatistics {
+            triples: read_u64(buffer)?,
+            ..GraphStatistics::default()
+        };
+        for _ in 0..read_u64(buffer)? {
+            let predicate = buffer.read_term()?;
+            statistics.predicates.insert(
+                predicate,
+                PredicateCounts {
+                    triples: read_u64(buffer)?,
+                    distinct_subjects: read_u64(buffer)?,
+                    distinct_objects: read_u64(buffer)?,
+                },
+            );
+        }
+        for _ in 0..read_u64(buffer)? {
+            let class = buffer.read_term()?;
+            statistics.classes.insert(class, read_u64(buffer)?);
+        }
+        Ok(statistics)
+    }
+
+    let mut version = [0];
+    buffer.read_exact(&mut version)?;
+    if version[0] != STATISTICS_VERSION {
+        return Err(CorruptionError::msg("Unsupported statistics version").into());
+    }
+    Ok(StorageStatistics {
+        named_graph_count: read_u64(&mut buffer)?,
+        default_graph: decode_graph(&mut buffer)?,
+        named_graphs: decode_graph(&mut buffer)?,
+    })
 }
 
 #[cfg(test)]

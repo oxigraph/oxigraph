@@ -63,6 +63,9 @@ It provides the following REST actions:
     --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
   ```
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
+
+The SPARQL query optimizer uses statistics about the stored data to choose the join order.
+They are computed by `oxigraph load` and `oxigraph optimize`, it is useful to run `oxigraph optimize` after changing a lot of data.
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
   For example:
   ```sh
