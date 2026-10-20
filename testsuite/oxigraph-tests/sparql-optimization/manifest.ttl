@@ -32,6 +32,8 @@
     :lateral_optional_service
     :filter_projection_scope
     :optional_lateral_reordering
+    :nested_optional_for_loop
+    :lateral_subquery_input_bindings
     ) .
 
 
@@ -155,3 +157,13 @@
     mf:name "OPTIONAL converted to LATERAL reorders inner BGP by bound input" ;
     mf:action <optional_lateral_reordering_input.rq> ;
     mf:result <optional_lateral_reordering_output.rq> .
+
+:nested_optional_for_loop rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL nested in other OPTIONAL patterns is evaluated with a for loop" ;
+    mf:action <nested_optional_for_loop_input.rq> ;
+    mf:result <nested_optional_for_loop_output.rq> .
+
+:lateral_subquery_input_bindings rdf:type ox:QueryOptimizationTest ;
+    mf:name "Variables bound before a LATERAL sub-query are kept bound after it" ;
+    mf:action <lateral_subquery_input_bindings_input.rq> ;
+    mf:result <lateral_subquery_input_bindings_output.rq> .

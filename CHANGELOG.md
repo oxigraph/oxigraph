@@ -1,3 +1,10 @@
+# [Unreleased]
+
+### Fixed
+- `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
+- `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
+
+
 # [0.5.12] - 2026-10-18
 
 ### Removed
