@@ -7,6 +7,9 @@
 - SPARQL: a signed numeric literal directly after an operand is now its own step of the `AdditiveExpression` grammar rule. It takes the `*` and `/` operands that follow it, so `?a+2*3` is `?a + (+2*3)` and no longer `(?a + +2) * 3`, and it is never absorbed into the right operand of a preceding `+` or `-`, so `10 - 2 -3` is 5 and no longer `10 - (2 + -3)`, which is 11.
 - SPARQL: avoid counting shared triples multiple times when merging default graphs with `FROM`, `USING`, or the union-default-graph option. RocksDB-backed stores use their ordered indexes to perform this merge without retaining all matched triples.
 - `spareval`: the explanation labels are only formatted by `explain`, no longer on every evaluation. Formatting them recurses once per `IN` list item and overflowed the stack on long lists.
+- SPARQL: `GRAPH ?g { ... MINUS { ... } }` returned too many results when the right side of the `MINUS` uses `?g`.
+- `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
+- `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
 
 
 # [0.5.7] - 2026-04-19

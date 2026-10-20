@@ -36,6 +36,9 @@
     :lateral_optional_service
     :lateral_zero_length_path
     :filter_projection_scope
+    :graph_minus_graph_variable
+    :nested_optional_for_loop
+    :lateral_subquery_input_bindings
     ) .
 
 
@@ -178,3 +181,18 @@
     mf:name "Filter pushdown preserves subquery projection scope" ;
     mf:action <filter_projection_scope_input.rq> ;
     mf:result <filter_projection_scope_output.rq> .
+
+:graph_minus_graph_variable rdf:type ox:QueryOptimizationTest ;
+    mf:name "GRAPH is not pushed into a MINUS that uses the graph variable" ;
+    mf:action <graph_minus_graph_variable_input.rq> ;
+    mf:result <graph_minus_graph_variable_output.rq> .
+
+:nested_optional_for_loop rdf:type ox:QueryOptimizationTest ;
+    mf:name "OPTIONAL nested in other OPTIONAL patterns is evaluated with a for loop" ;
+    mf:action <nested_optional_for_loop_input.rq> ;
+    mf:result <nested_optional_for_loop_output.rq> .
+
+:lateral_subquery_input_bindings rdf:type ox:QueryOptimizationTest ;
+    mf:name "Variables bound before a LATERAL sub-query are kept bound after it" ;
+    mf:action <lateral_subquery_input_bindings_input.rq> ;
+    mf:result <lateral_subquery_input_bindings_output.rq> .

@@ -744,6 +744,14 @@ impl Optimizer {
                 if left_variables
                     .iter()
                     .any(|(v, t)| !t.undef && !right_variables.get(v).undef)
+                    && current_graph.as_ref().is_none_or(|pattern| {
+                        if let NamedNodePattern::Variable(v) = pattern {
+                            // In the right side, the graph variable is not bound to the graph name
+                            right_variables.get(v) == VariableType::UNDEF
+                        } else {
+                            true
+                        }
+                    })
                 {
                     // We know we are not in the disjoint case, we can propagate
                     QueryExpression::minus(
@@ -1114,15 +1122,19 @@ fn is_fit_for_for_loop_join(
             }
 
             // It is not ok to transform into for loop join if right binds a variable also bound by the entry part of the for loop join
+            // (the variables given by the global input are the same in both cases)
             let mut left_types = infer_query_expression_types(left, global_input_types.clone());
-            let right_types = infer_query_expression_types(right, global_input_types.clone());
-            if right_types.iter().any(|(variable, t)| {
-                *t != VariableType::UNDEF
-                    && left_types.get(variable).undef
-                    && entry_types.get(variable) != VariableType::UNDEF
-            }) {
+            if infer_query_expression_types(right, VariableTypes::default())
+                .iter()
+                .any(|(variable, t)| {
+                    *t != VariableType::UNDEF
+                        && left_types.get(variable).undef
+                        && entry_types.get(variable) != VariableType::UNDEF
+                })
+            {
                 return false;
             }
+            let right_types = infer_query_expression_types(right, global_input_types.clone());
 
             // We don't forget the final expression
             left_types.intersect_with(right_types);

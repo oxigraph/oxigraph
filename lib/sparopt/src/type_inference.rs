@@ -81,13 +81,16 @@ pub fn infer_query_expression_types(
             types
         }
         QueryExpression::Filter { inner, .. } => infer_query_expression_types(inner, types),
-        QueryExpression::Project { inner, variables } => VariableTypes {
-            inner: infer_query_expression_types(inner, types)
-                .inner
-                .into_iter()
-                .filter(|(v, _)| variables.contains(v))
-                .collect(),
-        },
+        QueryExpression::Project { inner, variables } => {
+            // Only the projected variables are given to the sub-query and the input bindings are kept
+            for (v, t) in infer_query_expression_types(inner, types.restricted_to(variables)).inner
+            {
+                if variables.contains(&v) {
+                    types.intersect_variable_with(v, t);
+                }
+            }
+            types
+        }
         QueryExpression::Distinct { inner }
         | QueryExpression::Reduced { inner }
         | QueryExpression::OrderBy { inner, .. }
@@ -367,6 +370,18 @@ impl VariableTypes {
 
     pub fn iter(&self) -> impl Iterator<Item = (&Variable, &VariableType)> {
         self.inner.iter()
+    }
+
+    /// Only keeps the given variables, like a projection does
+    pub fn restricted_to(&self, variables: &[Variable]) -> Self {
+        Self {
+            inner: self
+                .inner
+                .iter()
+                .filter(|(v, _)| variables.contains(v))
+                .map(|(v, t)| (v.clone(), *t))
+                .collect(),
+        }
     }
 
     pub fn intersect_with(&mut self, other: Self) {
