@@ -33,6 +33,7 @@
     :filter_projection_scope
     :optional_lateral_reordering
     :nested_optional_for_loop
+    :nested_optional_bind_from_input
     :lateral_subquery_input_bindings
     ) .
 
@@ -167,3 +168,8 @@
     mf:name "Variables bound before a LATERAL sub-query are kept bound after it" ;
     mf:action <lateral_subquery_input_bindings_input.rq> ;
     mf:result <lateral_subquery_input_bindings_output.rq> .
+
+:nested_optional_bind_from_input rdf:type ox:QueryOptimizationTest ;
+    mf:name "Nested OPTIONAL with a conflicting BIND from input is not converted to a for loop" ;
+    mf:action <nested_optional_bind_from_input_input.rq> ;
+    mf:result <nested_optional_bind_from_input_output.rq> .
