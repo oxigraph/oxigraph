@@ -1,0 +1,12 @@
+PREFIX ex: <http://example.org/>
+
+SELECT ?g ?x ?v ?o WHERE {
+    VALUES ?g { 1 }
+    LATERAL {
+        VALUES (?x ?v) { (ex:x 2) }
+        OPTIONAL {
+            ?x ex:p ?o .
+            OPTIONAL { BIND(?g AS ?v) }
+        }
+    }
+}
