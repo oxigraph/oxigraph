@@ -16,6 +16,7 @@
 //! to catch.
 
 #![cfg(test)]
+#![cfg(target_pointer_width = "64")] // Query optimization depends on pointer width.
 #![expect(clippy::panic, clippy::panic_in_result_fn)]
 
 use oxigraph::model::vocab::rdf;

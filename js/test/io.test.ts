@@ -111,7 +111,7 @@ describe("parse", () => {
         assert(result[0].equals(dataModel.quad(ex, ex, ex)));
     });
 
-    it("parse Array<Buffer>", async () => {
+    it("parse Array<Buffer> async", async () => {
         const result = await arrayFromAsyncIterable(
             parse(
                 asyncIterator([

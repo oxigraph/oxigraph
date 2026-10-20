@@ -1,5 +1,8 @@
 [advisories]
-ignore = []
+ignore = [
+  "RUSTSEC-2026-0194", # quick-xml: quadratic duplicate attribute name checks
+  "RUSTSEC-2026-0195", # quick-xml: unbounded namespace-declaration allocation
+]
 
 [licenses]
 allow = [

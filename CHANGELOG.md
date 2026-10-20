@@ -1,8 +1,10 @@
-# [Unreleased]
+# [0.5.13] - 2026-10-22
 
 ### Fixed
-- `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
-- `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
+- SPARQL: improve join cost estimates and `OPTIONAL` planning to avoid quadratic scaling for joins on foreign keys.
+- SPARQL: preserve input bindings during type inference for subqueries, fixing joins that lost their keys after a `LATERAL` subquery.
+- SPARQL: allow for-loop left joins for nested `OPTIONAL` patterns while preserving input-dependent `BIND` expressions and conflicting bindings.
+- RocksDB: fix copying read options with recent RocksDB versions.
 
 
 # [0.5.12] - 2026-10-18
