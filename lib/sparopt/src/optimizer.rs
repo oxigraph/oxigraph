@@ -1122,19 +1122,19 @@ fn is_fit_for_for_loop_join(
             }
 
             // It is not ok to transform into for loop join if right binds a variable also bound by the entry part of the for loop join
-            // (the variables given by the global input are the same in both cases)
             let mut left_types = infer_query_expression_types(left, global_input_types.clone());
-            if infer_query_expression_types(right, VariableTypes::default())
-                .iter()
-                .any(|(variable, t)| {
-                    *t != VariableType::UNDEF
-                        && left_types.get(variable).undef
-                        && entry_types.get(variable) != VariableType::UNDEF
-                })
-            {
+            // Keep the global input types for expressions such as BIND(?input AS ?output).
+            // Only check variables used by right: other global input bindings pass through unchanged.
+            let right_types = infer_query_expression_types(right, global_input_types.clone());
+            let mut has_conflicting_variable = false;
+            right.lookup_used_variables(&mut |variable| {
+                has_conflicting_variable |= right_types.get(variable) != VariableType::UNDEF
+                    && left_types.get(variable).undef
+                    && entry_types.get(variable) != VariableType::UNDEF;
+            });
+            if has_conflicting_variable {
                 return false;
             }
-            let right_types = infer_query_expression_types(right, global_input_types.clone());
 
             // We don't forget the final expression
             left_types.intersect_with(right_types);
