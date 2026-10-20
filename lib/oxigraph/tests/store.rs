@@ -7,6 +7,8 @@ use oxigraph::model::*;
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+use std::collections::BTreeSet;
 use std::error::Error;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::fs::remove_dir_all;
@@ -235,14 +237,15 @@ fn test_bulk_load_rollback() -> Result<(), Box<dyn Error>> {
     let store = Store::open(&dir)?;
     let before_files = read_dir(&dir)?
         .map(|e| e.map(|e| e.path()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<BTreeSet<_>, _>>()?;
     let mut loader = store.bulk_loader();
     loader.load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     drop(loader);
+    assert!(store.is_empty()?);
     store.validate()?;
     let after_files = read_dir(&dir)?
         .map(|e| e.map(|e| e.path()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<BTreeSet<_>, _>>()?;
     assert_eq!(
         before_files, after_files,
         "Files created even if bulk loader got rolled back"
