@@ -1388,6 +1388,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_family = "wasm"))] // Requires threads to set the stack size.
     fn execute_does_not_format_long_expressions() {
         // Overflows the stack if execute() builds the labels.
         let query = SparqlParser::new()
