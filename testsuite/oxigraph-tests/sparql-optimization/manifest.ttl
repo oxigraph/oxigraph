@@ -188,7 +188,7 @@
     mf:result <graph_minus_graph_variable_output.rq> .
 
 :nested_optional_for_loop rdf:type ox:QueryOptimizationTest ;
-    mf:name "OPTIONAL nested in OPTIONALs is evaluated with a for loop" ;
+    mf:name "OPTIONAL nested in other OPTIONAL patterns is evaluated with a for loop" ;
     mf:action <nested_optional_for_loop_input.rq> ;
     mf:result <nested_optional_for_loop_output.rq> .
 

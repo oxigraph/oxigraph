@@ -9,7 +9,7 @@
 - `spareval`: the explanation labels are only formatted by `explain`, no longer on every evaluation. Formatting them recurses once per `IN` list item and overflowed the stack on long lists.
 - SPARQL: `GRAPH ?g { ... MINUS { ... } }` returned too many results when the right side of the `MINUS` uses `?g`.
 - `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
-- `sparopt`: OPTIONALs nested in OPTIONALs can be evaluated with for-loop left joins.
+- `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
 
 
 # [0.5.7] - 2026-04-19
