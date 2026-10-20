@@ -747,7 +747,7 @@ impl Optimizer {
                     && current_graph.as_ref().is_none_or(|pattern| {
                         if let NamedNodePattern::Variable(v) = pattern {
                             // In the right side, the graph variable is not bound to the graph name
-                            !is_variable_used(&right, v)
+                            right_variables.get(v) == VariableType::UNDEF
                         } else {
                             true
                         }
@@ -1500,16 +1500,6 @@ fn is_named_node_pattern_bound(pattern: &NamedNodePattern, input_types: &Variabl
         NamedNodePattern::NamedNode(_) => true,
         NamedNodePattern::Variable(v) => !input_types.get(v).undef,
     }
-}
-
-fn is_variable_used(query_expression: &QueryExpression, variable: &Variable) -> bool {
-    let mut found = false;
-    query_expression.lookup_used_variables(&mut |v| {
-        if v == variable {
-            found = true;
-        }
-    });
-    found
 }
 
 fn wrap_in_possible_graph(
