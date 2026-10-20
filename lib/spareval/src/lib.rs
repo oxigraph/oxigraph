@@ -1277,6 +1277,7 @@ mod tests {
         assert!(result.is_none());
     }
 
+    #[cfg(not(target_family = "wasm"))] // Requires threads to set the stack size.
     #[test]
     fn execute_does_not_format_long_expressions() {
         // Overflows the stack if execute() builds the labels.
