@@ -43,7 +43,7 @@ Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
 [dependency-groups]
-build = ["maturin~=1.0", "ruff~=0.16.0"]
+build = ["maturin~=1.0", "ruff~=0.17.0"]
 dev = [
   { include-group = "build" },
   "furo",
