@@ -1429,16 +1429,14 @@ mod tests {
     }
 
     #[test]
-    fn cancellation_without_dataset_reads() {
+    fn cancellation_without_returned_quads() {
         let cancellation_token = CancellationToken::new();
         cancellation_token.cancel();
         let dataset = Dataset::new();
         for query in [
             "SELECT * WHERE { VALUES ?x { 1 2 3 } VALUES ?y { 1 2 } }",
-            "SELECT (COUNT(*) AS ?c) WHERE { VALUES ?x { 1 2 3 } }",
-            "SELECT * WHERE { VALUES ?x { 3 1 2 } } ORDER BY ?x",
-            #[cfg(feature = "sep-0006")]
-            "SELECT * WHERE { VALUES ?x { 1 2 3 } LATERAL { VALUES ?y { 1 2 } } }",
+            "SELECT * WHERE { VALUES ?s { <http://example.com/s> } ?s <http://example.com/p> ?o }",
+            "SELECT * WHERE { VALUES ?s { <http://example.com/s> } OPTIONAL { ?s <http://example.com/p> ?o } }",
         ] {
             let query = SparqlParser::new().parse_query(query).unwrap();
             let results = QueryEvaluator::new()

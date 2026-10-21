@@ -142,6 +142,10 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
         graph_name: Option<Option<&D::InternalTerm>>,
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a>
     {
+        // The lookup might not return any quad, so checking the cancellation on each returned quad is not enough
+        if let Err(error) = self.cancellation_token.ensure_alive() {
+            return Box::new(once(Err(error)));
+        }
         if let Some(graph_name) = graph_name {
             // A graph (named or default), has been specified, we only query it
             if let Some(graph_name) = graph_name {
@@ -1164,12 +1168,11 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
                 let build = left;
                 let probe = right;
-                let cancellation_token = self.dataset.cancellation_token.clone();
                 if keys.is_empty() {
                     // Cartesian product
+                    let cancellation_token = self.dataset.cancellation_token.clone();
                     Ok(Rc::new(move |from| {
-                        let built_values = cancellable(build(from.clone()), &cancellation_token)
-                            .collect::<Result<Vec<_>, _>>();
+                        let built_values = build(from.clone()).collect::<Result<Vec<_>, _>>();
                         if built_values.as_ref().is_err_and(|e| !e.can_be_silent()) {
                             // We return non-silent errors proactively to abort execution
                             return Box::new(built_values.err().into_iter().map(Err));
@@ -1202,9 +1205,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         .collect::<Vec<_>>();
                     Ok(Rc::new(move |from| {
                         let mut built_values = InternalTupleSet::new(keys.clone());
-                        let error = built_values
-                            .extend(cancellable(build(from.clone()), &cancellation_token))
-                            .err();
+                        let error = built_values.extend(build(from.clone())).err();
                         if error.as_ref().is_some_and(|e| !e.can_be_silent()) {
                             // We return non-silent errors proactively to abort execution
                             return Box::new(error.into_iter().map(Err));
@@ -1259,14 +1260,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     self.query_expression_evaluator(&right, encoded_variables);
                 stat_children.push(right_stats);
                 let right = right?;
-                let cancellation_token = self.dataset.cancellation_token.clone();
                 return Ok(Rc::new(move |from| {
                     Box::new(ForLoopLeftJoinIterator {
                         right_evaluator: Rc::clone(&right),
                         left_iter: left(from.clone()),
                         current_right: Box::new(empty()),
                         left_tuple_to_yield: None,
-                        cancellation_token: cancellation_token.clone(),
                     })
                 }));
             }
@@ -1274,22 +1273,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         let (right, right_stats) = self.query_expression_evaluator(right, encoded_variables);
         stat_children.push(right_stats);
         let right = right?;
-        let cancellation_token = self.dataset.cancellation_token.clone();
         Ok(Rc::new(move |from| {
             let right = Rc::clone(&right);
-            let cancellation_token = cancellation_token.clone();
-            Box::new(left(from.clone()).flat_map(
-                move |t| -> InternalTuplesIterator<'a, D::InternalTerm> {
-                    // The right side might not read anything from the dataset, so we check the cancellation here
-                    if let Err(e) = cancellation_token.ensure_alive() {
-                        return Box::new(once(Err(e)));
-                    }
-                    match t {
-                        Ok(t) => right(t),
-                        Err(e) => Box::new(once(Err(e))),
-                    }
-                },
-            ))
+            Box::new(left(from.clone()).flat_map(move |t| match t {
+                Ok(t) => right(t),
+                Err(e) => Box::new(once(Err(e))),
+            }))
         }))
     }
 
@@ -1526,9 +1515,8 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 })
             })
             .collect::<Result<(Vec<_>, Vec<_>), QueryEvaluationError>>()?;
-        let cancellation_token = self.dataset.cancellation_token.clone();
         Ok(Rc::new(move |from| {
-            let mut tuples_and_sort_keys = match cancellable(child(from), &cancellation_token)
+            let mut tuples_and_sort_keys = match child(from)
                 .map(|tuple| {
                     let tuple = tuple?;
                     let sort_terms = expressions
@@ -1696,7 +1684,6 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             .map(|(variable, _)| encode_variable(encoded_variables, variable))
             .collect::<Vec<_>>();
         let dataset = self.dataset.clone();
-        let cancellation_token = self.dataset.cancellation_token.clone();
         Ok(Rc::new(move |from| {
             let tuple_size = from.capacity();
             let key_variables = Rc::clone(&key_variables);
@@ -1711,7 +1698,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>(),
                 );
             }
-            for result in cancellable(child(from), &cancellation_token) {
+            for result in child(from) {
                 let tuple = match result {
                     Ok(tuple) => tuple,
                     Err(error) => return Box::new(once(Err(error))),
@@ -3252,12 +3239,13 @@ impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
                 (&self.probe_tuple, self.built.get(self.built_offset))
             {
                 self.built_offset += 1;
+                // This loop might produce a lot of tuples without calling any other operator, so we check the cancellation here
+                if let Err(error) = self.cancellation_token.ensure_alive() {
+                    return Some(Err(error));
+                }
                 if let Some(result_tuple) = probe_tuple.combine_with(built_tuple) {
                     return Some(Ok(result_tuple));
                 }
-            }
-            if let Err(e) = self.cancellation_token.ensure_alive() {
-                return Some(Err(e));
             }
             self.probe_tuple = match self.probe_iter.next()? {
                 Ok(probe_tuple) => Some(probe_tuple),
@@ -3369,7 +3357,6 @@ struct ForLoopLeftJoinIterator<'a, T> {
     left_iter: InternalTuplesIterator<'a, T>,
     current_right: InternalTuplesIterator<'a, T>,
     left_tuple_to_yield: Option<InternalTuple<T>>,
-    cancellation_token: CancellationToken,
 }
 
 #[cfg(feature = "sep-0006")]
@@ -3387,10 +3374,6 @@ impl<T: Clone> Iterator for ForLoopLeftJoinIterator<'_, T> {
             }
             if let Some(left_tuple) = self.left_tuple_to_yield.take() {
                 return Some(Ok(left_tuple));
-            }
-            // The right side might not read anything from the dataset, so we check the cancellation here
-            if let Err(e) = self.cancellation_token.ensure_alive() {
-                return Some(Err(e));
             }
             let left_tuple = match self.left_iter.next()? {
                 Ok(left_tuple) => left_tuple,
@@ -3910,20 +3893,6 @@ impl<T: Hash> InternalTupleSet<T> {
         }
         Ok(())
     }
-}
-
-/// Makes the iteration fail if the cancellation token is cancelled
-///
-/// Useful when materializing results that do not come directly from the dataset
-fn cancellable<'a, T: 'a>(
-    iter: InternalTuplesIterator<'a, T>,
-    cancellation_token: &CancellationToken,
-) -> impl Iterator<Item = Result<InternalTuple<T>, QueryEvaluationError>> + 'a {
-    let cancellation_token = cancellation_token.clone();
-    iter.map(move |tuple| {
-        cancellation_token.ensure_alive()?;
-        tuple
-    })
 }
 
 struct StatsIterator<'a, T> {
