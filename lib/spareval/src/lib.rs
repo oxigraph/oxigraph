@@ -1427,4 +1427,33 @@ mod tests {
             .explain(&Dataset::new());
         assert!(format!("{explanation:?}").contains("Filter("));
     }
+
+    #[test]
+    fn cancellation_without_returned_quads() {
+        let cancellation_token = CancellationToken::new();
+        cancellation_token.cancel();
+        let dataset = Dataset::new();
+        for query in [
+            "SELECT * WHERE { VALUES ?x { 1 2 3 } VALUES ?y { 1 2 } }",
+            "SELECT * WHERE { VALUES ?s { <http://example.com/s> } ?s <http://example.com/p> ?o }",
+            "SELECT * WHERE { VALUES ?s { <http://example.com/s> } OPTIONAL { ?s <http://example.com/p> ?o } }",
+        ] {
+            let query = SparqlParser::new().parse_query(query).unwrap();
+            let results = QueryEvaluator::new()
+                .with_cancellation_token(cancellation_token.clone())
+                .prepare(&query)
+                .execute(&dataset);
+            let error = match results {
+                Ok(QueryResults::Solutions(solutions)) => {
+                    solutions.collect::<Result<Vec<_>, _>>().unwrap_err()
+                }
+                Ok(_) => unreachable!(),
+                Err(error) => error,
+            };
+            assert!(
+                matches!(error, QueryEvaluationError::Cancelled),
+                "{query}: {error}"
+            );
+        }
+    }
 }
