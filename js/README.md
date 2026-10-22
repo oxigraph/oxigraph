@@ -1,5 +1,4 @@
-Oxigraph for JavaScript
-=======================
+# Oxigraph for JavaScript
 
 [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
@@ -29,7 +28,7 @@ Note that a bundler compatible with WebAssembly like Vite or WebPack is likely r
 
 ## Example
 
-Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in  SPARQL:
+Insert the triple `<http://example/> <http://schema.org/name> "example"` and log the name of `<http://example/>` in SPARQL:
 
 ```js
 import { Store } from "oxigraph";
@@ -38,7 +37,9 @@ const store = new Store();
 const ex = dataModel.namedNode("http://example/");
 const schemaName = dataModel.namedNode("http://schema.org/name");
 store.add(dataModel.quad(ex, schemaName, dataModel.literal("example")));
-for (const binding of store.query("SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }")) {
+for (const binding of store.query(
+    "SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }",
+)) {
     console.log(binding.get("name").value);
 }
 ```
@@ -56,33 +57,30 @@ Parse some content and return `Quad`s.
 
 The method arguments are:
 1. `input`: the serialized RDF triples or quads. It allows different types:
-    - `string | UInt8Array`. In this case the output is returned as a plain `Quad[]`.
-    - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
-    - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
+   - `string | UInt8Array`. In this case the output is returned as a plain `Quad[]`.
+     - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
+       - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
 2. `options`: an object containing various options (all optional except `format`):
-    - `format`: the format of the serialization as a `string`. See below for the supported formats.
-    - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
-    - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
-    - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
+   - `format`: the format of the serialization as a `string`. See below for the supported formats.
+     - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
+       - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
+         - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
 
 The available formats are:
-* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
-* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
-* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
-* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
-* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
-* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
-* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
+- [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+- [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+- [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+- [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+- [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+- [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+- [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of parsing a Turtle file with the base IRI `http://example.com`:
 ```js
-parse(
-    "<http://example.com> <http://example.com> <> .",
-    {
-        format: "text/turtle",
-        base_iri: "http://example.com",
-    }
-)
+parse("<http://example.com> <http://example.com> <> .", {
+    format: "text/turtle",
+    base_iri: "http://example.com",
+});
 ```
 
 ### `Store`
@@ -92,6 +90,7 @@ Oxigraph API is centered around the `Store` class.
 A store contains an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) and allows to query and update them using SPARQL.
 
 #### `Store(optional sequence<Quad>? quads)` (constructor)
+
 Creates a new store.
 
 ```js
@@ -102,13 +101,14 @@ const store = new Store();
 If provided, the `Store` will be initialized with a sequence of quads.
 
 ```js
-import {Store} from "oxigraph";
+import { Store } from "oxigraph";
 import dataModel from "@rdfjs/data-model";
 
 const store = new Store([dataModel.quad(blank, ex, foo)]);
 ```
 
 #### `Store.prototype.add(Quad quad)`
+
 Inserts a quad in the store.
 
 Example:
@@ -117,6 +117,7 @@ store.add(quad);
 ```
 
 #### `Store.prototype.delete(Quad quad)`
+
 Removes a quad from the store.
 
 Example:
@@ -125,6 +126,7 @@ store.delete(quad);
 ```
 
 #### `Store.prototype.has(Quad quad)`
+
 Returns a boolean stating if the store contains the quad.
 
 Example:
@@ -133,6 +135,7 @@ store.has(quad);
 ```
 
 #### `Store.prototype.match(optional Term? subject, optional Term? predicate, optional Term? object, optional Term? graph)`
+
 Returns an array with all the quads matching a given quad pattern.
 
 Example to get all quads in the default graph with `ex` for subject:
@@ -146,6 +149,7 @@ store.match();
 ```
 
 #### `Store.prototype.query(String query, object options)`
+
 Executes a [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).
 For `SELECT` queries the return type is an array of `Map` which keys are the bound variables and values are the values the result is bound to.
 For `CONSTRUCT` and `ÐESCRIBE` queries the return type is an array of `Quad`.
@@ -160,7 +164,9 @@ for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
 
 Example of CONSTRUCT query:
 ```js
-const filteredStore = new Store(store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"));
+const filteredStore = new Store(
+    store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"),
+);
 ```
 
 Example of ASK query:
@@ -173,30 +179,33 @@ if (store.query("ASK { ?s ?s ?s }")) {
 It is also possible to provide some options in an object given as second argument:
 
 ```js
-console.log(store.query("ASK { <s> ?p ?o }", {
-    base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
-    use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
-    default_graph: [dataModel.defaultGraph(), dataModel.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
-    named_graphs: [dataModel.namedNode("http://example.com"), dataModel.blankNode("b")], // we restrict the available named graphs to the two listed
-    results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
-}));
+console.log(
+    store.query("ASK { <s> ?p ?o }", {
+        base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
+        use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
+        default_graph: [dataModel.defaultGraph(), dataModel.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
+        named_graphs: [dataModel.namedNode("http://example.com"), dataModel.blankNode("b")], // we restrict the available named graphs to the two listed
+        results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
+    }),
+);
 ```
 
 #### `Store.prototype.update(String query, object options)`
+
 Executes a [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
 The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
 
 Example of update:
 ```js
-store.update("DELETE WHERE { <http://example.com/s> ?p ?o }")
+store.update("DELETE WHERE { <http://example.com/s> ?p ?o }");
 ```
 
 It is also possible to provide some options in an object given as second argument:
 
 ```js
 store.update("DELETE WHERE { <s> ?p ?o }", {
-  base_iri: "http://example.com/" // base IRI to resolve relative IRIs in the update
-})
+    base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the update
+});
 ```
 
 #### `Store.prototype.load(string | UInt8Array | Iterable<string | UInt8Array> data, object options)`
@@ -212,24 +221,21 @@ The method arguments are:
    - `no_transaction`: disables transactional guarantees: if the file has a syntax error, the start of it might be loaded into the store even if parsing fails.
 
 The available formats are:
-* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
-* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
-* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
-* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
-* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
-* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
-* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
+- [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+- [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+- [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+- [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+- [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+- [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+- [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js
-store.load(
-    "<http://example.com> <http://example.com> <> .",
-    {
-        format: "text/turtle",
-        base_iri: "http://example.com",
-        to_graph_name: dataModel.namedNode("http://example.com/graph")
-    }
-);
+store.load("<http://example.com> <http://example.com> <> .", {
+    format: "text/turtle",
+    base_iri: "http://example.com",
+    to_graph_name: dataModel.namedNode("http://example.com/graph"),
+});
 ```
 
 #### `Store.prototype.dump(object options)`
@@ -240,35 +246,37 @@ The method argument is a single object, `options`, with the following options (a
 - `from_named_graph`: for triple serialization formats, the name of the named graph the triple should be loaded from as a `NamedNode`, `BlankNode` or `DefaultGraph`..
 
 The available formats are:
-* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
-* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
-* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
-* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
-* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
-* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
-* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
+- [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
+- [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+- [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+- [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+- [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+- [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+- [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of building a Turtle file from the named graph `<http://example.com/graph>`:
 ```js
 store.dump({
     format: "text/turtle",
-    from_graph_name: dataModel.namedNode("http://example.com/graph")
+    from_graph_name: dataModel.namedNode("http://example.com/graph"),
 });
 ```
 
 ## Migration guide
 
 ### From 0.5 to 0.6
-* The package is now build from bundlers and not for plain Node.JS or web browsers. 
+
+- The package is now build from bundlers and not for plain Node.JS or web browsers.
   If you don't use a bundler you can still avoid using one by directly importing the `oxigraph_bg.wasm` and `oxigraph_bg.js` files.
   To import Oxigraph use `import { Store } from "oxigraph"`
-* Oxigraph does not implement RDF/JS DataModel anymore.
-  Use another library like ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model). 
+- Oxigraph does not implement RDF/JS DataModel anymore.
+  Use another library like ['@rdfjs/data-model`](https://github.com/rdfjs-base/data-model).
 
 ### From 0.2 to 0.3
-* The `MemoryStore` class is now called `Store` (there is no other kind of stores...).
-* RDF/JS datamodel functions (`namedNode`...) are now available at the root of the `oxigraph` package. You now need to call `oxigraph.namedNode` instead of `store.dataFactory.namedNode`.
-* [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented. `Quad` is now a valid value for the `Ωuad` `subject` and `object` properties.
+
+- The `MemoryStore` class is now called `Store` (there is no other kind of stores...).
+- RDF/JS datamodel functions (`namedNode`...) are now available at the root of the `oxigraph` package. You now need to call `oxigraph.namedNode` instead of `store.dataFactory.namedNode`.
+- [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented. `Quad` is now a valid value for the `Ωuad` `subject` and `object` properties.
 
 
 ## How to contribute
@@ -292,10 +300,9 @@ Testing and linting:
 ## License
 
 This project is licensed under either of
-
-* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+- Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
   http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or
   http://opensource.org/licenses/MIT)
 
 at your option.
