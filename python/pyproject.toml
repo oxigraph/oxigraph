@@ -52,6 +52,7 @@ dev = [
   "sphinx>=7.0,<10.0",
   "sphinx-lint~=1.0",
 ]
+pyodide = ["pyodide-build>=0.19,<0.40"]
 
 [tool.ruff]
 line-length = 120
