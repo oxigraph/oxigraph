@@ -2573,7 +2573,7 @@ fn unescape_local_name(mut input: &str) -> (Cow<'_, str>, bool) {
         if matches!(escape, '/' | '?' | '#' | '@' | '%') {
             might_be_invalid_iri = true;
         }
-        input = after;
+        input = &after[escape.len_utf8()..];
     }
     (
         if let Some(mut output) = output {
