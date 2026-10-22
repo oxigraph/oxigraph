@@ -46,11 +46,6 @@ struct oxrocksdb_pinnable_handle_t {
 
 struct rocksdb_readoptions_t {
   ReadOptions rep;
-  // stack variables to set pointers to in ReadOptions
-  Slice upper_bound;
-  Slice lower_bound;
-  Slice timestamp;
-  Slice iter_start_ts;
 };
 }
 
@@ -200,6 +195,8 @@ oxrocksdb_pinnable_handle_t* oxrocksdb_writebatch_wi_get_pinned_cf_v2(
 
 rocksdb_readoptions_t* oxrocksdb_readoptions_create_copy(
     rocksdb_readoptions_t* options) {
-  return new rocksdb_readoptions_t(*options);
+  auto* copy = rocksdb_readoptions_create();
+  copy->rep = options->rep;
+  return copy;
 }
 }
