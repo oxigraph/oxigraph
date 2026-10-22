@@ -66,6 +66,7 @@
     :arithmetic_left_associative
     :arithmetic_signed_literal
     :graph_minus_graph_variable
+    :pname_local_escape
     ) .
 
 :eq_dirLangString rdf:type mf:QueryEvaluationTest ;
@@ -356,3 +357,8 @@
         qt:graphData <graph_minus_graph_variable.ttl>
     ] ;
     mf:result <graph_minus_graph_variable.srj> .
+
+:pname_local_escape rdf:type mf:QueryEvaluationTest ;
+    mf:name "An escape sequence in the local part of a prefixed name stands for one character" ;
+    mf:action [ qt:query <pname_local_escape.rq> ; qt:data <pname_local_escape.ttl> ] ;
+    mf:result <true.srx> .

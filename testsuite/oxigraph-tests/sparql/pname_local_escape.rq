@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+ASK {
+    ex:a\/b ex:p ex:c\-d .
+    FILTER(STR(ex:a\/b) = "http://example.com/a/b")
+}
