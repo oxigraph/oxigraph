@@ -16,7 +16,7 @@ use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Ur
 use oxigraph::io::{DocumentLoader, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
-use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{CancellationToken, QueryExplanation, QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store, Transaction};
 use oxiri::{Iri, IriRef};
 use oxstr::OxString;
@@ -297,8 +297,10 @@ pub fn main() -> anyhow::Result<()> {
             results_format,
             explain,
             explain_file,
+            explain_only,
             stats,
             union_default_graph,
+            timeout_s,
         } => {
             let query = if let Some(query) = query {
                 query
@@ -314,11 +316,30 @@ pub fn main() -> anyhow::Result<()> {
             if let Some(base) = query_base {
                 evaluator = evaluator.with_base_iri(&base)?;
             }
+            if let Some(timeout_s) = timeout_s {
+                let cancellation_token = CancellationToken::new();
+                evaluator = evaluator.with_cancellation_token(cancellation_token.clone());
+                thread::Builder::new()
+                    .name("SPARQL evaluation timeout".into())
+                    .spawn(move || {
+                        thread::sleep(Duration::from_secs(timeout_s));
+                        cancellation_token.cancel();
+                    })?;
+            }
             let mut prepared = evaluator.parse_query(&query)?;
             if union_default_graph {
                 prepared.dataset_mut().set_default_graph_as_union();
             }
             let mut prepared = prepared.on_store(&store);
+            if explain_only {
+                let explanation = prepared.plan()?;
+                return if let Some(explain_file) = explain_file {
+                    write_explanation_file(&explanation, &explain_file)
+                } else {
+                    eprintln!("{explanation:#?}");
+                    Ok(())
+                };
+            }
             if stats {
                 prepared = prepared.compute_statistics();
             }
@@ -427,20 +448,7 @@ pub fn main() -> anyhow::Result<()> {
                 Ok(())
             })();
             if let Some(explain_file) = explain_file {
-                let mut file = BufWriter::new(File::create(&explain_file)?);
-                match explain_file.extension().and_then(OsStr::to_str) {
-                    Some("json") => {
-                        explanation.write_in_json(&mut file)?;
-                    }
-                    Some("txt") => {
-                        write!(file, "{explanation:?}")?;
-                    }
-                    _ => bail!(
-                        "The given explanation file {} must have an extension that is .json or .txt",
-                        explain_file.display()
-                    ),
-                }
-                close_file_writer(file)?;
+                write_explanation_file(&explanation, &explain_file)?;
             } else if explain || stats {
                 eprintln!("{explanation:#?}");
             }
@@ -606,6 +614,26 @@ fn bulk_load_read(
     }
     loader.load_from_reader(parser, reader)?;
     Ok(())
+}
+
+fn write_explanation_file(
+    explanation: &QueryExplanation,
+    explain_file: &Path,
+) -> anyhow::Result<()> {
+    let mut file = BufWriter::new(File::create(explain_file)?);
+    match explain_file.extension().and_then(OsStr::to_str) {
+        Some("json") => {
+            explanation.write_in_json(&mut file)?;
+        }
+        Some("txt") => {
+            write!(file, "{explanation:?}")?;
+        }
+        _ => bail!(
+            "The given explanation file {} must have an extension that is .json or .txt",
+            explain_file.display()
+        ),
+    }
+    Ok(close_file_writer(file)?)
 }
 
 fn bulk_load_file(
@@ -1391,6 +1419,7 @@ fn configure_and_evaluate_sparql_query(
 ) -> Result<Response<Body>, HttpError> {
     let default_graph_uris = args.remove_all("default-graph-uri");
     let named_graph_uris = args.remove_all("named-graph-uri");
+    let explain = args.remove_single("explain")?;
     let mut use_default_graph_as_union = args.contains("union-default-graph");
     if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
         use_default_graph_as_union |= default_use_default_graph_as_union;
@@ -1412,6 +1441,7 @@ fn configure_and_evaluate_sparql_query(
         use_default_graph_as_union,
         default_graph_uris,
         named_graph_uris,
+        explain.as_deref(),
         request,
         timeout,
     )
@@ -1424,6 +1454,7 @@ fn evaluate_sparql_query(
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
+    explain: Option<&str>,
     request: &Request<Body>,
     timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
@@ -1470,6 +1501,44 @@ fn evaluate_sparql_query(
         );
     }
 
+    match explain {
+        None => (),
+        Some("plan") => {
+            // We only plan the query
+            let explanation = prepared
+                .on_store(store)
+                .plan()
+                .map_err(internal_server_error)?;
+            return explanation_response(&explanation);
+        }
+        Some("stats") => {
+            // We evaluate the query and return the plan with the statistics, even if the evaluation fails (e.g. timeout)
+            let (results, explanation) = prepared.on_store(store).compute_statistics().explain();
+            match results {
+                Ok(QueryResults::Solutions(solutions)) => {
+                    for solution in solutions {
+                        if solution.is_err() {
+                            break;
+                        }
+                    }
+                }
+                Ok(QueryResults::Graph(triples)) => {
+                    for triple in triples {
+                        if triple.is_err() {
+                            break;
+                        }
+                    }
+                }
+                Ok(QueryResults::Boolean(_)) | Err(_) => (),
+            }
+            return explanation_response(&explanation);
+        }
+        Some(explain) => {
+            return Err(bad_request(format!(
+                "The explain parameter must be 'plan' or 'stats', found '{explain}'"
+            )));
+        }
+    }
     let results = prepared
         .on_store(store)
         .execute()
@@ -1525,6 +1594,17 @@ fn evaluate_sparql_query(
             )
         }
     }
+}
+
+fn explanation_response(explanation: &QueryExplanation) -> Result<Response<Body>, HttpError> {
+    let mut body = Vec::new();
+    explanation
+        .write_in_json(&mut body)
+        .map_err(internal_server_error)?;
+    Response::builder()
+        .header(CONTENT_TYPE, "application/json")
+        .body(body.into())
+        .map_err(internal_server_error)
 }
 
 fn configure_and_evaluate_sparql_update(
@@ -2560,6 +2640,60 @@ mod tests {
     }
 
     #[test]
+    fn cli_query_explain_only() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
+        cli_command()
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query")
+            .arg("SELECT * WHERE { ?s <http://example.com/p> ?o }")
+            .arg("--explain-only")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("QuadPattern"))
+            .success();
+
+        let explain_file = NamedTempFile::new("explanation.json")?;
+        cli_command()
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query")
+            .arg("SELECT * WHERE { ?s <http://example.com/p> ?o }")
+            .arg("--explain-only")
+            .arg("--explain-file")
+            .arg(explain_file.path())
+            .assert()
+            .success();
+        explain_file.assert(predicate::str::contains("QuadPattern"));
+        Ok(())
+    }
+
+    #[test]
+    fn cli_query_timeout() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
+        cli_command()
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query")
+            .arg("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+            .arg("--results-format")
+            .arg("csv")
+            .arg("--timeout-s")
+            .arg("10")
+            .assert()
+            .stdout("s,p,o\r\nhttp://example.com/s,http://example.com/p,http://example.com/o\r\n")
+            .success();
+        Ok(())
+    }
+
+    #[test]
     fn cli_select_query_file() -> Result<()> {
         let store_dir = initialized_cli_store(
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
@@ -2808,6 +2942,39 @@ mod tests {
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
         )
+    }
+
+    #[test]
+    fn get_query_explain() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "application/trig")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
+
+        for (explain, expected) in [("plan", "QuadPattern"), ("stats", "number of results")] {
+            let request = Request::builder()
+                .uri(format!(
+                    "http://localhost/query?query=SELECT%20?s%20WHERE%20{{%20?s%20?p%20?o%20}}&explain={explain}"
+                ))
+                .body(())?;
+            let mut response = server.exec(request);
+            let body = read_to_string(response.body_mut())?;
+            assert_eq!(response.status(), StatusCode::OK, "Error message: {body}");
+            assert_eq!(
+                response.headers().get(CONTENT_TYPE),
+                Some(&HeaderValue::from_static("application/json"))
+            );
+            assert!(body.contains(expected), "{body}");
+        }
+
+        let request = Request::builder()
+            .uri("http://localhost/query?query=SELECT%20?s%20WHERE%20{%20?s%20?p%20?o%20}&explain=foo")
+            .body(())?;
+        server.test_status(request, StatusCode::BAD_REQUEST)
     }
 
     #[test]
