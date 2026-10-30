@@ -1823,7 +1823,9 @@ where
                             ExpressionTerm::DoubleLiteral(value) => value.into(),
                             ExpressionTerm::IntegerLiteral(value) => value.into(),
                             ExpressionTerm::DecimalLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1840,7 +1842,9 @@ where
                             ExpressionTerm::IntegerLiteral(value) => value.into(),
                             ExpressionTerm::DecimalLiteral(value) => value.into(),
                             ExpressionTerm::BooleanLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1857,7 +1861,9 @@ where
                             ExpressionTerm::IntegerLiteral(value) => value.into(),
                             ExpressionTerm::DecimalLiteral(value) => value.into(),
                             ExpressionTerm::BooleanLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1874,7 +1880,9 @@ where
                             ExpressionTerm::IntegerLiteral(value) => value,
                             ExpressionTerm::DecimalLiteral(value) => value.try_into().ok()?,
                             ExpressionTerm::BooleanLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1891,7 +1899,9 @@ where
                             ExpressionTerm::IntegerLiteral(value) => value.into(),
                             ExpressionTerm::DecimalLiteral(value) => value,
                             ExpressionTerm::BooleanLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1906,7 +1916,9 @@ where
                         Some(ExpressionTerm::DateLiteral(match t {
                             ExpressionTerm::DateLiteral(value) => value,
                             ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1921,7 +1933,9 @@ where
                         Some(ExpressionTerm::TimeLiteral(match t {
                             ExpressionTerm::TimeLiteral(value) => value,
                             ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1936,7 +1950,9 @@ where
                             ExpressionTerm::DateTimeLiteral(value) => value,
                             #[cfg(feature = "sep-0002")]
                             ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1952,7 +1968,9 @@ where
                             ExpressionTerm::DurationLiteral(value) => value,
                             ExpressionTerm::YearMonthDurationLiteral(value) => value.into(),
                             ExpressionTerm::DayTimeDurationLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1967,7 +1985,9 @@ where
                         Some(ExpressionTerm::YearMonthDurationLiteral(match t {
                             ExpressionTerm::DurationLiteral(value) => value.try_into().ok()?,
                             ExpressionTerm::YearMonthDurationLiteral(value) => value,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1982,7 +2002,9 @@ where
                         Some(ExpressionTerm::DayTimeDurationLiteral(match t {
                             ExpressionTerm::DurationLiteral(value) => value.try_into().ok()?,
                             ExpressionTerm::DayTimeDurationLiteral(value) => value,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -1999,7 +2021,9 @@ where
                             ExpressionTerm::GYearMonthLiteral(value) => value.try_into().ok()?,
                             ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
                             ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -2015,7 +2039,9 @@ where
                             ExpressionTerm::GYearMonthLiteral(value) => value,
                             ExpressionTerm::DateLiteral(value) => value.into(),
                             ExpressionTerm::DateTimeLiteral(value) => value.try_into().ok()?,
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -2033,7 +2059,9 @@ where
                             ExpressionTerm::GMonthDayLiteral(value) => value.into(),
                             ExpressionTerm::DateLiteral(value) => value.into(),
                             ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -2049,7 +2077,9 @@ where
                             ExpressionTerm::GMonthDayLiteral(value) => value,
                             ExpressionTerm::DateLiteral(value) => value.into(),
                             ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -2066,7 +2096,9 @@ where
                             ExpressionTerm::GMonthDayLiteral(value) => value.into(),
                             ExpressionTerm::DateLiteral(value) => value.into(),
                             ExpressionTerm::DateTimeLiteral(value) => value.into(),
-                            ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                            ExpressionTerm::StringLiteral(value) => {
+                                xml_trim(&value).parse().ok()?
+                            }
                             _ => return None,
                         }))
                     })(try_or_ok!(e(tuple)?)))
@@ -2860,6 +2892,12 @@ fn substring(source_string: &str, start: i64, length: Option<i64>) -> Option<&st
         }
     }
     Some(start_position.map_or("", |start_position| &source_string[start_position..]))
+}
+
+/// Casting from a string first collapses its whitespace (XPath functions 19.2),
+/// and none of the cast target types allows inner whitespace.
+fn xml_trim(value: &str) -> &str {
+    value.trim_matches([' ', '\t', '\r', '\n'])
 }
 
 fn extract_parameters<'a, E, const N: usize>(

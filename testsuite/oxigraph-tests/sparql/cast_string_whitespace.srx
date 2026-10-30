@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="i"/>
+    <variable name="d"/>
+    <variable name="b"/>
+    <variable name="t"/>
+  </head>
+  <results>
+    <result>
+      <binding name="i">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">7</literal>
+      </binding>
+      <binding name="d">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#double">1.5E0</literal>
+      </binding>
+      <binding name="b">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+      </binding>
+      <binding name="t">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">2020-01-01T00:00:00Z</literal>
+      </binding>
+    </result>
+  </results>
+</sparql>

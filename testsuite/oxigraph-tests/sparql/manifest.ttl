@@ -28,6 +28,7 @@
     :nested_path
     :nested_expression
     :order_terms
+    :cast_string_whitespace
     :nested_anonymous
     :unbound_variable_in_subquery
     :one_or_more_shared
@@ -362,3 +363,8 @@
     mf:name "An escape sequence in the local part of a prefixed name stands for one character" ;
     mf:action [ qt:query <pname_local_escape.rq> ; qt:data <pname_local_escape.ttl> ] ;
     mf:result <true.srx> .
+
+:cast_string_whitespace rdf:type mf:QueryEvaluationTest ;
+    mf:name "Casting a string ignores leading and trailing whitespace" ;
+    mf:action [ qt:query <cast_string_whitespace.rq> ] ;
+    mf:result <cast_string_whitespace.srx> .
