@@ -1,0 +1,5 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?v ?n WHERE {
+    VALUES ?v { "12"^^xsd:byte "1200"^^xsd:byte "-1"^^xsd:nonNegativeInteger "0"^^xsd:positiveInteger "255"^^xsd:unsignedByte "256"^^xsd:unsignedByte }
+    BIND(isNumeric(?v) AS ?n)
+}
