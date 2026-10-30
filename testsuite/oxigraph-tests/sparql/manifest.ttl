@@ -24,6 +24,7 @@
     :values_in_filter_not_exists
     :subquery_in_filter_not_exists
     :cmp_langString
+    :is_numeric_derived_integer_range
     :eq_dirLangString
     :nested_path
     :nested_expression
@@ -185,6 +186,11 @@
     mf:name "rdf:langString with the same language are comparable" ;
     mf:action [ qt:query <cmp_langString.rq> ] ;
     mf:result <cmp_langString.srx> .
+
+:is_numeric_derived_integer_range rdf:type mf:QueryEvaluationTest ;
+    mf:name "isNumeric is false for a derived integer type outside its range" ;
+    mf:action [ qt:query <is_numeric_derived_integer_range.rq> ] ;
+    mf:result <is_numeric_derived_integer_range.srx> .
 
 :nested_path rdf:type mf:PositiveSyntaxTest11 ;
     mf:name "A very nested property path" ;

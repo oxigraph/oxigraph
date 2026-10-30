@@ -606,6 +606,13 @@ impl ExpressionTerm {
     }
 }
 
+fn integer_in(value: &str, min: i64, max: i64) -> Option<ExpressionTerm> {
+    let value: Integer = value.parse().ok()?;
+    (min..=max)
+        .contains(&i64::from(value))
+        .then_some(ExpressionTerm::IntegerLiteral(value))
+}
+
 fn parse_typed_literal(value: &OxString, datatype: &str) -> Option<ExpressionTerm> {
     Some(match datatype {
         "http://www.w3.org/2001/XMLSchema#boolean" => {
@@ -621,21 +628,27 @@ fn parse_typed_literal(value: &OxString, datatype: &str) -> Option<ExpressionTer
         "http://www.w3.org/2001/XMLSchema#decimal" => {
             ExpressionTerm::DecimalLiteral(value.parse().ok()?)
         }
-        "http://www.w3.org/2001/XMLSchema#integer"
-        | "http://www.w3.org/2001/XMLSchema#byte"
-        | "http://www.w3.org/2001/XMLSchema#short"
-        | "http://www.w3.org/2001/XMLSchema#int"
-        | "http://www.w3.org/2001/XMLSchema#long"
-        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+        "http://www.w3.org/2001/XMLSchema#integer" | "http://www.w3.org/2001/XMLSchema#long" => {
             ExpressionTerm::IntegerLiteral(value.parse().ok()?)
         }
+        // The derived integer types only allow part of the integer range
+        "http://www.w3.org/2001/XMLSchema#byte" => {
+            integer_in(value, i8::MIN.into(), i8::MAX.into())?
+        }
+        "http://www.w3.org/2001/XMLSchema#short" => {
+            integer_in(value, i16::MIN.into(), i16::MAX.into())?
+        }
+        "http://www.w3.org/2001/XMLSchema#int" => {
+            integer_in(value, i32::MIN.into(), i32::MAX.into())?
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" => integer_in(value, 0, u8::MAX.into())?,
+        "http://www.w3.org/2001/XMLSchema#unsignedShort" => integer_in(value, 0, u16::MAX.into())?,
+        "http://www.w3.org/2001/XMLSchema#unsignedInt" => integer_in(value, 0, u32::MAX.into())?,
+        "http://www.w3.org/2001/XMLSchema#unsignedLong"
+        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => integer_in(value, 0, i64::MAX)?,
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" => integer_in(value, 1, i64::MAX)?,
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" => integer_in(value, i64::MIN, -1)?,
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => integer_in(value, i64::MIN, 0)?,
         "http://www.w3.org/2001/XMLSchema#dateTime"
         | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => {
             ExpressionTerm::DateTimeLiteral(value.parse().ok()?)
