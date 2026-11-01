@@ -26,7 +26,7 @@ jobs:
       - run: bash trim_rocksdb.sh
         working-directory: ./oxrocksdb-sys
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.14"
           enable-cache: false
@@ -37,11 +37,11 @@ jobs:
         working-directory: ./python
       - run: uvx maturin sdist
         working-directory: ./cli
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyoxigraph_sdist
           path: target/wheels/pyoxigraph-*.tar.gz
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_pypi_sdist
           path: target/wheels/oxigraph-*.tar.gz
@@ -65,22 +65,22 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.14"
           enable-cache: false
       - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux_2_28_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyoxigraph_${{ matrix.arch }}_linux_gnu
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_pypi_${{ matrix.arch }}_linux_gnu
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_${{ matrix.arch }}_linux_gnu
           path: oxigraph-*.data/scripts/oxigraph
@@ -107,14 +107,14 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.14"
           enable-cache: false
       - uses: ./.github/actions/setup-rust
       - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/musllinux_build.sh > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.arch }} quay.io/pypa/musllinux_1_2_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyoxigraph_${{ matrix.arch }}_linux_musl
           path: target/wheels/pyoxigraph-*.whl
@@ -144,7 +144,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: ${{ matrix.target }}
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.15"
           enable-cache: false
@@ -159,16 +159,16 @@ jobs:
         working-directory: ./python
       - run: uvx maturin build --release --target ${{ matrix.target }} --compatibility pypi
         working-directory: ./cli
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyoxigraph_apple_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_pypi_apple_${{ matrix.arch }}
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_${{ matrix.arch }}_apple
           path: oxigraph-*.data/scripts/oxigraph
@@ -198,7 +198,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.15"
           enable-cache: false
@@ -212,16 +212,16 @@ jobs:
         working-directory: ./python
       - run: uvx maturin build --release --compatibility pypi
         working-directory: ./cli
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pyoxigraph_windows_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_pypi_windows_${{ matrix.arch }}
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_${{ matrix.arch }}_windows
           path: oxigraph-*.data/scripts/oxigraph.exe
@@ -248,12 +248,12 @@ jobs:
       - wheel_linux
       - wheel_linux_musl
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: pyoxigraph_*
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 #  v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 #  v1.14.3
         with:
           packages-dir: dist
           skip-existing: true
@@ -273,12 +273,12 @@ jobs:
       - wheel_linux
       - wheel_linux_musl
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: oxigraph_pypi_*
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 #  v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 #  v1.14.3
         with:
           packages-dir: dist
           skip-existing: true
@@ -296,7 +296,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: wasm32-unknown-unknown
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -305,7 +305,7 @@ jobs:
         working-directory: ./js
       - run: npm run pack
         working-directory: ./js
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oxigraph_wasm_npm
           path: js/*.tgz
@@ -327,12 +327,12 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -384,7 +384,7 @@ jobs:
           persist-credentials: false
       - run: bash trim_rocksdb.sh
         working-directory: ./oxrocksdb-sys
-      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
       - run: cargo publish
         working-directory: ./oxrocksdb-sys
