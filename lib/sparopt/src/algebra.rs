@@ -584,8 +584,7 @@ impl Add for Expression {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        let (left, right) = order_pair(self, rhs);
-        Self::Add(Box::new(left), Box::new(right))
+        Self::Add(Box::new(self), Box::new(rhs))
     }
 }
 
