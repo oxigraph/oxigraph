@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxrdf::Quad;
-use oxttl::{NQuadsParser, NQuadsSerializer};
+use oxttl::{NQuadsParser, NQuadsSerializer, TurtleParseError};
 use std::str;
 use std::str::FromStr;
 
@@ -50,6 +50,31 @@ fuzz_target!(|data: &[u8]| {
         parse([data_without_breaks.as_slice()], false);
     assert_eq!(quads, quads_without_split);
     assert_eq!(errors, errors_without_split);
+
+    // We parse using the borrowed callback API. It stops at the first error,
+    // unlike the recovering low-level parser, so its output must be a prefix.
+    let mut borrowed_quads = Vec::new();
+    let borrowed_result = NQuadsParser::new().parse_reader(
+        data_without_breaks.as_slice(),
+        |quad| {
+            borrowed_quads.push(quad.into_owned());
+            Ok::<_, TurtleParseError>(())
+        },
+    );
+    assert!(quads.starts_with(&borrowed_quads));
+    match borrowed_result {
+        Ok(()) => {
+            assert!(errors.is_empty());
+            assert_eq!(borrowed_quads, quads);
+        }
+        Err(error) => {
+            let error = error.to_string();
+            assert!(
+                errors.contains(&error),
+                "the owned parser should report the borrowed parser error {error:?}, found {errors:?}"
+            );
+        }
+    }
 
     // We test also unchecked if valid
     let (quads_unchecked, errors_unchecked) = parse(data.split(|c| *c == 0xFF), true);
