@@ -1,5 +1,6 @@
 //! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
+use crate::MAX_NUMBER_OF_NESTED_TRIPLES;
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
@@ -713,7 +714,8 @@ enum State {
     Uri,
     BNode,
     Literal,
-    Triple,
+    /// The lengths of the subject, predicate and object stacks when the triple started
+    Triple([usize; 3]),
     Subject,
     Predicate,
     Object,
@@ -739,6 +741,14 @@ struct XmlInnerSolutionsParser {
 }
 
 impl XmlInnerSolutionsParser {
+    fn stack_lengths(&self) -> [usize; 3] {
+        [
+            self.subject_stack.len(),
+            self.predicate_stack.len(),
+            self.object_stack.len(),
+        ]
+    }
+
     pub fn read_event(
         &mut self,
         event: Event<'_>,
@@ -839,7 +849,19 @@ impl XmlInnerSolutionsParser {
                             self.state_stack.push(State::Literal);
                             Ok(None)
                         } else if event.local_name().into_inner() == "triple" {
-                            self.state_stack.push(State::Triple);
+                            if self
+                                .state_stack
+                                .iter()
+                                .filter(|s| matches!(s, State::Triple(_)))
+                                .count()
+                                >= MAX_NUMBER_OF_NESTED_TRIPLES
+                            {
+                                return Err(QueryResultsSyntaxError::msg(
+                                    "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                                )
+                                .into());
+                            }
+                            self.state_stack.push(State::Triple(self.stack_lengths()));
                             Ok(None)
                         } else {
                             Err(QueryResultsSyntaxError::msg(format!(
@@ -849,7 +871,7 @@ impl XmlInnerSolutionsParser {
                             .into())
                         }
                     }
-                    State::Triple => {
+                    State::Triple(_) => {
                         if event.local_name().into_inner() == "subject" {
                             self.state_stack.push(State::Subject);
                             Ok(None)
@@ -995,7 +1017,14 @@ impl XmlInnerSolutionsParser {
                         );
                         Ok(None)
                     }
-                    State::Triple => {
+                    State::Triple(lengths) => {
+                        // exactly one of each, so a repeated child cannot leave a term for an enclosing triple
+                        if self.stack_lengths() != lengths.map(|l| l + 1) {
+                            return Err(QueryResultsSyntaxError::msg(
+                                "A <triple> must contain exactly one <subject>, one <predicate> and one <object>",
+                            )
+                            .into());
+                        }
                         #[cfg(feature = "sparql-12")]
                         if let (Some(subject), Some(predicate), Some(object)) = (
                             self.subject_stack.pop(),

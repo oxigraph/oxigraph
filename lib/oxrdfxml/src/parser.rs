@@ -696,6 +696,9 @@ const RDF_RESOURCE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#resource"
 const RDF_VERSION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#version";
 const RDF_ANNOTATION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotation";
 const RDF_ANNOTATION_NODE_ID: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotationNodeID";
+/// The value of oxrdf's `MAX_NUMBER_OF_NESTED_TRIPLES`: much deeper triple terms can overflow the stack when they are cloned, dropped or printed.
+#[cfg(feature = "rdf-12")]
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
 const RESERVED_RDF_ELEMENTS: [&str; 11] = [
     RDF_ABOUT,
@@ -1080,6 +1083,22 @@ impl<R> InternalRdfXmlParser<R> {
                         "Collection" => RdfXmlParseType::Collection,
                         "Literal" => RdfXmlParseType::Literal,
                         "Resource" => RdfXmlParseType::Resource,
+                        #[cfg(feature = "rdf-12")]
+                        "Triple"
+                            if self
+                                .state
+                                .iter()
+                                .filter(|s| {
+                                    matches!(s, RdfXmlState::ParseTypeTriplePropertyElt { .. })
+                                })
+                                .count()
+                                >= MAX_NUMBER_OF_NESTED_TRIPLES =>
+                        {
+                            return Err(RdfXmlSyntaxError::msg(
+                                "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                            )
+                            .into());
+                        }
                         #[cfg(feature = "rdf-12")]
                         "Triple" => RdfXmlParseType::Triple,
                         _ => RdfXmlParseType::Other,
@@ -1801,6 +1820,20 @@ impl<R> InternalRdfXmlParser<R> {
                         ));
                     }
                     let triple = Triple::new(subject, iri, triples.into_iter().next().unwrap());
+                    // an annotation reifies the triple, a triple term one level deeper than its object
+                    if annotation_attr.is_some() || annotation_node_id_attr.is_some() {
+                        let mut nested = 0;
+                        let mut object = &triple.object;
+                        while let Term::Triple(t) = object {
+                            nested += 1;
+                            object = &t.object;
+                        }
+                        if nested >= MAX_NUMBER_OF_NESTED_TRIPLES {
+                            return Err(RdfXmlSyntaxError::msg(
+                                "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                            ));
+                        }
+                    }
                     self.reify_and_annotation(
                         &triple,
                         id_attr,
@@ -2191,5 +2224,40 @@ impl RdfVersion {
                 "The rdf:version value '{value}' is not supported, allowed values are '1.1' and '1.2'"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "rdf-12")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_triple_term_limit() {
+        let parse = |depth: usize, annotated: bool| {
+            let data = format!(
+                r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:ex="http://e/" rdf:version="1.2"><rdf:Description rdf:about="http://e/s">{}<ex:p rdf:resource="http://e/o"/>{}</rdf:Description></rdf:RDF>"#,
+                r#"<ex:p rdf:parseType="Triple"><rdf:Description rdf:about="http://e/s">"#
+                    .repeat(depth),
+                "</rdf:Description></ex:p>".repeat(depth)
+            );
+            // the annotation reifies the outermost triple, one level deeper than its object
+            let data = if annotated {
+                data.replacen(
+                    r#"rdf:parseType="Triple""#,
+                    r#"rdf:parseType="Triple" rdf:annotation="http://e/r""#,
+                    1,
+                )
+            } else {
+                data
+            };
+            RdfXmlParser::new()
+                .for_slice(&data)
+                .collect::<Result<Vec<_>, _>>()
+        };
+        parse(128, false).unwrap();
+        parse(129, false).unwrap_err();
+        parse(127, true).unwrap();
+        parse(128, true).unwrap_err();
     }
 }

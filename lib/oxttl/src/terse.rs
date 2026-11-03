@@ -1,5 +1,7 @@
 //! Shared parser implementation for Turtle and TriG.
 
+#[cfg(feature = "rdf-12")]
+use crate::MAX_NUMBER_OF_NESTED_TRIPLES;
 use crate::lexer::{
     N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name, to_lowercase,
 };
@@ -12,6 +14,10 @@ use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Te
 use oxstr::OxString;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
+
+#[cfg(feature = "rdf-12")]
+const TOO_MANY_NESTED_TRIPLE_TERMS: &str =
+    "Too many nested triple terms. The parser fails here to avoid a stack overflow.";
 
 pub struct TriGRecognizer {
     stack: Vec<TriGState>,
@@ -503,6 +509,19 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::Object);
                     }
                     #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("~")
+                        if Self::too_nested_to_reify(self.cur_object.last().unwrap()) =>
+                    {
+                        self.error(errors, TOO_MANY_NESTED_TRIPLE_TERMS);
+                    }
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("{|")
+                        if !with_reifier
+                            && Self::too_nested_to_reify(self.cur_object.last().unwrap()) =>
+                    {
+                        self.error(errors, TOO_MANY_NESTED_TRIPLE_TERMS);
+                    }
+                    #[cfg(feature = "rdf-12")]
                     N3Token::Punctuation("~") => {
                         self.stack
                             .push(TriGState::AnnotationBlock { with_reifier: true });
@@ -878,6 +897,9 @@ impl RuleRecognizer for TriGRecognizer {
                 }
                 #[cfg(feature = "rdf-12")]
                 TriGState::EndOfReifiedTripleBeforeReifier => {
+                    if Self::too_nested_to_reify(self.cur_object.last().unwrap()) {
+                        return self.error(errors, TOO_MANY_NESTED_TRIPLE_TERMS);
+                    }
                     let triple = Triple::new(
                         self.cur_subject.pop().unwrap(),
                         self.cur_predicate.pop().unwrap(),
@@ -1063,6 +1085,9 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_object
                             .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
                     }
+                    N3Token::Punctuation("<<(") if self.too_many_nested_triple_terms() => {
+                        self.error(errors, TOO_MANY_NESTED_TRIPLE_TERMS);
+                    }
                     N3Token::Punctuation("<<(") => {
                         self.stack.push(TriGState::TripleTermEnd { emit: false });
                         self.stack
@@ -1170,6 +1195,28 @@ impl TriGRecognizer {
         self.cur_predicate.clear();
         self.cur_object.clear();
         self.cur_graph = GraphName::DefaultGraph;
+    }
+
+    /// A triple term only nests in the object of another one, so the open ones are on top of the stack.
+    #[cfg(feature = "rdf-12")]
+    fn too_many_nested_triple_terms(&self) -> bool {
+        self.stack
+            .iter()
+            .rev()
+            .take_while(|s| matches!(s, TriGState::TripleTermEnd { .. }))
+            .count()
+            >= MAX_NUMBER_OF_NESTED_TRIPLES
+    }
+
+    /// A reifier reifies the triple with this object, which is then a triple term one level deeper.
+    #[cfg(feature = "rdf-12")]
+    fn too_nested_to_reify(mut object: &Term) -> bool {
+        let mut nested = 0;
+        while let Term::Triple(triple) = object {
+            nested += 1;
+            object = &triple.object;
+        }
+        nested >= MAX_NUMBER_OF_NESTED_TRIPLES
     }
 
     fn emit_quad(&mut self, results: &mut Vec<Quad>) {
