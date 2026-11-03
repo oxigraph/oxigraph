@@ -40,6 +40,8 @@
     :nested_optional_for_loop
     :nested_optional_bind_from_input
     :lateral_subquery_input_bindings
+    :lateral_union_reordering
+    :lateral_filter_group_reordering
     ) .
 
 
@@ -202,3 +204,13 @@
     mf:name "Nested OPTIONAL with a conflicting BIND from input is not converted to a for loop" ;
     mf:action <nested_optional_bind_from_input_input.rq> ;
     mf:result <nested_optional_bind_from_input_output.rq> .
+
+:lateral_union_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "UNION converted to LATERAL reorders its branches by bound input" ;
+    mf:action <lateral_union_reordering_input.rq> ;
+    mf:result <lateral_union_reordering_output.rq> .
+
+:lateral_filter_group_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "Group with a FILTER converted to LATERAL reorders its BGP by bound input" ;
+    mf:action <lateral_filter_group_reordering_input.rq> ;
+    mf:result <lateral_filter_group_reordering_output.rq> .
