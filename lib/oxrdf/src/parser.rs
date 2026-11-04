@@ -480,14 +480,14 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
 }
 
 fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), TermParseError> {
-    if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
-        return Err(TermParseError::msg(
-            "Too many nested triples. The parser fails here to avoid a stack overflow.",
-        ));
-    }
     let s = s.trim();
     #[cfg_attr(not(feature = "rdf-12"), expect(unused_variables))]
     if let Some(remain) = s.strip_prefix("<<(") {
+        if number_of_recursive_calls >= MAX_NUMBER_OF_NESTED_TRIPLES {
+            return Err(TermParseError::msg(
+                "Too many nested triples. The parser fails here to avoid a stack overflow.",
+            ));
+        }
         #[cfg(feature = "rdf-12")]
         {
             let (triple, remain) = read_triple(remain, number_of_recursive_calls + 1)?;
@@ -521,9 +521,9 @@ fn read_triple(
     number_of_recursive_calls: usize,
 ) -> Result<(Triple, &str), TermParseError> {
     let s = s.trim();
-    let (subject, remain) = read_term(s, number_of_recursive_calls + 1)?;
+    let (subject, remain) = read_term(s, number_of_recursive_calls)?;
     let (predicate, remain) = read_named_node(remain)?;
-    let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
+    let (object, remain) = read_term(remain, number_of_recursive_calls)?;
     Ok((
         Triple {
             subject: match subject {
@@ -639,5 +639,21 @@ mod tests {
                 Literal::new_typed_literal("1.2e3", xsd::DOUBLE),
             )
         );
+    }
+
+    #[test]
+    fn nested_triple_term_limit() {
+        let nested = |depth: usize| {
+            format!(
+                "{}<http://e/o>{}",
+                "<<( <http://e/s> <http://e/p> ".repeat(depth),
+                " )>>".repeat(depth)
+            )
+        };
+        Term::from_str(&nested(128)).unwrap();
+        Term::from_str(&nested(129)).unwrap_err();
+        Triple::from_str(&format!("<http://e/s> <http://e/p> {}", nested(128))).unwrap();
+        Triple::from_str(&format!("<http://e/s> <http://e/p> {}", nested(129))).unwrap_err();
+        Quad::from_str(&format!("<http://e/s> <http://e/p> {} .", nested(129))).unwrap_err();
     }
 }

@@ -1592,4 +1592,22 @@ mod tests {
         );
         Ok(())
     }
+
+    #[cfg(feature = "rdf-12")]
+    #[test]
+    fn nested_triple_term_limit() {
+        let parse = |depth: usize| {
+            let data = format!(
+                "<http://e/g> {{ <http://e/s> <http://e/p> {}<http://e/o>{} }}",
+                "<<( <http://e/s> <http://e/p> ".repeat(depth),
+                " )>>".repeat(depth)
+            );
+            TriGParser::new()
+                .for_slice(&data)
+                .collect::<Result<Vec<_>, _>>()
+        };
+        parse(128).unwrap();
+        let error = parse(129).unwrap_err().to_string();
+        assert!(error.contains("Too many nested triple terms"), "{error}");
+    }
 }
