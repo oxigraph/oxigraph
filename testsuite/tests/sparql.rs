@@ -18,9 +18,6 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
         &[
             // We use XSD 1.1 equality on dates
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
-            // This test relies on naive iteration on the input file
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
         ],
     )
 }
@@ -69,6 +66,7 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv01",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv02",
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv03",
+            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv04",
         ],
     )
 }
