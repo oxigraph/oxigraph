@@ -152,26 +152,25 @@ impl RuleRecognizer for NQuadsRecognizer {
                             .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
                     }
                     #[cfg(feature = "rdf-12")]
-                    N3Token::Punctuation("<<(")
+                    N3Token::Punctuation("<<(") => {
                         if self
                             .stack
                             .iter()
                             .filter(|s| matches!(s, NQuadsState::AfterQuotedTriple))
                             .count()
-                            >= MAX_NUMBER_OF_NESTED_TRIPLES =>
-                    {
-                        self.error(
-                            context,
-                            results,
-                            errors,
-                            TokenOrLineJump::Token(token),
-                            "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
-                        )
-                    }
-                    #[cfg(feature = "rdf-12")]
-                    N3Token::Punctuation("<<(") => {
-                        self.stack.push(NQuadsState::AfterQuotedTriple);
-                        self.stack.push(NQuadsState::ExpectSubject);
+                            >= MAX_NUMBER_OF_NESTED_TRIPLES
+                        {
+                            self.error(
+                                context,
+                                results,
+                                errors,
+                                TokenOrLineJump::Token(token),
+                                "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                            )
+                        } else {
+                            self.stack.push(NQuadsState::AfterQuotedTriple);
+                            self.stack.push(NQuadsState::ExpectSubject);
+                        }
                     }
                     _ => self.error(
                         context,

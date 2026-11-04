@@ -1136,14 +1136,13 @@ mod tests {
     #[cfg(feature = "rdf-12")]
     #[test]
     fn nested_triple_term_limit() {
-        // the chain also starts inside a blank node property list and a reified triple,
-        // and the triple a reifier reifies is one level deeper than its object
-        for (before, after, max) in [
-            ("", "", 128),
-            ("[ <http://e/q> ", " ]", 128),
-            ("<< <http://e/a> <http://e/b> ", " >>", 127),
-            ("", " ~ <http://e/r>", 127),
-            ("", " {| <http://e/q> <http://e/o> |}", 127),
+        // the chain also starts in a blank node property list or a reified triple, or is annotated
+        for (before, after) in [
+            ("", ""),
+            ("[ <http://e/q> ", " ]"),
+            ("<< <http://e/a> <http://e/b> ", " >>"),
+            ("", " ~ <http://e/r>"),
+            ("", " {| <http://e/q> <http://e/o> |}"),
         ] {
             let parse = |depth: usize| {
                 let data = format!(
@@ -1155,8 +1154,8 @@ mod tests {
                     .for_slice(&data)
                     .collect::<Result<Vec<_>, _>>()
             };
-            parse(max).unwrap();
-            let error = parse(max + 1).unwrap_err().to_string();
+            parse(128).unwrap();
+            let error = parse(129).unwrap_err().to_string();
             assert!(error.contains("Too many nested triple terms"), "{error}");
         }
     }
