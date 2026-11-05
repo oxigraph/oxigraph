@@ -907,12 +907,17 @@ impl<R> InternalRdfXmlParser<R> {
                         "<!ENTITY declarations should contain both an entity name and an entity value",
                     )
                 })?;
-                let input = input.trim_start().strip_prefix('\"').ok_or_else(|| {
-                    RdfXmlSyntaxError::msg("<!ENTITY values should be enclosed in double quotes")
-                })?;
-                let (entity_value, input) = input.split_once('"').ok_or_else(|| {
+                let input = input.trim_start();
+                let quote = input
+                    .chars()
+                    .next()
+                    .filter(|c| matches!(c, '"' | '\''))
+                    .ok_or_else(|| {
+                        RdfXmlSyntaxError::msg("<!ENTITY values should be enclosed in quotes")
+                    })?;
+                let (entity_value, input) = input[1..].split_once(quote).ok_or_else(|| {
                     RdfXmlSyntaxError::msg(
-                        "<!ENTITY declarations values should be enclosed in double quotes",
+                        "<!ENTITY declarations values should be enclosed in quotes",
                     )
                 })?;
                 input.trim_start().strip_prefix('>').ok_or_else(|| {

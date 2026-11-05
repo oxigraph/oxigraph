@@ -17,6 +17,7 @@
 		<#langtag_with_numbers_ttl>
 		<#xml_entities>
 		<#xml_nested_entities>
+		<#xml_single_quoted_entities>
 		<#literal_value_space>
 		<#bad_parentheses>
 		<#keyword_vs_prefix_ttl>
@@ -96,6 +97,12 @@
 	mf:name "custom XML entities with nested definitions" ;
 	mf:action <xml_nested_entities.rdf> ;
 	mf:result <xml_nested_entities.nt> .
+
+<#xml_single_quoted_entities>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "custom XML entities with single quoted values" ;
+	mf:action <xml_single_quoted_entities.rdf> ;
+	mf:result <xml_single_quoted_entities.nt> .
 
 <#literal_value_space>
 	rdf:type rdft:TestXMLEval ;
