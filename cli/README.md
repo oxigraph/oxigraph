@@ -63,6 +63,8 @@ It provides the following REST actions:
     --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
   ```
   This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
+  With the non-standard `explain=plan` parameter, the query is not evaluated and the evaluation plan is returned in JSON.
+  With `explain=stats`, the query is evaluated and the plan is returned with evaluation statistics, even if the evaluation timed out.
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
   For example:
   ```sh
