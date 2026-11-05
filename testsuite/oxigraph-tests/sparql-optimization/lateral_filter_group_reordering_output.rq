@@ -1,0 +1,8 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?a ex:p ?c .
+    ?s ex:r ?c .
+    ?s ex:q ?o .
+    FILTER(isIRI(?o))
+}
