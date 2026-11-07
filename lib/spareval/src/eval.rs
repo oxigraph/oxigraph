@@ -1849,15 +1849,15 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     let evaluator =
                         self.expression_evaluator(expr, encoded_variables, stat_children)?;
                     if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        Box::new(move || AccumulatorWrapper::CountDistinctExpression {
                             evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(CountAccumulator::default())),
+                            count: 0,
                         })
                     } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
+                        Box::new(move || AccumulatorWrapper::CountExpression {
                             evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(CountAccumulator::default())),
+                            count: 0,
                         })
                     }
                 } else if *name == sparql::AGG_SUM {
@@ -2300,6 +2300,15 @@ enum AccumulatorWrapper<'a, T> {
         evaluator: ExpressionEvaluator<'a, InternalTuple<T>, T, QueryEvaluationError>,
         count: u64,
     },
+    CountExpression {
+        evaluator: ExpressionEvaluator<'a, InternalTuple<T>, ExpressionTerm, QueryEvaluationError>,
+        count: u64,
+    },
+    CountDistinctExpression {
+        seen: FxHashSet<ExpressionTerm>,
+        evaluator: ExpressionEvaluator<'a, InternalTuple<T>, ExpressionTerm, QueryEvaluationError>,
+        count: u64,
+    },
     Sample {
         // TODO: add internal variant
         evaluator: ExpressionEvaluator<'a, InternalTuple<T>, ExpressionTerm, QueryEvaluationError>,
@@ -2333,6 +2342,23 @@ impl<T: Clone + Eq + Hash> AccumulatorWrapper<'_, T> {
                 }
             }
             Self::CountDistinctInternal {
+                seen,
+                evaluator,
+                count,
+            } => {
+                let Some(value) = evaluator(tuple)? else {
+                    return Ok(());
+                };
+                if seen.insert(value) {
+                    *count += 1;
+                }
+            }
+            Self::CountExpression { evaluator, count } => {
+                if evaluator(tuple)?.is_some() {
+                    *count += 1;
+                }
+            }
+            Self::CountDistinctExpression {
                 seen,
                 evaluator,
                 count,
@@ -2394,7 +2420,9 @@ impl<T: Clone + Eq + Hash> AccumulatorWrapper<'_, T> {
             Self::CountTuple { count, .. }
             | Self::CountDistinctTuple { count, .. }
             | Self::CountInternal { count, .. }
-            | Self::CountDistinctInternal { count, .. } => Some(ExpressionTerm::IntegerLiteral(
+            | Self::CountDistinctInternal { count, .. }
+            | Self::CountExpression { count, .. }
+            | Self::CountDistinctExpression { count, .. } => Some(ExpressionTerm::IntegerLiteral(
                 i64::try_from(count).ok()?.into(),
             )),
             Self::Sample { value, .. } => value,
@@ -2409,21 +2437,6 @@ trait Accumulator {
     fn accumulate(&mut self, element: ExpressionTerm);
 
     fn finish(&mut self) -> Option<ExpressionTerm>;
-}
-
-#[derive(Default, Debug)]
-struct CountAccumulator {
-    count: i64,
-}
-
-impl Accumulator for CountAccumulator {
-    fn accumulate(&mut self, _element: ExpressionTerm) {
-        self.count += 1;
-    }
-
-    fn finish(&mut self) -> Option<ExpressionTerm> {
-        Some(ExpressionTerm::IntegerLiteral(self.count.into()))
-    }
 }
 
 struct SumAccumulator {
