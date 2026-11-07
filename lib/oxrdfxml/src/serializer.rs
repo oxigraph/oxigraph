@@ -363,7 +363,9 @@ impl InnerRdfXmlWriter {
 
             let (mut description_start, with_type_tag) = if triple.predicate == rdf::TYPE {
                 if let Term::NamedNode(t) = &triple.object {
-                    if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
+                    if RESERVED_SYNTAX_TERMS.contains(&t.as_str())
+                        || self.splits_inside_local_name(t)
+                    {
                         (BytesStart::new("rdf:Description"), false)
                     } else if let Some((prop_qname, prop_xmlns)) = self.uri_to_qname_and_xmlns(t) {
                         let mut description_start = BytesStart::new(prop_qname.clone());
@@ -510,6 +512,14 @@ impl InnerRdfXmlWriter {
         output.push(Event::End(BytesEnd::new("rdf:RDF")));
     }
 
+    /// Whether the IRI QName needs an undeclared namespace cut inside the last IRI segment,
+    /// like `http://example.org/1` for `http://example.org/1Class`.
+    fn splits_inside_local_name(&self, uri: &NamedNode) -> bool {
+        let (namespace, _) = split_iri(uri.as_str());
+        namespace.ends_with(|c| is_name_char(c) && c != ':')
+            && !self.prefixes_by_iri.contains_key(namespace)
+    }
+
     fn uri_to_qname_and_xmlns<'a>(
         &self,
         uri: &'a NamedNode,
@@ -623,6 +633,38 @@ mod tests {
         assert_eq!(
             serializer.finish()?,
             b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<rdf:Description rdf:about=\"http://example.com/s\">\n\t\t<rdf:type rdf:resource=\"http://example.com/123\"/>\n\t</rdf:Description>\n</rdf:RDF>"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_type_with_mid_name_split() -> Result<(), Box<dyn Error>> {
+        let mut serializer = RdfXmlSerializer::new().for_writer(Vec::new());
+        serializer.serialize_triple(&Triple::new(
+            NamedNode::new("http://example.com/s")?,
+            rdf::TYPE,
+            NamedNode::new("http://example.com/1Class")?,
+        ))?;
+        assert_eq!(
+            String::from_utf8_lossy(&serializer.finish()?),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<rdf:Description rdf:about=\"http://example.com/s\">\n\t\t<rdf:type rdf:resource=\"http://example.com/1Class\"/>\n\t</rdf:Description>\n</rdf:RDF>"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_type_with_mid_name_split_and_declared_prefix() -> Result<(), Box<dyn Error>> {
+        let mut serializer = RdfXmlSerializer::new()
+            .with_prefix("ex", "http://example.com/1")?
+            .for_writer(Vec::new());
+        serializer.serialize_triple(&Triple::new(
+            NamedNode::new("http://example.com/s")?,
+            rdf::TYPE,
+            NamedNode::new("http://example.com/1Class")?,
+        ))?;
+        assert_eq!(
+            String::from_utf8_lossy(&serializer.finish()?),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:ex=\"http://example.com/1\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<ex:Class rdf:about=\"http://example.com/s\">\n\t</ex:Class>\n</rdf:RDF>"
         );
         Ok(())
     }
