@@ -1,4 +1,4 @@
-//! Collection types that work both with `std` and, through `hashbrown`, without it.
+// Convenience module to reconcile hashbrown and std `HashMap`s
 
 #[cfg(not(feature = "std"))]
 pub(crate) use alloc::collections::{
@@ -7,7 +7,6 @@ pub(crate) use alloc::collections::{
 };
 #[cfg(not(feature = "std"))]
 pub(crate) use hashbrown::{DefaultHashBuilder, HashMap, HashSet, hash_map::Entry};
-
 #[cfg(feature = "std")]
 pub(crate) use std::collections::{
     BTreeMap, BTreeSet, HashMap, HashSet,
@@ -15,7 +14,7 @@ pub(crate) use std::collections::{
     hash_map::{Entry, RandomState as DefaultHashBuilder},
 };
 
-/// Hashes a string into a `u64`, using the platform default hasher.
+// Hashes a string into a `u64`, using the platform default hasher.
 #[inline]
 pub(crate) fn hash_str(value: &str) -> u64 {
     #[cfg(feature = "std")]
