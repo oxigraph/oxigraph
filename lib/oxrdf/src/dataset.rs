@@ -35,17 +35,13 @@ use crate::map::{
 };
 use crate::*;
 #[cfg(not(feature = "std"))]
-use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-#[cfg(not(feature = "std"))]
-use alloc::format;
-#[cfg(not(feature = "std"))]
-use alloc::string::{String, ToString};
-#[cfg(not(feature = "std"))]
-use alloc::vec;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{
+    borrow::ToOwned,
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::fmt;
 use core::mem::take;
 use oxstr::{OxString, oxformat};
@@ -1962,7 +1958,7 @@ impl Iterator for Iter<'_> {
 /// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
     dataset: &'a Dataset,
-    inner: alloc::collections::btree_set::Range<
+    inner: BTreeSetRange<
         'a,
         (
             InternedGraphName,
@@ -2061,7 +2057,7 @@ impl IdentifierIssuer {
 }
 
 fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec<T>> {
-    let mut current_output = vec![Vec::new()];
+    let mut current_output = Vec::from([Vec::new()]);
     for (i, next) in items.into_iter().enumerate() {
         let mut new_output = Vec::with_capacity(current_output.len() * (i + 1));
         for mut permutation in current_output {

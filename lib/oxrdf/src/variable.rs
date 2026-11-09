@@ -1,7 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::{borrow::ToOwned, string::String};
 use core::cmp::Ordering;
 use core::fmt;
 use oxstr::OxString;
