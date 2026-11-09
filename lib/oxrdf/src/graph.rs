@@ -28,7 +28,7 @@
 use crate::dataset::*;
 pub use crate::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
 use crate::*;
-use std::fmt;
+use core::fmt;
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 ///

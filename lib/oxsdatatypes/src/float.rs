@@ -1,10 +1,10 @@
 use crate::double::format_finite_float;
 use crate::{Boolean, Double, Integer};
-use std::cmp::Ordering;
-use std::fmt;
-use std::num::ParseFloatError;
-use std::ops::{Add, Div, Mul, Neg, Sub};
-use std::str::FromStr;
+use core::cmp::Ordering;
+use core::fmt;
+use core::num::ParseFloatError;
+use core::ops::{Add, Div, Mul, Neg, Sub};
+use core::str::FromStr;
 
 /// [XML Schema `float` datatype](https://www.w3.org/TR/xmlschema11-2/#float)
 ///
@@ -48,6 +48,7 @@ impl Float {
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
+    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn ceil(self) -> Self {
@@ -55,6 +56,7 @@ impl Float {
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
+    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn floor(self) -> Self {
@@ -62,6 +64,7 @@ impl Float {
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
+    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn round(self) -> Self {

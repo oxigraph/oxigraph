@@ -1,7 +1,9 @@
-use crate::{Boolean, Double, Float};
-use std::fmt;
-use std::num::ParseIntError;
-use std::str::FromStr;
+use crate::Boolean;
+#[cfg(feature = "std")]
+use crate::{Double, Float};
+use core::fmt;
+use core::num::ParseIntError;
+use core::str::FromStr;
 
 /// [XML Schema `integer` datatype](https://www.w3.org/TR/xmlschema11-2/#integer)
 ///
@@ -238,6 +240,7 @@ impl fmt::Display for Integer {
     }
 }
 
+#[cfg(feature = "std")]
 impl TryFrom<Float> for Integer {
     type Error = TooLargeForIntegerError;
 
@@ -253,6 +256,7 @@ impl TryFrom<Float> for Integer {
     }
 }
 
+#[cfg(feature = "std")]
 impl TryFrom<Double> for Integer {
     type Error = TooLargeForIntegerError;
 

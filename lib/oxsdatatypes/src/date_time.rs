@@ -1,10 +1,10 @@
 #![expect(clippy::expect_used)]
 
 use crate::{DayTimeDuration, Decimal, Duration, YearMonthDuration};
-use std::cmp::{Ordering, min};
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
+use core::cmp::{Ordering, min};
+use core::fmt;
+use core::hash::{Hash, Hasher};
+use core::str::FromStr;
 
 /// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime)
 ///
@@ -47,6 +47,12 @@ impl DateTime {
     }
 
     /// [fn:current-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-current-dateTime)
+    #[cfg(any(
+        feature = "std",
+        feature = "custom-now",
+        target_os = "zkvm",
+        all(feature = "js", target_family = "wasm", target_os = "unknown")
+    ))]
     #[inline]
     pub fn now() -> Self {
         Self {
@@ -362,6 +368,12 @@ impl Time {
     }
 
     /// [fn:current-time](https://www.w3.org/TR/xpath-functions-31/#func-current-time)
+    #[cfg(any(
+        feature = "std",
+        feature = "custom-now",
+        target_os = "zkvm",
+        all(feature = "js", target_family = "wasm", target_os = "unknown")
+    ))]
     #[inline]
     pub fn now() -> Self {
         Self {
@@ -605,6 +617,12 @@ impl Date {
     }
 
     /// [fn:current-date](https://www.w3.org/TR/xpath-functions-31/#func-current-date)
+    #[cfg(any(
+        feature = "std",
+        feature = "custom-now",
+        target_os = "zkvm",
+        all(feature = "js", target_family = "wasm", target_os = "unknown")
+    ))]
     #[inline]
     pub fn now() -> Self {
         DateTime::now()
@@ -1622,6 +1640,12 @@ impl Timestamp {
         })
     }
 
+    #[cfg(any(
+        feature = "std",
+        feature = "custom-now",
+        target_os = "zkvm",
+        all(feature = "js", target_family = "wasm", target_os = "unknown")
+    ))]
     #[inline]
     fn now() -> Self {
         Self::new(
@@ -1878,11 +1902,14 @@ fn since_unix_epoch() -> Duration {
     .into()
 }
 
-#[cfg(not(any(
-    feature = "custom-now",
-    target_os = "zkvm",
-    all(feature = "js", target_family = "wasm", target_os = "unknown")
-)))]
+#[cfg(all(
+    feature = "std",
+    not(any(
+        feature = "custom-now",
+        target_os = "zkvm",
+        all(feature = "js", target_family = "wasm", target_os = "unknown")
+    ))
+))]
 fn since_unix_epoch() -> Duration {
     use std::time::SystemTime;
 

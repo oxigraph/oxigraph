@@ -1,9 +1,11 @@
+use core::{fmt, str};
 use oxstr::OxString;
+#[cfg(feature = "std")]
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+#[cfg(feature = "std")]
 use std::io::Write;
-use std::{fmt, str};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
@@ -73,6 +75,7 @@ impl fmt::Display for BlankNode {
     }
 }
 
+#[cfg(feature = "std")]
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id.
     #[inline]

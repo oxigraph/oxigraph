@@ -30,15 +30,27 @@
 //! See also [`Graph`] if you only care about plain triples.
 
 use crate::interning::*;
+use crate::map::{
+    BTreeMap, BTreeSet, BTreeSetIter, BTreeSetRange, Entry, HashMap, HashSet, hash_str,
+};
 use crate::*;
+#[cfg(not(feature = "std"))]
+use alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+#[cfg(not(feature = "std"))]
+use alloc::vec;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+use core::fmt;
+use core::mem::take;
 use oxstr::{OxString, oxformat};
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::mem::take;
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
@@ -1225,11 +1237,7 @@ impl Dataset {
             Some(CanonicalizationHashAlgorithm::Sha384) => {
                 hex::encode(Sha384::new().chain_update(input).finalize())
             }
-            None => {
-                let mut hasher = DefaultHasher::new();
-                input.hash(&mut hasher);
-                hasher.finish().to_string()
-            }
+            None => hash_str(input).to_string(),
         }
     }
 
@@ -1930,7 +1938,7 @@ impl fmt::Display for GraphViewMut<'_> {
 /// Iterator returned by [`Dataset::iter`].
 pub struct Iter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Iter<
+    inner: BTreeSetIter<
         'a,
         (
             InternedNamedOrBlankNode,
@@ -1954,7 +1962,7 @@ impl Iterator for Iter<'_> {
 /// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Range<
+    inner: alloc::collections::btree_set::Range<
         'a,
         (
             InternedGraphName,

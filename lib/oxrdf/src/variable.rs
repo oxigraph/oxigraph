@@ -1,6 +1,10 @@
+#[cfg(not(feature = "std"))]
+use alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+use core::cmp::Ordering;
+use core::fmt;
 use oxstr::OxString;
-use std::cmp::Ordering;
-use std::fmt;
 
 /// A [SPARQL query](https://www.w3.org/TR/sparql11-query/) owned variable.
 ///

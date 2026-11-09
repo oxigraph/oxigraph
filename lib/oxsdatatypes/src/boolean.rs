@@ -1,6 +1,6 @@
 use crate::{Decimal, Double, Float, Integer};
-use std::fmt;
-use std::str::{FromStr, ParseBoolError};
+use core::fmt;
+use core::str::{FromStr, ParseBoolError};
 
 /// [XML Schema `boolean` datatype](https://www.w3.org/TR/xmlschema11-2/#boolean)
 ///
