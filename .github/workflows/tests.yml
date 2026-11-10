@@ -51,7 +51,11 @@ jobs:
           component: clippy
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
+      - run: cargo clippy --lib --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./lib/oxsdatatypes
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdf
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdf
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfxml
@@ -97,6 +101,25 @@ jobs:
         working-directory: ./testsuite
       - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
         working-directory: ./testsuite
+
+  clippy_no_std:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: 1.95.0
+          target: thumbv7em-none-eabi
+          component: clippy
+      - run: cargo clippy --lib --target thumbv7em-none-eabi --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./lib/oxsdatatypes
+      - run: cargo clippy --lib --target thumbv7em-none-eabi --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdf
+      - run: cargo clippy --lib --target thumbv7em-none-eabi --no-default-features --features rdf-12,serde,oxsdatatypes,rdfc-10 -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdf
 
   clippy_wasm_js:
     runs-on: ubuntu-latest
@@ -192,6 +215,20 @@ jobs:
           key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
+
+  test_no_std:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      # oxsdatatypes is covered by clippy_no_std only: its own unit tests need `std`
+      - run: cargo test --no-default-features
+        working-directory: ./lib/oxrdf
+      - run: cargo test --no-default-features --features rdf-12,serde,oxsdatatypes,rdfc-10
+        working-directory: ./lib/oxrdf
 
   test_macos:
     runs-on: macos-latest

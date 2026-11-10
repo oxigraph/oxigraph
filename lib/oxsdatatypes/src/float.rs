@@ -48,28 +48,41 @@ impl Float {
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
-    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn ceil(self) -> Self {
-        self.value.ceil().into()
+        #[cfg(feature = "std")]
+        let result = self.value.ceil();
+        #[cfg(not(feature = "std"))]
+        let result = libm::ceilf(self.value);
+        result.into()
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
-    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn floor(self) -> Self {
-        self.value.floor().into()
+        #[cfg(feature = "std")]
+        let result = self.value.floor();
+        #[cfg(not(feature = "std"))]
+        let result = libm::floorf(self.value);
+        result.into()
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
-    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn round(self) -> Self {
-        let mut result = self.value.round();
-        if self.value.fract() == -0.5 {
+        // `f32::round` and `libm::roundf` both round half away from zero,
+        // `fn:round` rounds half towards positive infinity.
+        #[cfg(feature = "std")]
+        let (mut result, fract) = (self.value.round(), self.value.fract());
+        #[cfg(not(feature = "std"))]
+        let (mut result, fract) = (
+            libm::roundf(self.value),
+            self.value - libm::truncf(self.value),
+        );
+        if fract == -0.5 {
             result += 1.;
         }
         if result == 0. && self.value.is_sign_negative() {

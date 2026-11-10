@@ -18,6 +18,7 @@ js = ["js-sys"]
 custom-now = []
 
 [dependencies]
+libm.workspace = true
 thiserror = { workspace = true, default-features = false }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]

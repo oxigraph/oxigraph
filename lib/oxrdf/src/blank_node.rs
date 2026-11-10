@@ -9,7 +9,8 @@ use std::io::Write;
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the [`BlankNode::default`] function.
+/// The common way to create a new blank node is to use the [`Default`] implementation,
+/// which requires the `std` feature.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNode::new`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
@@ -31,8 +32,8 @@ impl BlankNode {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`]
-    /// that creates a random ID that could be easily inlined by Oxigraph stores.
+    /// In most cases, it is much more convenient to create a blank node using the [`Default`]
+    /// implementation that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: impl Into<OxString>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
@@ -96,7 +97,8 @@ impl Default for BlankNode {
 
 /// A borrowed RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
-/// The common way to create a new blank node is to use the [`BlankNode::default`] trait method.
+/// The common way to create a new blank node is to use the [`Default`] implementation of
+/// [`BlankNode`], which requires the `std` feature.
 ///
 /// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`] function.
 /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
@@ -118,8 +120,9 @@ impl<'a> BlankNodeRef<'a> {
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`].
-    /// that creates a random ID that could be easily inlined by Oxigraph stores.
+    /// In most cases, it is much more convenient to create a blank node using the [`Default`]
+    /// implementation of [`BlankNode`] that creates a random ID that could be easily inlined by
+    /// Oxigraph stores.
     pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
         validate_blank_node_identifier(id)?;
         Ok(Self::new_unchecked(id))

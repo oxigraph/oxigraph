@@ -1,6 +1,4 @@
-use crate::Boolean;
-#[cfg(feature = "std")]
-use crate::{Double, Float};
+use crate::{Boolean, Double, Float};
 use core::fmt;
 use core::num::ParseIntError;
 use core::str::FromStr;
@@ -240,7 +238,6 @@ impl fmt::Display for Integer {
     }
 }
 
-#[cfg(feature = "std")]
 impl TryFrom<Float> for Integer {
     type Error = TooLargeForIntegerError;
 
@@ -249,14 +246,17 @@ impl TryFrom<Float> for Integer {
     fn try_from(value: Float) -> Result<Self, Self::Error> {
         let value = f32::from(value);
         if (i64::MIN as f32..=i64::MAX as f32).contains(&value) {
-            Ok(Self::from(value.trunc() as i64))
+            #[cfg(feature = "std")]
+            let truncated = value.trunc();
+            #[cfg(not(feature = "std"))]
+            let truncated = libm::truncf(value);
+            Ok(Self::from(truncated as i64))
         } else {
             Err(TooLargeForIntegerError)
         }
     }
 }
 
-#[cfg(feature = "std")]
 impl TryFrom<Double> for Integer {
     type Error = TooLargeForIntegerError;
 
@@ -265,7 +265,11 @@ impl TryFrom<Double> for Integer {
     fn try_from(value: Double) -> Result<Self, Self::Error> {
         let value = f64::from(value);
         if (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
-            Ok(Self::from(value.trunc() as i64))
+            #[cfg(feature = "std")]
+            let truncated = value.trunc();
+            #[cfg(not(feature = "std"))]
+            let truncated = libm::trunc(value);
+            Ok(Self::from(truncated as i64))
         } else {
             Err(TooLargeForIntegerError)
         }

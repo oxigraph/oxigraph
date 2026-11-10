@@ -1828,6 +1828,7 @@ name = "oxsdatatypes"
 version = "0.3.0-dev"
 dependencies = [
  "js-sys",
+ "libm",
  "thiserror 2.0.21",
 ]
 

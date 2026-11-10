@@ -2,6 +2,7 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `oxrdf` and `oxsdatatypes`: a `std` feature, enabled by default. Disabling it makes the crates `no_std`: `oxrdf` then needs only the `alloc` crate and uses [`hashbrown`](https://crates.io/crates/hashbrown) in place of `std::collections::HashMap`, while `oxsdatatypes` needs no allocator at all and computes `ceil`, `floor` and `round` with [`libm`](https://crates.io/crates/libm). Three items require `std`: `BlankNode::default`, which needs an entropy source, and `DateTime::now`, `Time::now` and `Date::now`, which need an OS clock unless the `custom-now` or `js` feature is used or the target is `zkvm`. `LanguageTagParseError` also loses its `core::error::Error` implementation without `std`, because `oxilangtag` only provides it behind its own `std` feature.
 
 ### Fixed
 - Turtle, TriG, N-Triples, N-Quads, RDF/XML and SPARQL JSON and XML results: a triple term nested more than 128 deep is now a syntax error, the same limit as `Term::from_str`. Very deeply nested terms overflowed the stack when they were cloned, dropped or printed. A SPARQL XML results `<triple>` must have exactly one subject, predicate and object.

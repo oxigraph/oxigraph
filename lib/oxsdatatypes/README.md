@@ -32,6 +32,13 @@ Each datatype provides:
 * `from_be_bytes` and `to_be_bytes` methods for serialization.
 
 
+### `no_std` support
+
+The `std` feature is enabled by default. Disabling it with `--no-default-features` makes the crate `no_std`, without even requiring the `alloc` crate.
+Floating point rounding (`ceil`, `floor` and `round`) is then computed using [`libm`](https://crates.io/crates/libm) instead of the `std` intrinsics, so the full API remains available.
+See below for `now` behavior, which does need an OS clock.
+
+
 ### `DateTime::now` behavior
 
 The `DateTime::now()` function needs special OS support.
@@ -47,7 +54,8 @@ Currently:
   ```
 - For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
 - For `zkvm` there is no access to IO functions so the function returns start of unix time (Jan 1, 1970)
-- For all other targets `SystemTime::now()` is used.
+- For all other targets `SystemTime::now()` is used, which requires the `std` feature.
+  Without it, and without any of the options above, `DateTime::now`, `Time::now` and `Date::now` are not available.
 
 ## License
 

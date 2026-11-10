@@ -86,7 +86,7 @@ impl FromStr for Literal {
     /// );
     /// assert_eq!(
     ///     Literal::from_str("\"ex\"@en")?,
-    ///     Literal::new_language_tagged_literal("ex", "en")?
+    ///     Literal::new_language_tagged_literal_unchecked("ex", "en")
     /// );
     /// assert_eq!(
     ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>")?,
