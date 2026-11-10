@@ -34,8 +34,8 @@ Each datatype provides:
 
 ### `no_std` support
 
-The `std` feature is enabled by default. Disabling it with `--no-default-features` makes the crate `no_std`, without even requiring the `alloc` crate.
-Floating point rounding (`ceil`, `floor` and `round`) is then computed using [`libm`](https://crates.io/crates/libm) instead of the `std` intrinsics, so the full API remains available.
+The `std` feature is enabled by default. Disabling it with `--no-default-features` makes the crate `no_std` (no `alloc` required).
+* Floating point rounding (`ceil`, `floor` and `round`) is then using [`libm`](https://crates.io/crates/libm) instead of the `std` intrinsics, so the full API remains available.
 See below for `now` behavior, which does need an OS clock.
 
 
@@ -46,7 +46,7 @@ Currently:
 - If the `custom-now` feature is enabled, a function computing `now` must be set:
   ```rust
   use oxsdatatypes::Duration;
-  
+
   #[unsafe(no_mangle)]
   fn custom_ox_now() -> Duration {
     unimplemented!("now implementation")
