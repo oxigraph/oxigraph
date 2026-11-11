@@ -1,0 +1,13 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?a ex:p ?c .
+    {
+        ?s ex:q ?o .
+        ?s ex:r ?c .
+    }
+    UNION
+    {
+        ?c ex:q ?o .
+    }
+}

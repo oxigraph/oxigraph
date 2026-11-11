@@ -18,7 +18,7 @@ impl Optimizer {
         let input_types = VariableTypes::default();
         let query_expression = Self::normalize_pattern(query_expression, &input_types);
         let query_expression = Self::push_graph(query_expression, None, &input_types);
-        let query_expression = Self::reorder_joins(query_expression, &input_types);
+        let query_expression = Self::reorder_joins(query_expression, &input_types, true);
         Self::push_filters(query_expression, Vec::new(), &input_types)
     }
 
@@ -818,6 +818,7 @@ impl Optimizer {
     fn reorder_joins(
         query_expression: QueryExpression,
         input_types: &VariableTypes,
+        replan_for_loop_join_right: bool,
     ) -> QueryExpression {
         match query_expression {
             QueryExpression::QuadPattern { .. }
@@ -826,13 +827,21 @@ impl Optimizer {
             QueryExpression::Join { left, right, .. } => {
                 // We flatten the join operation
                 let mut to_reorder = Vec::new();
+                let mut not_reordered = Vec::new();
                 let mut todo = vec![*right, *left];
                 while let Some(e) = todo.pop() {
                     if let QueryExpression::Join { left, right, .. } = e {
                         todo.push(*right);
                         todo.push(*left);
                     } else {
-                        to_reorder.push(Self::reorder_joins(e, input_types));
+                        not_reordered.push(
+                            (replan_for_loop_join_right
+                                && cfg!(feature = "sep-0006")
+                                && (is_for_loop_join_candidate(&e)
+                                    || has_for_loop_join_candidate(&e)))
+                            .then(|| e.clone()),
+                        );
+                        to_reorder.push(Self::reorder_joins(e, input_types, false));
                     }
                 }
 
@@ -854,7 +863,11 @@ impl Optimizer {
                     .min_by_key(|i| estimate_query_expression_size(&to_reorder[*i], input_types))
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
-                    let mut output = to_reorder[next_entry_id].clone();
+                    let mut output = Self::plan_join_operand(
+                        to_reorder[next_entry_id].clone(),
+                        not_reordered[next_entry_id].take(),
+                        input_types,
+                    );
                     let mut output_types = to_reorder_types[next_entry_id].clone();
                     // We look for an other child to join with that does not blow up the join cost
                     while let Some(next_id) = not_yet_reordered_ids
@@ -902,11 +915,21 @@ impl Optimizer {
                         {
                             output = if is_fit_for_for_loop_join(&next, input_types, &output_types)
                             {
+                                let next = Self::plan_for_loop_join_right(
+                                    next,
+                                    not_reordered[next_id].take(),
+                                    input_types,
+                                    &output_types,
+                                );
                                 QueryExpression::lateral(output, next)
                             } else {
                                 QueryExpression::join(
                                     output,
-                                    next,
+                                    Self::plan_join_operand(
+                                        next,
+                                        not_reordered[next_id].take(),
+                                        input_types,
+                                    ),
                                     JoinAlgorithm::HashBuildLeftProbeRight {
                                         keys: join_key_variables(
                                             &output_types,
@@ -965,8 +988,8 @@ impl Optimizer {
             QueryExpression::Lateral { left, right } => {
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 QueryExpression::lateral(
-                    Self::reorder_joins(*left, input_types),
-                    Self::reorder_joins(*right, &left_types),
+                    Self::reorder_joins(*left, input_types, replan_for_loop_join_right),
+                    Self::reorder_joins(*right, &left_types, replan_for_loop_join_right),
                 )
             }
             QueryExpression::LeftJoin {
@@ -975,7 +998,7 @@ impl Optimizer {
                 expression,
                 ..
             } => {
-                let left = Self::reorder_joins(*left, input_types);
+                let left = Self::reorder_joins(*left, input_types, replan_for_loop_join_right);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
@@ -993,8 +1016,11 @@ impl Optimizer {
                             );
 
                         if lateral_cost <= join_cost.saturating_mul(100) {
-                            let right_for_lateral =
-                                Self::reorder_joins((*right).clone(), &left_types);
+                            let right_for_lateral = Self::reorder_joins(
+                                (*right).clone(),
+                                &left_types,
+                                replan_for_loop_join_right,
+                            );
                             if is_fit_for_for_loop_join(
                                 &right_for_lateral,
                                 input_types,
@@ -1015,7 +1041,7 @@ impl Optimizer {
                         }
                     }
                 }
-                let right = Self::reorder_joins(*right, input_types);
+                let right = Self::reorder_joins(*right, input_types, replan_for_loop_join_right);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::left_join(
                     left,
@@ -1027,9 +1053,9 @@ impl Optimizer {
                 )
             }
             QueryExpression::Minus { left, right, .. } => {
-                let left = Self::reorder_joins(*left, input_types);
+                let left = Self::reorder_joins(*left, input_types, replan_for_loop_join_right);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
-                let right = Self::reorder_joins(*right, input_types);
+                let right = Self::reorder_joins(*right, input_types, replan_for_loop_join_right);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::minus(
                     left,
@@ -1039,43 +1065,55 @@ impl Optimizer {
                     },
                 )
             }
-            QueryExpression::Graph { graph_name, inner } => {
-                QueryExpression::graph(Self::reorder_joins(*inner, input_types), graph_name)
-            }
+            QueryExpression::Graph { graph_name, inner } => QueryExpression::graph(
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                graph_name,
+            ),
             QueryExpression::Extend {
                 inner,
                 expression,
                 variable,
             } => QueryExpression::extend(
-                Self::reorder_joins(*inner, input_types),
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 variable,
                 expression,
             ),
-            QueryExpression::Filter { inner, expression } => {
-                QueryExpression::filter(Self::reorder_joins(*inner, input_types), expression)
-            }
+            QueryExpression::Filter { inner, expression } => QueryExpression::filter(
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                expression,
+            ),
             QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
-                    .map(|c| Self::reorder_joins(c, input_types)),
+                    .map(|c| Self::reorder_joins(c, input_types, replan_for_loop_join_right)),
             ),
             QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
-            } => QueryExpression::slice(Self::reorder_joins(*inner, input_types), offset, limit),
-            QueryExpression::Distinct { inner } => {
-                QueryExpression::distinct(Self::reorder_joins(*inner, input_types))
-            }
-            QueryExpression::Reduced { inner } => {
-                QueryExpression::reduced(Self::reorder_joins(*inner, input_types))
-            }
-            QueryExpression::Project { inner, variables } => {
-                QueryExpression::project(Self::reorder_joins(*inner, input_types), variables)
-            }
-            QueryExpression::OrderBy { inner, expression } => {
-                QueryExpression::order_by(Self::reorder_joins(*inner, input_types), expression)
-            }
+            } => QueryExpression::slice(
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                offset,
+                limit,
+            ),
+            QueryExpression::Distinct { inner } => QueryExpression::distinct(Self::reorder_joins(
+                *inner,
+                input_types,
+                replan_for_loop_join_right,
+            )),
+            QueryExpression::Reduced { inner } => QueryExpression::reduced(Self::reorder_joins(
+                *inner,
+                input_types,
+                replan_for_loop_join_right,
+            )),
+            QueryExpression::Project { inner, variables } => QueryExpression::project(
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                variables,
+            ),
+            QueryExpression::OrderBy { inner, expression } => QueryExpression::order_by(
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                expression,
+            ),
             QueryExpression::Service { .. } => {
                 // We don't do join reordering inside of SERVICE calls, we don't know about cardinalities
                 query_expression
@@ -1085,11 +1123,40 @@ impl Optimizer {
                 variables,
                 aggregates,
             } => QueryExpression::group(
-                Self::reorder_joins(*inner, input_types),
+                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 variables,
                 aggregates,
             ),
         }
+    }
+
+    fn plan_join_operand(
+        planned: QueryExpression,
+        not_reordered: Option<QueryExpression>,
+        input_types: &VariableTypes,
+    ) -> QueryExpression {
+        match not_reordered {
+            Some(not_reordered) if has_for_loop_join_candidate(&not_reordered) => {
+                Self::reorder_joins(not_reordered, input_types, true)
+            }
+            _ => planned,
+        }
+    }
+
+    #[cfg(feature = "sep-0006")]
+    fn plan_for_loop_join_right(
+        planned: QueryExpression,
+        not_reordered: Option<QueryExpression>,
+        input_types: &VariableTypes,
+        left_types: &VariableTypes,
+    ) -> QueryExpression {
+        if let Some(not_reordered) = not_reordered {
+            let replanned = Self::reorder_joins(not_reordered, left_types, true);
+            if is_fit_for_for_loop_join(&replanned, input_types, left_types) {
+                return replanned;
+            }
+        }
+        planned
     }
 }
 
@@ -1181,6 +1248,54 @@ fn is_fit_for_for_loop_join(
         | QueryExpression::Slice { .. }
         | QueryExpression::Project { .. }
         | QueryExpression::Group { .. } => false,
+    }
+}
+
+fn is_for_loop_join_candidate(query_expression: &QueryExpression) -> bool {
+    !matches!(
+        query_expression,
+        QueryExpression::QuadPattern { .. }
+            | QueryExpression::Path { .. }
+            | QueryExpression::Values { .. }
+            | QueryExpression::Join { .. }
+            | QueryExpression::Minus { .. }
+            | QueryExpression::Service { .. }
+            | QueryExpression::OrderBy { .. }
+            | QueryExpression::Distinct { .. }
+            | QueryExpression::Reduced { .. }
+            | QueryExpression::Slice { .. }
+            | QueryExpression::Project { .. }
+            | QueryExpression::Group { .. }
+    )
+}
+
+fn has_for_loop_join_candidate(query_expression: &QueryExpression) -> bool {
+    match query_expression {
+        QueryExpression::QuadPattern { .. }
+        | QueryExpression::Path { .. }
+        | QueryExpression::Values { .. }
+        | QueryExpression::Service { .. } => false,
+        QueryExpression::Join { left, right, .. } => [left, right].into_iter().any(|operand| {
+            is_for_loop_join_candidate(operand) || has_for_loop_join_candidate(operand)
+        }),
+        QueryExpression::LeftJoin { left, right, .. }
+        | QueryExpression::Minus { left, right, .. } => {
+            has_for_loop_join_candidate(left) || has_for_loop_join_candidate(right)
+        }
+        #[cfg(feature = "sep-0006")]
+        QueryExpression::Lateral { left, right } => {
+            has_for_loop_join_candidate(left) || has_for_loop_join_candidate(right)
+        }
+        QueryExpression::Union { inner } => inner.iter().any(has_for_loop_join_candidate),
+        QueryExpression::Graph { inner, .. }
+        | QueryExpression::Filter { inner, .. }
+        | QueryExpression::Extend { inner, .. }
+        | QueryExpression::OrderBy { inner, .. }
+        | QueryExpression::Distinct { inner }
+        | QueryExpression::Reduced { inner }
+        | QueryExpression::Slice { inner, .. }
+        | QueryExpression::Project { inner, .. }
+        | QueryExpression::Group { inner, .. } => has_for_loop_join_candidate(inner),
     }
 }
 

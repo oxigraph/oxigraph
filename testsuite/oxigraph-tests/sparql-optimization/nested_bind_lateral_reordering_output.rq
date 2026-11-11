@@ -3,8 +3,8 @@ PREFIX : <ex:>
 SELECT ?t ?x WHERE {
     ?t a :T .
     LATERAL {
-        ?a a :A ;
-           :hasT ?t .
+        ?a :hasT ?t ;
+           a :A .
         BIND(?a AS ?x)
     }
 }

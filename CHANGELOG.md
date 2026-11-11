@@ -12,6 +12,7 @@
 - SPARQL: `GRAPH ?g { ... MINUS { ... } }` returned too many results when the right side of the `MINUS` uses `?g`.
 - `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
 - `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
+- `sparopt`: when a join becomes a for-loop join, its right side is ordered knowing the variables bound by its left side, as for `LATERAL` and `OPTIONAL`. A `UNION` or a group with a `FILTER` joined with another pattern no longer scans the same pattern again for each row of the left side (#1951).
 
 
 # [0.5.7] - 2026-04-19
