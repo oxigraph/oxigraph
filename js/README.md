@@ -15,11 +15,13 @@ The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/
 It is distributed using an [NPM package](https://www.npmjs.com/package/oxigraph) that is compatible with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
 
 To install:
+
 ```bash
 npm install oxigraph
 ```
 
 And then import:
+
 ```js
 import { Store } from "oxigraph";
 ```
@@ -56,17 +58,19 @@ It relies on the [RDF/JS DataModel API](https://rdf.js.org/data-model-spec/) to 
 Parse some content and return `Quad`s.
 
 The method arguments are:
+
 1. `input`: the serialized RDF triples or quads. It allows different types:
    - `string | UInt8Array`. In this case the output is returned as a plain `Quad[]`.
-     - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
-       - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
+   - `Iterable<string | UInt8Array>`. In this case the output is returned as an `Iterable<Quad>` that consumes the input iterator lazily.
+   - `AsyncIterable<string | UInt8Array>`. In this case the output is returned as an `AsyncIterable<Quad>` that consumes the input iterator lazily.
 2. `options`: an object containing various options (all optional except `format`):
    - `format`: the format of the serialization as a `string`. See below for the supported formats.
-     - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
-       - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
-         - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
+   - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
+   - `to_named_graph`: for triple serialization formats, the name of the named graph the output quad should be in. If set, must be `NamedNode`, `BlankNode` or `DefaultGraph`.
+   - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
 
 The available formats are:
+
 - [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 - [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 - [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
@@ -76,6 +80,7 @@ The available formats are:
 - [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of parsing a Turtle file with the base IRI `http://example.com`:
+
 ```js
 parse("<http://example.com> <http://example.com> <> .", {
     format: "text/turtle",
@@ -112,6 +117,7 @@ const store = new Store([dataModel.quad(blank, ex, foo)]);
 Inserts a quad in the store.
 
 Example:
+
 ```js
 store.add(quad);
 ```
@@ -121,6 +127,7 @@ store.add(quad);
 Removes a quad from the store.
 
 Example:
+
 ```js
 store.delete(quad);
 ```
@@ -130,6 +137,7 @@ store.delete(quad);
 Returns a boolean stating if the store contains the quad.
 
 Example:
+
 ```js
 store.has(quad);
 ```
@@ -139,11 +147,13 @@ store.has(quad);
 Returns an array with all the quads matching a given quad pattern.
 
 Example to get all quads in the default graph with `ex` for subject:
+
 ```js
 store.match(ex, null, null, dataModel.defaultGraph());
 ```
 
 Example to get all quads:
+
 ```js
 store.match();
 ```
@@ -156,6 +166,7 @@ For `CONSTRUCT` and `ÐESCRIBE` queries the return type is an array of `Quad`.
 For `ASK` queries the return type is a boolean.
 
 Example of SELECT query:
+
 ```js
 for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
     console.log(binding.get("s").value);
@@ -163,6 +174,7 @@ for (binding of store.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }")) {
 ```
 
 Example of CONSTRUCT query:
+
 ```js
 const filteredStore = new Store(
     store.query("CONSTRUCT { <http:/example.com/> ?p ?o } WHERE { <http:/example.com/> ?p ?o }"),
@@ -170,6 +182,7 @@ const filteredStore = new Store(
 ```
 
 Example of ASK query:
+
 ```js
 if (store.query("ASK { ?s ?s ?s }")) {
     console.log("there is a triple with same subject, predicate and object");
@@ -196,6 +209,7 @@ Executes a [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
 The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
 
 Example of update:
+
 ```js
 store.update("DELETE WHERE { <http://example.com/s> ?p ?o }");
 ```
@@ -212,6 +226,7 @@ store.update("DELETE WHERE { <s> ?p ?o }", {
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
+
 1. `data`: the serialized RDF triples or quads as a single buffer or an iterable of buffers.
 2. `options`: an object containing various options (all optional except `format`):
    - `format`: the format of the serialization as a `string`. See below for the supported formats.
@@ -221,6 +236,7 @@ The method arguments are:
    - `no_transaction`: disables transactional guarantees: if the file has a syntax error, the start of it might be loaded into the store even if parsing fails.
 
 The available formats are:
+
 - [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 - [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 - [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
@@ -230,6 +246,7 @@ The available formats are:
 - [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
+
 ```js
 store.load("<http://example.com> <http://example.com> <> .", {
     format: "text/turtle",
@@ -242,10 +259,12 @@ store.load("<http://example.com> <http://example.com> <> .", {
 
 Returns serialized RDF triples or quad from the store.
 The method argument is a single object, `options`, with the following options (all optional except `format`):
+
 - `format`: the format type of the serialization as a `string`. See below for the supported types.
 - `from_named_graph`: for triple serialization formats, the name of the named graph the triple should be loaded from as a `NamedNode`, `BlankNode` or `DefaultGraph`..
 
 The available formats are:
+
 - [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 - [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 - [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
@@ -255,6 +274,7 @@ The available formats are:
 - [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of building a Turtle file from the named graph `<http://example.com/graph>`:
+
 ```js
 store.dump({
     format: "text/turtle",
@@ -278,7 +298,6 @@ store.dump({
 - RDF/JS datamodel functions (`namedNode`...) are now available at the root of the `oxigraph` package. You now need to call `oxigraph.namedNode` instead of `store.dataFactory.namedNode`.
 - [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented. `Quad` is now a valid value for the `Ωuad` `subject` and `object` properties.
 
-
 ## How to contribute
 
 The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://rustwasm.github.io/docs.html).
@@ -286,27 +305,28 @@ The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
 To setup a dev environment:
+
 - ensure to have a Rust toolchain with `rustup` and `cargo` installed ([possible instructions](https://www.rust-lang.org/tools/install)).
 - `npm install` to install JS dependencies.
 - you are good to go!
 
 Testing and linting:
+
 - Rust code is formatted with [rustfmt](https://github.com/rust-lang/rustfmt) and linted with [clippy](https://github.com/rust-lang/rust-clippy).
   You can execute them with `cargo fmt` and `cargo clippy`.
-- JS code is formatted and linted with [Biome](https://biomejs.dev/). `npm run fmt` to auto-format and `npm test` to lint and test.
-- Tests are written in JavaScript using [Mocha](https://mochajs.org/) in the `test` directory. `npm test` to run them.
-
+- JS code is formatted and linted with [Biome](https://biomejs.dev/). `npm run fmt` to auto-format.
+- Tests are in the `test` directory. `npm test` to run them.
 
 ## License
 
 This project is licensed under either of
+
 - Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
   http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](../LICENSE-MIT) or
   http://opensource.org/licenses/MIT)
 
 at your option.
-
 
 ### Contribution
 
