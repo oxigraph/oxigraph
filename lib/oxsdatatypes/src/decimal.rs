@@ -410,7 +410,15 @@ impl TryFrom<Double> for Decimal {
     #[inline]
     #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn try_from(value: Double) -> Result<Self, Self::Error> {
-        let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
+        let value = f64::from(value);
+        // The shortest decimal form of the double is exact, while the
+        // multiplication below rounds (1e10 would give 9999999999.999999583...)
+        if value.is_finite() {
+            if let Ok(decimal) = value.to_string().parse() {
+                return Ok(decimal);
+            }
+        }
+        let shifted = value * (DECIMAL_PART_POW as f64);
         if (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
             Ok(Self {
                 value: shifted as i128,
@@ -1059,6 +1067,14 @@ mod tests {
                 .checked_abs()
                 .unwrap()
                 < Decimal::from(1)
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(1e10))?,
+            Decimal::from(10_000_000_000_i64)
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(3e9))?,
+            Decimal::from(3_000_000_000_i64)
         );
         Decimal::try_from(Double::from(f64::NAN)).unwrap_err();
         Decimal::try_from(Double::from(f64::INFINITY)).unwrap_err();
