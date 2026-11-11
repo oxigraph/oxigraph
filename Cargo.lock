@@ -1752,7 +1752,7 @@ dependencies = [
 [[package]]
 name = "oxiri"
 version = "0.3.1"
-source = "git+https://github.com/mkatychev/oxiri?rev=62cec90580bde26a7e1b8a20a17de3d2d9f50ccf#62cec90580bde26a7e1b8a20a17de3d2d9f50ccf"
+source = "git+https://github.com/oxigraph/oxiri#39c39bdc8bce5d58395444847f13200a4471668e"
 dependencies = [
  "memchr",
  "serde",
