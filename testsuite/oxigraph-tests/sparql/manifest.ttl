@@ -69,6 +69,7 @@
     :arithmetic_signed_literal
     :graph_minus_graph_variable
     :pname_local_escape
+    :count_skips_errors
     ) .
 
 :eq_dirLangString rdf:type mf:QueryEvaluationTest ;
@@ -374,3 +375,8 @@
     mf:name "Casting a string ignores leading and trailing whitespace" ;
     mf:action [ qt:query <cast_string_whitespace.rq> ] ;
     mf:result <cast_string_whitespace.srx> .
+
+:count_skips_errors rdf:type mf:QueryEvaluationTest ;
+    mf:name "COUNT of an expression skips the solutions where the expression is an error" ;
+    mf:action [ qt:query <count_skips_errors.rq> ] ;
+    mf:result <count_skips_errors.srx> .
