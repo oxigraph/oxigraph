@@ -1,3 +1,27 @@
+diff --git a/db/blob/blob_file_meta.h b/db/blob/blob_file_meta.h
+--- a/db/blob/blob_file_meta.h
++++ b/db/blob/blob_file_meta.h
+@@ -10,3 +10,4 @@
++#include <cstdint>
+ #include <memory>
+ #include <string>
+ #include <unordered_set>
+diff --git a/include/rocksdb/trace_record.h b/include/rocksdb/trace_record.h
+--- a/include/rocksdb/trace_record.h
++++ b/include/rocksdb/trace_record.h
+@@ -8,3 +8,4 @@
++#include <cstdint>
+ #include <memory>
+ #include <string>
+ #include <vector>
+diff --git a/include/rocksdb/write_batch_base.h b/include/rocksdb/write_batch_base.h
+--- a/include/rocksdb/write_batch_base.h
++++ b/include/rocksdb/write_batch_base.h
+@@ -11,3 +11,4 @@
+ #include <cstddef>
++#include <cstdint>
+
+ #include "rocksdb/attribute_groups.h"
 diff --git a/memtable/wbwi_memtable.h b/memtable/wbwi_memtable.h
 --- a/memtable/wbwi_memtable.h	(revision ae8fb3e5000e46d8d4c9dbf3a36019c0aaceebff)
 +++ b/memtable/wbwi_memtable.h	(date 1750604861180)

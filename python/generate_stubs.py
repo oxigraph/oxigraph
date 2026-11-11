@@ -62,7 +62,7 @@ BUILTINS: dict[str, None | tuple[list[ast.expr], ast.expr]] = {
     "__next__": ([], path_to_type("typing", "Any")),
     "__reduce__": None,
     "__reduce_ex__": None,
-    "__repr__": ([], path_to_type("str")),
+    "__repr__": None,
     "__setattr__": (
         [path_to_type("str"), path_to_type("typing", "Any")],
         path_to_type("None"),
@@ -72,7 +72,7 @@ BUILTINS: dict[str, None | tuple[list[ast.expr], ast.expr]] = {
         path_to_type("typing", "Any"),
     ),
     "__sizeof__": None,
-    "__str__": ([], path_to_type("str")),
+    "__str__": None,
     "__subclasshook__": None,
 }
 
@@ -101,7 +101,16 @@ def module_stubs(module: Any) -> ast.Module:
                 0,
                 ast.Assign(
                     targets=[ast.Name(id=member_name, ctx=ast.Store())],
-                    value=ast.Constant(member_value),
+                    value=ast.List(
+                        elts=[
+                            ast.Constant(name)
+                            for name in sorted(
+                                member_value,
+                                key=lambda name: (0 if name.isupper() else 1 if name[:1].isupper() else 2, name),
+                            )
+                        ],
+                        ctx=ast.Load(),
+                    ),
                     lineno=0,
                 ),
             )

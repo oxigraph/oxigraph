@@ -234,7 +234,7 @@ impl fmt::Display for PyBlankNode {
 /// An RDF `literal <https://www.w3.org/TR/rdf11-concepts/#dfn-literal>`_.
 ///
 /// :param value: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_.
-/// :type value: str or int or float or bool
+/// :type value: str or float or bool
 /// :param datatype: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_.
 /// :type datatype: NamedNode or None, optional
 /// :param language: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_.
