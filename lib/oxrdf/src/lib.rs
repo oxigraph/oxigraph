@@ -3,12 +3,17 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 mod blank_node;
 pub mod dataset;
 pub mod graph;
 mod interning;
 mod literal;
+mod map;
 mod named_node;
 mod parser;
 mod triple;

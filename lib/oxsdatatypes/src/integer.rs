@@ -1,7 +1,7 @@
 use crate::{Boolean, Double, Float};
-use std::fmt;
-use std::num::ParseIntError;
-use std::str::FromStr;
+use core::fmt;
+use core::num::ParseIntError;
+use core::str::FromStr;
 
 /// [XML Schema `integer` datatype](https://www.w3.org/TR/xmlschema11-2/#integer)
 ///
@@ -246,7 +246,11 @@ impl TryFrom<Float> for Integer {
     fn try_from(value: Float) -> Result<Self, Self::Error> {
         let value = f32::from(value);
         if (i64::MIN as f32..=i64::MAX as f32).contains(&value) {
-            Ok(Self::from(value.trunc() as i64))
+            #[cfg(feature = "std")]
+            let truncated = value.trunc();
+            #[cfg(not(feature = "std"))]
+            let truncated = libm::truncf(value);
+            Ok(Self::from(truncated as i64))
         } else {
             Err(TooLargeForIntegerError)
         }
@@ -261,7 +265,11 @@ impl TryFrom<Double> for Integer {
     fn try_from(value: Double) -> Result<Self, Self::Error> {
         let value = f64::from(value);
         if (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
-            Ok(Self::from(value.trunc() as i64))
+            #[cfg(feature = "std")]
+            let truncated = value.trunc();
+            #[cfg(not(feature = "std"))]
+            let truncated = libm::trunc(value);
+            Ok(Self::from(truncated as i64))
         } else {
             Err(TooLargeForIntegerError)
         }

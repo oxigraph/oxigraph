@@ -1,9 +1,9 @@
+use core::cmp::Ordering;
+use core::fmt;
 use oxiri::{Iri, IriParseError};
 use oxstr::OxString;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::cmp::Ordering;
-use std::fmt;
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///

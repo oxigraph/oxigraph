@@ -2,9 +2,11 @@ use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
+#[cfg(all(feature = "rdf-12", not(feature = "std")))]
+use alloc::boxed::Box;
+use core::fmt;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, Serializer};
-use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

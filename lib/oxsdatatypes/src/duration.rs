@@ -1,9 +1,9 @@
 use crate::{DateTime, Decimal};
-use std::cmp::Ordering;
-use std::fmt;
-use std::str::FromStr;
+use core::cmp::Ordering;
+use core::fmt;
+use core::str::FromStr;
 #[cfg(not(target_os = "zkvm"))]
-use std::time::Duration as StdDuration;
+use core::time::Duration as StdDuration;
 
 /// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
 ///

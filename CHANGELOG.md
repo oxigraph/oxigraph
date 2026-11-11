@@ -2,6 +2,7 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `oxrdf` and `oxsdatatypes`: a `std` feature, enabled by default. Disabling it makes the crates `no_std`: `oxrdf` then needs only the `alloc` crate and uses [`hashbrown`](https://crates.io/crates/hashbrown) in place of `std::collections::HashMap`, while `oxsdatatypes` needs no allocator at all and computes `ceil`, `floor` and `round` with [`libm`](https://crates.io/crates/libm).
 
 ### Fixed
 - Turtle, TriG, N-Triples, N-Quads, RDF/XML and SPARQL JSON and XML results: a triple term nested more than 128 deep is now a syntax error, the same limit as `Term::from_str`. Very deeply nested terms overflowed the stack when they were cloned, dropped or printed. A SPARQL XML results `<triple>` must have exactly one subject, predicate and object.
@@ -35,7 +36,7 @@
 
 ### Added
 - JSON-LD: JSON-LD 1.1 is now implemented and enabled by default.
-- JavaScript: the `parse` method that allows to parse a RDF file from a buffer, an iterator of buffers or and async iterator of buffers (including streams). 
+- JavaScript: the `parse` method that allows to parse a RDF file from a buffer, an iterator of buffers or and async iterator of buffers (including streams).
 - `oxrdf`: the `Dataset.quads_for_pattern` method allowing to iterate only on quads matching a given pattern.
 - `oxjsonld`: The `JsonLdParser.with_processing_mode` method to select the JSON-LD 1.0 or 1.1 processing mode.
 
@@ -59,7 +60,7 @@
 # [0.5.3] - 2025-12-19
 
 ### Added
-- SPARQL 1.2: support `VERSION` declaration. 
+- SPARQL 1.2: support `VERSION` declaration.
 
 ### Changed
 - SPARQL: fixes parsing of `HAVING` when there are multiple conditions.
@@ -123,7 +124,7 @@ _This release is dedicated to the memory of [Gregg Kellogg](https://greggkellogg
 - `spareval`: expose `QueryEvaluator::evaluate_expression` to evaluate expressions
 
 ### Changed
-- Oxigraph: `Transaction` has now stronger lifetime bounds to ensure operations on a transaction are not running longer than the transaction itself. 
+- Oxigraph: `Transaction` has now stronger lifetime bounds to ensure operations on a transaction are not running longer than the transaction itself.
   It also affects types like `QuadIter` or `GraphNameIter` that now carry a lifetime.
 - SPARQL: raise an error when blank nodes are shared between different INSERT DATA statements (follows SPARQL spec).
 - SPARQL: Makes single DELETE/INSERT and LOAD statements slightly faster by not indexing the changes.
@@ -137,7 +138,7 @@ _This release is dedicated to the memory of [Gregg Kellogg](https://greggkellogg
 - Turtle: use the longest possible prefix during serialization.
 - Improved error when opening an old RocksDB database in read-only
 - `spareval`: Add a lifetime to `QueryResults`
-- `spareval`: Allow `QueryableDataset` to be bounded by a lifetime. 
+- `spareval`: Allow `QueryableDataset` to be bounded by a lifetime.
 - `spareval`: `QueryableDataset` is now implemented by `&Dataset` and not by `Dataset` (allows avoiding a bunch of copies).
 
 
@@ -186,7 +187,7 @@ _This release is dedicated to the memory of [Gregg Kellogg](https://greggkellogg
 - `oxrdf`: the `Subject` enum is now merged into `NamedOrBlankNode`.
 - `spargebra`: `GroundSubject` is now merged into `NamedNode`.
 - `spareval`: `ExpressionSubject` is now merged into `NamedOrBlankNode`.
-- `oxigraph`: `Store.transaction` is replaced by `Store.start_transaction`. 
+- `oxigraph`: `Store.transaction` is replaced by `Store.start_transaction`.
 - Python: `pyoxigraph.__package__` and `pyoxigraph.__author__` constants.
 
 ### Changed
@@ -315,7 +316,7 @@ _This release is dedicated to the memory of [Gregg Kellogg](https://greggkellogg
 - Turtle: prevent line jump in single quoted string (but not in unchecked/lenient mode).
 - Turtle: forbid invalid \u+123 escape sequences.
 - RDF/XML: only ignore possible literal values composed of whitespaces if an other object value is present.
-- SPARQL: fixes regex function evaluation when the regex is not set to a literal. 
+- SPARQL: fixes regex function evaluation when the regex is not set to a literal.
 - SPARQL: ignore errors in joins if the other side of the join returns no results (the output would be no results anyway if the errors are fixed).
 - SPARQL: make ASK return true if the inner query is returning a valid tuple even if the inner query is also returning errors (fixing these errors would not change the ASK output).
 - SPARQL optimizer: do not attempt to optimize SERVICE (keep them, do not push filter in them...). This was leading to a lot of subtle behavior changes.

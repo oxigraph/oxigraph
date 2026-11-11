@@ -1,10 +1,10 @@
 use crate::{Boolean, Float, Integer};
-use std::cmp::Ordering;
-use std::fmt;
-use std::fmt::Write as _;
-use std::num::ParseFloatError;
-use std::ops::{Add, Div, Mul, Neg, Sub};
-use std::str::FromStr;
+use core::cmp::Ordering;
+use core::fmt;
+use core::fmt::Write as _;
+use core::num::ParseFloatError;
+use core::ops::{Add, Div, Mul, Neg, Sub};
+use core::str::FromStr;
 
 /// [XML Schema `double` datatype](https://www.w3.org/TR/xmlschema11-2/#double)
 ///
@@ -51,22 +51,38 @@ impl Double {
     #[inline]
     #[must_use]
     pub fn ceil(self) -> Self {
-        self.value.ceil().into()
+        #[cfg(feature = "std")]
+        let result = self.value.ceil();
+        #[cfg(not(feature = "std"))]
+        let result = libm::ceil(self.value);
+        result.into()
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
     #[must_use]
     pub fn floor(self) -> Self {
-        self.value.floor().into()
+        #[cfg(feature = "std")]
+        let result = self.value.floor();
+        #[cfg(not(feature = "std"))]
+        let result = libm::floor(self.value);
+        result.into()
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
     #[must_use]
     pub fn round(self) -> Self {
-        let mut result = self.value.round();
-        if self.value.fract() == -0.5 {
+        // `f64::round` and `libm::round` both round half away from zero,
+        // `fn:round` rounds half towards positive infinity.
+        #[cfg(feature = "std")]
+        let (mut result, fract) = (self.value.round(), self.value.fract());
+        #[cfg(not(feature = "std"))]
+        let (mut result, fract) = (
+            libm::round(self.value),
+            self.value - libm::trunc(self.value),
+        );
+        if fract == -0.5 {
             result += 1.;
         }
         if result == 0. && self.value.is_sign_negative() {

@@ -1,13 +1,15 @@
 use crate::named_node::{NamedNode, NamedNodeRef};
 use crate::vocab::{rdf, xsd};
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+use core::fmt;
+use core::fmt::Write;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 use oxstr::OxString;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::fmt;
-use std::fmt::Write;
 
 static XSD_STRING: NamedNode = xsd::STRING;
 static RDF_LANG_STRING: NamedNode = rdf::LANG_STRING;

@@ -1,14 +1,16 @@
 //! Interning of RDF elements using Rodeo
 
+use crate::map::{DefaultHashBuilder, Entry, HashMap};
 use crate::vocab::xsd;
 use crate::*;
+#[cfg(all(feature = "rdf-12", not(feature = "std")))]
+use alloc::boxed::Box;
+use core::hash::{BuildHasher, Hasher};
 use oxstr::OxString;
-use std::collections::hash_map::{Entry, HashMap, RandomState};
-use std::hash::{BuildHasher, Hasher};
 
 #[derive(Debug, Default, Clone)]
 pub struct Interner {
-    hasher: RandomState,
+    hasher: DefaultHashBuilder,
     string_for_hash: HashMap<u64, OxString, IdentityHasherBuilder>,
     #[cfg(feature = "rdf-12")]
     triples: HashMap<InternedTriple, Triple>,

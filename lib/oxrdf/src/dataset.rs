@@ -30,15 +30,23 @@
 //! See also [`Graph`] if you only care about plain triples.
 
 use crate::interning::*;
+use crate::map::{
+    BTreeMap, BTreeSet, BTreeSetIter, BTreeSetRange, Entry, HashMap, HashSet, hash_str,
+};
 use crate::*;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    borrow::ToOwned,
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::fmt;
+use core::mem::take;
 use oxstr::{OxString, oxformat};
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::mem::take;
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
@@ -557,12 +565,12 @@ impl Dataset {
     /// let iri = NamedNode::new("http://example.com")?;
     ///
     /// let mut graph1 = Graph::new();
-    /// let bnode1 = BlankNode::default();
+    /// let bnode1 = BlankNode::new("a")?;
     /// graph1.insert(Triple::new(iri.clone(), iri.clone(), bnode1.clone()));
     /// graph1.insert(Triple::new(bnode1, iri.clone(), iri.clone()));
     ///
     /// let mut graph2 = Graph::new();
-    /// let bnode2 = BlankNode::default();
+    /// let bnode2 = BlankNode::new("b")?;
     /// graph2.insert(Triple::new(iri.clone(), iri.clone(), bnode2.clone()));
     /// graph2.insert(Triple::new(bnode2, iri.clone(), iri));
     ///
@@ -1225,11 +1233,7 @@ impl Dataset {
             Some(CanonicalizationHashAlgorithm::Sha384) => {
                 hex::encode(Sha384::new().chain_update(input).finalize())
             }
-            None => {
-                let mut hasher = DefaultHasher::new();
-                input.hash(&mut hasher);
-                hasher.finish().to_string()
-            }
+            None => hash_str(input).to_string(),
         }
     }
 
@@ -1930,7 +1934,7 @@ impl fmt::Display for GraphViewMut<'_> {
 /// Iterator returned by [`Dataset::iter`].
 pub struct Iter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Iter<
+    inner: BTreeSetIter<
         'a,
         (
             InternedNamedOrBlankNode,
@@ -1954,7 +1958,7 @@ impl Iterator for Iter<'_> {
 /// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
     dataset: &'a Dataset,
-    inner: std::collections::btree_set::Range<
+    inner: BTreeSetRange<
         'a,
         (
             InternedGraphName,
@@ -2053,7 +2057,7 @@ impl IdentifierIssuer {
 }
 
 fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec<T>> {
-    let mut current_output = vec![Vec::new()];
+    let mut current_output = Vec::from([Vec::new()]);
     for (i, next) in items.into_iter().enumerate() {
         let mut new_output = Vec::with_capacity(current_output.len() * (i + 1));
         for mut permutation in current_output {

@@ -12,21 +12,31 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = []
+default = ["std"]
+std = [
+  "dep:rand",
+  "oxilangtag/std",
+  "oxiri/std",
+  "oxsdatatypes?/std",
+  "oxstr/std",
+  "serde?/std",
+  "thiserror/std",
+]
 rdf-12 = []
 rdfc-10 = ["dep:hex", "dep:sha2"]
 serde = ["dep:serde", "oxstr/serde"]
 
 [dependencies]
-hex = { workspace = true, optional = true }
-oxilangtag.workspace = true
-oxiri.workspace = true
-oxsdatatypes = { workspace = true, optional = true }
-oxstr.workspace = true
-sha2 = { workspace = true, optional = true }
-rand.workspace = true
-thiserror.workspace = true
-serde = { workspace = true, features = ["derive"], optional = true }
+hex = { workspace = true, optional = true, default-features = false, features = ["alloc"] }
+hashbrown.workspace = true
+oxilangtag = { workspace = true, default-features = false }
+oxiri = { workspace = true, default-features = false }
+oxsdatatypes = { workspace = true, optional = true, default-features = false }
+oxstr = { workspace = true, default-features = false }
+sha2 = { workspace = true, optional = true, default-features = false }
+rand = { workspace = true, optional = true }
+thiserror = { workspace = true, default-features = false }
+serde = { workspace = true, features = ["derive", "alloc"], optional = true, default-features = false }
 
 [dev-dependencies]
 serde_json.workspace = true

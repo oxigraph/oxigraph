@@ -5,10 +5,17 @@ use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
     NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
 };
+#[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+#[cfg(not(feature = "std"))]
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+use core::char;
+use core::str::{Chars, FromStr};
 use oxstr::{OxStr, OxString};
+#[cfg(feature = "std")]
 use std::borrow::Cow;
-use std::char;
-use std::str::{Chars, FromStr};
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
@@ -79,7 +86,7 @@ impl FromStr for Literal {
     /// );
     /// assert_eq!(
     ///     Literal::from_str("\"ex\"@en")?,
-    ///     Literal::new_language_tagged_literal("ex", "en")?
+    ///     Literal::new_language_tagged_literal_unchecked("ex", "en")
     /// );
     /// assert_eq!(
     ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>")?,

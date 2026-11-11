@@ -1,6 +1,6 @@
 use crate::{Boolean, Double, Float, Integer, TooLargeForIntegerError};
-use std::str::FromStr;
-use std::{fmt, str};
+use core::str::FromStr;
+use core::{fmt, str};
 
 const DECIMAL_PART_DIGITS: u32 = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;

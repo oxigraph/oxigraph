@@ -17,6 +17,10 @@ Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind
 
 Support for [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) is available behind the `rdfc-10` feature.
 
+The `std` feature is enabled by default. Disabling it with `--no-default-features` makes the crate `no_std`, relying only on the `alloc` crate. Two differences apply without `std`:
+`BlankNode` does not implement `Default`, because generating a random identifier needs an entropy source;
+and `LanguageTagParseError` does not implement `core::error::Error`, because [`oxilangtag`](https://crates.io/crates/oxilangtag) only provides that implementation behind its own `std` feature.
+
 OxRDF is inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
 
 Use [`oxrdfio`](https://crates.io/crates/oxrdfio) if you need to read or write RDF files.

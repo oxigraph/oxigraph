@@ -28,7 +28,7 @@
 use crate::dataset::*;
 pub use crate::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
 use crate::*;
-use std::fmt;
+use core::fmt;
 
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 ///
@@ -194,12 +194,12 @@ impl Graph {
     /// let iri = NamedNode::new("http://example.com")?;
     ///
     /// let mut graph1 = Graph::new();
-    /// let bnode1 = BlankNode::default();
+    /// let bnode1 = BlankNode::new("a")?;
     /// graph1.insert(Triple::new(iri.clone(), iri.clone(), bnode1.clone()));
     /// graph1.insert(Triple::new(bnode1, iri.clone(), iri.clone()));
     ///
     /// let mut graph2 = Graph::new();
-    /// let bnode2 = BlankNode::default();
+    /// let bnode2 = BlankNode::new("b")?;
     /// graph2.insert(Triple::new(iri.clone(), iri.clone(), bnode2.clone()));
     /// graph2.insert(Triple::new(bnode2, iri.clone(), iri));
     ///
