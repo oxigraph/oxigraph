@@ -702,6 +702,32 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
         prepared.execute(self.queryable_dataset)
     }
 
+    /// Plans the query without evaluating it and returns the plan.
+    ///
+    /// It is cheap: the store content is not read.
+    ///
+    /// Usage example serializing the plan in JSON:
+    /// ```
+    /// use oxigraph::sparql::SparqlEvaluator;
+    /// use oxigraph::store::Store;
+    ///
+    /// let explanation = SparqlEvaluator::new()
+    ///     .parse_query("SELECT * WHERE { ?s ?p ?o }")?
+    ///     .on_store(&Store::new()?)
+    ///     .plan()?;
+    /// let mut buf = Vec::new();
+    /// explanation.write_in_json(&mut buf)?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn plan(self) -> Result<QueryExplanation, QueryEvaluationError> {
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.plan(self.queryable_dataset)
+    }
+
     /// Compute statistics during evaluation and fills them in the explanation tree.
     pub fn compute_statistics(mut self) -> Self {
         self.evaluator = self.evaluator.compute_statistics();
