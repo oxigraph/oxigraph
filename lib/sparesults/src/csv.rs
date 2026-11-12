@@ -823,7 +823,7 @@ impl LineReader {
         slice: &'a [u8],
     ) -> Result<&'a str, QueryResultsSyntaxError> {
         let line_end = memchr(b'\n', &slice[self.buffer_start..])
-            .map_or_else(|| slice.len(), |eol| self.buffer_start + eol + 1);
+            .map_or(slice.len(), |eol| self.buffer_start + eol + 1);
         let result = str::from_utf8(&slice[self.buffer_start..line_end]).map_err(|e| {
             QueryResultsSyntaxError::msg(format!("Invalid UTF-8 in the TSV file: {e}"))
         });
