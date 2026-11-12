@@ -1,7 +1,7 @@
 use crate::model::Term;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
-    insert_term,
+    insert_term, value_encoding,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxsdatatypes::Boolean;
@@ -182,6 +182,17 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
             EncodedTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
             EncodedTerm::IntegerLiteral(value) => Some(Boolean::from(value).into()),
             EncodedTerm::DecimalLiteral(value) => Some(Boolean::from(value).into()),
+            EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => {
+                // "1"^^xsd:boolean or "01"^^xsd:integer, kept as written because
+                // their value encoding would not give them back
+                let Term::Literal(literal) = self.decode_term(&term)? else {
+                    return Ok(None);
+                };
+                return match value_encoding(literal.value(), literal.datatype().as_str()) {
+                    Some(value) => self.internal_term_effective_boolean_value(value),
+                    None => Ok(None),
+                };
+            }
             _ => None,
         })
     }

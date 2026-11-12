@@ -784,3 +784,140 @@ fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+/// Literals whose value encoding would not give them back: a lexical form that
+/// is not the canonical one, or a datatype derived from the one the value is
+/// stored as. Each is a different RDF term from every other one here.
+const NON_CANONICAL_LITERALS: &str = r#"
+<http://example.com/s> <http://example.com/p> "4.0"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<http://example.com/s> <http://example.com/p> "4"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<http://example.com/s> <http://example.com/p> "04"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.com/s> <http://example.com/p> "4"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.com/s> <http://example.com/p> "4"^^<http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
+<http://example.com/s> <http://example.com/p> "007"^^<http://www.w3.org/2001/XMLSchema#positiveInteger> .
+<http://example.com/s> <http://example.com/p> "1"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<http://example.com/s> <http://example.com/p> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<http://example.com/s> <http://example.com/p> "1e0"^^<http://www.w3.org/2001/XMLSchema#double> .
+<http://example.com/s> <http://example.com/p> "2026-03-15T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<http://example.com/s> <http://example.com/p> "2026-03-15T10:00:00+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp> .
+"#;
+
+fn assert_gives_back_literals_as_written(store: &Store) -> Result<(), Box<dyn Error>> {
+    let mut expected = oxigraph::io::RdfParser::from_format(RdfFormat::NTriples)
+        .for_reader(NON_CANONICAL_LITERALS.as_bytes())
+        .map(|t| Ok(t?.object.to_string()))
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+    let mut actual = store
+        .iter()
+        .map(|q| Ok(q?.object.to_string()))
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+    expected.sort();
+    actual.sort();
+    assert_eq!(actual, expected);
+    Ok(())
+}
+
+#[test]
+fn test_store_gives_back_literals_as_written() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    store.load_from_reader(RdfFormat::NTriples, NON_CANONICAL_LITERALS.as_bytes())?;
+    assert_gives_back_literals_as_written(&store)?;
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_store_gives_back_literals_as_written_on_disk() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    {
+        let store = Store::open(&dir)?;
+        store.load_from_reader(RdfFormat::NTriples, NON_CANONICAL_LITERALS.as_bytes())?;
+    }
+    let store = Store::open(&dir)?;
+    assert_gives_back_literals_as_written(&store)?;
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_non_canonical_literals_keep_their_value_in_sparql() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    store.load_from_reader(RdfFormat::NTriples, NON_CANONICAL_LITERALS.as_bytes())?;
+    let count = |query: &str| -> Result<usize, Box<dyn Error>> {
+        let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+            .parse_query(query)?
+            .on_store(&store)
+            .execute()?
+        else {
+            unreachable!()
+        };
+        Ok(solutions.collect::<Result<Vec<_>, _>>()?.len())
+    };
+    // Compared by value: "4.0", "4" (decimal), "04", "4" (integer) and "4"
+    // (nonNegativeInteger) are all equal to 4
+    assert_eq!(count("SELECT ?o WHERE { ?s ?p ?o FILTER(?o = 4) }")?, 5);
+    assert_eq!(count("SELECT ?o WHERE { ?s ?p ?o FILTER(?o > 5) }")?, 1);
+    assert_eq!(
+        count(
+            "SELECT ?o WHERE { ?s ?p ?o FILTER(?o = \"2026-03-15T10:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>) }"
+        )?,
+        2
+    );
+    // Matched by term: only the literal written that way
+    assert_eq!(
+        count("SELECT ?s WHERE { ?s ?p \"4.0\"^^<http://www.w3.org/2001/XMLSchema#decimal> }")?,
+        1
+    );
+    assert_eq!(count("SELECT ?s WHERE { ?s ?p 4 }")?, 1);
+    // DATATYPE and STR read the term as written
+    assert_eq!(
+        count(
+            "SELECT ?o WHERE { ?s ?p ?o FILTER(DATATYPE(?o) = <http://www.w3.org/2001/XMLSchema#nonNegativeInteger>) }"
+        )?,
+        1
+    );
+    assert_eq!(
+        count(
+            "SELECT ?o WHERE { ?s ?p ?o FILTER(DATATYPE(?o) = <http://www.w3.org/2001/XMLSchema#dateTimeStamp>) }"
+        )?,
+        1
+    );
+    assert_eq!(
+        count(
+            "SELECT ?o WHERE { ?s ?p ?o FILTER(DATATYPE(?o) = <http://www.w3.org/2001/XMLSchema#integer>) }"
+        )?,
+        2
+    );
+    assert_eq!(
+        count("SELECT ?o WHERE { ?s ?p ?o FILTER(STR(?o) = \"4.0\") }")?,
+        1
+    );
+    // The effective boolean value of a value is the value's, whatever its form
+    assert_eq!(
+        count(
+            "SELECT ?o WHERE { ?s ?p ?o FILTER(DATATYPE(?o) = <http://www.w3.org/2001/XMLSchema#boolean> && ?o) }"
+        )?,
+        2
+    );
+    assert_eq!(
+        count(
+            "SELECT ?x WHERE { BIND(\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> AS ?x) FILTER(?x) }"
+        )?,
+        0
+    );
+    assert_eq!(
+        count(
+            "SELECT ?x WHERE { BIND(\"01\"^^<http://www.w3.org/2001/XMLSchema#integer> AS ?x) FILTER(?x) }"
+        )?,
+        1
+    );
+    assert_eq!(
+        count(
+            "SELECT ?x WHERE { BIND(\"00\"^^<http://www.w3.org/2001/XMLSchema#integer> AS ?x) FILTER(?x) }"
+        )?,
+        0
+    );
+    Ok(())
+}

@@ -4,7 +4,7 @@ use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use oxstr::OxString;
 use siphasher::sip128::{Hasher128, SipHasher24};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::mem::discriminant;
@@ -586,7 +586,6 @@ impl From<&Literal> for EncodedTerm {
                         }
                     }
                 }),
-            "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
             "http://www.w3.org/2001/XMLSchema#string" => {
                 Some(if let Ok(value) = SmallString::try_from(value) {
                     Self::SmallStringLiteral(value)
@@ -596,39 +595,15 @@ impl From<&Literal> for EncodedTerm {
                     }
                 })
             }
-            "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
-            "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
-            "http://www.w3.org/2001/XMLSchema#integer"
-            | "http://www.w3.org/2001/XMLSchema#byte"
-            | "http://www.w3.org/2001/XMLSchema#short"
-            | "http://www.w3.org/2001/XMLSchema#int"
-            | "http://www.w3.org/2001/XMLSchema#long"
-            | "http://www.w3.org/2001/XMLSchema#unsignedByte"
-            | "http://www.w3.org/2001/XMLSchema#unsignedShort"
-            | "http://www.w3.org/2001/XMLSchema#unsignedInt"
-            | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-            | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-            | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-            | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
-            | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
-            "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
-            "http://www.w3.org/2001/XMLSchema#dateTime"
-            | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
-            "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
-            "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
-            "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
-            "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
-            "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
-            "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
-            "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
-            "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
-            "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
-                parse_year_month_duration_str(value)
-            }
-            "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => {
-                parse_day_time_duration_str(value)
-            }
-            _ => None,
+            // The value encodings keep the value and drop the lexical form and,
+            // for a derived datatype, the datatype: they decode to the canonical
+            // form of the primitive type. So one is used only when it decodes to
+            // the very literal it encodes. "4.0"^^xsd:decimal, "01"^^xsd:integer
+            // and "1"^^xsd:nonNegativeInteger are different RDF terms from
+            // "4"^^xsd:decimal, "1"^^xsd:integer and "1"^^xsd:integer, and are
+            // stored as typed literals so that they are given back as written.
+            _ => value_encoding(value, datatype)
+                .filter(|term| decodes_to_literal(term, value, datatype)),
         };
         match native_encoding {
             Some(term) => term,
@@ -895,6 +870,88 @@ pub fn insert_term<F: FnMut(&StrHash, OxString)>(
             insert_term(triple.object, &encoded.object, insert_str);
         }
     }
+}
+
+/// The value encoding of a literal of an XSD datatype that has one, whether or
+/// not it decodes to the same lexical form and datatype. `None` for any other
+/// datatype and for a lexical form outside the datatype's lexical space.
+pub fn value_encoding(value: &str, datatype: &str) -> Option<EncodedTerm> {
+    match datatype {
+        "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
+        "http://www.w3.org/2001/XMLSchema#float" => parse_float_str(value),
+        "http://www.w3.org/2001/XMLSchema#double" => parse_double_str(value),
+        "http://www.w3.org/2001/XMLSchema#integer"
+        | "http://www.w3.org/2001/XMLSchema#byte"
+        | "http://www.w3.org/2001/XMLSchema#short"
+        | "http://www.w3.org/2001/XMLSchema#int"
+        | "http://www.w3.org/2001/XMLSchema#long"
+        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => parse_integer_str(value),
+        "http://www.w3.org/2001/XMLSchema#decimal" => parse_decimal_str(value),
+        "http://www.w3.org/2001/XMLSchema#dateTime"
+        | "http://www.w3.org/2001/XMLSchema#dateTimeStamp" => parse_date_time_str(value),
+        "http://www.w3.org/2001/XMLSchema#time" => parse_time_str(value),
+        "http://www.w3.org/2001/XMLSchema#date" => parse_date_str(value),
+        "http://www.w3.org/2001/XMLSchema#gYearMonth" => parse_g_year_month_str(value),
+        "http://www.w3.org/2001/XMLSchema#gYear" => parse_g_year_str(value),
+        "http://www.w3.org/2001/XMLSchema#gMonthDay" => parse_g_month_day_str(value),
+        "http://www.w3.org/2001/XMLSchema#gDay" => parse_g_day_str(value),
+        "http://www.w3.org/2001/XMLSchema#gMonth" => parse_g_month_str(value),
+        "http://www.w3.org/2001/XMLSchema#duration" => parse_duration_str(value),
+        "http://www.w3.org/2001/XMLSchema#yearMonthDuration" => {
+            parse_year_month_duration_str(value)
+        }
+        "http://www.w3.org/2001/XMLSchema#dayTimeDuration" => parse_day_time_duration_str(value),
+        _ => None,
+    }
+}
+
+/// Whether decoding `term`, the value encoding of `value`^^`datatype`, gives
+/// back that same literal: same datatype, same lexical form.
+fn decodes_to_literal(term: &EncodedTerm, value: &str, datatype: &str) -> bool {
+    let (decoded_datatype, decoded): (&str, &dyn fmt::Display) = match term {
+        EncodedTerm::BooleanLiteral(v) => ("http://www.w3.org/2001/XMLSchema#boolean", v),
+        EncodedTerm::FloatLiteral(v) => ("http://www.w3.org/2001/XMLSchema#float", v),
+        EncodedTerm::DoubleLiteral(v) => ("http://www.w3.org/2001/XMLSchema#double", v),
+        EncodedTerm::IntegerLiteral(v) => ("http://www.w3.org/2001/XMLSchema#integer", v),
+        EncodedTerm::DecimalLiteral(v) => ("http://www.w3.org/2001/XMLSchema#decimal", v),
+        EncodedTerm::DateTimeLiteral(v) => ("http://www.w3.org/2001/XMLSchema#dateTime", v),
+        EncodedTerm::TimeLiteral(v) => ("http://www.w3.org/2001/XMLSchema#time", v),
+        EncodedTerm::DateLiteral(v) => ("http://www.w3.org/2001/XMLSchema#date", v),
+        EncodedTerm::GYearMonthLiteral(v) => ("http://www.w3.org/2001/XMLSchema#gYearMonth", v),
+        EncodedTerm::GYearLiteral(v) => ("http://www.w3.org/2001/XMLSchema#gYear", v),
+        EncodedTerm::GMonthDayLiteral(v) => ("http://www.w3.org/2001/XMLSchema#gMonthDay", v),
+        EncodedTerm::GDayLiteral(v) => ("http://www.w3.org/2001/XMLSchema#gDay", v),
+        EncodedTerm::GMonthLiteral(v) => ("http://www.w3.org/2001/XMLSchema#gMonth", v),
+        EncodedTerm::DurationLiteral(v) => ("http://www.w3.org/2001/XMLSchema#duration", v),
+        EncodedTerm::YearMonthDurationLiteral(v) => {
+            ("http://www.w3.org/2001/XMLSchema#yearMonthDuration", v)
+        }
+        EncodedTerm::DayTimeDurationLiteral(v) => {
+            ("http://www.w3.org/2001/XMLSchema#dayTimeDuration", v)
+        }
+        _ => return true,
+    };
+    decoded_datatype == datatype && displays_as(decoded, value)
+}
+
+/// `value.to_string() == expected`, without allocating the string.
+fn displays_as(value: &dyn fmt::Display, expected: &str) -> bool {
+    struct Remaining<'a>(&'a str);
+    impl fmt::Write for Remaining<'_> {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
+            self.0 = self.0.strip_prefix(s).ok_or(fmt::Error)?;
+            Ok(())
+        }
+    }
+    let mut remaining = Remaining(expected);
+    fmt::write(&mut remaining, format_args!("{value}")).is_ok() && remaining.0.is_empty()
 }
 
 pub fn parse_boolean_str(value: &str) -> Option<EncodedTerm> {
@@ -1245,6 +1302,53 @@ mod tests {
     use super::*;
     #[cfg(target_pointer_width = "64")]
     use std::mem::{align_of, size_of};
+
+    #[test]
+    fn value_encoding_only_when_it_gives_the_literal_back() {
+        let encode = |value: &str, datatype: &str| {
+            EncodedTerm::from(&Literal::new_typed_literal(
+                value.to_owned(),
+                NamedNode::new_unchecked(datatype.to_owned()),
+            ))
+        };
+        let xsd = |local: &str| format!("http://www.w3.org/2001/XMLSchema#{local}");
+        for (value, datatype) in [
+            ("4", "integer"),
+            ("-4", "integer"),
+            ("4.5", "decimal"),
+            ("4", "decimal"),
+            ("true", "boolean"),
+            ("2026-03-15T10:00:00Z", "dateTime"),
+            ("P1D", "duration"),
+        ] {
+            assert!(
+                !matches!(
+                    encode(value, &xsd(datatype)),
+                    EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. }
+                ),
+                "{value}^^xsd:{datatype} is canonical and should be value encoded"
+            );
+        }
+        for (value, datatype) in [
+            ("04", "integer"),
+            ("+4", "integer"),
+            ("4.0", "decimal"),
+            ("1", "boolean"),
+            ("1e0", "double"),
+            ("4", "int"),
+            ("4", "nonNegativeInteger"),
+            ("2026-03-15T10:00:00.000Z", "dateTime"),
+            ("2026-03-15T10:00:00Z", "dateTimeStamp"),
+        ] {
+            assert!(
+                matches!(
+                    encode(value, &xsd(datatype)),
+                    EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. }
+                ),
+                "{value}^^xsd:{datatype} would not decode as written"
+            );
+        }
+    }
 
     #[test]
     fn str_hash_stability() {
