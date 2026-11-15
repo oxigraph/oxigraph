@@ -457,6 +457,11 @@ pub struct MoveOperation {
 }
 
 impl MoveOperation {
+    /// Returns the DELETE/INSERT operation used to copy the source graph's triples.
+    pub fn copy_operation(&self) -> DeleteInsertOperation {
+        copy_graph(self.source.clone(), self.destination.clone())
+    }
+
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         f.write_str("(move ")?;
         if self.silent {
@@ -492,6 +497,36 @@ impl From<MoveOperation> for GraphUpdateOperation {
     #[inline]
     fn from(op: MoveOperation) -> Self {
         Self::Move(op)
+    }
+}
+
+pub(crate) fn copy_graph(
+    from: impl Into<GraphName>,
+    to: impl Into<GraphNamePattern>,
+) -> DeleteInsertOperation {
+    let bgp = QueryExpression::Bgp {
+        patterns: vec![TriplePattern::new(
+            Variable::new_unchecked("s"),
+            Variable::new_unchecked("p"),
+            Variable::new_unchecked("o"),
+        )],
+    };
+    DeleteInsertOperation {
+        delete: Vec::new(),
+        insert: vec![QuadTemplate::new(
+            Variable::new_unchecked("s"),
+            Variable::new_unchecked("p"),
+            Variable::new_unchecked("o"),
+            to,
+        )],
+        using: None,
+        pattern: Box::new(match from.into() {
+            GraphName::NamedNode(from) => QueryExpression::Graph {
+                name: from.into(),
+                inner: Box::new(bgp),
+            },
+            GraphName::DefaultGraph => bgp,
+        }),
     }
 }
 

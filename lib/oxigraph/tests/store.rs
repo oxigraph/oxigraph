@@ -6,7 +6,9 @@ use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::sparql::QueryResults;
-use oxigraph::sparql::SparqlEvaluator;
+use oxigraph::sparql::{
+    CancellationToken, QueryEvaluationError, SparqlEvaluator, UpdateEvaluationError,
+};
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
@@ -898,5 +900,60 @@ fn test_move_missing_and_empty_source() -> Result<(), Box<dyn Error>> {
     )?;
     assert!(!store.contains_named_graph(&source.into())?);
     assert!(store.contains_named_graph(&destination.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_respects_dataset_override() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:staging> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    let staging = NamedNode::new_unchecked("urn:staging");
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let mut update =
+        SparqlEvaluator::new().parse_update("MOVE DEFAULT TO GRAPH <urn:destination>")?;
+    let mut datasets = update.using_datasets_mut();
+    datasets
+        .next()
+        .expect("MOVE should expose its query dataset")
+        .set_default_graph(vec![staging.clone().into(), destination.clone().into()]);
+    assert!(datasets.next().is_none());
+    update.on_store(&store).execute()?;
+    let new = NamedNode::new_unchecked("urn:new");
+    let subject = NamedNode::new_unchecked("urn:s");
+    let predicate = NamedNode::new_unchecked("urn:p");
+    assert_eq!(store.len()?, 2);
+    assert!(store.contains(&Quad::new(
+        subject.clone(),
+        predicate.clone(),
+        new.clone(),
+        staging
+    ))?);
+    assert!(store.contains(&Quad::new(subject, predicate, new, destination))?);
+    Ok(())
+}
+
+#[test]
+fn test_move_cancelled_before_execution_rolls_back() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    let before = store.iter().collect::<Result<Vec<_>, _>>()?;
+    let token = CancellationToken::new();
+    token.cancel();
+    let error = SparqlEvaluator::new()
+        .with_cancellation_token(token)
+        .parse_update("MOVE GRAPH <urn:source> TO GRAPH <urn:destination>")?
+        .on_store(&store)
+        .execute()
+        .expect_err("cancelled MOVE must fail");
+    assert!(
+        matches!(error, UpdateEvaluationError::Unexpected(error) if matches!(error.downcast_ref::<QueryEvaluationError>(), Some(QueryEvaluationError::Cancelled)))
+    );
+    assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, before);
     Ok(())
 }

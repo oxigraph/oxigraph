@@ -13,7 +13,7 @@ use crate::term::{
 };
 use crate::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
-    InsertDataOperation, LoadOperation, MoveOperation, Update,
+    InsertDataOperation, LoadOperation, MoveOperation, Update, copy_graph,
 };
 use crate::vocab::sparql;
 use chumsky::span::{SimpleSpan, Span, Spanned, WrappingSpan};
@@ -3377,35 +3377,5 @@ impl<'a> FreshBlankNodeAllocator<'a> {
                 return BlankNode::new_unchecked(id);
             }
         }
-    }
-}
-
-fn copy_graph(
-    from: impl Into<GraphName>,
-    to: impl Into<GraphNamePattern>,
-) -> DeleteInsertOperation {
-    let bgp = QueryExpression::Bgp {
-        patterns: vec![TriplePattern::new(
-            Variable::new_unchecked("s"),
-            Variable::new_unchecked("p"),
-            Variable::new_unchecked("o"),
-        )],
-    };
-    DeleteInsertOperation {
-        delete: Vec::new(),
-        insert: vec![QuadTemplate::new(
-            Variable::new_unchecked("s"),
-            Variable::new_unchecked("p"),
-            Variable::new_unchecked("o"),
-            to,
-        )],
-        using: None,
-        pattern: Box::new(match from.into() {
-            GraphName::NamedNode(from) => QueryExpression::Graph {
-                name: from.into(),
-                inner: Box::new(bgp),
-            },
-            GraphName::DefaultGraph => bgp,
-        }),
     }
 }
