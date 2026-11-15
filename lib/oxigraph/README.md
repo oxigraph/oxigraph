@@ -1,32 +1,20 @@
-Oxigraph
-========
+# Incroxigraph Rust library
 
-[![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph)
-[![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-[![Crates.io downloads](https://img.shields.io/crates/d/oxigraph)](https://crates.io/crates/oxigraph)
-[![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
+This is the Incroxigraph database engine, derived from
+[Oxigraph](https://github.com/oxigraph/oxigraph). It provides RDF stores, ordinary
+SPARQL queries and updates, parsing and serialization, and incremental queries.
+The workspace crate is currently named `oxigraph`, which is the name used in
+these examples.
 
-Oxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+The [Python bindings](https://github.com/maartyman/incroxigraph/tree/main/python)
+and [JavaScript bindings](https://github.com/maartyman/incroxigraph/tree/main/js)
+expose the same engine through their own interfaces.
 
-Its goal is to provide a compliant, safe and fast on-disk graph database.
-It also provides a set of utility functions for reading, writing, and processing RDF files.
+## Usage
 
-Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
+The main entry point is `oxigraph::store::Store`. `Store::new()` creates an
+in-memory store; `Store::open(path)` opens a persistent database.
 
-Oxigraph also provides [a CLI tool](https://crates.io/crates/oxigraph-cli) and [a Python library](https://pyoxigraph.readthedocs.io/) based on this library.
-
-
-Oxigraph implements the following specifications:
-* [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
-* [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval.
-* [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
-
-Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) and [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) is also available behind the `rdf-12` feature.
-
-Oxigraph internal design [is described on the wiki](https://github.com/oxigraph/oxigraph/wiki/Architecture).
-
-The main entry point of Oxigraph is the [`Store`](store::Store) struct:
 ```rust
 use oxigraph::model::*;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
@@ -90,7 +78,7 @@ if let IncrementalQueryResults::Solutions(rows) = query.results().unwrap() {
 
 let ex = NamedNode::new("http://example.com").unwrap();
 let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-let mut transaction = store.start_transaction().unwrap(); // Grouping updates in a transaction is best for performance.
+let mut transaction = store.start_transaction().unwrap();
 transaction.insert(quad.clone());
 transaction.commit().unwrap();
 if let IncrementalQueryResults::Solutions(rows) = query.results().unwrap() {
@@ -117,7 +105,7 @@ if let QueryResultsDelta::Solutions(initial) = query.deltas().unwrap() {
 
 let ex = NamedNode::new("http://example.com").unwrap();
 let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-let mut transaction = store.start_transaction().unwrap(); // Grouping updates in a transaction is best for performance.
+let mut transaction = store.start_transaction().unwrap();
 transaction.insert(quad.clone());
 transaction.commit().unwrap();
 if let QueryResultsDelta::Solutions(mut changes) = query.deltas().unwrap() {
@@ -135,36 +123,41 @@ Complete snapshots borrow the state: finish using a snapshot before calling `res
 If you need an explicit type for a store-bound state, use `StoreIncrementalQueryResultsState` or `StoreIncrementalQueryDeltasState`.
 For example, a struct can store the results handle in a field of type `StoreIncrementalQueryResultsState`.
 
-It is based on these crates that can be used separately:
-* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
-* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
-  * [`oxttl`](https://crates.io/crates/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
-  * [`oxrdfxml`](https://crates.io/crates/oxrdfxml), RDF/XML parsing and serialization.
-* [`spargebra`](https://crates.io/crates/spargebra), a SPARQL parser.
-* [`sparesults`](https://crates.io/crates/sparesults), parsers and serializers for SPARQL result formats (the [`oxigraph::sparql::results`](crate::sparql::results) module).
-* [`sparopt`](https://crates.io/crates/sparesults), a SPARQL optimizer.
-* [`oxsdatatypes`](https://crates.io/crates/oxsdatatypes), an implementation of some XML Schema datatypes.
+The current incremental evaluator supports quad patterns, joins, projection and
+VALUES. Optimized plans containing unsupported operators return errors. Ordinary
+queries use the broader SPARQL implementation.
 
-To build the library locally, don't forget to clone the submodules using `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or `git submodule update --init` to add submodules to the already cloned repository.
+## Build from source
 
-It is possible to disable the RocksDB storage backend to only use the in-memory fallback by disabling the `rocksdb` default feature:
-```toml
-oxigraph = { version = "*", default-features = false }
+Initialize the repository submodules with `git submodule update --init --recursive`.
+Native builds with RocksDB require a C++ toolchain and Clang in addition to Rust.
+From the repository root:
+
+```sh
+cargo build -p oxigraph
 ```
-This is the default behavior when compiling Oxigraph to WASM.
+
+To use this checkout from another Rust project, add a path dependency:
+
+```toml
+[dependencies]
+oxigraph = { path = "/path/to/incroxigraph/lib/oxigraph" }
+```
+
+The `rocksdb` feature is enabled by default for native persistent storage. Set
+`default-features = false` on the dependency for an in-memory-only build.
+WebAssembly builds use the in-memory backend.
+
+Optional features include `rdf-12` for RDF/SPARQL 1.2 support, `geosparql` for
+GeoSPARQL functions, and `http-client` for federated queries and remote loading.
+TLS variants of the HTTP client are listed in `Cargo.toml`.
+
+See the [workspace overview](../README.md) for the supporting crates and
+[store benchmarks](benches/README.md) for benchmark commands and inputs.
 
 ## License
 
-This project is licensed under either of
-
-* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
-  `<http://www.apache.org/licenses/LICENSE-2.0>`)
-* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-  `<http://opensource.org/licenses/MIT>`)
-
-at your option.
-
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Oxigraph by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Apache-2.0 or MIT, at your option. See
+[LICENSE-APACHE](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-APACHE)
+and [LICENSE-MIT](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-MIT).
+Upstream Oxigraph copyright and license notices are retained.

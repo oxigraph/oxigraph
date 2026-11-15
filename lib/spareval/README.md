@@ -36,6 +36,56 @@ if let QueryResults::Solutions(solutions) = results.unwrap() {
 }
 ```
 
+## Incremental evaluation
+
+Incroxigraph extends prepared queries with incremental evaluation for SELECT,
+ASK and CONSTRUCT. After `QueryEvaluator::prepare()`, choose one of these methods:
+
+| Method | State returned | Reading results |
+| --- | --- | --- |
+| `execute_incremental_results(dataset)` | `IncrementalQueryResultsState` | `results()` returns the complete current answer |
+| `execute_incremental_deltas(dataset)` | `IncrementalQueryDeltasState` | `deltas()` consumes additions and deletions since the previous read |
+
+SELECT deltas contain `Delta<QuerySolution>` values and preserve duplicate rows.
+CONSTRUCT deltas contain `Delta<Triple>` values with set semantics. ASK emits its
+initial boolean, including false, and later values only when the answer changes.
+Initial SELECT rows and CONSTRUCT triples are additions.
+
+Snapshots borrow their state, so finish using them before requesting another
+snapshot. Delta batches own their data and can outlive the state. Both state
+objects also provide asynchronous access through `iter_results()` or
+`iter_deltas()` and `next().await`. Reads process the changes currently available;
+several updates can be combined into one result. Drop the state after an
+evaluation error.
+
+### Dataset integration
+
+Incremental execution requires `IncrementalQueryableDataset`, which extends
+`QueryableDataset`. Its default implementation exposes existing quads as additions
+and then ends. The implementation for `&oxrdf::Dataset` therefore provides an
+initial result rather than a live subscription.
+
+A custom live dataset must implement `internal_quad_deltas_for_pattern()` to
+provide matching additions and deletions. Its iterator returns
+`StreamingItem::Pending` when no change is ready and `None` only when permanently
+exhausted. Use the supplied weak `IncrementalQueryNotifier` to notify waiting
+consumers when new changes become available.
+
+The `oxigraph` store adapter provides this integration for committed store
+changes. See its [incremental query examples](../oxigraph/README.md#incremental-queries)
+for complete snapshots, result deltas and atomic transactions.
+
+Advanced SELECT integrations can use `execute_incremental_driver()` for the
+lower-level polling interface.
+
+### Current limits
+
+The incremental evaluator currently supports quad patterns, joins, projection
+and VALUES. Optimized plans retaining unsupported operators, such as FILTER,
+OPTIONAL, UNION, aggregates or property paths, return an evaluation error.
+Incremental DESCRIBE is unsupported. Ordinary `execute()` retains the broader
+SPARQL evaluator.
+
 ## Cargo features
 - `sparql-12`: enables [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) changes.
 - `sep-0002`: enables the [`SEP-0002`](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0002/sep-0002.md) (`ADJUST` function and a lot of arithmetic on `xsd:date`, `xsd:time`, `xsd:yearMonthDuration` and `xsd:dayTimeDuration`).
@@ -47,9 +97,9 @@ if let QueryResults::Solutions(solutions) = results.unwrap() {
 
 This project is licensed under either of
 
-* Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
+* Apache License, Version 2.0, ([LICENSE-APACHE](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-APACHE) or
   `<http://www.apache.org/licenses/LICENSE-2.0>`)
-* MIT license ([LICENSE-MIT](../LICENSE-MIT) or
+* MIT license ([LICENSE-MIT](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-MIT) or
   `<http://opensource.org/licenses/MIT>`)
 
 at your option.
