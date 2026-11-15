@@ -914,12 +914,12 @@ fn test_move_respects_dataset_override() -> Result<(), Box<dyn Error>> {
     let destination = NamedNode::new_unchecked("urn:destination");
     let mut update =
         SparqlEvaluator::new().parse_update("MOVE DEFAULT TO GRAPH <urn:destination>")?;
-    let mut datasets = update.using_datasets_mut();
-    datasets
+    update
+        .using_datasets_mut()
         .next()
         .expect("MOVE should expose its query dataset")
         .set_default_graph(vec![staging.clone().into(), destination.clone().into()]);
-    assert!(datasets.next().is_none());
+    assert_eq!(update.using_datasets().count(), 1);
     update.on_store(&store).execute()?;
     let new = NamedNode::new_unchecked("urn:new");
     let subject = NamedNode::new_unchecked("urn:s");
