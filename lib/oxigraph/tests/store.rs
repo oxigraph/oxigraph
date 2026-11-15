@@ -917,7 +917,7 @@ fn test_move_respects_dataset_override() -> Result<(), Box<dyn Error>> {
     update
         .using_datasets_mut()
         .next()
-        .expect("MOVE should expose its query dataset")
+        .ok_or("MOVE should expose its query dataset")?
         .set_default_graph(vec![staging.clone().into(), destination.clone().into()]);
     assert_eq!(update.using_datasets().count(), 1);
     update.on_store(&store).execute()?;
@@ -945,14 +945,13 @@ fn test_move_cancelled_before_execution_rolls_back() -> Result<(), Box<dyn Error
     let before = store.iter().collect::<Result<Vec<_>, _>>()?;
     let token = CancellationToken::new();
     token.cancel();
-    let error = SparqlEvaluator::new()
+    let result = SparqlEvaluator::new()
         .with_cancellation_token(token)
         .parse_update("MOVE GRAPH <urn:source> TO GRAPH <urn:destination>")?
         .on_store(&store)
-        .execute()
-        .expect_err("cancelled MOVE must fail");
+        .execute();
     assert!(
-        matches!(error, UpdateEvaluationError::Unexpected(error) if matches!(error.downcast_ref::<QueryEvaluationError>(), Some(QueryEvaluationError::Cancelled)))
+        matches!(result, Err(UpdateEvaluationError::Unexpected(error)) if matches!(error.downcast_ref::<QueryEvaluationError>(), Some(QueryEvaluationError::Cancelled)))
     );
     assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, before);
     Ok(())
