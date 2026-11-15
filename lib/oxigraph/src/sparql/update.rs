@@ -7,6 +7,7 @@ use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, Quad as OxQuad};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
+use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::{Storage, StorageError, StorageReadableTransaction, StorageTransaction};
 use crate::store::{Store, Transaction};
 use oxiri::Iri;
@@ -19,7 +20,7 @@ use spargebra::term::{BlankNode, GraphName, GroundQuad, GroundTerm, NamedOrBlank
 use spargebra::term::{GroundTriple, Triple};
 use spargebra::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
-    GraphUpdateOperation, InsertDataOperation, LoadOperation, Update,
+    GraphUpdateOperation, InsertDataOperation, LoadOperation, MoveOperation, Update,
 };
 #[cfg(feature = "http-client")]
 use std::time::Duration;
@@ -279,6 +280,7 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             GraphUpdateOperation::Clear(op) => self.eval_clear(op),
             GraphUpdateOperation::Create(op) => self.eval_create(op),
             GraphUpdateOperation::Drop(op) => self.eval_drop(op),
+            GraphUpdateOperation::Move(op) => self.eval_move(op),
         }
     }
 
@@ -367,6 +369,49 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 .insert_named_graph(operation.graph.clone().into());
             Ok(())
         }
+    }
+
+    fn eval_move(&mut self, operation: &MoveOperation) -> Result<(), UpdateEvaluationError> {
+        if operation.source == operation.destination {
+            return Ok(());
+        }
+        let reader = self.transaction.reader();
+        if let GraphName::NamedNode(graph_name) = &operation.source {
+            if !reader.contains_named_graph(&graph_name.into())? {
+                return if operation.silent {
+                    Ok(())
+                } else {
+                    Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
+                };
+            }
+        }
+        let source = match &operation.source {
+            GraphName::NamedNode(name) => OxGraphName::NamedNode(name.clone()),
+            GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+        };
+        let destination = match &operation.destination {
+            GraphName::NamedNode(name) => OxGraphName::NamedNode(name.clone()),
+            GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+        };
+        let quads = reader
+            .quads_for_pattern(None, None, None, Some(&EncodedTerm::from(&source)))
+            .map(|quad| reader.decode_quad(&quad?))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.transaction.clear_graph(&destination)?;
+        if let GraphName::NamedNode(name) = &operation.destination {
+            self.transaction.insert_named_graph(name.clone().into());
+        }
+        for mut quad in quads {
+            quad.graph_name = destination.clone();
+            self.transaction.insert(quad);
+        }
+        match &operation.source {
+            GraphName::NamedNode(name) => {
+                self.transaction.remove_named_graph(&name.clone().into())?
+            }
+            GraphName::DefaultGraph => self.transaction.clear_graph(&source)?,
+        }
+        Ok(())
     }
 
     fn eval_clear(&mut self, operation: &ClearOperation) -> Result<(), UpdateEvaluationError> {
@@ -486,6 +531,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             GraphUpdateOperation::Clear(op) => self.eval_clear(op),
             GraphUpdateOperation::Create(op) => self.eval_create(op),
             GraphUpdateOperation::Drop(op) => self.eval_drop(op),
+            GraphUpdateOperation::Move(_) => unreachable!("MOVE requires a readable transaction"),
         }
     }
 

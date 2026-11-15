@@ -106,6 +106,8 @@ pub enum GraphUpdateOperation {
     Create(CreateOperation),
     /// [drop](https://www.w3.org/TR/sparql11-update/#defn_dropOperation).
     Drop(DropOperation),
+    /// [move](https://www.w3.org/TR/sparql11-update/#move).
+    Move(MoveOperation),
 }
 
 impl GraphUpdateOperation {
@@ -119,6 +121,7 @@ impl GraphUpdateOperation {
             Self::Clear(op) => op.fmt_sse(f),
             Self::Create(op) => op.fmt_sse(f),
             Self::Drop(op) => op.fmt_sse(f),
+            Self::Move(op) => op.fmt_sse(f),
         }
     }
 }
@@ -133,6 +136,7 @@ impl fmt::Display for GraphUpdateOperation {
             Self::Clear(op) => op.fmt(f),
             Self::Create(op) => op.fmt(f),
             Self::Drop(op) => op.fmt(f),
+            Self::Move(op) => op.fmt(f),
         }
     }
 }
@@ -441,6 +445,53 @@ impl From<DropOperation> for GraphUpdateOperation {
     #[inline]
     fn from(op: DropOperation) -> Self {
         Self::Drop(op)
+    }
+}
+
+/// The [move](https://www.w3.org/TR/sparql11-update/#move) update operation.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct MoveOperation {
+    pub silent: bool,
+    pub source: GraphName,
+    pub destination: GraphName,
+}
+
+impl MoveOperation {
+    fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(move ")?;
+        if self.silent {
+            f.write_str("silent ")?;
+        }
+        self.source.fmt_sse(f)?;
+        f.write_str(" ")?;
+        self.destination.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for MoveOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("MOVE ")?;
+        if self.silent {
+            f.write_str("SILENT ")?;
+        }
+        for (i, graph) in [&self.source, &self.destination].into_iter().enumerate() {
+            if i > 0 {
+                f.write_str(" TO ")?;
+            }
+            if matches!(graph, GraphName::NamedNode(_)) {
+                f.write_str("GRAPH ")?;
+            }
+            write!(f, "{graph}")?;
+        }
+        Ok(())
+    }
+}
+
+impl From<MoveOperation> for GraphUpdateOperation {
+    #[inline]
+    fn from(op: MoveOperation) -> Self {
+        Self::Move(op)
     }
 }
 

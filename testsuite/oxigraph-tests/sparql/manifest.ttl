@@ -70,6 +70,7 @@
     :graph_minus_graph_variable
     :pname_local_escape
     :count_skips_errors
+    :move_silent_replay
     ) .
 
 :eq_dirLangString rdf:type mf:QueryEvaluationTest ;
@@ -380,3 +381,8 @@
     mf:name "COUNT of an expression skips the solutions where the expression is an error" ;
     mf:action [ qt:query <count_skips_errors.rq> ] ;
     mf:result <count_skips_errors.srx> .
+
+:move_silent_replay rdf:type mf:UpdateEvaluationTest ;
+    mf:name "MOVE SILENT replay preserves the destination written earlier in the request" ;
+    mf:action [ ut:request <move_silent_replay.ru> ] ;
+    mf:result [ ut:graphData [ ut:graph <move_silent_replay.ttl> ; rdfs:label "urn:destination" ] ] .

@@ -5,7 +5,8 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
@@ -782,5 +783,120 @@ fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
             .count(),
         1
     );
+    Ok(())
+}
+
+fn move_update(store: &Store, update: &str) -> Result<(), Box<dyn Error>> {
+    SparqlEvaluator::new()
+        .parse_update(update)?
+        .on_store(store)
+        .execute()?;
+    Ok(())
+}
+
+fn assert_move_replay(store: &Store) -> Result<(), Box<dyn Error>> {
+    let source = NamedNode::new_unchecked("urn:source");
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let new = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:new"),
+        destination.clone(),
+    );
+    let old = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:old"),
+        destination.clone(),
+    );
+    move_update(
+        store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    move_update(
+        store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(store.contains(&new)?);
+    assert!(!store.contains(&old)?);
+    assert!(!store.contains_named_graph(&source.into())?);
+    Ok(())
+}
+
+fn assert_move_replay_unchanged(store: &Store) -> Result<(), Box<dyn Error>> {
+    move_update(
+        store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    let quads = store.iter().collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        quads,
+        vec![Quad::new(
+            NamedNode::new_unchecked("urn:s"),
+            NamedNode::new_unchecked("urn:p"),
+            NamedNode::new_unchecked("urn:new"),
+            NamedNode::new_unchecked("urn:destination")
+        )]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_move_silent_replay() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    assert_move_replay(&store)?;
+    assert_move_replay_unchanged(&store)
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_move_silent_replay_after_reopen() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    {
+        let store = Store::open(&dir)?;
+        assert_move_replay(&store)?;
+    }
+    let store = Store::open(&dir)?;
+    assert_move_replay_unchanged(&store)
+}
+
+#[test]
+fn test_move_missing_and_empty_source() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let source = NamedNode::new_unchecked("urn:source");
+    let old = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:old"),
+        destination.clone(),
+    );
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    move_update(
+        &store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(store.contains(&old)?);
+    assert!(move_update(&store, "INSERT DATA { <urn:s> <urn:p> <urn:rollback> }; MOVE GRAPH <urn:source> TO GRAPH <urn:destination>").is_err());
+    assert_eq!(
+        store.iter().collect::<Result<Vec<_>, _>>()?,
+        vec![old.clone()]
+    );
+    move_update(
+        &store,
+        "CREATE GRAPH <urn:source>; MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(!store.contains(&old)?);
+    assert!(!store.contains_named_graph(&source.clone().into())?);
+    assert!(store.contains_named_graph(&destination.clone().into())?);
+    move_update(
+        &store,
+        "DROP GRAPH <urn:destination>; CREATE GRAPH <urn:source>; MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(!store.contains_named_graph(&source.into())?);
+    assert!(store.contains_named_graph(&destination.into())?);
     Ok(())
 }
