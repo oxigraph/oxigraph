@@ -400,12 +400,10 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 };
             }
         }
-        match &operation.destination {
-            GraphName::NamedNode(name) => {
-                self.transaction.remove_named_graph(&name.clone().into())?
-            }
-            GraphName::DefaultGraph => self.transaction.clear_graph(&OxGraphName::DefaultGraph)?,
-        }
+        self.eval_drop(&DropOperation {
+            silent: true,
+            graph: operation.destination.clone().into(),
+        })?;
         self.eval_delete_insert(&operation.copy_operation(), using)?;
         if let GraphName::NamedNode(name) = &operation.destination {
             self.transaction.insert_named_graph(name.clone().into());

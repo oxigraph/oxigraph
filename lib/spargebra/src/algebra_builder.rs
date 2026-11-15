@@ -1786,14 +1786,20 @@ impl<'a> AlgebraBuilder<'a> {
                     let to = self.build_graph_name(to)?;
                     operations.push(copy_graph(from, to).into())
                 }
-                ast::Update1::Move { silent, from, to } => operations.push(
-                    MoveOperation {
-                        silent,
-                        source: self.build_graph_name(from)?,
-                        destination: self.build_graph_name(to)?,
+                ast::Update1::Move { silent, from, to } => {
+                    let source = self.build_graph_name(from)?;
+                    let destination = self.build_graph_name(to)?;
+                    if source != destination {
+                        operations.push(
+                            MoveOperation {
+                                silent,
+                                source,
+                                destination,
+                            }
+                            .into(),
+                        );
                     }
-                    .into(),
-                ),
+                }
                 ast::Update1::Copy { from, to, .. } => {
                     // Rewriting defined by https://www.w3.org/TR/sparql11-update/#move
                     let from = self.build_graph_name(from)?;

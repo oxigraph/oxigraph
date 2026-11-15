@@ -957,3 +957,45 @@ fn test_move_cancelled_before_execution_rolls_back() -> Result<(), Box<dyn Error
     assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, before);
     Ok(())
 }
+
+#[test]
+fn test_self_moves_do_not_affect_transaction_selection() -> Result<(), Box<dyn Error>> {
+    let update = spargebra::SparqlParser::new()
+        .parse_update("MOVE DEFAULT TO DEFAULT; MOVE GRAPH <urn:g> TO GRAPH <urn:g>; DROP ALL")?;
+    assert!(matches!(
+        update.operations.as_slice(),
+        [spargebra::update::GraphUpdateOperation::Drop(_)]
+    ));
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_cancelled_move_preserves_graph_created_after_snapshot() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } }",
+    )?;
+    let mut transaction = store.start_transaction()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+
+    let token = CancellationToken::new();
+    token.cancel();
+    assert!(
+        SparqlEvaluator::new()
+            .with_cancellation_token(token)
+            .parse_update("MOVE GRAPH <urn:source> TO GRAPH <urn:destination>")?
+            .on_transaction(&mut transaction)
+            .execute()
+            .is_err()
+    );
+    transaction.commit()?;
+    assert!(store.contains_named_graph(&NamedNode::new_unchecked("urn:destination").into())?);
+    assert_eq!(store.len()?, 2);
+    Ok(())
+}
