@@ -1,20 +1,19 @@
 [package]
-name = "pyoxigraph"
-version.workspace = true
-authors.workspace = true
+name = "pyincroxigraph"
+version = "0.0.1"
+authors = ["Incroxigraph contributors", "Oxigraph contributors"]
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/python"
-homepage = "https://pyoxigraph.readthedocs.io/"
-description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
+description = "Self-contained Python bindings for Incroxigraph, an incremental RDF and SPARQL database"
+repository = "https://github.com/maartyman/incroxigraph"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
-name = "pyoxigraph"
+name = "pyincroxigraph"
 doctest = false
 doc = false
 

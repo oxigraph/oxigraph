@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { webcrypto } from "node:crypto";
 import dataModel from "@rdfjs/data-model";
 import { describe, it, vi } from "vitest";
-import { parse } from "../pkg";
+import { parse, Store } from "../pkg";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
 vi.stubGlobal("crypto", webcrypto);
@@ -10,12 +10,23 @@ vi.stubGlobal("crypto", webcrypto);
 const ex = dataModel.namedNode("http://example.com");
 
 describe("parse", () => {
+    it("supports unchecked as a legacy alias for lenient parsing", () => {
+        const input = "<urn:s> <urn:p> <http://[> .";
+        assert.throws(() => parse(input, { format: "nt" }));
+        assert.equal(parse(input, { format: "nt", unchecked: true }).length, 1);
+        const store = new Store();
+        assert.throws(() => store.load(input, { format: "nt" }));
+        store.load(input, { format: "nt", unchecked: true });
+        assert.equal(store.size, 1);
+        store.free();
+    });
+
     it("parse NTriples in the default graph", () => {
         const result = parse("<http://example.com> <http://example.com> <http://example.com> .", {
             format: "application/n-triples",
         });
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse NTriples in an other graph", () => {
@@ -24,7 +35,7 @@ describe("parse", () => {
             to_graph_name: ex,
         });
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex, ex)));
     });
 
     it("parse Turtle with a base IRI", () => {
@@ -33,7 +44,7 @@ describe("parse", () => {
             format: "text/turtle",
         });
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse NQuads", () => {
@@ -42,7 +53,7 @@ describe("parse", () => {
             { format: "application/n-quads" },
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex, ex)));
     });
 
     it("parse TriG with a base IRI", () => {
@@ -51,7 +62,7 @@ describe("parse", () => {
             base_iri: "http://example.com",
         });
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex, ex)));
     });
 
     it("parse TriG with options", () => {
@@ -61,7 +72,7 @@ describe("parse", () => {
             lenient: true,
         });
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex, ex)));
     });
 
     it("parse Buffer", () => {
@@ -72,7 +83,7 @@ describe("parse", () => {
             },
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse Array<string>", () => {
@@ -82,7 +93,7 @@ describe("parse", () => {
             }),
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse Array<Buffer>", () => {
@@ -95,7 +106,7 @@ describe("parse", () => {
             ),
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse AsyncGenerator<string>", async () => {
@@ -108,7 +119,7 @@ describe("parse", () => {
             ),
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 
     it("parse Array<Buffer>", async () => {
@@ -123,7 +134,7 @@ describe("parse", () => {
             ),
         );
         assert.strictEqual(result.length, 1);
-        assert(result[0].equals(dataModel.quad(ex, ex, ex)));
+        assert(result[0]?.equals(dataModel.quad(ex, ex, ex)));
     });
 });
 
@@ -136,7 +147,7 @@ async function arrayFromAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<T[
     return output;
 }
 
-async function* asyncIterator<T>(iterable: Iterable<T>): AsyncIterator<T> {
+async function* asyncIterator<T>(iterable: Iterable<T>): AsyncIterableIterator<T> {
     for (const item of iterable) {
         yield item;
     }

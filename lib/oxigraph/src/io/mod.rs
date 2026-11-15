@@ -4,7 +4,7 @@
 //!
 //! Usage example converting a Turtle file to a N-Triples file:
 //! ```
-//! use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+//! use incroxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 //!
 //! let turtle_file = "@base <http://example.com/> .
 //! @prefix schema: <http://schema.org/> .

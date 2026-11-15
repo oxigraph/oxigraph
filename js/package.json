@@ -1,6 +1,6 @@
 {
-    "name": "oxigraph_tests",
-    "description": "Oxigraph JS build and tests",
+    "name": "incroxigraph-js",
+    "description": "Incroxigraph JavaScript package build and tests",
     "private": true,
     "dependencies": {
         "@rdfjs/data-model": "^2.1.0",
@@ -20,11 +20,12 @@
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "npm run build-debug && vitest",
-        "build": "python build_package.py",
-        "build-debug": "python build_package.py --debug",
-        "release": "npm run build && npm publish --provenance --access public ./pkg",
+        "test": "npm run build-debug && vitest run",
+        "build": "python3 build_package.py",
+        "build-debug": "python3 build_package.py --debug",
         "pack": "npm run build && npm pack ./pkg",
-        "bench": "npm run build && vitest bench"
-    }
+        "bench": "npm run build && vitest bench",
+        "check": "tsc --noEmit && biome check ."
+    },
+    "type": "module"
 }

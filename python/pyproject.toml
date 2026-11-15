@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 # Most of the metadata are in Cargo.toml and injected by maturin
-name = "pyoxigraph"
+name = "pyincroxigraph"
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -24,23 +24,25 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.9"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 dynamic = [
   "authors",
   "description",
   "keywords",
   "license",
-  "license-files",
   "maintainers",
   "readme",
   "version",
 ]
 
 [project.urls]
-Changelog = "https://github.com/oxigraph/oxigraph/blob/main/CHANGELOG.md"
-Documentation = "https://pyoxigraph.readthedocs.io/"
-Homepage = "https://pyoxigraph.readthedocs.io/"
-Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
-Tracker = "https://github.com/oxigraph/oxigraph/issues"
+"Source" = "https://github.com/maartyman/incroxigraph"
+"Issues" = "https://github.com/maartyman/incroxigraph/issues"
+"Upstream project" = "https://github.com/oxigraph/oxigraph"
+
+[tool.maturin]
+strip = true
+include = [{ path = "pyincroxigraph.pyi", format = "sdist" }]
 
 [dependency-groups]
 build = ["maturin~=1.0", "ruff~=0.16.0"]

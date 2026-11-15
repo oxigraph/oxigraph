@@ -85,19 +85,19 @@ wasm-bindgen-futures = "0.4.71"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.6.0-dev", path = "lib/oxigraph", default-features = false }
-oxjsonld = { version = "=0.3.0-dev", path = "lib/oxjsonld" }
-oxrdf = { version = "=0.4.0-dev", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.3.0-dev", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.3.0-dev", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.6.0-dev", path = "./oxrocksdb-sys" }
-oxsdatatypes = { version = "=0.3.0-dev", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.3.0-dev", path = "lib/oxttl" }
-spargebra = { version = "=0.5.0-dev", path = "lib/spargebra" }
-spargeo = { version = "=0.6.0-dev", path = "lib/spargeo" }
-sparesults = { version = "=0.4.0-dev", path = "lib/sparesults" }
-sparopt = { version = "=0.4.0-dev", path = "lib/sparopt" }
-spareval = { version = "=0.3.0-dev", path = "lib/spareval" }
+oxigraph = { package = "incroxigraph", version = "=0.0.1", path = "lib/oxigraph", default-features = false }
+oxjsonld = { package = "incroxigraph-oxjsonld", version = "=0.0.1", path = "lib/oxjsonld" }
+oxrdf = { package = "incroxigraph-oxrdf", version = "=0.0.1", path = "lib/oxrdf" }
+oxrdfio = { package = "incroxigraph-oxrdfio", version = "=0.0.1", path = "lib/oxrdfio" }
+oxrdfxml = { package = "incroxigraph-oxrdfxml", version = "=0.0.1", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { package = "incroxigraph-oxrocksdb-sys", version = "=0.0.1", path = "./oxrocksdb-sys" }
+oxsdatatypes = { package = "incroxigraph-oxsdatatypes", version = "=0.0.1", path = "lib/oxsdatatypes" }
+oxttl = { package = "incroxigraph-oxttl", version = "=0.0.1", path = "lib/oxttl" }
+spargebra = { package = "incroxigraph-spargebra", version = "=0.0.1", path = "lib/spargebra" }
+spargeo = { package = "incroxigraph-spargeo", version = "=0.0.1", path = "lib/spargeo" }
+sparesults = { package = "incroxigraph-sparesults", version = "=0.0.1", path = "lib/sparesults" }
+sparopt = { package = "incroxigraph-sparopt", version = "=0.0.1", path = "lib/sparopt" }
+spareval = { package = "incroxigraph-spareval", version = "=0.0.1", path = "lib/spareval" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
@@ -328,5 +328,5 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
-[profile.release.package.oxigraph-js]
+[profile.release.package.incroxigraph-js]
 opt-level = "z"

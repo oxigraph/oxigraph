@@ -30,7 +30,8 @@ pub fn parse(input: &JsValue, options: &JsValue) -> Result<JsValue, JsValue> {
         to_graph_name_rs = to_option_ref(&reflect_get(options, &TO_GRAPH_NAME)?)
             .map(to_graph_name)
             .transpose()?;
-        lenient = reflect_get(options, &LENIENT)?.is_truthy();
+        lenient = reflect_get(options, &LENIENT)?.is_truthy()
+            || reflect_get(options, &UNCHECKED)?.is_truthy();
         data_factory = to_option(reflect_get(options, &DATA_FACTORY)?).map(Into::into);
     }
     let format = format

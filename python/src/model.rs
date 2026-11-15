@@ -23,7 +23,7 @@ use std::vec::IntoIter;
 #[pyclass(
     frozen,
     name = "NamedNode",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     ord,
     hash,
@@ -132,7 +132,7 @@ impl fmt::Display for PyNamedNode {
 #[pyclass(
     frozen,
     name = "BlankNode",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -256,7 +256,7 @@ impl fmt::Display for PyBlankNode {
 #[pyclass(
     frozen,
     name = "Literal",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -490,7 +490,7 @@ impl fmt::Display for PyLiteral {
 #[pyclass(
     frozen,
     name = "BaseDirection",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -600,7 +600,7 @@ impl fmt::Display for PyBaseDirection {
 #[pyclass(
     frozen,
     name = "DefaultGraph",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -728,7 +728,7 @@ impl From<Term> for PyTerm {
     frozen,
     sequence,
     name = "Triple",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -914,7 +914,7 @@ impl From<GraphName> for PyGraphName {
     frozen,
     sequence,
     name = "Quad",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -1103,7 +1103,7 @@ impl fmt::Display for PyQuad {
 #[pyclass(
     frozen,
     name = "Variable",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,
@@ -1307,7 +1307,7 @@ fn triple_repr(triple: TripleRef<'_>, buffer: &mut String) {
     buffer.push('>');
 }
 
-#[pyclass(module = "pyoxigraph")]
+#[pyclass(module = "pyincroxigraph")]
 pub struct TripleComponentsIter {
     inner: IntoIter<Term>,
 }
@@ -1323,7 +1323,7 @@ impl TripleComponentsIter {
     }
 }
 
-#[pyclass(module = "pyoxigraph")]
+#[pyclass(module = "pyincroxigraph")]
 pub struct QuadComponentsIter {
     inner: IntoIter<Option<Term>>,
 }

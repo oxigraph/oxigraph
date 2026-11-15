@@ -4,7 +4,7 @@ import pickle
 import sys
 import unittest
 
-from pyoxigraph import (
+from pyincroxigraph import (
     BaseDirection,
     BlankNode,
     DefaultGraph,

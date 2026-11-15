@@ -1,15 +1,18 @@
 [package]
-name = "sparopt"
-version = "0.4.0-dev"
+name = "incroxigraph-sparopt"
+version = "0.0.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
-documentation = "https://docs.rs/sparopt"
+repository = "https://github.com/maartyman/incroxigraph"
+documentation = "https://docs.rs/incroxigraph-sparopt"
 description = "SPARQL optimizer"
 edition.workspace = true
 rust-version.workspace = true
+
+[lib]
+name = "sparopt"
 
 [features]
 default = []

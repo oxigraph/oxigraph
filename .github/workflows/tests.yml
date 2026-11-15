@@ -191,7 +191,14 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
+      - name: Compare with the previous published API
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "incroxigraph"))')
+          if [ "$version" = "0.0.1" ]; then
+            echo "Skipping API compatibility comparison for the initial release."
+          else
+            cargo semver-checks check-release --exclude incroxigraph-oxrocksdb-sys --exclude incroxigraph-js --exclude pyincroxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
+          fi
 
   test_macos:
     runs-on: macos-latest
@@ -201,7 +208,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - run: cargo test --features rdf-12
+      - run: cargo test --features rdf-12,spareval/sep-0006
 
   test_windows:
     runs-on: windows-latest
@@ -211,7 +218,7 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
-      - run: cargo test --features rdf-12
+      - run: cargo test --features rdf-12,spareval/sep-0006
 
   test_linux_i686:
     runs-on: ubuntu-latest
@@ -246,7 +253,7 @@ jobs:
         working-directory: ./lib/spareval
       - run: cargo test --target i686-unknown-linux-gnu --features http-client-rustls-native
         working-directory: ./lib/oxigraph
-      - run: cargo test --target i686-unknown-linux-gnu
+      - run: cargo test --target i686-unknown-linux-gnu --features spareval/sep-0006
         working-directory: ./testsuite
 
   test_linux_msv:
@@ -263,7 +270,7 @@ jobs:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
-      - run: cargo test --workspace --exclude sparql-smith
+      - run: cargo test --workspace --exclude sparql-smith --features spareval/sep-0006
 
   test_linux_address_sanitizer:
     runs-on: ubuntu-latest
@@ -276,7 +283,7 @@ jobs:
         with:
           version: nightly
       - run: sudo apt-get update && sudo apt-get install -y llvm
-      - run: cargo test --tests --target x86_64-unknown-linux-gnu --package oxigraph
+      - run: cargo test --tests --target x86_64-unknown-linux-gnu --package incroxigraph
         env:
           RUSTFLAGS: -Z sanitizer=address
 
@@ -293,7 +300,7 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo test --tests --package oxigraph --features oxrocksdb-sys/pkg-config
+      - run: cargo test --tests --package incroxigraph --features oxrocksdb-sys/pkg-config
 
   test_wasip1:
     runs-on: ubuntu-latest
@@ -307,7 +314,7 @@ jobs:
           target: wasm32-wasip1
       - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with: { tool: "wasmtime" }
-      - run: cargo test --target wasm32-wasip1 --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
+      - run: cargo test --target wasm32-wasip1 --workspace --exclude incroxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude incroxigraph-oxrocksdb-sys --exclude pyincroxigraph
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime --dir /tmp/
           WASMTIME_BACKTRACE_DETAILS: 1
@@ -337,7 +344,7 @@ jobs:
           target: wasm32-unknown-unknown
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 18
+          node-version: 24
           cache: npm
           cache-dependency-path: "js/package.json"
       - run: npm install
@@ -362,7 +369,7 @@ jobs:
         working-directory: ./python/tests
       - run: uv run --locked sphinx-build -M html . build
         working-directory: ./python/docs
-      - run: uv run --locked python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run --locked python generate_stubs.py pyincroxigraph pyincroxigraph.pyi --ruff
         working-directory: ./python
       - run: uv run --locked ty check --output-format=github generate_stubs.py tests
         working-directory: ./python
@@ -370,7 +377,7 @@ jobs:
         working-directory: ./python
       - run: uv run --locked ruff check --output-format=github .
         working-directory: ./python
-      - run: uv run --locked -m mypy.stubtest pyoxigraph --allowlist=mypy_allowlist.txt
+      - run: uv run --locked -m mypy.stubtest pyincroxigraph --allowlist=mypy_allowlist.txt
         working-directory: ./python
       - run: uv run --locked sphinx-lint docs
         working-directory: ./python
@@ -506,7 +513,7 @@ jobs:
             bench-data
       - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with: { tool: cargo-codspeed }
-      - run: cargo codspeed build -p oxigraph --features http-client-native-tls
+      - run: cargo codspeed build -p incroxigraph --features http-client-native-tls
       - uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
         with:
           run: cargo codspeed run
@@ -525,7 +532,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with: { tool: cargo-codspeed }
-      - run: cargo codspeed build -p oxigraph-testsuite
+      - run: cargo codspeed build -p oxigraph-testsuite --features spareval/sep-0006
       - uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
         with:
           run: cargo codspeed run
@@ -546,7 +553,7 @@ jobs:
           component: llvm-tools-preview
       - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with: { tool: cargo-llvm-cov }
-      - run: cargo llvm-cov --features oxrdfio/async-tokio,sparesults/async-tokio --codecov --output-path codecov.json
+      - run: cargo llvm-cov --features oxrdfio/async-tokio,sparesults/async-tokio,spareval/sep-0006 --codecov --output-path codecov.json
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: codecov.json

@@ -1,15 +1,18 @@
 [package]
-name = "spareval"
-version = "0.3.0-dev"
+name = "incroxigraph-spareval"
+version = "0.0.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spareval"
-documentation = "https://docs.rs/spareval"
+repository = "https://github.com/maartyman/incroxigraph"
+documentation = "https://docs.rs/incroxigraph-spareval"
 description = "SPARQL evaluator"
 edition.workspace = true
 rust-version.workspace = true
+
+[lib]
+name = "spareval"
 
 [features]
 default = []

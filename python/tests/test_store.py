@@ -3,11 +3,13 @@ from __future__ import annotations
 import gc
 import sys
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
+from threading import Thread
 
-from pyoxigraph import (
+from pyincroxigraph import (
     BlankNode,
     DefaultGraph,
     Literal,
@@ -317,9 +319,31 @@ class TestStore(unittest.TestCase):
 
     @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_update_load(self) -> None:
-        store = Store()
-        store.update("LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>")
-        self.assertGreater(len(store), 100)
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                body = b"<urn:subject> <urn:predicate> <urn:object> .\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/n-triples")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+        with HTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                store = Store()
+                store.update(f"LOAD <http://127.0.0.1:{server.server_port}/data.nt>")
+                self.assertEqual(
+                    list(store),
+                    [Quad(NamedNode("urn:subject"), NamedNode("urn:predicate"), NamedNode("urn:object"))],
+                )
+            finally:
+                server.shutdown()
+                thread.join()
 
     def test_update_star(self) -> None:
         store = Store()

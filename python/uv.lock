@@ -876,7 +876,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pyoxigraph"
+name = "pyincroxigraph"
 source = { editable = "." }
 
 [package.dev-dependencies]

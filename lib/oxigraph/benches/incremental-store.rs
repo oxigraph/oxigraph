@@ -4,15 +4,15 @@ use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{
     BatchSize, Criterion, Throughput, criterion_group, criterion_main,
 };
-use oxhttp::model::{Request, Uri};
-use oxigraph::io::{RdfFormat, RdfParser};
-use oxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
-use oxigraph::sparql::{
+use incroxigraph::io::{RdfFormat, RdfParser};
+use incroxigraph::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use incroxigraph::sparql::{
     Delta, IncrementalQueryDeltasState, IncrementalQueryResults, IncrementalQueryResultsState,
     IncrementalSelectResults, PreparedSparqlQuery, QueryResults, QueryResultsDelta,
     SparqlEvaluator,
 };
-use oxigraph::store::Store;
+use incroxigraph::store::Store;
+use oxhttp::model::{Request, Uri};
 use spareval::IncrementalQueryableDataset;
 use spargebra::Query;
 use spargebra::algebra::QueryExpression;
@@ -814,7 +814,7 @@ fn named_node(iri: &str) -> NamedNode {
     NamedNode::new(iri.to_owned()).unwrap()
 }
 
-const EXPLORE_QUERY_1: &str = r#"
+const EXPLORE_QUERY_1: &str = "
 PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
@@ -829,9 +829,9 @@ WHERE {
 }
 ORDER BY ?label
 LIMIT 10
-"#;
+";
 
-const EXPLORE_QUERY_2: &str = r#"
+const EXPLORE_QUERY_2: &str = "
 PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX dc: <http://purl.org/dc/elements/1.1/>
@@ -855,9 +855,9 @@ WHERE {
     OPTIONAL { %ProductXYZ% bsbm:productPropertyTextual5 ?propertyTextual5 }
     OPTIONAL { %ProductXYZ% bsbm:productPropertyNumeric4 ?propertyNumeric4 }
 }
-"#;
+";
 
-const EXPLORE_QUERY_3_MINUS: &str = r#"
+const EXPLORE_QUERY_3_MINUS: &str = "
 PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
@@ -876,9 +876,9 @@ WHERE {
 }
 ORDER BY ?label
 LIMIT 10
-"#;
+";
 
-const EXPLORE_QUERY_4: &str = r#"
+const EXPLORE_QUERY_4: &str = "
 PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -906,7 +906,7 @@ WHERE {
 ORDER BY ?label
 OFFSET 5
 LIMIT 10
-"#;
+";
 
 fn initialize_store(data: &[u8]) -> Store {
     let store = Store::new().unwrap();
@@ -998,6 +998,7 @@ fn collect_incremental_bsbm_stats(
     }
 }
 
+#[expect(clippy::print_stderr, reason = "Benchmark workload diagnostics")]
 fn print_incremental_bsbm_stats(
     data_size: usize,
     workload: &IncrementalBsbmWorkload,
@@ -1112,25 +1113,44 @@ fn remove_incrementally_unsupported_solution_modifiers(
             inner: Box::new(remove_incrementally_unsupported_solution_modifiers(*inner)),
             silent,
         },
-        QueryExpression::Bgp { .. }
-        | QueryExpression::Path { .. }
-        | QueryExpression::Values { .. } => pattern,
+        // Keep leaf nodes and optional operators, such as LATERAL, unchanged.
+        _ => pattern,
     }
 }
 
 fn drain_query_results(results: QueryResults<'_>) -> usize {
     match results {
         QueryResults::Boolean(_) => 1,
-        QueryResults::Solutions(solutions) => solutions.map(|s| s.unwrap()).count(),
-        QueryResults::Graph(graph) => graph.map(|t| t.unwrap()).count(),
+        QueryResults::Solutions(solutions) => solutions
+            .inspect(|s| {
+                s.as_ref().unwrap();
+            })
+            .count(),
+        QueryResults::Graph(graph) => graph
+            .inspect(|t| {
+                t.as_ref().unwrap();
+            })
+            .count(),
     }
 }
 
 fn drain_delta_results(results: QueryResultsDelta<'_>) -> usize {
     match results {
-        QueryResultsDelta::Solutions(solutions) => solutions.map(|s| s.unwrap()).count(),
-        QueryResultsDelta::Boolean(values) => values.map(|v| v.unwrap()).count(),
-        QueryResultsDelta::Graph(graph) => graph.map(|t| t.unwrap()).count(),
+        QueryResultsDelta::Solutions(solutions) => solutions
+            .inspect(|s| {
+                s.as_ref().unwrap();
+            })
+            .count(),
+        QueryResultsDelta::Boolean(values) => values
+            .inspect(|v| {
+                v.as_ref().unwrap();
+            })
+            .count(),
+        QueryResultsDelta::Graph(graph) => graph
+            .inspect(|t| {
+                t.as_ref().unwrap();
+            })
+            .count(),
     }
 }
 
@@ -1328,6 +1348,12 @@ fn prepare_incremental_watdiv_workload(
 
     let mut cases = Vec::new();
     for &initial_stream_fraction in &config.initial_stream_fractions {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "Validated fractions in [0, 1] select a bounded event prefix"
+        )]
+        #[cfg_attr(target_pointer_width = "64", expect(clippy::cast_precision_loss))]
         let prefix_event_count =
             ((initial_stream_fraction * events.len() as f64).floor() as usize).min(events.len());
         let update_event_count = events.len() - prefix_event_count;
@@ -1367,7 +1393,7 @@ fn read_stream_watdiv_timestamp_events(stream_file: &Path) -> Vec<(String, Vec<S
         if line.is_empty() {
             continue;
         }
-        let (timestamp, triple) = parse_stream_watdiv_line(&line);
+        let (timestamp, triple) = parse_stream_watdiv_line(line);
         if let Some((last_timestamp, triples)) = events.last_mut()
             && last_timestamp == &timestamp
         {
@@ -1415,7 +1441,7 @@ fn read_watdiv_events(path: &Path) -> Vec<WatdivEvent> {
             .into_iter()
             .enumerate()
             .map(|(event_id, (timestamp, triples))| {
-                build_watdiv_event(event_id, Some(&timestamp), triples)
+                build_watdiv_event(event_id, Some(&timestamp), &triples)
             })
             .collect();
     }
@@ -1433,15 +1459,17 @@ fn read_watdiv_events(path: &Path) -> Vec<WatdivEvent> {
         if line.starts_with('{') {
             flush_watdiv_event(&mut events, &mut current, None);
             let value: serde_json::Value = serde_json::from_str(line).unwrap();
-            let event_id = value["event_id"].as_u64().unwrap_or(events.len() as u64) as usize;
+            let event_id = value["event_id"]
+                .as_u64()
+                .map_or(events.len(), |id| usize::try_from(id).unwrap());
             let timestamp = value["timestamp"].as_str();
             let triples = value["triples"]
                 .as_array()
-                .expect("WatDiv event JSONL row should have a triples array")
+                .unwrap_or_else(|| panic!("WatDiv event JSONL row should have a triples array"))
                 .iter()
                 .map(|value| value.as_str().unwrap().to_owned())
                 .collect::<Vec<_>>();
-            events.push(build_watdiv_event(event_id, timestamp, triples));
+            events.push(build_watdiv_event(event_id, timestamp, &triples));
         } else if line.starts_with("# event") {
             flush_watdiv_event(&mut events, &mut current, None);
         } else if let Some(triple) = line.strip_prefix('+') {
@@ -1449,7 +1477,7 @@ fn read_watdiv_events(path: &Path) -> Vec<WatdivEvent> {
         } else {
             flush_watdiv_event(&mut events, &mut current, None);
             let event_id = events.len();
-            events.push(build_watdiv_event(event_id, None, vec![line.to_owned()]));
+            events.push(build_watdiv_event(event_id, None, &[line.to_owned()]));
         }
     }
     flush_watdiv_event(&mut events, &mut current, None);
@@ -1475,18 +1503,15 @@ fn flush_watdiv_event(
         events.push(build_watdiv_event(
             event_id,
             timestamp,
-            std::mem::take(current),
+            &std::mem::take(current),
         ));
     }
 }
 
-fn build_watdiv_event(
-    event_id: usize,
-    timestamp: Option<&str>,
-    triples: Vec<String>,
-) -> WatdivEvent {
+fn build_watdiv_event(event_id: usize, timestamp: Option<&str>, triples: &[String]) -> WatdivEvent {
     let triple_count = triples.len();
-    let data = triples.join("\n") + "\n";
+    let mut data = triples.join("\n");
+    data.push('\n');
     let quads = parse_ntriples_quads(data.as_bytes())
         .into_iter()
         .enumerate()
@@ -1515,9 +1540,7 @@ fn watdiv_stream_graph_name(
     triple_id: usize,
     timestamp: Option<&str>,
 ) -> NamedNode {
-    let timestamp = timestamp
-        .map(sanitize_watdiv_graph_component)
-        .unwrap_or_else(|| "none".to_owned());
+    let timestamp = timestamp.map_or_else(|| "none".to_owned(), sanitize_watdiv_graph_component);
     NamedNode::new(format!(
         "urn:watdiv:stream:event:{event_id}:triple:{triple_id}:time:{timestamp}"
     ))
@@ -1560,7 +1583,7 @@ fn read_watdiv_queries(path: &Path) -> Vec<String> {
 fn normalize_watdiv_queries(raw: &str) -> Vec<String> {
     let mut queries = Vec::new();
     let mut query = String::new();
-    let mut brace_depth = 0i64;
+    let mut brace_depth = 0_i64;
     for line in raw.lines() {
         let line = normalize_watdiv_query_line(line);
         let line = line.trim();
@@ -1571,8 +1594,8 @@ fn normalize_watdiv_queries(raw: &str) -> Vec<String> {
             query.push(' ');
         }
         query.push_str(line);
-        brace_depth += line.matches('{').count() as i64;
-        brace_depth -= line.matches('}').count() as i64;
+        brace_depth += i64::try_from(line.matches('{').count()).unwrap();
+        brace_depth -= i64::try_from(line.matches('}').count()).unwrap();
         if brace_depth <= 0 && line.ends_with('}') {
             queries.push(query.trim().to_owned());
             query.clear();
@@ -1645,18 +1668,17 @@ fn validate_incremental_watdiv_case(
             .unwrap(),
     );
     let reevaluation_latency_ns = start.elapsed().as_nanos();
-    if incremental_results != reevaluated_results {
-        panic!(
-            "WatDiv incremental mismatch for query {}, fraction {}, update {}: incremental results {}, reevaluated results {}, update triples {}\n{}",
-            case.query_id,
-            case.initial_stream_fraction,
-            case.update_type.id(),
-            count_multiset(&incremental_results),
-            count_multiset(&reevaluated_results),
-            case.update_triple_count,
-            workload.query_texts[case.query_id - 1]
-        );
-    }
+    assert!(
+        incremental_results == reevaluated_results,
+        "WatDiv incremental mismatch for query {}, fraction {}, update {}: incremental results {}, reevaluated results {}, update triples {}\n{}",
+        case.query_id,
+        case.initial_stream_fraction,
+        case.update_type.id(),
+        count_multiset(&incremental_results),
+        count_multiset(&reevaluated_results),
+        case.update_triple_count,
+        workload.query_texts[case.query_id - 1]
+    );
     let final_result_count = count_multiset(&reevaluated_results);
     assert_eq!(
         initial_result_count + delta_counts.additions,
@@ -1897,7 +1919,11 @@ fn collect_watdiv_delta_counts(delta: QueryResultsDelta<'_>) -> WatdivDeltaCount
             }
         }
         QueryResultsDelta::Boolean(changes) => {
-            counts.additions += changes.map(|value| value.unwrap()).count();
+            counts.additions += changes
+                .inspect(|value| {
+                    value.as_ref().unwrap();
+                })
+                .count();
         }
         QueryResultsDelta::Graph(changes) => {
             for change in changes {
@@ -2006,9 +2032,14 @@ fn write_incremental_watdiv_results(
         ];
         writeln!(file, "{}", fields.join("\t")).unwrap();
     }
-    assert_eq!(workload.cases.len(), measurements.len());
+    assert_eq!(
+        workload.cases.len(),
+        measurements.len(),
+        "Each workload case must have one measurement"
+    );
 }
 
+#[expect(clippy::print_stderr, reason = "Benchmark workload diagnostics")]
 fn print_incremental_watdiv_stats(
     config: &IncrementalWatdivConfig,
     workload: &IncrementalWatdivWorkload,
@@ -2063,7 +2094,12 @@ fn env_fractions(name: &str, default: &[f64]) -> Vec<f64> {
                 .split([',', ' '])
                 .filter(|value| !value.is_empty())
                 .map(|value| value.parse::<f64>().unwrap())
-                .inspect(|value| assert!((0.0..=1.0).contains(value)))
+                .inspect(|value| {
+                    assert!(
+                        (0.0..=1.0).contains(value),
+                        "{name} fractions must be between 0 and 1"
+                    )
+                })
                 .collect::<Vec<_>>()
         })
         .filter(|values| !values.is_empty())

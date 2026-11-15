@@ -28,8 +28,8 @@ use std::time::Duration;
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::sparql::SparqlEvaluator;
-/// use oxigraph::store::Store;
+/// use incroxigraph::sparql::SparqlEvaluator;
+/// use incroxigraph::store::Store;
 ///
 /// let prepared_update = SparqlEvaluator::new().parse_update(
 ///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
@@ -94,8 +94,8 @@ impl PreparedSparqlUpdate {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::sparql::SparqlEvaluator;
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::sparql::SparqlEvaluator;
+    /// use incroxigraph::store::Store;
     ///
     /// let prepared_update = SparqlEvaluator::new().parse_update(
     ///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
@@ -131,8 +131,8 @@ impl PreparedSparqlUpdate {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::sparql::SparqlEvaluator;
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::sparql::SparqlEvaluator;
+    /// use incroxigraph::store::Store;
     ///
     /// let prepared_update = SparqlEvaluator::new().parse_update(
     ///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
@@ -164,8 +164,8 @@ impl PreparedSparqlUpdate {
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::sparql::SparqlEvaluator;
-/// use oxigraph::store::Store;
+/// use incroxigraph::sparql::SparqlEvaluator;
+/// use incroxigraph::store::Store;
 ///
 /// let store = Store::new()?;
 /// let prepared_update = SparqlEvaluator::new()

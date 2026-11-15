@@ -18,10 +18,10 @@
 #![cfg(test)]
 #![expect(clippy::panic, clippy::panic_in_result_fn)]
 
-use oxigraph::model::vocab::rdf;
-use oxigraph::model::{Literal, NamedNode, NamedNodeRef, QuadRef};
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxigraph::store::Store;
+use incroxigraph::model::vocab::rdf;
+use incroxigraph::model::{Literal, NamedNode, NamedNodeRef, QuadRef};
+use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+use incroxigraph::store::Store;
 use serde_json::Value;
 
 const N_PERSONS: usize = 20;
@@ -64,7 +64,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                 p,
                 &rdf::TYPE,
                 person_type,
-                oxigraph::model::GraphNameRef::DefaultGraph,
+                incroxigraph::model::GraphNameRef::DefaultGraph,
             )
             .into_owned(),
         )?;
@@ -73,7 +73,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                 p,
                 address_country,
                 country.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
+                incroxigraph::model::GraphNameRef::DefaultGraph,
             )
             .into_owned(),
         )?;
@@ -82,7 +82,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                 p,
                 segment,
                 seg.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
+                incroxigraph::model::GraphNameRef::DefaultGraph,
             )
             .into_owned(),
         )?;
@@ -98,7 +98,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                     &order,
                     &rdf::TYPE,
                     order_type,
-                    oxigraph::model::GraphNameRef::DefaultGraph,
+                    incroxigraph::model::GraphNameRef::DefaultGraph,
                 )
                 .into_owned(),
             )?;
@@ -107,7 +107,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                     &order,
                     customer,
                     p.as_ref(),
-                    oxigraph::model::GraphNameRef::DefaultGraph,
+                    incroxigraph::model::GraphNameRef::DefaultGraph,
                 )
                 .into_owned(),
             )?;
@@ -116,7 +116,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
                     &order,
                     total_price,
                     price.as_ref(),
-                    oxigraph::model::GraphNameRef::DefaultGraph,
+                    incroxigraph::model::GraphNameRef::DefaultGraph,
                 )
                 .into_owned(),
             )?;

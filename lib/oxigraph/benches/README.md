@@ -19,7 +19,7 @@ Both ordinary SPARQL evaluation and initial evaluation with the incremental engi
 No stream events or named-graph union are involved, so the incremental-engine case measures initial result computation, not update maintenance.
 
 ```sh
-cargo bench -p oxigraph --features rocksdb --bench store -- WatDiv
+cargo bench -p incroxigraph --features rocksdb --bench store -- WatDiv
 ```
 
 For files elsewhere, set `WATDIV_STORE_DATA` to the static `.nt` file and `WATDIV_STORE_WORKLOAD_DIR` to the directory containing `watdiv-stress-<scale>/`. 
@@ -34,10 +34,10 @@ The default is scale `10` for both static and stream data (`static-10-stream-10-
 No dataset paths or generator settings are needed.
 
 ```sh
-cargo bench -p oxigraph --features rocksdb --bench incremental-store -- WatDiv
+cargo bench -p incroxigraph --features rocksdb --bench incremental-store -- WatDiv
 
 WATDIV_INCREMENTAL_SCALE=1 \
-cargo bench -p oxigraph --features rocksdb --bench incremental-store -- WatDiv
+cargo bench -p incroxigraph --features rocksdb --bench incremental-store -- WatDiv
 ```
 
 The default initial stream fraction is `0.90`; override it with `WATDIV_INCREMENTAL_INITIAL_STREAM_FRACTIONS`. 
@@ -50,8 +50,8 @@ Validation still constructs stores for each case and can be slow at scale 10. In
 The `store` target benchmarks BSBM parsing, loading, queries, and query/update workloads on in-memory and on-disk stores. The `incremental-store` target benchmarks BSBM Explore queries 1–4 across product-update scenarios, comparing incremental evaluation with recomputation, with and without update time. Both targets cache the [published BSBM inputs](https://zenodo.org/records/12663333) after the first download.
 
 ```sh
-cargo bench -p oxigraph --features rocksdb --bench store -- BSBM
-cargo bench -p oxigraph --features rocksdb --bench incremental-store -- BSBM
+cargo bench -p incroxigraph --features rocksdb --bench store -- BSBM
+cargo bench -p incroxigraph --features rocksdb --bench incremental-store -- BSBM
 ```
 
 In `incremental-store`, a `BSBM` filter skips WatDiv setup (and vice versa). The BSBM incremental benchmark currently cannot complete: one Explore query uses a `FILTER` that the incremental SELECT core does not support. The `store` target still sets up other workload groups before Criterion applies its name filter.

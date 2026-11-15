@@ -1,8 +1,8 @@
 RDF Model
 =========
-.. py:currentmodule:: pyoxigraph
+.. py:currentmodule:: pyincroxigraph
 
-Oxigraph provides python classes to represents basic RDF concepts:
+Pyincroxigraph provides Python classes representing basic RDF concepts:
 
 
 `IRIs <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_

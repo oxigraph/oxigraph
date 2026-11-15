@@ -1,84 +1,81 @@
-# Pyoxigraph (Oxigraph for Python)
+# Pyincroxigraph
 
-[![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
-[![Conda](https://img.shields.io/conda/vn/conda-forge/pyoxigraph)](https://anaconda.org/conda-forge/pyoxigraph)
-![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyoxigraph)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyoxigraph)
-[![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
+`pyincroxigraph` provides Python bindings for Incroxigraph, an RDF and SPARQL
+database based on [Oxigraph](https://github.com/oxigraph/oxigraph). The package
+includes the native engine, in-memory and persistent stores, RDF types, parsers,
+serializers, and incremental queries.
 
-Pyoxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
-It is a Python library written on top of [Oxigraph](https://crates.io/crates/oxigraph).
+## Example
 
-Pyoxigraph offers two stores with [SPARQL 1.1](https://www.w3.org/TR/sparql11-overview/) capabilities.
-One of the store is in-memory, and the other one is disk based.
+```python
+from pyincroxigraph import DeltaKind, Literal, NamedNode, Quad, Store
 
-It also provides a set of utility functions for reading, writing and processing RDF files in
-[JSON-LD](https://www.w3.org/TR/json-ld/),
-[Turtle](https://www.w3.org/TR/turtle/),
-[TriG](https://www.w3.org/TR/trig/),
-[N-Triples](https://www.w3.org/TR/n-triples/),
-[N-Quads](https://www.w3.org/TR/n-quads/) and
-[RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
+store = Store()  # Use Store("database") for persistent storage.
+quad = Quad(NamedNode("urn:alice"), NamedNode("urn:name"), Literal("Alice"))
 
-Pyoxigraph is distributed [on Pypi](https://pypi.org/project/pyoxigraph/) and [on conda-forge](https://anaconda.org/conda-forge/pyoxigraph).
-Run `pip install pyoxigraph` to install it.
-
-There exists also a small library providing [rdflib](https://rdflib.readthedocs.io) stores using pyoxigraph: [oxrdflib](https://github.com/oxigraph/oxrdflib).
-
-Pyoxigraph documentation is [available on the Oxigraph website](https://pyoxigraph.readthedocs.io/).
-
-## Build the development version
-
-To build and install the development version of pyoxigraph you need to clone this git repository including submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`)
-and to run `pip install .` in the `python` directory (the one this README is in).
-
-Note that by default the installation will not use [cpython stable ABI](https://docs.python.org/3/c-api/stable.html).
-Use `--features abi3` feature to use cpython stable ABI.
-
-## Help
-
-Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
-[Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very welcome.
-
-If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt).
-
-## How to contribute
-
-Pyoxigraph is written in Rust using [PyO3](https://github.com/PyO3/pyo3).
-
-Pyoxigraph is built using [Maturin](https://github.com/PyO3/maturin).
-Maturin could be installed using the `pip install 'maturin>=0.9,<0.10'`.
-To install a development version of Oxigraph just run `maturin develop` in this README directory.
-
-### Tests
-
-The Python bindings tests are written in Python.
-To run them use `python -m unittest` in the `tests` directory.
-
-### Docs
-
-The Sphinx documentation can be generated and viewed in the browser using the following command:
-
-```
-sphinx-autobuild docs docs/_build/html
+with store.query_incremental_deltas("SELECT ?name WHERE { ?s <urn:name> ?name }") as query:
+    with store.transaction() as tx:
+        tx.add(quad)
+    for change in query.deltas():
+        if change.kind == DeltaKind.ADDITION:
+            print(change.value["name"].value)  # Alice
 ```
 
-Note that you will need to have [sphinx-autobuild](https://pypi.org/project/sphinx-autobuild/) installed.
+Use `Store.query()` for an ordinary query, `query_incremental_results().results()`
+for complete maintained snapshots, and `query_incremental_deltas().deltas()` for
+consumed batches of additions and deletions. Live queries observe committed changes.
+A transaction commits on successful context exit and rolls back on an exception.
 
-Alternatively, you can use `sphinx-build` with Python's `http.server` to achieve the same thing.
+SELECT preserves duplicate rows, CONSTRUCT uses set semantics, and ASK emits its
+initial boolean and subsequent changes. Returned snapshots and batches own their
+data. Use live handles on the thread that created them and close them with a
+context manager or `close()`.
+
+The current incremental evaluator supports quad patterns, joins, projection and
+VALUES. Optimized plans containing unsupported operators, and incremental DESCRIBE,
+raise `NotImplementedError`. Reads process pending work synchronously.
+
+The [incremental API guide](https://github.com/maartyman/incroxigraph/blob/main/python/docs/incremental.rst)
+contains result types, batching behavior and lifecycle details.
+
+Pyincroxigraph and Pyoxigraph have separate RDF classes. When using both packages,
+exchange RDF through serialization or explicitly convert their terms.
+
+## Build from source
+
+Python 3.9+, Rust, a C++ toolchain and Clang are required. Activate a Python virtual
+environment, initialize the submodules, and install from the repository root:
+
+```sh
+git submodule update --init --recursive
+python -m pip install ./python
+```
+
+## Development
+
+To rebuild the native module while developing, run these commands from `python/`
+in an activated virtual environment:
+
+```sh
+python -m pip install 'maturin~=1.0'
+maturin develop --release
+python -m unittest discover -s tests
+```
+
+Build a CPython stable-ABI wheel with `maturin build --release --features abi3`.
+Wheels are written to `../target/wheels/`.
+
+For the documentation and type-checking tools, use `uv sync --locked` from this
+directory. Generate type stubs and build the documentation with:
+
+```sh
+uv run python generate_stubs.py pyincroxigraph pyincroxigraph.pyi --ruff
+uv run sphinx-build -M html docs docs/build
+```
 
 ## License
 
-This project is licensed under either of
-
-- Apache License, Version 2.0, ([LICENSE-APACHE](../LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](../LICENSE-MIT) or
-  http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Oxigraph by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Apache-2.0 or MIT, at your option. See
+[LICENSE-APACHE](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-APACHE)
+and [LICENSE-MIT](https://github.com/maartyman/incroxigraph/blob/main/LICENSE-MIT).
+The bindings derive from Pyoxigraph; upstream copyright and license notices are retained.

@@ -1295,6 +1295,208 @@ dependencies = [
 ]
 
 [[package]]
+name = "incroxigraph"
+version = "0.0.1"
+dependencies = [
+ "bzip2",
+ "codspeed-criterion-compat",
+ "csv",
+ "dashmap",
+ "flate2",
+ "getrandom 0.4.3",
+ "incroxigraph-oxrdf",
+ "incroxigraph-oxrdfio",
+ "incroxigraph-oxrocksdb-sys",
+ "incroxigraph-oxsdatatypes",
+ "incroxigraph-sparesults",
+ "incroxigraph-spareval",
+ "incroxigraph-spargebra",
+ "js-sys",
+ "libc",
+ "oxhttp",
+ "oxiri",
+ "oxstr",
+ "rand",
+ "rustc-hash",
+ "serde_json",
+ "siphasher",
+ "tar",
+ "tempfile",
+ "thiserror 1.0.69",
+ "url",
+ "zip",
+]
+
+[[package]]
+name = "incroxigraph-js"
+version = "0.0.1"
+dependencies = [
+ "console_error_panic_hook",
+ "incroxigraph",
+ "incroxigraph-oxrdfio",
+ "js-sys",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "incroxigraph-oxjsonld"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxrdf",
+ "json-event-parser",
+ "oxiri",
+ "oxstr",
+ "ryu-js",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "incroxigraph-oxrdf"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "incroxigraph-oxsdatatypes",
+ "oxilangtag",
+ "oxiri",
+ "oxstr",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "incroxigraph-oxrdfio"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxjsonld",
+ "incroxigraph-oxrdf",
+ "incroxigraph-oxrdfxml",
+ "incroxigraph-oxttl",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "incroxigraph-oxrdfxml"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxrdf",
+ "oxilangtag",
+ "oxiri",
+ "oxstr",
+ "quick-xml",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "incroxigraph-oxrocksdb-sys"
+version = "0.0.1"
+dependencies = [
+ "bindgen",
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
+name = "incroxigraph-oxsdatatypes"
+version = "0.0.1"
+dependencies = [
+ "js-sys",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "incroxigraph-oxttl"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxrdf",
+ "memchr",
+ "oxilangtag",
+ "oxiri",
+ "oxstr",
+ "rayon",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "incroxigraph-sparesults"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxrdf",
+ "json-event-parser",
+ "memchr",
+ "oxstr",
+ "quick-xml",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "incroxigraph-spareval"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "incroxigraph-oxrdf",
+ "incroxigraph-oxsdatatypes",
+ "incroxigraph-sparesults",
+ "incroxigraph-spargebra",
+ "incroxigraph-spargeo",
+ "incroxigraph-sparopt",
+ "json-event-parser",
+ "md-5",
+ "oxiri",
+ "oxstr",
+ "rand",
+ "regex",
+ "rustc-hash",
+ "sha1",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "incroxigraph-spargebra"
+version = "0.0.1"
+dependencies = [
+ "chumsky",
+ "incroxigraph-oxrdf",
+ "logos",
+ "oxiri",
+ "oxstr",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "incroxigraph-spargeo"
+version = "0.0.1"
+dependencies = [
+ "geo",
+ "geojson",
+ "incroxigraph-oxrdf",
+ "oxstr",
+ "wkt",
+]
+
+[[package]]
+name = "incroxigraph-sparopt"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph-oxrdf",
+ "incroxigraph-spargebra",
+ "oxstr",
+ "rand",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1692,39 +1894,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxigraph"
-version = "0.6.0-dev"
-dependencies = [
- "bzip2",
- "codspeed-criterion-compat",
- "csv",
- "dashmap",
- "flate2",
- "getrandom 0.4.3",
- "js-sys",
- "libc",
- "oxhttp",
- "oxiri",
- "oxrdf",
- "oxrdfio",
- "oxrocksdb-sys",
- "oxsdatatypes",
- "oxstr",
- "rand",
- "rustc-hash",
- "serde_json",
- "siphasher",
- "sparesults",
- "spareval",
- "spargebra",
- "tar",
- "tempfile",
- "thiserror 2.0.20",
- "url",
- "zip",
-]
-
-[[package]]
 name = "oxigraph-cli"
 version = "0.6.0-dev"
 dependencies = [
@@ -1735,27 +1904,14 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "flate2",
+ "incroxigraph",
  "oxhttp",
- "oxigraph",
  "oxiri",
  "oxstr",
  "predicates",
  "rand",
  "rayon-core",
  "url",
-]
-
-[[package]]
-name = "oxigraph-js"
-version = "0.6.0-dev"
-dependencies = [
- "console_error_panic_hook",
- "js-sys",
- "oxigraph",
- "oxrdfio",
- "tokio",
- "wasm-bindgen",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -1766,16 +1922,16 @@ dependencies = [
  "clap",
  "codspeed-criterion-compat",
  "dissimilar",
+ "incroxigraph",
+ "incroxigraph-oxjsonld",
+ "incroxigraph-oxrdf",
+ "incroxigraph-oxttl",
+ "incroxigraph-spareval",
+ "incroxigraph-spargebra",
+ "incroxigraph-sparopt",
  "json-event-parser",
- "oxigraph",
  "oxiri",
- "oxjsonld",
- "oxrdf",
  "oxstr",
- "oxttl",
- "spareval",
- "spargebra",
- "sparopt",
  "time",
 ]
 
@@ -1798,99 +1954,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxjsonld"
-version = "0.3.0-dev"
-dependencies = [
- "json-event-parser",
- "oxiri",
- "oxrdf",
- "oxstr",
- "ryu-js",
- "thiserror 2.0.20",
- "tokio",
-]
-
-[[package]]
-name = "oxrdf"
-version = "0.4.0-dev"
-dependencies = [
- "hex",
- "oxilangtag",
- "oxiri",
- "oxsdatatypes",
- "oxstr",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "oxrdfio"
-version = "0.3.0-dev"
-dependencies = [
- "oxjsonld",
- "oxrdf",
- "oxrdfxml",
- "oxttl",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
-]
-
-[[package]]
-name = "oxrdfxml"
-version = "0.3.0-dev"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "oxrdf",
- "oxstr",
- "quick-xml",
- "thiserror 2.0.20",
- "tokio",
-]
-
-[[package]]
-name = "oxrocksdb-sys"
-version = "0.6.0-dev"
-dependencies = [
- "bindgen",
- "cc",
- "pkg-config",
-]
-
-[[package]]
-name = "oxsdatatypes"
-version = "0.3.0-dev"
-dependencies = [
- "js-sys",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "oxstr"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8c3a7befbd89a2df6da36532ef7df41fbecdd702f4f405a10b085f6c30ad2bb"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "oxttl"
-version = "0.3.0-dev"
-dependencies = [
- "memchr",
- "oxilangtag",
- "oxiri",
- "oxrdf",
- "oxstr",
- "rayon",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
 ]
 
 [[package]]
@@ -2039,6 +2108,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyincroxigraph"
+version = "0.0.1"
+dependencies = [
+ "incroxigraph",
+ "oxstr",
+ "pyo3",
+]
+
+[[package]]
 name = "pyo3"
 version = "0.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2093,15 +2171,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "pyoxigraph"
-version = "0.6.0-dev"
-dependencies = [
- "oxigraph",
- "oxstr",
- "pyo3",
 ]
 
 [[package]]
@@ -2617,75 +2686,6 @@ dependencies = [
  "num-traits",
  "robust",
  "smallvec",
-]
-
-[[package]]
-name = "sparesults"
-version = "0.4.0-dev"
-dependencies = [
- "json-event-parser",
- "memchr",
- "oxrdf",
- "oxstr",
- "quick-xml",
- "thiserror 2.0.20",
- "tokio",
-]
-
-[[package]]
-name = "spareval"
-version = "0.3.0-dev"
-dependencies = [
- "hex",
- "json-event-parser",
- "md-5",
- "oxiri",
- "oxrdf",
- "oxsdatatypes",
- "oxstr",
- "rand",
- "regex",
- "rustc-hash",
- "sha1",
- "sha2",
- "sparesults",
- "spargebra",
- "spargeo",
- "sparopt",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "spargebra"
-version = "0.5.0-dev"
-dependencies = [
- "chumsky",
- "logos",
- "oxiri",
- "oxrdf",
- "oxstr",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "spargeo"
-version = "0.6.0-dev"
-dependencies = [
- "geo",
- "geojson",
- "oxrdf",
- "oxstr",
- "wkt",
-]
-
-[[package]]
-name = "sparopt"
-version = "0.4.0-dev"
-dependencies = [
- "oxrdf",
- "oxstr",
- "rand",
- "spargebra",
 ]
 
 [[package]]

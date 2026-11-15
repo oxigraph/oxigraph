@@ -1,8 +1,8 @@
 RDF Parsing and Serialization
 =============================
-.. py:currentmodule:: pyoxigraph
+.. py:currentmodule:: pyincroxigraph
 
-Oxigraph provides functions to parse and serialize RDF files:
+Pyincroxigraph provides functions to parse and serialize RDF files:
 
 
 Parsing

@@ -3,12 +3,12 @@
 use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
 use flate2::read::GzDecoder;
+use incroxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
+use incroxigraph::model::Dataset;
+use incroxigraph::sparql::{QueryEvaluationError, QueryResults, SparqlEvaluator};
+use incroxigraph::store::Store;
 use oxhttp::model::{Request, Uri};
-use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
-use oxigraph::model::Dataset;
-use oxigraph::sparql::{QueryEvaluationError, QueryResults, SparqlEvaluator};
-use oxigraph::store::Store;
-use spareval::{IncrementalQueryableDataset, QueryEvaluator};
+use spareval::QueryEvaluator;
 use spargebra::{Query, Update};
 use std::fs::File;
 use std::io::Read;
@@ -338,22 +338,23 @@ fn store_watdiv(c: &mut Criterion) {
     }
     let scale = std::env::var("WATDIV_STORE_SCALE")
         .ok()
-        .map(|scale| {
+        .map_or(100, |scale| {
             scale
                 .parse::<usize>()
-                .expect("WATDIV_STORE_SCALE must be an integer")
-        })
-        .unwrap_or(100);
-    let data_path = std::env::var_os("WATDIV_STORE_DATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
+                .unwrap_or_else(|error| panic!("WATDIV_STORE_SCALE must be an integer: {error}"))
+        });
+    let data_path = std::env::var_os("WATDIV_STORE_DATA").map_or_else(
+        || {
             repo_root()
                 .join("target/watdiv/dataset")
                 .join(format!("watdiv.{scale}.nt"))
-        });
-    let workloads_root = std::env::var_os("WATDIV_STORE_WORKLOAD_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join("target/watdiv/workloads"));
+        },
+        PathBuf::from,
+    );
+    let workloads_root = std::env::var_os("WATDIV_STORE_WORKLOAD_DIR").map_or_else(
+        || repo_root().join("target/watdiv/workloads"),
+        PathBuf::from,
+    );
     ensure_watdiv_data(&data_path, scale);
     let stress_dir = workloads_root.join(format!("watdiv-stress-{scale}"));
     ensure_watdiv_stress_queries(&stress_dir, scale);
@@ -513,12 +514,13 @@ fn run_operations(store: &Store, operations: &[Operation], with_opts: bool) {
     }
 }
 
+#[derive(Clone, Copy)]
 enum UnsupportedQueryHandling {
     Skip,
 }
 
-fn run_operations_incremental<'a, D: IncrementalQueryableDataset<'a> + Clone>(
-    dataset: D,
+fn run_operations_incremental(
+    dataset: &Dataset,
     operations: &[Operation],
     with_opts: bool,
     unsupported: UnsupportedQueryHandling,
@@ -533,7 +535,7 @@ fn run_operations_incremental<'a, D: IncrementalQueryableDataset<'a> + Clone>(
         }
         let mut state = match evaluator
             .prepare(query)
-            .execute_incremental_results(dataset.clone())
+            .execute_incremental_results(dataset)
         {
             Ok(state) => state,
             Err(error) => {
@@ -551,10 +553,7 @@ fn run_operations_incremental<'a, D: IncrementalQueryableDataset<'a> + Clone>(
             Ok(spareval::IncrementalQueryResults::Graph(results)) => for _ in results {},
             Err(error)
                 if matches!(unsupported, UnsupportedQueryHandling::Skip)
-                    && is_unsupported_incremental_error(&error) =>
-            {
-                ()
-            }
+                    && is_unsupported_incremental_error(&error) => {}
             Err(error) => panic!("incremental query results failed: {error}"),
         }
     }
@@ -574,13 +573,11 @@ fn run_store_operations_incremental(store: &Store, operations: &[Operation]) {
             .results()
             .unwrap_or_else(|error| panic!("incremental query results failed: {error}"));
         match results {
-            oxigraph::sparql::IncrementalQueryResults::Solutions(results) => {
+            incroxigraph::sparql::IncrementalQueryResults::Solutions(results) => {
                 for _ in results {}
             }
-            oxigraph::sparql::IncrementalQueryResults::Boolean(_) => (),
-            oxigraph::sparql::IncrementalQueryResults::Graph(results) => {
-                for _ in results {}
-            }
+            incroxigraph::sparql::IncrementalQueryResults::Boolean(_) => (),
+            incroxigraph::sparql::IncrementalQueryResults::Graph(results) => for _ in results {},
         }
     }
 }
@@ -712,7 +709,7 @@ fn watdiv_sparql_queries(directory: &Path, names: &[&str]) -> Vec<Operation> {
 fn read_watdiv_queries(path: &Path) -> Vec<String> {
     let mut queries = Vec::new();
     let mut query = String::new();
-    let mut brace_depth = 0i64;
+    let mut brace_depth = 0_i64;
     for line in fs::read_to_string(path).unwrap().lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -722,8 +719,8 @@ fn read_watdiv_queries(path: &Path) -> Vec<String> {
             query.push(' ');
         }
         query.push_str(line);
-        brace_depth += line.matches('{').count() as i64;
-        brace_depth -= line.matches('}').count() as i64;
+        brace_depth += i64::try_from(line.matches('{').count()).unwrap();
+        brace_depth -= i64::try_from(line.matches('}').count()).unwrap();
         if brace_depth == 0 && line.ends_with('}') {
             queries.push(std::mem::take(&mut query));
         }

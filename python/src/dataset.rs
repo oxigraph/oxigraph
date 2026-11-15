@@ -24,7 +24,7 @@ use std::fmt;
 ///
 /// >>> str(Dataset([Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), NamedNode('http://example.com/o'), NamedNode('http://example.com/g'))]))
 /// '<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n'
-#[pyclass(name = "Dataset", module = "pyoxigraph", eq, str)]
+#[pyclass(name = "Dataset", module = "pyincroxigraph", eq, str)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct PyDataset {
     inner: Dataset,
@@ -266,7 +266,7 @@ impl fmt::Display for PyDataset {
     }
 }
 
-#[pyclass(unsendable, module = "pyoxigraph")]
+#[pyclass(unsendable, module = "pyincroxigraph")]
 pub struct QuadIter {
     inner: std::vec::IntoIter<Quad>,
 }
@@ -286,13 +286,13 @@ impl QuadIter {
 ///
 /// The following algorithms are supported:
 ///
-/// * :py:attr:`CanonicalizationAlgorithm.UNSTABLE`: an unstable algorithm preferred by PyOxigraph.
+/// * :py:attr:`CanonicalizationAlgorithm.UNSTABLE`: an unstable algorithm preferred by Incroxigraph.
 /// * :py:attr:`CanonicalizationAlgorithm.RDFC_1_0`: the `RDF Canonicalization algorithm version 1.0 <https://www.w3.org/TR/rdf-canon/#dfn-rdfc-1-0>`_.
 /// * :py:attr:`CanonicalizationAlgorithm.RDFC_1_0_SHA_384`: the same algorithm with SHA-384 hash function.
 #[pyclass(
     frozen,
     name = "CanonicalizationAlgorithm",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash
 )]
@@ -303,7 +303,7 @@ pub struct PyCanonicalizationAlgorithm {
 
 #[pymethods]
 impl PyCanonicalizationAlgorithm {
-    /// The algorithm preferred by PyOxigraph.
+    /// The algorithm preferred by Incroxigraph.
     ///
     /// Warning: Might change between Oxigraph versions. No stability guaranties.
     #[classattr]
@@ -311,7 +311,7 @@ impl PyCanonicalizationAlgorithm {
         inner: CanonicalizationAlgorithm::Unstable,
     };
 
-    /// The algorithm preferred by PyOxigraph but outputting ids based on hashes.
+    /// The algorithm preferred by Incroxigraph but outputting ids based on hashes.
     ///
     /// This enables to use the blank node ids for diffing, additions or deletions of triples affect less blank node ids.
     ///

@@ -3,7 +3,7 @@
 //! Usage example:
 //!
 //! ```
-//! use oxigraph::model::*;
+//! use incroxigraph::model::*;
 //!
 //! let mut graph = Graph::default();
 //!

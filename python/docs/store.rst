@@ -1,6 +1,6 @@
 RDF Store
 =========
-.. py:currentmodule:: pyoxigraph
+.. py:currentmodule:: pyincroxigraph
 
 .. autoclass:: Store
     :members:

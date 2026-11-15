@@ -5,7 +5,7 @@ from doctest import DocTest, DocTestFinder, DocTestSuite
 from typing import Any
 from unittest import TestLoader, TestSuite
 
-import pyoxigraph
+import pyincroxigraph
 
 
 class ExtendedDocTestFinder(DocTestFinder):
@@ -45,5 +45,5 @@ class ExtendedDocTestFinder(DocTestFinder):
 
 
 def load_tests(_loader: TestLoader, tests: TestSuite, _pattern: str | None = None) -> TestSuite:
-    tests.addTests(DocTestSuite(pyoxigraph, test_finder=ExtendedDocTestFinder()))
+    tests.addTests(DocTestSuite(pyincroxigraph, test_finder=ExtendedDocTestFinder()))
     return tests

@@ -1,0 +1,236 @@
+name: Incroxigraph release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+concurrency:
+  group: incroxigraph-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository == 'maartyman/incroxigraph'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - name: Check package versions and repository
+        run: python3 .github/scripts/check_release.py --rust
+      - name: Check release tag
+        if: github.event_name == 'release'
+        run: python3 .github/scripts/check_release.py --tag "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - run: cargo fmt -- --check
+      - name: Test the Rust engine, including LATERAL fixtures
+        run: cargo test --locked --release -p oxigraph-testsuite --features spareval/sep-0006 --no-fail-fast
+
+  python_sdist:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - run: bash trim_rocksdb.sh
+        working-directory: oxrocksdb-sys
+      - run: uv run --locked --only-dev maturin develop --release --locked --features abi3
+        working-directory: python
+      - run: uv run --locked --only-dev python generate_stubs.py pyincroxigraph pyincroxigraph.pyi --ruff
+        working-directory: python
+      - run: uv run --locked --only-dev maturin sdist
+        working-directory: python
+      - run: uvx twine check target/wheels/pyincroxigraph-*.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyincroxigraph-sdist
+          path: target/wheels/pyincroxigraph-*.tar.gz
+          if-no-files-found: error
+
+  python_linux:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            image: manylinux_2_28
+            script: manylinux_build.sh
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            image: manylinux_2_28
+            script: manylinux_build.sh
+          - arch: x86_64
+            runner: ubuntu-latest
+            image: musllinux_1_2
+            script: musllinux_build.sh
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            image: musllinux_1_2
+            script: musllinux_build.sh
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Build and test portable Python wheels
+        run: |
+          sed "s/%arch%/$BUILD_ARCH/g" ".github/workflows/$BUILD_SCRIPT" > /tmp/incroxigraph-wheel-build.sh
+          docker run --rm -v "$PWD:/workdir" -v /tmp/incroxigraph-wheel-build.sh:/build.sh:ro "quay.io/pypa/${BUILD_IMAGE}_${BUILD_ARCH}" /bin/bash /build.sh
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
+          BUILD_IMAGE: ${{ matrix.image }}
+          BUILD_SCRIPT: ${{ matrix.script }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyincroxigraph-${{ matrix.image }}-${{ matrix.arch }}
+          path: target/wheels/pyincroxigraph-*.whl
+          if-no-files-found: error
+
+  python_native:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+          - runner: macos-latest
+          - runner: windows-latest
+          - runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - run: uv run --locked --only-dev maturin develop --release --locked --features abi3
+        working-directory: python
+      - run: uv run --locked --only-dev python generate_stubs.py pyincroxigraph pyincroxigraph.pyi --ruff
+        working-directory: python
+      - name: Test Python bindings
+        run: uv run --locked --only-dev python -m unittest discover -s tests
+        working-directory: python
+      - run: uv run --locked --only-dev maturin build --release --locked --features abi3 --compatibility pypi
+        working-directory: python
+      - run: uvx twine check target/wheels/pyincroxigraph-*.whl
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyincroxigraph-${{ matrix.runner }}
+          path: target/wheels/pyincroxigraph-*.whl
+          if-no-files-found: error
+
+  npm_tarball:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          target: wasm32-unknown-unknown
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: js
+      - run: npm test
+        working-directory: js
+      - run: npm run check
+        working-directory: js
+      - run: npm run pack
+        working-directory: js
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: incroxigraph-js-npm
+          path: js/incroxigraph-js-*.tgz
+          if-no-files-found: error
+
+  publish_pypi:
+    if: github.event_name == 'release'
+    needs: [python_sdist, python_linux, python_native, npm_tarball]
+    runs-on: ubuntu-latest
+    environment:
+      name: pyincroxigraph-pypi
+      url: https://pypi.org/p/pyincroxigraph
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: pyincroxigraph-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true
+
+  publish_npm:
+    if: github.event_name == 'release' && vars.INCROXIGRAPH_NPM_RELEASES_ENABLED == 'true'
+    needs: [python_sdist, python_linux, python_native, npm_tarball]
+    runs-on: ubuntu-latest
+    environment:
+      name: incroxigraph-npm
+      url: https://www.npmjs.com/package/incroxigraph-js
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: incroxigraph-js-npm
+          path: dist
+      - run: npm publish --access public --tag latest dist/incroxigraph-js-*.tgz
+
+  publish_crates:
+    if: github.event_name == 'release' && vars.INCROXIGRAPH_RUST_RELEASES_ENABLED == 'true'
+    needs: [python_sdist, python_linux, python_native, npm_tarball]
+    runs-on: ubuntu-latest
+    environment:
+      name: incroxigraph-crates
+      url: https://crates.io/crates/incroxigraph
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - run: bash trim_rocksdb.sh
+        working-directory: oxrocksdb-sys
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+      - run: python3 .github/scripts/check_release.py --publish-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

@@ -1,66 +1,34 @@
-pyoxigraph |release|
-====================
+Pyincroxigraph |release|
+========================
 
-.. image:: https://img.shields.io/pypi/v/pyoxigraph
-    :alt: PyPI
-    :target: https://pypi.org/project/pyoxigraph/
-.. image:: https://img.shields.io/conda/vn/conda-forge/pyoxigraph
-    :alt: conda-forge
-    :target: https://anaconda.org/conda-forge/pyoxigraph
-.. image:: https://img.shields.io/pypi/implementation/pyoxigraph
-    :alt: PyPI - Implementation
-.. image:: https://img.shields.io/pypi/pyversions/pyoxigraph
-    :alt: PyPI - Python Version
-.. image:: https://img.shields.io/pypi/l/pyoxigraph
-    :alt: PyPI - License
-
-
-Pyoxigraph is a Python graph database library implementing the `SPARQL <https://www.w3.org/TR/sparql11-overview/>`_ standard.
-
-It is built on top of `Oxigraph <https://crates.io/crates/oxigraph>`_ using `PyO3 <https://pyo3.rs/>`_.
-
-It also provides a set of utility functions for reading, writing, and processing RDF files in
-`JSON-LD <https://www.w3.org/TR/json-ld/>`_,
-`Turtle <https://www.w3.org/TR/turtle/>`_,
-`TriG <https://www.w3.org/TR/trig/>`_,
-`N-Triples <https://www.w3.org/TR/n-triples/>`_,
-`N-Quads <https://www.w3.org/TR/n-quads/>`_ and
-`RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
-
-Pyoxigraph is distributed `on Pypi <https://pypi.org/project/pyoxigraph/>`_ and `on conda-forge <https://anaconda.org/conda-forge/pyoxigraph>`_.
-
-There is also a small library providing a `rdflib <https://rdflib.readthedocs.io>`_ store using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
-
-Oxigraph and pyoxigraph source code are on `GitHub <https://github.com/oxigraph/oxigraph/tree/main/python>`_.
-
+Pyincroxigraph is a self-contained Python RDF and SPARQL database with incremental queries.
+It is based on `Oxigraph and Pyoxigraph <https://github.com/oxigraph/oxigraph>`_, using
+`PyO3 <https://pyo3.rs/>`_. It includes its own engine and RDF classes and does not depend
+on Pyoxigraph.
 
 Installation
-""""""""""""
+------------
 
-Pyoxigraph is distributed on `Pypi <https://pypi.org/project/pyoxigraph/>`_.
-
-To install it, run the usual ``pip install pyoxigraph``
-
+Build this checkout with ``pip install ./python`` from the repository root.
+See the `Python README <https://github.com/maartyman/incroxigraph/tree/main/python>`_
+for build requirements and development instructions.
 
 Example
-"""""""
+-------
 
-Insert the triple ``<http://example/> <http://schema.org/name> "example"`` and print the name of ``<http://example/>`` in SPARQL:
+.. doctest::
 
-::
+    >>> from pyincroxigraph import Store, NamedNode, Quad, Literal
+    >>> store = Store()
+    >>> store.add(Quad(NamedNode("urn:example"), NamedNode("urn:name"), Literal("example")))
+    >>> for row in store.query("SELECT ?name WHERE { ?s <urn:name> ?name }"):
+    ...     print(row["name"].value)
+    example
 
-    from pyoxigraph import *
-
-    store = Store()
-    ex = NamedNode('http://example/')
-    schema_name = NamedNode('http://schema.org/name')
-    store.add(Quad(ex, schema_name, Literal('example')))
-    for binding in store.query('SELECT ?name WHERE { <http://example/> <http://schema.org/name> ?name }'):
-        print(binding['name'].value)
-
+The :doc:`incremental` guide describes live snapshots, result deltas, and transaction batching.
 
 Table of contents
-"""""""""""""""""
+-----------------
 
 .. toctree::
 
@@ -68,13 +36,4 @@ Table of contents
    io
    store
    sparql
-   migration
-
-
-Help
-""""
-
-Feel free to use `GitHub discussions <https://github.com/oxigraph/oxigraph/discussions>`_ or `the Gitter chat <https://gitter.im/oxigraph/community>`_ to ask questions or talk about Oxigraph.
-`Bug reports <https://github.com/oxigraph/oxigraph/issues>`_ are also very welcome.
-
-If you need advanced support or are willing to pay to get some extra features, feel free to reach out to `Tpt <https://github.com/Tpt>`_.
+   incremental

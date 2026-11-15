@@ -3,8 +3,7 @@
 This is the Incroxigraph database engine, derived from
 [Oxigraph](https://github.com/oxigraph/oxigraph). It provides RDF stores, ordinary
 SPARQL queries and updates, parsing and serialization, and incremental queries.
-The workspace crate is currently named `oxigraph`, which is the name used in
-these examples.
+The public Rust crate is named `incroxigraph`.
 
 The [Python bindings](https://github.com/maartyman/incroxigraph/tree/main/python)
 and [JavaScript bindings](https://github.com/maartyman/incroxigraph/tree/main/js)
@@ -12,13 +11,13 @@ expose the same engine through their own interfaces.
 
 ## Usage
 
-The main entry point is `oxigraph::store::Store`. `Store::new()` creates an
+The main entry point is `incroxigraph::store::Store`. `Store::new()` creates an
 in-memory store; `Store::open(path)` opens a persistent database.
 
 ```rust
-use oxigraph::model::*;
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxigraph::store::Store;
+use incroxigraph::model::*;
+use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+use incroxigraph::store::Store;
 
 let store = Store::new().unwrap();
 
@@ -58,11 +57,11 @@ The query observes committed store changes.
 Use `execute_incremental_results()` when you want the current complete result after each change:
 
 ```rust
-use oxigraph::model::{GraphName, NamedNode, Quad};
-use oxigraph::sparql::{
+use incroxigraph::model::{GraphName, NamedNode, Quad};
+use incroxigraph::sparql::{
     IncrementalQueryResults, SparqlEvaluator, StoreIncrementalQueryResultsState,
 };
-use oxigraph::store::Store;
+use incroxigraph::store::Store;
 
 let store = Store::new().unwrap();
 let mut query: StoreIncrementalQueryResultsState = SparqlEvaluator::new()
@@ -89,9 +88,9 @@ if let IncrementalQueryResults::Solutions(rows) = query.results().unwrap() {
 Use `execute_incremental_deltas()` when you maintain your own result set and only need changes since the previous call:
 
 ```rust
-use oxigraph::model::{GraphName, NamedNode, Quad};
-use oxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
-use oxigraph::store::Store;
+use incroxigraph::model::{GraphName, NamedNode, Quad};
+use incroxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
+use incroxigraph::store::Store;
 
 let store = Store::new().unwrap();
 let mut query = SparqlEvaluator::new()
@@ -134,14 +133,14 @@ Native builds with RocksDB require a C++ toolchain and Clang in addition to Rust
 From the repository root:
 
 ```sh
-cargo build -p oxigraph
+cargo build -p incroxigraph
 ```
 
 To use this checkout from another Rust project, add a path dependency:
 
 ```toml
 [dependencies]
-oxigraph = { path = "/path/to/incroxigraph/lib/oxigraph" }
+incroxigraph = { path = "/path/to/incroxigraph/lib/oxigraph" }
 ```
 
 The `rocksdb` feature is enabled by default for native persistent storage. Set

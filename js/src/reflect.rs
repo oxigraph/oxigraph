@@ -87,4 +87,7 @@ extern "C" {
 
     #[wasm_bindgen(thread_local_v2, static_string)]
     pub static VALUE: JsString = "value";
+
+    #[wasm_bindgen(thread_local_v2, static_string)]
+    pub static UNCHECKED: JsString = "unchecked";
 }

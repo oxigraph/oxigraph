@@ -1,15 +1,18 @@
 [package]
-name = "spargebra"
-version = "0.5.0-dev"
+name = "incroxigraph-spargebra"
+version = "0.0.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
-documentation = "https://docs.rs/spargebra"
+repository = "https://github.com/maartyman/incroxigraph"
+documentation = "https://docs.rs/incroxigraph-spargebra"
 description = "SPARQL parser"
 edition.workspace = true
 rust-version.workspace = true
+
+[lib]
+name = "spargebra"
 
 [features]
 default = []

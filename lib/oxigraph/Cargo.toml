@@ -1,15 +1,15 @@
 [package]
-name = "oxigraph"
-version.workspace = true
-authors.workspace = true
+name = "incroxigraph"
+version = "0.0.1"
+authors = ["Incroxigraph contributors", "Oxigraph contributors"]
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxigraph"
-homepage = "https://oxigraph.org/"
-documentation = "https://docs.rs/oxigraph"
-description = "SPARQL database and RDF toolkit"
+repository = "https://github.com/maartyman/incroxigraph"
+homepage = "https://github.com/maartyman/incroxigraph"
+documentation = "https://docs.rs/incroxigraph"
+description = "RDF and SPARQL database with incremental query evaluation"
 edition.workspace = true
 rust-version.workspace = true
 

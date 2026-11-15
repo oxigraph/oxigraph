@@ -1,12 +1,16 @@
 use crate::format_err;
+use crate::incremental::{
+    JsIncrementalQueryDeltas, JsIncrementalQueryResults, map_incremental_error,
+};
 use crate::io::{BytesInput, buffer_from_js_value, convert_base_iri, rdf_format};
 use crate::model::*;
 use crate::reflect::*;
+use crate::transaction::{JsTransaction, collect_quads};
 use crate::utils::{to_option, to_option_ref};
 use js_sys::{Array, Map, try_iter};
 use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
@@ -86,148 +90,68 @@ impl JsStore {
     }
 
     pub fn query(&self, query: &str, options: &JsValue) -> Result<JsValue, JsValue> {
-        // Parsing options
-        let mut base_iri = None;
-        let mut use_default_graph_as_union = false;
-        let mut results_format = None;
-        let mut default_graph = None;
-        let mut named_graphs = None;
-        if let Some(options) = to_option_ref(options) {
-            base_iri = convert_base_iri(&reflect_get(options, &BASE_IRI)?)?;
-
-            default_graph =
-                if let Some(default_graph) = to_option(reflect_get(options, &DEFAULT_GRAPH)?) {
-                    Some(if let Some(iter) = try_iter(&default_graph)? {
-                        iter.map(|term| to_graph_name(&term?))
-                            .collect::<Result<Vec<_>, _>>()?
-                    } else {
-                        vec![to_graph_name(&default_graph)?]
-                    })
-                } else {
-                    None
-                };
-
-            named_graphs =
-                if let Some(named_graphs) = to_option(reflect_get(options, &NAMED_GRAPHS)?) {
-                    Some(
-                        try_iter(&named_graphs)?
-                            .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
-                            .map(|term| to_named_or_blank_node(&term?))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    )
-                } else {
-                    None
-                };
-
-            use_default_graph_as_union =
-                reflect_get(options, &USED_DEFAULT_GRAPH_AS_UNION)?.is_truthy();
-
-            if let Some(js_results_format) = to_option(reflect_get(options, &RESULTS_FORMAT)?) {
-                results_format = Some(
-                    js_results_format
-                        .as_string()
-                        .ok_or_else(|| format_err!("results_format option must be a string"))?,
-                );
-            }
-        }
-
-        let mut evaluator = SparqlEvaluator::new();
-        if let Some(base_iri) = base_iri {
-            evaluator = evaluator.with_base_iri(&base_iri).map_err(JsError::from)?;
-        }
-
-        let mut prepared_query = evaluator.parse_query(&query).map_err(JsError::from)?;
-        if use_default_graph_as_union {
-            prepared_query.dataset_mut().set_default_graph_as_union();
-        }
-        if let Some(default_graph) = default_graph {
-            prepared_query
-                .dataset_mut()
-                .set_default_graph(default_graph);
-        }
-        if let Some(named_graphs) = named_graphs {
-            prepared_query
-                .dataset_mut()
-                .set_available_named_graphs(named_graphs);
-        }
-
+        let (prepared_query, results_format) = prepare_query(query, options)?;
         let results = prepared_query
             .on_store(&self.store)
             .execute()
             .map_err(JsError::from)?;
-        Ok(match results {
-            QueryResults::Solutions(solutions) => {
-                if let Some(results_format) = results_format {
-                    let mut serializer =
-                        QueryResultsSerializer::from_format(query_results_format(&results_format)?)
-                            .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
-                            .map_err(JsError::from)?;
-                    for solution in solutions {
-                        serializer
-                            .serialize(&solution.map_err(JsError::from)?)
-                            .map_err(JsError::from)?;
-                    }
-                    JsValue::from_str(
-                        &String::from_utf8(serializer.finish().map_err(JsError::from)?)
-                            .map_err(JsError::from)?,
-                    )
-                } else {
-                    let results = Array::new();
-                    for solution in solutions {
-                        let solution = solution.map_err(JsError::from)?;
-                        let result = Map::new();
-                        for (variable, value) in solution.iter() {
-                            result.set(
-                                &variable.as_str().into(),
-                                &from_term(&self.data_factory, value),
-                            );
-                        }
-                        results.push(&result.into());
-                    }
-                    results.into()
-                }
-            }
-            QueryResults::Graph(triples) => {
-                if let Some(results_format) = results_format {
-                    let mut serializer = RdfSerializer::from_format(rdf_format(&results_format)?)
-                        .for_writer(Vec::new());
-                    for triple in triples {
-                        serializer
-                            .serialize_triple(&triple.map_err(JsError::from)?)
-                            .map_err(JsError::from)?;
-                    }
-                    JsValue::from_str(
-                        &String::from_utf8(serializer.finish().map_err(JsError::from)?)
-                            .map_err(JsError::from)?,
-                    )
-                } else {
-                    let results = Array::new();
-                    for triple in triples {
-                        results.push(&from_triple(
-                            &self.data_factory,
-                            &triple.map_err(JsError::from)?,
-                        ));
-                    }
-                    results.into()
-                }
-            }
-            QueryResults::Boolean(b) => {
-                if let Some(results_format) = results_format {
-                    JsValue::from_str(
-                        &String::from_utf8(
-                            QueryResultsSerializer::from_format(query_results_format(
-                                &results_format,
-                            )?)
-                            .serialize_boolean_to_writer(Vec::new(), b)
-                            .map_err(JsError::from)?,
-                        )
-                        .map_err(JsError::from)?,
-                    )
-                } else {
-                    b.into()
-                }
-            }
-        })
+        results_to_js(results, &self.data_factory, results_format.as_deref())
+    }
+
+    /// Creates a live query whose results() method returns complete snapshots.
+    #[wasm_bindgen(js_name = queryIncrementalResults)]
+    pub fn query_incremental_results(
+        &self,
+        query: &str,
+        options: &JsValue,
+    ) -> Result<JsIncrementalQueryResults, JsValue> {
+        let (prepared, format) = prepare_query(query, options)?;
+        let state = prepared
+            .on_store(&self.store)
+            .execute_incremental_results()
+            .map_err(|error| map_incremental_error(&error))?;
+        Ok(JsIncrementalQueryResults::new(
+            state,
+            self.data_factory.clone().into(),
+            format,
+        ))
+    }
+
+    /// Creates a live query whose deltas() method consumes pending result changes.
+    #[wasm_bindgen(js_name = queryIncrementalDeltas)]
+    pub fn query_incremental_deltas(
+        &self,
+        query: &str,
+        options: &JsValue,
+    ) -> Result<JsIncrementalQueryDeltas, JsValue> {
+        let (prepared, format) = prepare_query(query, options)?;
+        if format.is_some() {
+            return Err(js_sys::TypeError::new(
+                "results_format is not supported for delta batches",
+            )
+            .into());
+        }
+        let state = prepared
+            .on_store(&self.store)
+            .execute_incremental_deltas()
+            .map_err(|error| map_incremental_error(&error))?;
+        Ok(JsIncrementalQueryDeltas::new(
+            state,
+            self.data_factory.clone().into(),
+        ))
+    }
+
+    /// Creates a buffered, write-only transaction. Call commit() to apply it.
+    pub fn transaction(&self) -> JsTransaction {
+        JsTransaction::new(self.store.clone())
+    }
+
+    /// Validates all quads, then inserts them in one atomic batch.
+    pub fn extend(&self, quads: &JsValue) -> Result<(), JsValue> {
+        self.store
+            .extend(collect_quads(quads)?)
+            .map_err(JsError::from)?;
+        Ok(())
     }
 
     pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
@@ -265,7 +189,8 @@ impl JsStore {
             to_graph_name_rs = to_option_ref(&reflect_get(options, &TO_GRAPH_NAME)?)
                 .map(to_graph_name)
                 .transpose()?;
-            lenient = reflect_get(options, &LENIENT)?.is_truthy();
+            lenient = reflect_get(options, &LENIENT)?.is_truthy()
+                || reflect_get(options, &UNCHECKED)?.is_truthy();
             no_transaction = reflect_get(options, &NO_TRANSACTION)?.is_truthy();
         }
         let format = format
@@ -355,4 +280,147 @@ fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
             )
         })
     }
+}
+
+fn prepare_query(
+    query: &str,
+    options: &JsValue,
+) -> Result<(PreparedSparqlQuery, Option<String>), JsValue> {
+    // Parsing options
+    let mut base_iri = None;
+    let mut use_default_graph_as_union = false;
+    let mut results_format = None;
+    let mut default_graph = None;
+    let mut named_graphs = None;
+    if let Some(options) = to_option_ref(options) {
+        base_iri = convert_base_iri(&reflect_get(options, &BASE_IRI)?)?;
+
+        default_graph =
+            if let Some(default_graph) = to_option(reflect_get(options, &DEFAULT_GRAPH)?) {
+                Some(if let Some(iter) = try_iter(&default_graph)? {
+                    iter.map(|term| to_graph_name(&term?))
+                        .collect::<Result<Vec<_>, _>>()?
+                } else {
+                    vec![to_graph_name(&default_graph)?]
+                })
+            } else {
+                None
+            };
+
+        named_graphs = if let Some(named_graphs) = to_option(reflect_get(options, &NAMED_GRAPHS)?) {
+            Some(
+                try_iter(&named_graphs)?
+                    .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
+                    .map(|term| to_named_or_blank_node(&term?))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+        } else {
+            None
+        };
+
+        use_default_graph_as_union =
+            reflect_get(options, &USED_DEFAULT_GRAPH_AS_UNION)?.is_truthy();
+
+        if let Some(js_results_format) = to_option(reflect_get(options, &RESULTS_FORMAT)?) {
+            results_format = Some(
+                js_results_format
+                    .as_string()
+                    .ok_or_else(|| format_err!("results_format option must be a string"))?,
+            );
+        }
+    }
+
+    let mut evaluator = SparqlEvaluator::new();
+    if let Some(base_iri) = base_iri {
+        evaluator = evaluator.with_base_iri(&base_iri).map_err(JsError::from)?;
+    }
+
+    let mut prepared_query = evaluator.parse_query(query).map_err(JsError::from)?;
+    if use_default_graph_as_union {
+        prepared_query.dataset_mut().set_default_graph_as_union();
+    }
+    if let Some(default_graph) = default_graph {
+        prepared_query
+            .dataset_mut()
+            .set_default_graph(default_graph);
+    }
+    if let Some(named_graphs) = named_graphs {
+        prepared_query
+            .dataset_mut()
+            .set_available_named_graphs(named_graphs);
+    }
+
+    Ok((prepared_query, results_format))
+}
+
+pub(crate) fn results_to_js(
+    results: QueryResults<'_>,
+    data_factory: &DataFactory,
+    results_format: Option<&str>,
+) -> Result<JsValue, JsValue> {
+    Ok(match results {
+        QueryResults::Solutions(solutions) => {
+            if let Some(results_format) = results_format {
+                let mut serializer =
+                    QueryResultsSerializer::from_format(query_results_format(results_format)?)
+                        .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
+                        .map_err(JsError::from)?;
+                for solution in solutions {
+                    serializer
+                        .serialize(&solution.map_err(JsError::from)?)
+                        .map_err(JsError::from)?;
+                }
+                JsValue::from_str(
+                    &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                        .map_err(JsError::from)?,
+                )
+            } else {
+                let results = Array::new();
+                for solution in solutions {
+                    let solution = solution.map_err(JsError::from)?;
+                    let result = Map::new();
+                    for (variable, value) in solution.iter() {
+                        result.set(&variable.as_str().into(), &from_term(data_factory, value));
+                    }
+                    results.push(&result.into());
+                }
+                results.into()
+            }
+        }
+        QueryResults::Graph(triples) => {
+            if let Some(results_format) = results_format {
+                let mut serializer =
+                    RdfSerializer::from_format(rdf_format(results_format)?).for_writer(Vec::new());
+                for triple in triples {
+                    serializer
+                        .serialize_triple(&triple.map_err(JsError::from)?)
+                        .map_err(JsError::from)?;
+                }
+                JsValue::from_str(
+                    &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                        .map_err(JsError::from)?,
+                )
+            } else {
+                let results = Array::new();
+                for triple in triples {
+                    results.push(&from_triple(data_factory, &triple.map_err(JsError::from)?));
+                }
+                results.into()
+            }
+        }
+        QueryResults::Boolean(b) => {
+            if let Some(results_format) = results_format {
+                JsValue::from_str(
+                    &String::from_utf8(
+                        QueryResultsSerializer::from_format(query_results_format(results_format)?)
+                            .serialize_boolean_to_writer(Vec::new(), b)
+                            .map_err(JsError::from)?,
+                    )
+                    .map_err(JsError::from)?,
+                )
+            } else {
+                b.into()
+            }
+        }
+    })
 }

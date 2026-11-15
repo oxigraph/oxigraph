@@ -182,7 +182,7 @@ pub fn serialize<'py>(
 /// >>> quads = parse(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/")
 /// >>> next(quads)
 /// <Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>
-#[pyclass(name = "QuadParser", module = "pyoxigraph")]
+#[pyclass(name = "QuadParser", module = "pyincroxigraph")]
 pub struct PyQuadParser {
     inner: ReaderQuadParser<PyReadable>,
     file_path: Option<PathBuf>,
@@ -260,7 +260,7 @@ impl PyQuadParser {
 #[pyclass(
     frozen,
     name = "RdfFormat",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,

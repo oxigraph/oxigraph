@@ -1,19 +1,19 @@
 [package]
-name = "oxigraph-js"
-version.workspace = true
-authors.workspace = true
+name = "incroxigraph-js"
+version = "0.0.1"
+authors = ["Incroxigraph contributors", "Oxigraph contributors"]
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "XML", "SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/js"
-description = "JavaScript bindings of Oxigraph"
+repository = "https://github.com/maartyman/incroxigraph"
+description = "Self-contained JavaScript and WebAssembly bindings for Incroxigraph with incremental SPARQL queries"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
-name = "oxigraph"
+name = "incroxigraph_js"
 doc = false
 
 [features]

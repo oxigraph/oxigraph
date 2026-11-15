@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::vec::IntoIter;
 use std::{fmt, io};
 
@@ -204,10 +205,34 @@ pub fn query_results_to_python<'py>(
 /// >>> s, p, o = solution
 /// >>> s
 /// <NamedNode value=http://example.com>
-#[pyclass(frozen, name = "QuerySolution", module = "pyoxigraph", eq)]
+#[pyclass(
+    frozen,
+    name = "QuerySolution",
+    module = "pyincroxigraph",
+    eq,
+    skip_from_py_object
+)]
 #[derive(Eq, PartialEq)]
 pub struct PyQuerySolution {
     inner: QuerySolution,
+}
+
+impl Clone for PyQuerySolution {
+    fn clone(&self) -> Self {
+        Self {
+            inner: (
+                Arc::<[Variable]>::from(self.inner.variables()),
+                self.inner.values().to_vec(),
+            )
+                .into(),
+        }
+    }
+}
+
+impl From<QuerySolution> for PyQuerySolution {
+    fn from(inner: QuerySolution) -> Self {
+        Self { inner }
+    }
 }
 
 #[pymethods]
@@ -267,7 +292,7 @@ pub enum PySolutionKey<'a> {
     Variable(PyRef<'a, PyVariable>),
 }
 
-#[pyclass(module = "pyoxigraph")]
+#[pyclass(module = "pyincroxigraph")]
 pub struct SolutionValueIter {
     inner: IntoIter<Option<Term>>,
 }
@@ -289,7 +314,7 @@ impl SolutionValueIter {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('SELECT ?s WHERE { ?s ?p ?o }'))
 /// [<QuerySolution s=<NamedNode value=http://example.com>>]
-#[pyclass(unsendable, name = "QuerySolutions", module = "pyoxigraph")]
+#[pyclass(unsendable, name = "QuerySolutions", module = "pyincroxigraph")]
 pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
@@ -428,10 +453,23 @@ impl PyQuerySolutions {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> bool(store.query('ASK { ?s ?p ?o }'))
 /// True
-#[pyclass(frozen, name = "QueryBoolean", module = "pyoxigraph", eq, ord, hash)]
+#[pyclass(
+    frozen,
+    name = "QueryBoolean",
+    module = "pyincroxigraph",
+    eq,
+    ord,
+    hash
+)]
 #[derive(Eq, Ord, PartialOrd, PartialEq, Hash)]
 pub struct PyQueryBoolean {
     inner: bool,
+}
+
+impl From<bool> for PyQueryBoolean {
+    fn from(inner: bool) -> Self {
+        Self { inner }
+    }
 }
 
 #[pymethods]
@@ -493,7 +531,7 @@ impl PyQueryBoolean {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> list(store.query('CONSTRUCT WHERE { ?s ?p ?o }'))
 /// [<Triple subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
-#[pyclass(unsendable, name = "QueryTriples", module = "pyoxigraph")]
+#[pyclass(unsendable, name = "QueryTriples", module = "pyincroxigraph")]
 pub struct PyQueryTriples {
     inner: UngilQueryTripleIter,
 }
@@ -630,7 +668,7 @@ pub fn parse_query_results(
 #[pyclass(
     frozen,
     name = "QueryResultsFormat",
-    module = "pyoxigraph",
+    module = "pyincroxigraph",
     eq,
     hash,
     str,

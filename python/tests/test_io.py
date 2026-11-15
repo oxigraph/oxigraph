@@ -4,7 +4,7 @@ from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
 from typing import cast
 
-from pyoxigraph import (
+from pyincroxigraph import (
     Literal,
     NamedNode,
     Quad,

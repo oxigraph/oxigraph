@@ -1,6 +1,6 @@
 **/target
 **/*.rs.bk
-Cargo.lock
+/fuzz/Cargo.lock
 .idea
 *.iml
 js/node_modules
@@ -14,3 +14,5 @@ data/
 *.so
 *.pyc
 **.pyi
+js/pkg
+js/*.tgz

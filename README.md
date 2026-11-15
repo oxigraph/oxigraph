@@ -13,7 +13,7 @@ are available through the underlying engine.
 
 | Interface | Directory | Description |
 | --- | --- | --- |
-| Rust | [lib/oxigraph](lib/oxigraph/README.md) | Database engine, currently named `oxigraph` in the workspace |
+| Rust | [lib/oxigraph](lib/oxigraph/README.md) | Database engine, published as `incroxigraph` |
 | Python | [python](python/README.md) | `pyincroxigraph`, with native RDF types, persistent stores and live queries |
 | JavaScript | [js](js/README.md) | `incroxigraph-js`, with an in-memory WebAssembly store and RDF/JS types |
 | Command line | [cli](cli/README.md) | RDF tools and a SPARQL HTTP server; the executable is named `oxigraph` |

@@ -19,9 +19,9 @@
 //! For example, a `SELECT` snapshot tracks both the initial state and later writes:
 //!
 //! ```
-//! use oxigraph::model::{GraphName, NamedNode, Quad};
-//! use oxigraph::sparql::{IncrementalQueryResults, SparqlEvaluator};
-//! use oxigraph::store::Store;
+//! use incroxigraph::model::{GraphName, NamedNode, Quad};
+//! use incroxigraph::sparql::{IncrementalQueryResults, SparqlEvaluator};
+//! use incroxigraph::store::Store;
 //!
 //! let store = Store::new().unwrap();
 //! let mut query = SparqlEvaluator::new()
@@ -50,9 +50,9 @@
 //! `CONSTRUCT` yields triple additions and deletions using graph set semantics:
 //!
 //! ```
-//! use oxigraph::model::{GraphName, NamedNode, Quad};
-//! use oxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
-//! use oxigraph::store::Store;
+//! use incroxigraph::model::{GraphName, NamedNode, Quad};
+//! use incroxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
+//! use incroxigraph::store::Store;
 //!
 //! let store = Store::new().unwrap();
 //! let mut query = SparqlEvaluator::new()
@@ -80,9 +80,9 @@
 //! `ASK` and `CONSTRUCT` use the same entry point, with different delta variants:
 //!
 //! ```
-//! use oxigraph::model::{GraphName, NamedNode, Quad};
-//! use oxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
-//! use oxigraph::store::Store;
+//! use incroxigraph::model::{GraphName, NamedNode, Quad};
+//! use incroxigraph::sparql::{Delta, QueryResultsDelta, SparqlEvaluator};
+//! use incroxigraph::store::Store;
 //!
 //! let store = Store::new().unwrap();
 //! let mut ask = SparqlEvaluator::new()
@@ -97,7 +97,12 @@
 //! assert_eq!(initial.collect::<Result<Vec<_>, _>>().unwrap(), [false]);
 //!
 //! let ex = NamedNode::new("http://example.com").unwrap();
-//! let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
+//! let quad = Quad::new(
+//!     ex.clone(),
+//!     NamedNode::new("urn:p").unwrap(),
+//!     ex.clone(),
+//!     GraphName::DefaultGraph,
+//! );
 //! let mut transaction = store.start_transaction().unwrap();
 //! // Grouping updates in a transaction is best for performance.
 //! transaction.insert(quad.clone());
@@ -116,8 +121,8 @@
 //! An asynchronous consumer can process changes as they arrive:
 //!
 //! ```no_run
-//! use oxigraph::sparql::{QueryResultsDelta, SparqlEvaluator};
-//! use oxigraph::store::Store;
+//! use incroxigraph::sparql::{QueryResultsDelta, SparqlEvaluator};
+//! use incroxigraph::store::Store;
 //!
 //! async fn watch(store: &Store) {
 //!     let mut query = SparqlEvaluator::new()
@@ -199,9 +204,9 @@ pub type StoreIncrementalQueryResultsState =
 ///
 /// Usage example disabling the federated query support:
 /// ```
-/// use oxigraph::model::NamedNode;
-/// use oxigraph::sparql::SparqlEvaluator;
-/// use oxigraph::store::Store;
+/// use incroxigraph::model::NamedNode;
+/// use incroxigraph::sparql::SparqlEvaluator;
+/// use incroxigraph::store::Store;
 ///
 /// SparqlEvaluator::new()
 ///     .with_custom_function(NamedNode::new("http://example.com/identity")?, |args| {
@@ -233,9 +238,9 @@ impl SparqlEvaluator {
     /// Provides an IRI that could be used to resolve the operation relative IRIs.
     ///
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
     ///     .with_base_iri("http://example.com/")?
@@ -259,9 +264,9 @@ impl SparqlEvaluator {
     /// Set a default IRI prefix used during parsing.
     ///
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
     ///     .with_prefix("ex", "http://example.com/")?
@@ -347,9 +352,9 @@ impl SparqlEvaluator {
     ///
     /// Example with a function serializing terms to N-Triples:
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
     ///     .with_custom_function(
@@ -380,8 +385,8 @@ impl SparqlEvaluator {
     /// Returns the list of custom functions currently registered in the evaluator.
     ///
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::SparqlEvaluator;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::SparqlEvaluator;
     ///
     /// let evaluator = SparqlEvaluator::new().with_custom_function(
     ///     NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
@@ -403,9 +408,9 @@ impl SparqlEvaluator {
     ///
     /// Example with a function doing concatenation:
     /// ```
-    /// use oxigraph::model::{Literal, NamedNode, Term};
-    /// use oxigraph::sparql::{AggregateFunctionAccumulator, QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::{Literal, NamedNode, Term};
+    /// use incroxigraph::sparql::{AggregateFunctionAccumulator, QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     /// use std::mem::take;
     ///
     /// struct ConcatAccumulator {
@@ -477,11 +482,11 @@ impl SparqlEvaluator {
     /// Might be used to abort a query cleanly.
     ///
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{
     ///     CancellationToken, QueryEvaluationError, QueryResults, SparqlEvaluator,
     /// };
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// store.insert(Quad::new(
@@ -528,9 +533,9 @@ impl SparqlEvaluator {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let ex = NamedNode::new("http://example.com")?;
@@ -563,9 +568,9 @@ impl SparqlEvaluator {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::*;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     /// use spargebra::SparqlParser;
     ///
     /// let store = Store::new()?;
@@ -603,8 +608,8 @@ impl SparqlEvaluator {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::sparql::SparqlEvaluator;
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::sparql::SparqlEvaluator;
+    /// use incroxigraph::store::Store;
     ///
     /// SparqlEvaluator::new()
     ///     .parse_update(
@@ -626,8 +631,8 @@ impl SparqlEvaluator {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::sparql::SparqlEvaluator;
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::sparql::SparqlEvaluator;
+    /// use incroxigraph::store::Store;
     /// use spargebra::SparqlParser;
     ///
     /// let update = SparqlParser::new().parse_update(
@@ -676,9 +681,9 @@ impl Default for SparqlEvaluator {
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::{Literal, Variable};
-/// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-/// use oxigraph::store::Store;
+/// use incroxigraph::model::{Literal, Variable};
+/// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+/// use incroxigraph::store::Store;
 ///
 /// let prepared_query = SparqlEvaluator::new()
 ///     .parse_query("SELECT ?v WHERE {}")?
@@ -710,9 +715,9 @@ impl PreparedSparqlQuery {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{Literal, Variable};
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::{Literal, Variable};
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// let prepared_query = SparqlEvaluator::new()
     ///     .parse_query("SELECT ?x ?v WHERE { BIND(?v+1 AS ?x) }")?
@@ -787,9 +792,9 @@ impl PreparedSparqlQuery {
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::model::{Literal, Variable};
-/// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-/// use oxigraph::store::Store;
+/// use incroxigraph::model::{Literal, Variable};
+/// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+/// use incroxigraph::store::Store;
 ///
 /// let prepared_query = SparqlEvaluator::new()
 ///     .parse_query("SELECT ?v WHERE {}")?
@@ -822,9 +827,9 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::model::{Literal, Variable};
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::model::{Literal, Variable};
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// let prepared_query = SparqlEvaluator::new()
     ///     .parse_query("SELECT ?x ?v WHERE { BIND(?v+1 AS ?x)}")?
@@ -872,8 +877,8 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
     ///
     /// Usage example serializing the explanation with statistics in JSON:
     /// ```
-    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-    /// use oxigraph::store::Store;
+    /// use incroxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use incroxigraph::store::Store;
     ///
     /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = SparqlEvaluator::new()
     ///     .parse_query("SELECT ?s WHERE { VALUES ?s { 1 2 3 } }")?

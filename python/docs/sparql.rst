@@ -1,8 +1,8 @@
 SPARQL utility objects
 ======================
-.. py:currentmodule:: pyoxigraph
+.. py:currentmodule:: pyincroxigraph
 
-Oxigraph provides also some utilities related to SPARQL queries:
+Pyincroxigraph provides utilities for SPARQL queries and results:
 
 Variable
 """"""""

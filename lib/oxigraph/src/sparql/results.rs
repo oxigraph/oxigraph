@@ -5,7 +5,7 @@
 //! Usage example converting a JSON result file into a TSV result file:
 //!
 //! ```
-//! use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput, QueryResultsSerializer};
+//! use incroxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput, QueryResultsSerializer};
 //! use std::io::Result;
 //!
 //! fn convert_json_to_tsv(json_file: &[u8]) -> Result<Vec<u8>> {

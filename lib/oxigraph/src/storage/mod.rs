@@ -736,10 +736,6 @@ struct PendingQuadState {
 }
 
 #[derive(Clone)]
-#[cfg_attr(
-    not(all(not(target_family = "wasm"), feature = "rocksdb")),
-    allow(dead_code)
-)]
 enum RangeClear {
     Pattern(IncrementalQuadPattern, u64),
     NamedGraphs(u64),
@@ -1441,10 +1437,6 @@ impl StorageBulkLoader<'_> {
         }
     }
 
-    #[cfg_attr(
-        any(target_family = "wasm", not(feature = "rocksdb")),
-        expect(clippy::unnecessary_wraps)
-    )]
     pub fn commit(self) -> Result<(), StorageError> {
         let Self {
             kind, incremental, ..

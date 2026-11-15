@@ -1,15 +1,18 @@
 [package]
-name = "sparesults"
-version = "0.4.0-dev"
+name = "incroxigraph-sparesults"
+version = "0.0.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
+repository = "https://github.com/maartyman/incroxigraph"
 description = "SPARQL query results formats parsers and serializers"
-documentation = "https://docs.rs/sparesults"
+documentation = "https://docs.rs/incroxigraph-sparesults"
 edition.workspace = true
 rust-version.workspace = true
+
+[lib]
+name = "sparesults"
 
 [features]
 default = []

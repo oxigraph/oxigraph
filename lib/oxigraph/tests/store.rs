@@ -1,18 +1,18 @@
 #![cfg(test)]
 #![expect(clippy::panic_in_result_fn)]
 
-use oxigraph::io::RdfFormat;
-use oxigraph::model::vocab::{rdf, xsd};
-use oxigraph::model::*;
+use incroxigraph::io::RdfFormat;
+use incroxigraph::model::vocab::{rdf, xsd};
+use incroxigraph::model::*;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use oxigraph::sparql::QueryResults;
-use oxigraph::sparql::{
+use incroxigraph::sparql::QueryResults;
+use incroxigraph::sparql::{
     Delta, IncrementalQueryResults, QueryResultsDelta, SparqlEvaluator,
     StoreIncrementalQueryDeltasState, StoreIncrementalQueryResultsState,
 };
-use oxigraph::store::Store;
+use incroxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use oxigraph::store::StoreOptions;
+use incroxigraph::store::StoreOptions;
 use std::error::Error;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::fs::remove_dir_all;

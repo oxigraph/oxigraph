@@ -1,9 +1,13 @@
+use crate::incremental::{
+    PyIncrementalQueryDeltas, PyIncrementalQueryResults, map_incremental_error,
+};
 use crate::io::{
     PyIo, PyRdfFormat, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
     map_parse_error,
 };
 use crate::model::*;
 use crate::sparql::*;
+use crate::transaction::PyTransaction;
 use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::GraphName;
 use oxigraph::sparql::QueryResults;
@@ -39,7 +43,7 @@ use std::path::PathBuf;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(frozen, name = "Store", module = "pyoxigraph", str)]
+#[pyclass(frozen, name = "Store", module = "pyincroxigraph", str)]
 pub struct PyStore {
     inner: Store,
 }
@@ -310,6 +314,154 @@ impl PyStore {
             .map_err(map_evaluation_error)?
             .0;
         query_results_to_python(py, results)
+    }
+
+    /// Creates a live SELECT, ASK, or CONSTRUCT query returning complete snapshots.
+    ///
+    /// Read the initial and subsequent answers with :py:meth:`IncrementalQueryResults.results`.
+    /// The handle observes committed changes and must be used on its creating thread.
+    /// Only the incremental evaluator's supported operators are accepted; DESCRIBE is unsupported.
+    ///
+    /// :param query: the SPARQL query to track.
+    /// :type query: str
+    /// :param base_iri: the base IRI for relative IRIs.
+    /// :type base_iri: str or None, optional
+    /// :param prefixes: default prefix names mapped to IRIs.
+    /// :type prefixes: dict[str, str] or None, optional
+    /// :param use_default_graph_as_union: query all graphs as the default graph.
+    /// :type use_default_graph_as_union: bool, optional
+    /// :param default_graph: the graph or graphs used as the default graph.
+    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
+    /// :param named_graphs: the available named graphs.
+    /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
+    /// :param substitutions: values substituted for variables.
+    /// :type substitutions: dict[Variable, NamedNode or BlankNode or Literal or Triple] or None, optional
+    /// :param custom_functions: custom scalar function definitions.
+    /// :type custom_functions: dict[NamedNode, typing.Callable[..., NamedNode or BlankNode or Literal or Triple or None]] or None, optional
+    /// :param custom_aggregate_functions: custom aggregate factories.
+    /// :type custom_aggregate_functions: dict[NamedNode, typing.Callable[[], AggregateFunctionAccumulator]] or None, optional
+    /// :rtype: IncrementalQueryResults
+    /// :raises SyntaxError: if the query is invalid.
+    /// :raises ValueError: if query options are invalid.
+    /// :raises NotImplementedError: if incremental execution does not support the query.
+    /// :raises OSError: if reading the store fails.
+    #[pyo3(signature = (query, *, base_iri = None, prefixes = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
+    fn query_incremental_results(
+        &self,
+        query: &str,
+        base_iri: Option<&str>,
+        prefixes: Option<HashMap<String, String>>,
+        use_default_graph_as_union: bool,
+        default_graph: Option<&Bound<'_, PyAny>>,
+        named_graphs: Option<&Bound<'_, PyAny>>,
+        substitutions: Option<HashMap<PyVariable, PyTerm>>,
+        custom_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+    ) -> PyResult<PyIncrementalQueryResults> {
+        let mut query = prepare_sparql_query(
+            sparql_evaluator_from_python(
+                base_iri,
+                prefixes,
+                custom_functions,
+                custom_aggregate_functions,
+            )?,
+            query,
+            use_default_graph_as_union,
+            default_graph,
+            named_graphs,
+        )?
+        .on_store(&self.inner);
+        if let Some(substitutions) = substitutions {
+            for (variable, term) in substitutions {
+                query = query.substitute_variable(variable, term);
+            }
+        }
+        query
+            .execute_incremental_results()
+            .map(PyIncrementalQueryResults::new)
+            .map_err(map_incremental_error)
+    }
+
+    /// Creates a live SELECT, ASK, or CONSTRUCT query returning additions and deletions.
+    ///
+    /// Consume pending changes with :py:meth:`IncrementalQueryDeltas.deltas`.
+    /// Initial rows and triples are additions; ASK first yields its current boolean.
+    /// The handle observes committed changes and must be used on its creating thread.
+    /// Only the incremental evaluator's supported operators are accepted; DESCRIBE is unsupported.
+    ///
+    /// :param query: the SPARQL query to track.
+    /// :type query: str
+    /// :param base_iri: the base IRI for relative IRIs.
+    /// :type base_iri: str or None, optional
+    /// :param prefixes: default prefix names mapped to IRIs.
+    /// :type prefixes: dict[str, str] or None, optional
+    /// :param use_default_graph_as_union: query all graphs as the default graph.
+    /// :type use_default_graph_as_union: bool, optional
+    /// :param default_graph: the graph or graphs used as the default graph.
+    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
+    /// :param named_graphs: the available named graphs.
+    /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
+    /// :param substitutions: values substituted for variables.
+    /// :type substitutions: dict[Variable, NamedNode or BlankNode or Literal or Triple] or None, optional
+    /// :param custom_functions: custom scalar function definitions.
+    /// :type custom_functions: dict[NamedNode, typing.Callable[..., NamedNode or BlankNode or Literal or Triple or None]] or None, optional
+    /// :param custom_aggregate_functions: custom aggregate factories.
+    /// :type custom_aggregate_functions: dict[NamedNode, typing.Callable[[], AggregateFunctionAccumulator]] or None, optional
+    /// :rtype: IncrementalQueryDeltas
+    /// :raises SyntaxError: if the query is invalid.
+    /// :raises ValueError: if query options are invalid.
+    /// :raises NotImplementedError: if incremental execution does not support the query.
+    /// :raises OSError: if reading the store fails.
+    #[pyo3(signature = (query, *, base_iri = None, prefixes = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
+    fn query_incremental_deltas(
+        &self,
+        query: &str,
+        base_iri: Option<&str>,
+        prefixes: Option<HashMap<String, String>>,
+        use_default_graph_as_union: bool,
+        default_graph: Option<&Bound<'_, PyAny>>,
+        named_graphs: Option<&Bound<'_, PyAny>>,
+        substitutions: Option<HashMap<PyVariable, PyTerm>>,
+        custom_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+    ) -> PyResult<PyIncrementalQueryDeltas> {
+        let mut query = prepare_sparql_query(
+            sparql_evaluator_from_python(
+                base_iri,
+                prefixes,
+                custom_functions,
+                custom_aggregate_functions,
+            )?,
+            query,
+            use_default_graph_as_union,
+            default_graph,
+            named_graphs,
+        )?
+        .on_store(&self.inner);
+        if let Some(substitutions) = substitutions {
+            for (variable, term) in substitutions {
+                query = query.substitute_variable(variable, term);
+            }
+        }
+        query
+            .execute_incremental_deltas()
+            .map(PyIncrementalQueryDeltas::new)
+            .map_err(map_incremental_error)
+    }
+
+    /// Creates a write-only transaction for batching quad additions and removals.
+    ///
+    /// Writes are buffered until commit. A context manager commits on a successful exit
+    /// and rolls back on an exception. The full batch is committed atomically.
+    /// :rtype: Transaction
+    ///
+    /// >>> store = Store()
+    /// >>> with store.transaction() as tx:
+    /// ...     tx.add(Quad(NamedNode('urn:s'), NamedNode('urn:p'), Literal('value')))
+    /// >>> len(store)
+    /// 1
+    fn transaction(&self) -> PyTransaction {
+        PyTransaction::new(self.inner.clone())
     }
 
     /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
@@ -859,7 +1011,7 @@ impl fmt::Display for PyStore {
     }
 }
 
-#[pyclass(unsendable, module = "pyoxigraph")]
+#[pyclass(unsendable, module = "pyincroxigraph")]
 pub struct QuadIter {
     inner: store::QuadIter<'static>,
 }
@@ -878,7 +1030,7 @@ impl QuadIter {
     }
 }
 
-#[pyclass(unsendable, module = "pyoxigraph")]
+#[pyclass(unsendable, module = "pyincroxigraph")]
 pub struct GraphNameIter {
     inner: store::GraphNameIter<'static>,
 }

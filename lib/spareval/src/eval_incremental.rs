@@ -1026,7 +1026,7 @@ impl<'a, T> JoinInputs<'a, T> {
                 }
                 Some(Err(error)) => return Some(Err(error)),
                 Some(Ok(StreamingItem::Pending)) | None => {
-                    return Some(Ok(StreamingItem::Item(self.staged.take().unwrap())));
+                    return Some(Ok(StreamingItem::Item(self.staged.take()?)));
                 }
             }
         }

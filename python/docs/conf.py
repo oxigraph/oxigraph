@@ -1,17 +1,17 @@
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-import pyoxigraph
+import pyincroxigraph
 
 sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
 
 # -- Project information -----------------------------------------------------
 
-project = "pyoxigraph"
-copyright = f"{datetime.now(tz=UTC).year}, Oxigraph contributors"
-version = pyoxigraph.__version__
-release = pyoxigraph.__version__
+project = "pyincroxigraph"
+copyright = f"{datetime.now(tz=timezone.utc).year}, Incroxigraph and Oxigraph contributors"
+version = pyincroxigraph.__version__
+release = pyincroxigraph.__version__
 
 # -- General configuration ---------------------------------------------------
 
@@ -26,11 +26,10 @@ html_static_path = []
 html_logo = "../../logo.svg"
 html_favicon = "../../logo.svg"
 html_theme_options = {"body_max_width": None}
-html_baseurl = "https://pyoxigraph.readthedocs.io/en/stable/"
 
 # -- Options for doctests -------------------------------------------------
 
-doctest_global_setup = "from pyoxigraph import *\nimport io"
+doctest_global_setup = "from pyincroxigraph import *\nimport io"
 
 # -- Options for intersphinx -------------------------------------------------
 

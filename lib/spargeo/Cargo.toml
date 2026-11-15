@@ -1,15 +1,18 @@
 [package]
-name = "spargeo"
-version = "0.6.0-dev"
+name = "incroxigraph-spargeo"
+version = "0.0.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["GeoSPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargeo"
-documentation = "https://docs.rs/spargeo"
+repository = "https://github.com/maartyman/incroxigraph"
+documentation = "https://docs.rs/incroxigraph-spargeo"
 description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true
+
+[lib]
+name = "spargeo"
 
 [features]
 default = []

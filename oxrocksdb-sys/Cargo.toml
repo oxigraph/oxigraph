@@ -1,16 +1,33 @@
 [package]
-name = "oxrocksdb-sys"
-version.workspace = true
+name = "incroxigraph-oxrocksdb-sys"
+version = "0.0.1"
 authors.workspace = true
 license = "GPL-2.0-only OR Apache-2.0"
-repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
+repository = "https://github.com/maartyman/incroxigraph"
 readme = "README.md"
 description = "Rust bindings for RocksDB for Oxigraph usage."
-documentation = "https://docs.rs/oxrocksdb-sys"
+documentation = "https://docs.rs/incroxigraph-oxrocksdb-sys"
 edition.workspace = true
 rust-version.workspace = true
 build = "build.rs"
 links = "rocksdb"
+# Keep the published archive within registry limits without trimming the checkout.
+exclude = [
+  "rocksdb/java",
+  "rocksdb/.circleci",
+  "rocksdb/.github",
+  "rocksdb/build_tools",
+  "rocksdb/coverage",
+  "rocksdb/db_stress_tool",
+  "rocksdb/docs",
+  "rocksdb/examples",
+  "rocksdb/fuzz",
+  "rocksdb/microbench",
+  "rocksdb/**/*_test.cc",
+]
+
+[lib]
+name = "oxrocksdb_sys"
 
 [features]
 pkg-config = ["dep:pkg-config"]
