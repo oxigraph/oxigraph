@@ -316,16 +316,9 @@ impl BorrowedNQuadsOutputBuilder {
 
     #[inline]
     fn lowercase_text(&mut self, value: &str) -> TextRange {
-        let start = self.arena.len();
-        self.arena.extend(
-            value
-                .bytes()
-                .map(|byte| char::from(byte.to_ascii_lowercase())),
-        );
-        TextRange {
-            start,
-            end: self.arena.len(),
-        }
+        let range = self.text(value);
+        self.arena[range.start..range.end].make_ascii_lowercase();
+        range
     }
 }
 

@@ -258,15 +258,17 @@ impl N3Lexer {
                             0..i + 1,
                             options,
                         )
+                        .map(N3Token::IriRef)
                     } else {
                         self.raw_buffer.extend_from_slice(&data[i - end..i]);
-                        Self::parse_owned_iri(
+                        Self::parse_borrowed_iri(
                             self.lenient,
                             &mut self.string_buffer,
                             &self.raw_buffer,
                             0..i + 1,
                             options,
                         )
+                        .map(|iri| N3Token::IriRef(N3String::Owned(iri.into_owned())))
                     };
                     return Some((i + 1, result));
                 }
@@ -294,23 +296,23 @@ impl N3Lexer {
         iri: &'a [u8],
         position: Range<usize>,
         options: &N3LexerOptions,
-    ) -> Result<N3Token<'a>, TokenRecognizerError> {
+    ) -> Result<N3String<'a>, TokenRecognizerError> {
         let iri = str_from_utf8(iri, position.clone())?;
         if lenient {
             let Some(base_iri) = options.base_iri.as_ref() else {
-                return Ok(N3Token::IriRef(N3String::Borrowed(iri)));
+                return Ok(N3String::Borrowed(iri));
             };
             let iri = IriRef::parse_unchecked(iri);
-            Ok(N3Token::IriRef(if iri.is_absolute() {
+            Ok(if iri.is_absolute() {
                 N3String::Borrowed(iri.into_inner())
             } else {
                 string_buffer.clear();
                 base_iri.resolve_into_unchecked(&iri, string_buffer);
                 N3String::Owned(OxString::new_owned(string_buffer))
-            }))
+            })
         } else {
             let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
-            Ok(N3Token::IriRef(if iri.is_absolute() {
+            Ok(if iri.is_absolute() {
                 N3String::Borrowed(iri.into_inner())
             } else if let Some(base_iri) = options.base_iri.as_ref() {
                 string_buffer.clear();
@@ -324,51 +326,7 @@ impl N3Lexer {
                     format!("{iri} is a relative IRI even if no @base is set"),
                 )
                     .into());
-            }))
-        }
-    }
-
-    fn parse_owned_iri(
-        lenient: bool,
-        string_buffer: &mut String,
-        iri: &[u8],
-        position: Range<usize>,
-        options: &N3LexerOptions,
-    ) -> Result<N3Token<'static>, TokenRecognizerError> {
-        let iri = str_from_utf8(iri, position.clone())?;
-        if lenient {
-            let Some(base_iri) = options.base_iri.as_ref() else {
-                return Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(iri))));
-            };
-            let iri = IriRef::parse_unchecked(iri);
-            Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(
-                if iri.is_absolute() {
-                    iri.into_inner()
-                } else {
-                    string_buffer.clear();
-                    base_iri.resolve_into_unchecked(&iri, string_buffer);
-                    string_buffer
-                },
-            ))))
-        } else {
-            let iri = IriRef::parse(iri).map_err(|e| (position.clone(), e.to_string()))?;
-            Ok(N3Token::IriRef(N3String::Owned(OxString::new_owned(
-                if iri.is_absolute() {
-                    iri.into_inner()
-                } else if let Some(base_iri) = options.base_iri.as_ref() {
-                    string_buffer.clear();
-                    base_iri
-                        .resolve_into(&iri, string_buffer)
-                        .map_err(|e| (position, e.to_string()))?;
-                    string_buffer
-                } else {
-                    return Err((
-                        position,
-                        format!("{iri} is a relative IRI even if no @base is set"),
-                    )
-                        .into());
-                },
-            ))))
+            })
         }
     }
 

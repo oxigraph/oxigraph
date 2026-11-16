@@ -397,6 +397,132 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "rdf-12")]
+    #[test]
+    fn rdf_12_version_directive_and_nesting_limit_match_owned_parser() {
+        fn nested(depth: usize, graph: &str) -> String {
+            format!(
+                "<http://example.com/s> <http://example.com/p> {}<http://example.com/o>{}{graph} .\n",
+                "<<( <http://example.com/s> <http://example.com/p> ".repeat(depth),
+                " )>>".repeat(depth),
+            )
+        }
+
+        fn read_ntriples(
+            input: &str,
+        ) -> (
+            Result<Vec<oxrdf::Triple>, TurtleParseError>,
+            Result<Vec<oxrdf::Triple>, TurtleParseError>,
+            usize,
+        ) {
+            let owned = NTriplesParser::new()
+                .for_reader(input.as_bytes())
+                .collect::<Result<Vec<_>, _>>();
+            let mut calls = 0;
+            let mut borrowed_items = Vec::new();
+            let borrowed = NTriplesParser::new()
+                .parse_reader(input.as_bytes(), |triple| {
+                    calls += 1;
+                    borrowed_items.push(triple.into_owned());
+                    Ok::<_, TurtleParseError>(())
+                })
+                .map(|()| borrowed_items);
+            (owned, borrowed, calls)
+        }
+
+        fn read_nquads(
+            input: &str,
+        ) -> (
+            Result<Vec<Quad>, TurtleParseError>,
+            Result<Vec<Quad>, TurtleParseError>,
+            usize,
+        ) {
+            let owned = NQuadsParser::new()
+                .for_reader(input.as_bytes())
+                .collect::<Result<Vec<_>, _>>();
+            let mut calls = 0;
+            let mut borrowed_items = Vec::new();
+            let borrowed = NQuadsParser::new()
+                .parse_reader(input.as_bytes(), |quad| {
+                    calls += 1;
+                    borrowed_items.push(quad.into_owned());
+                    Ok::<_, TurtleParseError>(())
+                })
+                .map(|()| borrowed_items);
+            (owned, borrowed, calls)
+        }
+
+        let version = "VERSION \"1.2\"\n<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n";
+        let (owned, borrowed, _) = read_ntriples(version);
+        let triples = borrowed.unwrap();
+        assert_eq!(triples, owned.unwrap());
+        assert_eq!(triples.len(), 1);
+        assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
+        assert_eq!(triples[0].predicate.to_string(), "<http://example.com/p>");
+        assert_eq!(triples[0].object.to_string(), "<http://example.com/o>");
+
+        let version = "VERSION \"1.2\"\n<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n";
+        let (owned, borrowed, _) = read_nquads(version);
+        let quads = borrowed.unwrap();
+        assert_eq!(quads, owned.unwrap());
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
+        assert_eq!(quads[0].predicate.to_string(), "<http://example.com/p>");
+        assert_eq!(quads[0].object.to_string(), "<http://example.com/o>");
+        assert_eq!(quads[0].graph_name.to_string(), "<http://example.com/g>");
+
+        // `VERSION` is accepted only while no quoted triple is open. Inside a
+        // triple term it is an ordinary subject token, which this recognizer rejects.
+        let version_inside = "<http://example.com/s> <http://example.com/p> <<( VERSION \"1.2\" <http://example.com/p> <http://example.com/o> )>> .\n";
+        let (owned, borrowed, calls) = read_ntriples(version_inside);
+        assert_eq!(calls, 0);
+        let error = borrowed.unwrap_err();
+        assert_eq!(error.to_string(), owned.unwrap_err().to_string());
+        assert!(
+            error
+                .to_string()
+                .contains("The subject of a triple must be an IRI or a blank node"),
+            "{error}"
+        );
+        let version_inside = "<http://example.com/s> <http://example.com/p> <<( VERSION \"1.2\" <http://example.com/p> <http://example.com/o> )>> <http://example.com/g> .\n";
+        let (owned, borrowed, calls) = read_nquads(version_inside);
+        assert_eq!(calls, 0);
+        let error = borrowed.unwrap_err();
+        assert_eq!(error.to_string(), owned.unwrap_err().to_string());
+        assert!(
+            error
+                .to_string()
+                .contains("The subject of a triple must be an IRI or a blank node"),
+            "{error}"
+        );
+
+        let (owned, borrowed, _) = read_ntriples(&nested(128, ""));
+        let triples = borrowed.unwrap();
+        assert_eq!(triples, owned.unwrap());
+        assert_eq!(triples.len(), 1);
+        let (owned, borrowed, calls) = read_ntriples(&nested(129, ""));
+        assert_eq!(calls, 0);
+        let error = borrowed.unwrap_err();
+        assert_eq!(error.to_string(), owned.unwrap_err().to_string());
+        assert!(
+            error.to_string().contains("Too many nested triple terms"),
+            "{error}"
+        );
+
+        let (owned, borrowed, _) = read_nquads(&nested(128, " <http://example.com/g>"));
+        let quads = borrowed.unwrap();
+        assert_eq!(quads, owned.unwrap());
+        assert_eq!(quads.len(), 1);
+        let (owned, borrowed, calls) = read_nquads(&nested(129, " <http://example.com/g>"));
+        assert_eq!(calls, 0);
+        let error = borrowed.unwrap_err();
+        assert_eq!(error.to_string(), owned.unwrap_err().to_string());
+        assert!(
+            error.to_string().contains("Too many nested triple terms"),
+            "{error}"
+        );
+    }
+
     #[cfg(not(feature = "rdf-12"))]
     #[test]
     fn rdf_12_triple_terms_are_not_exposed_without_the_feature() {
