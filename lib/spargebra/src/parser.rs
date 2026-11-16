@@ -1585,12 +1585,11 @@ fn expression<'src, E: CParserError<'src>>(
                 inner: Expression::Subtract(Box::new(l), Box::new(r)),
                 span: c.span(),
             }),
-            postfix(
-                4,
-                numeric_literal_positive_or_negative()
-                    .map(Expression::Literal)
-                    .spanned(),
-                |l, r, c| Spanned {
+            // A signed literal implies addition/subtraction. Leave it for the right operand parser.
+            infix(
+                left(4),
+                numeric_literal_positive_or_negative().rewind().ignored(),
+                |l, (), r, c| Spanned {
                     inner: Expression::Add(Box::new(l), Box::new(r)),
                     span: c.span(),
                 },

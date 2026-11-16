@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="n"/>
+        <variable name="d"/>
+    </head>
+    <results>
+        <result>
+            <binding name="n"><literal datatype="http://www.w3.org/2001/XMLSchema#integer">1</literal></binding>
+            <binding name="d"><literal datatype="http://www.w3.org/2001/XMLSchema#integer">1</literal></binding>
+        </result>
+    </results>
+</sparql>

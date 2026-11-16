@@ -24,9 +24,12 @@
     :values_in_filter_not_exists
     :subquery_in_filter_not_exists
     :cmp_langString
+    :is_numeric_derived_integer_range
+    :eq_dirLangString
     :nested_path
     :nested_expression
     :order_terms
+    :cast_string_whitespace
     :nested_anonymous
     :unbound_variable_in_subquery
     :one_or_more_shared
@@ -62,7 +65,17 @@
     :merged_default_graph_update
     :delete_insert_solution_order
     :repeated_blank_node
+    :arithmetic_left_associative
+    :arithmetic_signed_literal
+    :graph_minus_graph_variable
+    :pname_local_escape
+    :count_skips_errors
     ) .
+
+:eq_dirLangString rdf:type mf:QueryEvaluationTest ;
+    mf:name "Directional language literal equality compares value, language and direction" ;
+    mf:action [ qt:query <eq_dirLangString.rq> ; qt:data <eq_dirLangString.ttl> ] ;
+    mf:result <true.srx> .
 
 :merged_default_graph rdf:type mf:QueryEvaluationTest ;
     mf:name "Merged default graphs deduplicate triples, not projected values" ;
@@ -175,6 +188,11 @@
     mf:name "rdf:langString with the same language are comparable" ;
     mf:action [ qt:query <cmp_langString.rq> ] ;
     mf:result <cmp_langString.srx> .
+
+:is_numeric_derived_integer_range rdf:type mf:QueryEvaluationTest ;
+    mf:name "isNumeric is false for a derived integer type outside its range" ;
+    mf:action [ qt:query <is_numeric_derived_integer_range.rq> ] ;
+    mf:result <is_numeric_derived_integer_range.srx> .
 
 :nested_path rdf:type mf:PositiveSyntaxTest11 ;
     mf:name "A very nested property path" ;
@@ -329,3 +347,36 @@
     mf:name "same blank node multiple times in the query" ;
     mf:action [ qt:query <repeated_blank_node.rq> ; qt:data <repeated_blank_node.ttl> ] ;
     mf:result  <repeated_blank_node.srx> .
+
+:arithmetic_left_associative rdf:type mf:QueryEvaluationTest ;
+    mf:name "Chains of '+', '-', '*' and '/' associate to the left" ;
+    mf:action [ qt:query <arithmetic_left_associative.rq> ] ;
+    mf:result  <true.srx> .
+
+:arithmetic_signed_literal rdf:type mf:QueryEvaluationTest ;
+    mf:name "A signed numeric literal after an operand is added to the result of the following '*' and '/' operations" ;
+    mf:action [ qt:query <arithmetic_signed_literal.rq> ] ;
+    mf:result  <true.srx> .
+
+:graph_minus_graph_variable rdf:type mf:QueryEvaluationTest ;
+    mf:name "In GRAPH ?g { ... MINUS { ... } }, ?g in the MINUS right side is not the graph name" ;
+    mf:action [
+        qt:query <graph_minus_graph_variable.rq> ;
+        qt:graphData <graph_minus_graph_variable.ttl>
+    ] ;
+    mf:result <graph_minus_graph_variable.srj> .
+
+:pname_local_escape rdf:type mf:QueryEvaluationTest ;
+    mf:name "An escape sequence in the local part of a prefixed name stands for one character" ;
+    mf:action [ qt:query <pname_local_escape.rq> ; qt:data <pname_local_escape.ttl> ] ;
+    mf:result <true.srx> .
+
+:cast_string_whitespace rdf:type mf:QueryEvaluationTest ;
+    mf:name "Casting a string ignores leading and trailing whitespace" ;
+    mf:action [ qt:query <cast_string_whitespace.rq> ] ;
+    mf:result <cast_string_whitespace.srx> .
+
+:count_skips_errors rdf:type mf:QueryEvaluationTest ;
+    mf:name "COUNT of an expression skips the solutions where the expression is an error" ;
+    mf:action [ qt:query <count_skips_errors.rq> ] ;
+    mf:result <count_skips_errors.srx> .

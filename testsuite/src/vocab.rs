@@ -30,6 +30,13 @@ pub mod rs {
 pub mod mf {
     use oxigraph::model::NamedNode;
 
+    pub const RESULT_CARDINALITY: NamedNode = NamedNode::new_const_unchecked(
+        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#resultCardinality",
+    );
+    pub const LAX_CARDINALITY: NamedNode = NamedNode::new_const_unchecked(
+        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#LaxCardinality",
+    );
+
     pub const INCLUDE: NamedNode = NamedNode::new_const_unchecked(
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#include",
     );

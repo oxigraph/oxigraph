@@ -1132,4 +1132,31 @@ mod tests {
         );
         Ok(())
     }
+
+    #[cfg(feature = "rdf-12")]
+    #[test]
+    fn nested_triple_term_limit() {
+        // the chain also starts in a blank node property list or a reified triple, or is annotated
+        for (before, after) in [
+            ("", ""),
+            ("[ <http://e/q> ", " ]"),
+            ("<< <http://e/a> <http://e/b> ", " >>"),
+            ("", " ~ <http://e/r>"),
+            ("", " {| <http://e/q> <http://e/o> |}"),
+        ] {
+            let parse = |depth: usize| {
+                let data = format!(
+                    "<http://e/s> <http://e/p> {before}{}<http://e/o>{}{after} .",
+                    "<<( <http://e/s> <http://e/p> ".repeat(depth),
+                    " )>>".repeat(depth)
+                );
+                TurtleParser::new()
+                    .for_slice(&data)
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            parse(128).unwrap();
+            let error = parse(129).unwrap_err().to_string();
+            assert!(error.contains("Too many nested triple terms"), "{error}");
+        }
+    }
 }

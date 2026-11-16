@@ -1338,7 +1338,10 @@ impl JsonLdContextProcessor {
         // 7)
         if vocab {
             if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                return Some(OxString::concat([vocabulary_mapping, &value]));
+                return Some(OxString::concat([
+                    vocabulary_mapping.as_str(),
+                    value.as_str(),
+                ]));
             }
         }
         // 8)
@@ -1430,7 +1433,7 @@ impl JsonLdContextProcessor {
                 iri // already absolute
             } else if let Some(base_iri) = base_iri {
                 let iri = base_iri.resolve_unchecked(&iri);
-                Iri::parse_unchecked(OxString::new_owned(&iri.into_inner()))
+                Iri::parse_unchecked(iri.into_inner().into())
             } else {
                 // hack to not fail
                 Iri::parse_unchecked(iri.into_inner())
@@ -1442,8 +1445,8 @@ impl JsonLdContextProcessor {
             if let Ok(iri) = iri.clone().try_into() {
                 iri
             } else if let Some(base_iri) = base_iri {
-                Iri::parse_unchecked(OxString::new_owned(
-                    &base_iri
+                Iri::parse_unchecked(
+                    base_iri
                         .resolve(&iri)
                         .map_err(|e| {
                             JsonLdSyntaxError::msg_and_code(
@@ -1451,8 +1454,9 @@ impl JsonLdContextProcessor {
                                 error_code,
                             )
                         })?
-                        .into_inner(),
-                ))
+                        .into_inner()
+                        .into(),
+                )
             } else {
                 return Err(JsonLdSyntaxError::msg_and_code(
                     format!("No base found to resolve relative URL '{iri}'"),
@@ -1519,12 +1523,14 @@ pub fn json_node_from_events<'a>(
     let mut stack = Vec::new();
     for event in events {
         if let Some(result) = match event? {
-            JsonEvent::String(value) => {
-                after_to_node_event(&mut stack, JsonNode::String(OxString::new_owned(&value)))
-            }
-            JsonEvent::Number(value) => {
-                after_to_node_event(&mut stack, JsonNode::Number(OxString::new_owned(&value)))
-            }
+            JsonEvent::String(value) => after_to_node_event(
+                &mut stack,
+                JsonNode::String(OxStr::from(value).into_owned()),
+            ),
+            JsonEvent::Number(value) => after_to_node_event(
+                &mut stack,
+                JsonNode::Number(OxStr::from(value).into_owned()),
+            ),
             JsonEvent::Boolean(value) => after_to_node_event(&mut stack, JsonNode::Boolean(value)),
             JsonEvent::Null => after_to_node_event(&mut stack, JsonNode::Null),
             JsonEvent::EndArray | JsonEvent::EndObject => {
@@ -1547,7 +1553,7 @@ pub fn json_node_from_events<'a>(
                 if let Some(BuildingObjectOrArrayNode::Object(object)) = stack.pop() {
                     stack.push(BuildingObjectOrArrayNode::ObjectWithPendingKey(
                         object,
-                        OxString::new_owned(&key),
+                        OxStr::from(key).into_owned(),
                     ));
                 }
                 None

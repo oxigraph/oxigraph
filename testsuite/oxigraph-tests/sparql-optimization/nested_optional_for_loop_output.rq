@@ -1,0 +1,19 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?n a ex:Norm .
+    LATERAL { VALUES () { () } OPTIONAL { ?n ex:condition ?c } }
+    LATERAL {
+        VALUES () { () }
+        OPTIONAL {
+            ?n ex:sanction ?s .
+            LATERAL {
+                VALUES () { () }
+                OPTIONAL {
+                    ?s ex:amount ?a .
+                    LATERAL { VALUES () { () } OPTIONAL { ?a ex:currency ?u } }
+                }
+            }
+        }
+    }
+}

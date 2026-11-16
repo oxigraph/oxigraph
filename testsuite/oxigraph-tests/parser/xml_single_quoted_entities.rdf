@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE rdf:RDF [
+  <!ENTITY ex 'http://example.com/'>
+  <!ENTITY rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <!ENTITY dq 'say "hi"'>
+  <!ENTITY sq "it's">
+]>
+
+<rdf:RDF xmlns:ex="&ex;" xmlns:rdf="&rdf;">
+	<rdf:Description rdf:about="&ex;foo">
+	    <ex:a>&dq;</ex:a>
+	    <ex:b>&sq;</ex:b>
+	</rdf:Description>
+</rdf:RDF>

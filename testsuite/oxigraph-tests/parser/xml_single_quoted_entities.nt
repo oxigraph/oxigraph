@@ -1,0 +1,2 @@
+<http://example.com/foo> <http://example.com/a> "say \"hi\"" .
+<http://example.com/foo> <http://example.com/b> "it's" .

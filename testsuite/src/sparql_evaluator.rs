@@ -133,7 +133,7 @@ fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat)
             true,
         )?;
         ensure!(
-            are_query_results_isomorphic(&expected_results, &actual_results),
+            are_query_results_isomorphic(&expected_results, &actual_results, false),
             "Not isomorphic results:\n{}\n",
             results_diff(expected_results, actual_results),
         );
@@ -193,7 +193,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
             .with_context(|| format!("Error when executing {query}"))?;
 
         ensure!(
-            are_query_results_isomorphic(&expected_results, &actual_results),
+            are_query_results_isomorphic(&expected_results, &actual_results, test.lax_cardinality),
             "Not isomorphic results.\n{}\nParsed query:\n{query}\nData:\n{dataset}\n",
             results_diff(expected_results, actual_results),
         );
@@ -398,6 +398,7 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
 fn are_query_results_isomorphic(
     expected: &StaticQueryResults,
     actual: &StaticQueryResults,
+    lax_cardinality: bool,
 ) -> bool {
     match (expected, actual) {
         (
@@ -413,7 +414,7 @@ fn are_query_results_isomorphic(
             },
         ) => {
             expected_variables == actual_variables
-                && expected_solutions.len() == actual_solutions.len()
+                && (lax_cardinality || expected_solutions.len() == actual_solutions.len())
                 && if *ordered {
                     expected_solutions.iter().zip(actual_solutions).all(
                         |(expected_solution, actual_solution)| {

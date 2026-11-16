@@ -1,0 +1,7 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?i ?d ?b ?t WHERE {
+    BIND(xsd:integer("  7 ") AS ?i)
+    BIND(xsd:double("\t1.5\n") AS ?d)
+    BIND(xsd:boolean(" true ") AS ?b)
+    BIND(xsd:dateTime(" 2020-01-01T00:00:00Z") AS ?t)
+}

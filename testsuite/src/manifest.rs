@@ -19,6 +19,7 @@ pub struct Test {
     pub graph_data: Vec<(NamedNode, OxString)>,
     pub service_data: Vec<(OxString, OxString)>,
     pub result: Option<OxString>,
+    pub lax_cardinality: bool,
     pub result_graph_data: Vec<(NamedNode, OxString)>,
     pub option: HashMap<NamedNode, Term>,
 }
@@ -305,6 +306,11 @@ impl TestManifest {
             {
                 option.insert(rdfc::HASH_ALGORITHM, hash_algorithm);
             }
+            let lax_cardinality = self.graph.contains(TripleRef::new(
+                &test_node,
+                &mf::RESULT_CARDINALITY,
+                &mf::LAX_CARDINALITY,
+            ));
             return Ok(Some(Test {
                 id: test_node,
                 kinds,
@@ -317,6 +323,7 @@ impl TestManifest {
                 graph_data,
                 service_data,
                 result,
+                lax_cardinality,
                 result_graph_data,
                 option,
             }));

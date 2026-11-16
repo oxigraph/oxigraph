@@ -6,7 +6,7 @@ use oxiri::{Iri, IriParseError, IriRef};
 use oxrdf::BaseDirection;
 use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
-use oxstr::OxString;
+use oxstr::{OxStr, OxString, oxformat};
 use quick_xml::escape::{EscapeError, resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -696,6 +696,9 @@ const RDF_RESOURCE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#resource"
 const RDF_VERSION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#version";
 const RDF_ANNOTATION: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotation";
 const RDF_ANNOTATION_NODE_ID: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#annotationNodeID";
+/// The value of oxrdf's `MAX_NUMBER_OF_NESTED_TRIPLES`: much deeper triple terms can overflow the stack when they are cloned, dropped or printed.
+#[cfg(feature = "rdf-12")]
+const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
 const RESERVED_RDF_ELEMENTS: [&str; 11] = [
     RDF_ABOUT,
@@ -904,12 +907,17 @@ impl<R> InternalRdfXmlParser<R> {
                         "<!ENTITY declarations should contain both an entity name and an entity value",
                     )
                 })?;
-                let input = input.trim_start().strip_prefix('\"').ok_or_else(|| {
-                    RdfXmlSyntaxError::msg("<!ENTITY values should be enclosed in double quotes")
-                })?;
-                let (entity_value, input) = input.split_once('"').ok_or_else(|| {
+                let input = input.trim_start();
+                let quote = input
+                    .chars()
+                    .next()
+                    .filter(|c| matches!(c, '"' | '\''))
+                    .ok_or_else(|| {
+                        RdfXmlSyntaxError::msg("<!ENTITY values should be enclosed in quotes")
+                    })?;
+                let (entity_value, input) = input[1..].split_once(quote).ok_or_else(|| {
                     RdfXmlSyntaxError::msg(
-                        "<!ENTITY declarations values should be enclosed in double quotes",
+                        "<!ENTITY declarations values should be enclosed in quotes",
                     )
                 })?;
                 input.trim_start().strip_prefix('>').ok_or_else(|| {
@@ -999,7 +1007,7 @@ impl<R> InternalRdfXmlParser<R> {
             {
                 match attribute.key.local_name().into_inner() {
                     "lang" => {
-                        let mut tag = OxString::new_owned(&self.convert_attribute(&attribute)?);
+                        let mut tag = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         tag.make_mut().make_ascii_lowercase();
                         language = Some(if self.lenient {
                             tag
@@ -1012,7 +1020,7 @@ impl<R> InternalRdfXmlParser<R> {
                         });
                     }
                     "base" => {
-                        let iri = OxString::new_owned(&self.convert_attribute(&attribute)?);
+                        let iri = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         base_iri = Some(if self.lenient {
                             Iri::parse_unchecked(iri)
                         } else {
@@ -1068,7 +1076,7 @@ impl<R> InternalRdfXmlParser<R> {
                         ))
                         .into());
                     }
-                    node_id_attr = Some(BlankNode::new_unchecked(OxString::new_owned(&id)));
+                    node_id_attr = Some(BlankNode::new_unchecked(OxStr::from(id).into_owned()));
                 } else if *attribute_url == *RDF_ABOUT {
                     about_attr = Some(attribute);
                 } else if *attribute_url == *RDF_RESOURCE {
@@ -1081,7 +1089,23 @@ impl<R> InternalRdfXmlParser<R> {
                         "Literal" => RdfXmlParseType::Literal,
                         "Resource" => RdfXmlParseType::Resource,
                         #[cfg(feature = "rdf-12")]
-                        "Triple" => RdfXmlParseType::Triple,
+                        "Triple" => {
+                            if self
+                                .state
+                                .iter()
+                                .filter(|s| {
+                                    matches!(s, RdfXmlState::ParseTypeTriplePropertyElt { .. })
+                                })
+                                .count()
+                                >= MAX_NUMBER_OF_NESTED_TRIPLES
+                            {
+                                return Err(RdfXmlSyntaxError::msg(
+                                    "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                                )
+                                .into());
+                            }
+                            RdfXmlParseType::Triple
+                        }
                         _ => RdfXmlParseType::Other,
                     };
                 } else if cfg!(feature = "rdf-12") && *attribute_url == *RDF_VERSION {
@@ -1110,7 +1134,7 @@ impl<R> InternalRdfXmlParser<R> {
                 } else {
                     property_attrs.push((
                         self.parse_iri(attribute_url)?,
-                        OxString::new_owned(&self.convert_attribute(&attribute)?),
+                        OxStr::from(self.convert_attribute(&attribute)?).into_owned(),
                     ));
                 }
             }
@@ -1189,7 +1213,7 @@ impl<R> InternalRdfXmlParser<R> {
                 ))
                 .into());
             }
-            Some(BlankNode::new_unchecked(OxString::new_owned(&id)))
+            Some(BlankNode::new_unchecked(OxStr::from(id).into_owned()))
         } else {
             None
         };
@@ -1286,9 +1310,9 @@ impl<R> InternalRdfXmlParser<R> {
                         .into());
                     };
                     *li_counter += 1;
-                    NamedNode::new_unchecked(OxString::new_owned(&format!(
+                    NamedNode::new_unchecked(oxformat!(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#_{li_counter}"
-                    )))
+                    ))
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name)
                     || *tag_name == *RDF_DESCRIPTION
                 {
@@ -1518,7 +1542,7 @@ impl<R> InternalRdfXmlParser<R> {
                     match unescape_with(&value, |e| self.custom_entities.resolve(e))
                         .map_err(Error::from)?
                     {
-                        Cow::Owned(value) => OxString::new_owned(&value),
+                        Cow::Owned(value) => value.into(),
                         Cow::Borrowed(_) => value, // Not changed, no need to reallocate
                     },
                 )
@@ -1745,11 +1769,11 @@ impl<R> InternalRdfXmlParser<R> {
                         subject,
                         iri,
                         Literal::new_typed_literal(
-                            OxString::new_owned(&String::from_utf8(object).map_err(|_| {
+                            String::from_utf8(object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
                                 )
-                            })?),
+                            })?,
                             rdf::XML_LITERAL,
                         ),
                     );
@@ -2191,5 +2215,40 @@ impl RdfVersion {
                 "The rdf:version value '{value}' is not supported, allowed values are '1.1' and '1.2'"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "rdf-12")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_triple_term_limit() {
+        let parse = |depth: usize, annotated: bool| {
+            let data = format!(
+                r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:ex="http://e/" rdf:version="1.2"><rdf:Description rdf:about="http://e/s">{}<ex:p rdf:resource="http://e/o"/>{}</rdf:Description></rdf:RDF>"#,
+                r#"<ex:p rdf:parseType="Triple"><rdf:Description rdf:about="http://e/s">"#
+                    .repeat(depth),
+                "</rdf:Description></ex:p>".repeat(depth)
+            );
+            // the annotation reifies the outermost triple, one level deeper than its object
+            let data = if annotated {
+                data.replacen(
+                    r#"rdf:parseType="Triple""#,
+                    r#"rdf:parseType="Triple" rdf:annotation="http://e/r""#,
+                    1,
+                )
+            } else {
+                data
+            };
+            RdfXmlParser::new()
+                .for_slice(&data)
+                .collect::<Result<Vec<_>, _>>()
+        };
+        parse(128, false).unwrap();
+        parse(129, false).unwrap_err();
+        parse(128, true).unwrap();
+        parse(129, true).unwrap_err();
     }
 }

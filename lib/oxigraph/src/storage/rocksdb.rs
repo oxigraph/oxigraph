@@ -1598,12 +1598,10 @@ pub struct RocksDbStorageBulkLoader<'a> {
 impl Drop for RocksDbStorageBulkLoader<'_> {
     fn drop(&mut self) {
         self.cancellation_token.cancel();
-        // We wait for threads
+        // Wait for all workers so no files can be created after cleanup.
         while let Some(thread) = self.threads.pop_front() {
-            if thread.is_finished() {
-                if let Ok(Ok(files)) = thread.join() {
-                    self.sst_files.extend(files);
-                }
+            if let Ok(Ok(files)) = thread.join() {
+                self.sst_files.extend(files);
             }
         }
         // We clean the created files

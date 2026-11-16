@@ -635,3 +635,47 @@ impl Iterator for SliceSolutionsParser<'_> {
         )
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "sparql-12")]
+mod tests {
+    use super::*;
+
+    fn parse(
+        format: QueryResultsFormat,
+        data: &str,
+    ) -> Result<Vec<QuerySolution>, QueryResultsSyntaxError> {
+        match QueryResultsParser::from_format(format).for_slice(data)? {
+            SliceQueryResultsParserOutput::Solutions(solutions) => solutions.collect(),
+            SliceQueryResultsParserOutput::Boolean(_) => Ok(Vec::new()),
+        }
+    }
+
+    #[test]
+    fn nested_triple_term_limit() {
+        let json = |depth: usize| {
+            format!(
+                r#"{{"head":{{"vars":["t"]}},"results":{{"bindings":[{{"t":{}{{"type":"uri","value":"http://e/o"}}{}}}]}}}}"#,
+                r#"{"type":"triple","value":{"subject":{"type":"uri","value":"http://e/s"},"predicate":{"type":"uri","value":"http://e/p"},"object":"#.repeat(depth),
+                "}}".repeat(depth)
+            )
+        };
+        let xml = |depth: usize| {
+            format!(
+                r#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="t"/></head><results><result><binding name="t">{}<uri>http://e/o</uri>{}</binding></result></results></sparql>"#,
+                "<triple><subject><uri>http://e/s</uri></subject><predicate><uri>http://e/p</uri></predicate><object>".repeat(depth),
+                "</object></triple>".repeat(depth)
+            )
+        };
+        parse(QueryResultsFormat::Json, &json(128)).unwrap();
+        parse(QueryResultsFormat::Json, &json(129)).unwrap_err();
+        parse(QueryResultsFormat::Xml, &xml(128)).unwrap();
+        parse(QueryResultsFormat::Xml, &xml(129)).unwrap_err();
+        // each inner triple with no object of its own took the object of the triple around it
+        let siblings = format!(
+            r#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="t"/></head><results><result><binding name="t"><triple><subject><uri>http://e/s</uri></subject><predicate><uri>http://e/p</uri></predicate><object><uri>http://e/o</uri></object>{}</triple></binding></result></results></sparql>"#,
+            "<object><triple><subject><uri>http://e/s</uri></subject><predicate><uri>http://e/p</uri></predicate></triple></object>".repeat(129)
+        );
+        parse(QueryResultsFormat::Xml, &siblings).unwrap_err();
+    }
+}

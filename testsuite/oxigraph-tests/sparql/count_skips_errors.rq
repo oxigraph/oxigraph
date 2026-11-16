@@ -1,0 +1,1 @@
+SELECT (COUNT(STR(?x)) AS ?n) (COUNT(DISTINCT STR(?x)) AS ?d) WHERE { VALUES ?x { <urn:a> UNDEF } }

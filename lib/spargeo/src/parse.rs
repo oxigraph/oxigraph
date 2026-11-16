@@ -9,7 +9,7 @@ use crate::geosparql;
 use geo::Geometry;
 use geojson::{GeoJson, Geometry as GeoJsonGeometry};
 use oxrdf::{Literal, Term};
-use oxstr::OxString;
+use oxstr::oxformat;
 use std::str::FromStr;
 use wkt::{ToWkt, TryFromWkt};
 
@@ -62,17 +62,14 @@ pub fn parse_geo_json_literal(value: &str) -> Option<Geometry> {
 /// [`parse_wkt_literal`] without loss of the coordinate reference system.
 pub fn result_to_wkt_literal(geom: &Geometry) -> Literal {
     let wkt_body = geom.wkt_string();
-    let value = format!("<{CRS84_URI}> {wkt_body}");
-    Literal::new_typed_literal(OxString::new_owned(&value), geosparql::WKT_LITERAL)
+    let value = oxformat!("<{CRS84_URI}> {wkt_body}");
+    Literal::new_typed_literal(value, geosparql::WKT_LITERAL)
 }
 
 /// Serialize a geometry as a `geoJSONLiteral`.
 pub fn result_to_geojson_literal(geom: &Geometry) -> Literal {
     let gj = GeoJsonGeometry::from(geom);
-    Literal::new_typed_literal(
-        OxString::new_owned(&gj.to_string()),
-        geosparql::GEO_JSON_LITERAL,
-    )
+    Literal::new_typed_literal(gj.to_string(), geosparql::GEO_JSON_LITERAL)
 }
 
 #[cfg(test)]

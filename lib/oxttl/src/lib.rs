@@ -28,3 +28,7 @@ pub(crate) const MIN_BUFFER_SIZE: usize = 4096;
 pub(crate) const DEFAULT_MAX_BUFFER_SIZE: usize = 4096 * 4096;
 #[expect(clippy::decimal_literal_representation)]
 pub(crate) const MIN_PARALLEL_CHUNK_SIZE: usize = 16384;
+/// Maximal number of nested triple terms, the value of oxrdf's `MAX_NUMBER_OF_NESTED_TRIPLES`.
+/// Much deeper triple terms can overflow the stack when they are cloned, dropped or printed.
+#[cfg(feature = "rdf-12")]
+pub(crate) const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;

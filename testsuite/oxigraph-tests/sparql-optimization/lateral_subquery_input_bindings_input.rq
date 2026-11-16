@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?a ex:p ?b .
+    LATERAL { SELECT ?b ?c WHERE { ?b ex:q ?c } }
+    OPTIONAL { ?a ex:r ?d }
+}

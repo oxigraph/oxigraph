@@ -1,5 +1,7 @@
 //! Shared parser implementation for N-Triples and N-Quads.
 
+#[cfg(feature = "rdf-12")]
+use crate::MAX_NUMBER_OF_NESTED_TRIPLES;
 use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3String, N3Token, to_lowercase};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use oxrdf::vocab::rdf;
@@ -479,6 +481,8 @@ pub(crate) struct NQuadsRecognizerContext {
 
 enum NQuadsState<L> {
     ExpectSubject,
+    #[cfg(feature = "rdf-12")]
+    ExpectVersion,
     ExpectPredicate,
     ExpectedObject,
     ExpectPossibleGraphOrEndOfQuotedTriple,
@@ -528,6 +532,10 @@ impl<B: NQuadsOutputBuilder> RuleRecognizer for NQuadsRecognizer<B> {
         match state {
             NQuadsState::ExpectSubject => match token {
                 TokenOrLineJump::Token(token) => match token {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::PlainKeyword("VERSION") if self.quoted_triples.is_empty() => {
+                        self.state = NQuadsState::ExpectVersion;
+                    }
                     N3Token::IriRef(s) => {
                         self.subject = Some(self.output_builder.named_subject(s));
                         self.state = NQuadsState::ExpectPredicate;
@@ -562,6 +570,19 @@ impl<B: NQuadsOutputBuilder> RuleRecognizer for NQuadsRecognizer<B> {
                         self.state = NQuadsState::ExpectSubject;
                     }
                 }
+            },
+            #[cfg(feature = "rdf-12")]
+            NQuadsState::ExpectVersion => match token {
+                TokenOrLineJump::Token(N3Token::String(_)) => {
+                    self.state = NQuadsState::ExpectLineJump;
+                }
+                _ => self.error(
+                    context,
+                    results,
+                    errors,
+                    token,
+                    "The VERSION keyword should be followed by a double quoted string like \"1.2\"",
+                ),
             },
             NQuadsState::ExpectPredicate => match token {
                 TokenOrLineJump::Token(token) => match token {
@@ -601,11 +622,21 @@ impl<B: NQuadsOutputBuilder> RuleRecognizer for NQuadsRecognizer<B> {
                     }
                     #[cfg(feature = "rdf-12")]
                     N3Token::Punctuation("<<(") => {
-                        self.quoted_triples.push(QuotedTripleFrame {
-                            subject: self.subject.take().unwrap(),
-                            predicate: self.predicate.take().unwrap(),
-                        });
-                        self.state = NQuadsState::ExpectSubject;
+                        if self.quoted_triples.len() >= MAX_NUMBER_OF_NESTED_TRIPLES {
+                            self.error(
+                                context,
+                                results,
+                                errors,
+                                TokenOrLineJump::Token(token),
+                                "Too many nested triple terms. The parser fails here to avoid a stack overflow.",
+                            );
+                        } else {
+                            self.quoted_triples.push(QuotedTripleFrame {
+                                subject: self.subject.take().unwrap(),
+                                predicate: self.predicate.take().unwrap(),
+                            });
+                            self.state = NQuadsState::ExpectSubject;
+                        }
                     }
                     _ => self.error(
                         context,

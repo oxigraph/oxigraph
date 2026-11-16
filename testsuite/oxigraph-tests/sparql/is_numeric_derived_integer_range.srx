@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="v"/>
+    <variable name="n"/>
+  </head>
+  <results>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#byte">12</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#byte">1200</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">-1</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#positiveInteger">0</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#unsignedByte">255</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+      </binding>
+    </result>
+    <result>
+      <binding name="v">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#unsignedByte">256</literal>
+      </binding>
+      <binding name="n">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+      </binding>
+    </result>
+  </results>
+</sparql>

@@ -7,7 +7,7 @@ use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::{Iri, IriRef};
-use oxstr::OxString;
+use oxstr::{OxStr, OxString};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
@@ -545,7 +545,7 @@ impl JsonLdExpansionConverter {
                     }
                     JsonEvent::ObjectKey(key) => {
                         if depth == 1 {
-                            let key = OxString::new_owned(&key);
+                            let key = OxStr::from(key).into_owned();
                             buffer.push((key.clone(), Vec::new()));
                             current_key = Some(key);
                         } else {
@@ -1250,7 +1250,7 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::String(value) => {
-                        new_types.push(OxString::new_owned(&value));
+                        new_types.push(OxStr::from(value).into_owned());
                         if is_array {
                             self.state.push(JsonLdExpansionState::ObjectType {
                                 types,
@@ -1357,7 +1357,7 @@ impl JsonLdExpansionConverter {
                     if from_start {
                         self.state.push(JsonLdExpansionState::ObjectStart {
                             types,
-                            id: Some(OxString::new_owned(&new_id)),
+                            id: Some(OxStr::from(new_id).into_owned()),
                             seen_id: true,
                             active_property: None,
                             active_context,
@@ -1368,7 +1368,7 @@ impl JsonLdExpansionConverter {
                     } else {
                         if let Some(new_id) = self.expand_iri(
                             &active_context,
-                            OxString::new_owned(&new_id),
+                            OxStr::from(new_id).into_owned(),
                             true,
                             false,
                         ) {
@@ -1632,7 +1632,7 @@ impl JsonLdExpansionConverter {
                                         }
                                     } else {
                                         JsonLdExpansionState::Element {
-                                            active_property: Some(OxString::new_owned(&key)),
+                                            active_property: Some(OxStr::from(key).into_owned()),
                                             active_context,
                                             is_array: false,
                                             container,
@@ -1723,7 +1723,7 @@ impl JsonLdExpansionConverter {
                                     in_property: true,
                                 });
                                 self.state.push(JsonLdExpansionState::Element {
-                                    active_property: Some(OxString::new_owned(&key)),
+                                    active_property: Some(OxStr::from(key).into_owned()),
                                     active_context,
                                     is_array: false,
                                     container,
@@ -1989,10 +1989,10 @@ impl JsonLdExpansionConverter {
                         }
                         let value = match value.into_iter().next().unwrap() {
                             JsonEvent::String(value) => {
-                                JsonLdValue::String(OxString::new_owned(&value))
+                                JsonLdValue::String(OxStr::from(value).into_owned())
                             }
                             JsonEvent::Number(value) => {
-                                JsonLdValue::Number(OxString::new_owned(&value))
+                                JsonLdValue::Number(OxStr::from(value).into_owned())
                             }
                             JsonEvent::Boolean(value) => JsonLdValue::Boolean(value),
                             JsonEvent::Null => return,
@@ -2072,7 +2072,7 @@ impl JsonLdExpansionConverter {
                         active_context,
                         r#type,
                         value,
-                        language: Some(OxString::new_owned(&language)),
+                        language: Some(OxStr::from(language).into_owned()),
                         direction,
                     })
                 } else {
@@ -2141,7 +2141,7 @@ impl JsonLdExpansionConverter {
             } => {
                 if let JsonEvent::String(t) = event {
                     let r#type =
-                        self.expand_iri(&active_context, OxString::new_owned(&t), true, true);
+                        self.expand_iri(&active_context, OxStr::from(t).into_owned(), true, true);
                     self.state.push(JsonLdExpansionState::Value {
                         active_context,
                         r#type,
@@ -2452,7 +2452,7 @@ impl JsonLdExpansionConverter {
                     self.state
                         .push(JsonLdExpansionState::LanguageContainerValue {
                             active_context,
-                            language: OxString::new_owned(&language),
+                            language: OxStr::from(language).into_owned(),
                             is_array: false,
                             direction,
                         })
@@ -2487,7 +2487,7 @@ impl JsonLdExpansionConverter {
                             });
                     }
                     results.push(JsonLdEvent::Value {
-                        value: JsonLdValue::String(OxString::new_owned(&value)),
+                        value: JsonLdValue::String(OxStr::from(value).into_owned()),
                         r#type: None,
                         language: (language != "@none"
                             && self.expand_iri(&active_context, language.clone(), false, false)
@@ -2745,7 +2745,10 @@ impl JsonLdExpansionConverter {
         // 7)
         if vocab {
             if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                return Some(OxString::concat([vocabulary_mapping, &value]));
+                return Some(OxString::concat([
+                    vocabulary_mapping.as_str(),
+                    value.as_str(),
+                ]));
             }
         }
         // 8)
@@ -2755,16 +2758,14 @@ impl JsonLdExpansionConverter {
                     return Some(value);
                 };
                 let iri = IriRef::parse_unchecked(value);
-                return Some(OxString::new_owned(
-                    &base_iri.resolve_unchecked(&iri).into_inner(),
-                ));
+                return Some(base_iri.resolve_unchecked(&iri).into_inner().into());
             } else if let Ok(iri) = IriRef::parse(value.clone()) {
                 if iri.is_absolute() {
                     return Some(iri.into_inner());
                 }
                 if let Some(base_iri) = &active_context.base_iri {
                     if let Ok(iri) = base_iri.resolve(&iri) {
-                        return Some(OxString::new_owned(&iri.into_inner()));
+                        return Some(iri.into_inner().into());
                     }
                 }
             }
@@ -2888,7 +2889,7 @@ impl JsonLdExpansionConverter {
                         if let JsonEvent::String(value) = value {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types: Vec::new(),
-                                id: Some(OxString::new_owned(&value)),
+                                id: Some(OxStr::from(value).into_owned()),
                                 seen_id: false,
                                 active_property: Some(active_property),
                                 active_context,
@@ -2908,7 +2909,7 @@ impl JsonLdExpansionConverter {
                                 id: self
                                     .expand_iri(
                                         &active_context,
-                                        OxString::new_owned(&value),
+                                        OxStr::from(value).into_owned(),
                                         true,
                                         true,
                                     )
