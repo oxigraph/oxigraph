@@ -242,6 +242,44 @@ impl Store {
             .quads_for_pattern(subject, predicate, object, graph_name)
     }
 
+    /// Returns the number of quads matching a filter on each quad component.
+    ///
+    /// This is faster than counting the results of [`quads_for_pattern`](Store::quads_for_pattern):
+    /// the matching quads are counted in the index without being decoded.
+    ///
+    /// <div class="warning">This function executes a full scan of the matching quads.</div>
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let g: GraphName = NamedNode::new("http://example.com/g")?.into();
+    /// store.insert(Quad::new(ex.clone(), ex.clone(), ex.clone(), g.clone()))?;
+    /// store.insert(Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// ))?;
+    ///
+    /// assert_eq!(2, store.count_quads_for_pattern(None, None, None, None)?);
+    /// assert_eq!(1, store.count_quads_for_pattern(None, None, None, Some(&g))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn count_quads_for_pattern(
+        &self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<usize, StorageError> {
+        self.snapshot()
+            .count_quads_for_pattern(subject, predicate, object, graph_name)
+    }
+
     /// Returns all the quads contained in the store.
     ///
     /// Usage example:
@@ -919,6 +957,24 @@ impl Snapshot {
         }
     }
 
+    /// Returns the number of quads matching a filter on each quad component.
+    ///
+    /// See [`Store::count_quads_for_pattern`].
+    pub fn count_quads_for_pattern(
+        &self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<usize, StorageError> {
+        self.reader.count_quads_for_pattern(
+            subject.map(EncodedTerm::from).as_ref(),
+            predicate.map(EncodedTerm::from).as_ref(),
+            object.map(EncodedTerm::from).as_ref(),
+            graph_name.map(EncodedTerm::from).as_ref(),
+        )
+    }
+
     /// Returns all the quads contained in the snapshot.
     pub fn iter(&self) -> QuadIter<'static> {
         self.quads_for_pattern(None, None, None, None)
@@ -1006,6 +1062,24 @@ impl<'a> Transaction<'a> {
             ),
             reader,
         }
+    }
+
+    /// Returns the number of quads matching a filter on each quad component.
+    ///
+    /// See [`Store::count_quads_for_pattern`].
+    pub fn count_quads_for_pattern(
+        &self,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<usize, StorageError> {
+        self.inner.reader().count_quads_for_pattern(
+            subject.map(EncodedTerm::from).as_ref(),
+            predicate.map(EncodedTerm::from).as_ref(),
+            object.map(EncodedTerm::from).as_ref(),
+            graph_name.map(EncodedTerm::from).as_ref(),
+        )
     }
 
     /// Returns all the quads contained in the store.
