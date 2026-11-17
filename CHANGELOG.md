@@ -12,6 +12,7 @@
 - SPARQL: `GRAPH ?g { ... MINUS { ... } }` returned too many results when the right side of the `MINUS` uses `?g`.
 - `sparopt`: the type inference of sub-queries no longer drops the input bindings, which made the joins after a `LATERAL` sub-query lose their keys.
 - `sparopt`: OPTIONAL patterns nested in other OPTIONAL patterns can be evaluated with for-loop left joins.
+- RDF/XML: the replacement text of DTD-declared entities is capped at 16 MiB per document, counting declarations and every content or attribute reference. Each declared entity was already capped at 1 MiB, but a document could repeat one of them without limit. A namespace URI declared with an entity is counted once, when its `xmlns` attribute is parsed.
 
 
 # [0.5.7] - 2026-04-19
