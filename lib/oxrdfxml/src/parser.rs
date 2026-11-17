@@ -981,6 +981,16 @@ impl<R> InternalRdfXmlParser<R> {
             return Ok(());
         }
 
+        // The reader keeps xmlns values raw and expands them again on every tag.
+        // Charge each declaration once, before this tag's name is resolved, so
+        // the declaring tag cannot expand past the budget.
+        for attribute in event.attributes() {
+            let attribute = attribute.map_err(Error::InvalidAttr)?;
+            if attribute.key.into_inner().starts_with("xmlns") {
+                self.convert_attribute(&attribute)?;
+            }
+        }
+
         let (tag_namespace, tag_local_name) = self.reader.resolver().resolve_element(event.name());
         let tag_name = self.resolve_ns_name(tag_namespace, tag_local_name)?;
 
@@ -1545,7 +1555,8 @@ impl<R> InternalRdfXmlParser<R> {
             ResolveResult::Bound(ns) => {
                 let value = OxString::concat([ns.into_inner(), local_name.into_inner()]);
                 Ok(
-                    match unescape_with(&value, |e| self.custom_entities.resolve(e))
+                    // Charged when the xmlns attribute was parsed. Later tags reuse it.
+                    match unescape_with(&value, |e| self.custom_entities.lookup(e))
                         .map_err(|error| self.entity_error(error))?
                     {
                         Cow::Owned(value) => value.into(),
@@ -2199,9 +2210,9 @@ impl Default for EntityRegistry {
 }
 
 impl EntityRegistry {
-    /// Resolves without charging the budget. Prefix reads use it because callers
-    /// may read the prefixes any number of times, and each read only expands
-    /// stored values once.
+    /// Resolves without charging the budget. Prefix reads and tag names use it.
+    /// The xmlns value that introduced a namespace entity is charged once, and
+    /// every later read expands that stored value again.
     fn lookup(&self, e: &str) -> Option<&str> {
         resolve_xml_entity(e).or_else(|| self.entities.get(e).map(String::as_str))
     }
@@ -2359,7 +2370,8 @@ mod entity_budget_tests {
         let dtd = format!("<!ENTITY big \"{}\">", "a".repeat(MIB));
         let references = |count: usize| "&big;".repeat(count);
 
-        let fits = parse(&document(&dtd, &references(15)));
+        // Sixteen copies fill the budget exactly.
+        let fits = parse(&document(&dtd, &references(16)));
         assert_eq!(fits.map(|triples| triples.len()).ok(), Some(1));
         assert_budget_refused(&parse(&document(&dtd, &references(17))));
     }
@@ -2403,6 +2415,50 @@ mod entity_budget_tests {
         }
         let triple = parser.next().unwrap().unwrap();
         assert_eq!(triple.object.to_string(), format!("\"{value}\""));
+    }
+
+    #[test]
+    fn namespace_entities_are_charged_once() {
+        // 5,000 tags times a 4,096-byte namespace is more than 16 MiB.
+        // Billing that namespace on every tag would refuse the document.
+        let ns = format!(
+            "http://example.com/{}",
+            "a".repeat(4096 - "http://example.com/".len())
+        );
+        let body = (0..5_000)
+            .map(|index| format!("<ex:p{index}>1</ex:p{index}>"))
+            .collect::<Vec<_>>()
+            .concat();
+        let with_namespace = |xmlns: &str, doctype: &str| {
+            format!(
+                "<?xml version=\"1.0\"?>{doctype}\
+                 <rdf:RDF xmlns:rdf=\"{RDF_NS}\" xmlns:ex=\"{xmlns}\">\
+                 <rdf:Description rdf:about=\"http://example.com/s\">{body}</rdf:Description></rdf:RDF>"
+            )
+        };
+
+        let via_entity = with_namespace(
+            "&ns;",
+            &format!("<!DOCTYPE rdf:RDF [<!ENTITY ns \"{ns}\">]>"),
+        );
+        let triples = parse(&via_entity).unwrap();
+        assert_eq!(triples.len(), 5_000);
+        assert_eq!(triples[0].predicate.to_string(), format!("<{ns}p0>"));
+
+        let written_out = with_namespace(&ns, "");
+        assert_eq!(parse(&written_out).unwrap().len(), 5_000);
+
+        // The declaration itself still counts. Seventeen copies in one xmlns
+        // value are over the budget even though no tag uses the prefix.
+        let big = "b".repeat(MIB);
+        let repeated = "&big;".repeat(17);
+        let blowup = format!(
+            "<?xml version=\"1.0\"?><!DOCTYPE rdf:RDF [<!ENTITY big \"{big}\">]>\
+             <rdf:RDF xmlns:rdf=\"{RDF_NS}\" xmlns:ex=\"{repeated}\">\
+             <rdf:Description rdf:about=\"http://example.com/s\"><rdf:value>1</rdf:value></rdf:Description>\
+             </rdf:RDF>"
+        );
+        assert_budget_refused(&parse(&blowup));
     }
 
     #[test]
