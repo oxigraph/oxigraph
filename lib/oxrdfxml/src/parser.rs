@@ -18,11 +18,17 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Read};
 use std::str;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 
 const MAX_ENTITY_NESTING: usize = 1024;
 const MAX_ENTITY_SIZE: usize = 1024 * 1024;
+/// Upper bound on the replacement bytes that DTD-declared entities may produce
+/// in one document. Declarations and every content or attribute reference
+/// draw from it, so a small document cannot repeat a large declared entity
+/// without limit. Each declared entity is also capped by `MAX_ENTITY_SIZE`.
+const MAX_CUSTOM_ENTITY_EXPANSION_BYTES: usize = 16 * 1024 * 1024;
 
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) streaming parser.
 ///
@@ -650,7 +656,7 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                     PrefixDeclaration::Default => "",
                     PrefixDeclaration::Named(name) => {
                         let Ok(Cow::Borrowed(name)) =
-                            unescape_with(name, |e| self.custom_entities.resolve(e))
+                            unescape_with(name, |e| self.custom_entities.lookup(e))
                         else {
                             continue;
                         };
@@ -662,7 +668,7 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                 },
                 {
                     let Ok(Cow::Borrowed(value)) =
-                        unescape_with(value.into_inner(), |e| self.custom_entities.resolve(e))
+                        unescape_with(value.into_inner(), |e| self.custom_entities.lookup(e))
                     else {
                         continue;
                     };
@@ -926,14 +932,14 @@ impl<R> InternalRdfXmlParser<R> {
 
                 // Resolves custom entities within the current entity definition.
                 let entity_value = unescape_with(entity_value, |e| self.custom_entities.resolve(e))
-                    .map_err(Error::from)?;
+                    .map_err(|error| self.entity_error(error))?;
                 if entity_value.len() > MAX_ENTITY_SIZE {
                     return Err(RdfXmlSyntaxError::msg(format!(
                         "The unescaped entity declaration is too long, it is capped at {MAX_ENTITY_SIZE} bytes"
                     )).into());
                 }
                 self.custom_entities
-                    .0
+                    .entities
                     .insert(entity_name.to_owned(), entity_value.to_string());
             }
         }
@@ -1540,7 +1546,7 @@ impl<R> InternalRdfXmlParser<R> {
                 let value = OxString::concat([ns.into_inner(), local_name.into_inner()]);
                 Ok(
                     match unescape_with(&value, |e| self.custom_entities.resolve(e))
-                        .map_err(Error::from)?
+                        .map_err(|error| self.entity_error(error))?
                     {
                         Cow::Owned(value) => value.into(),
                         Cow::Borrowed(_) => value, // Not changed, no need to reallocate
@@ -1972,11 +1978,11 @@ impl<R> InternalRdfXmlParser<R> {
         &self,
         attribute: &Attribute<'a>,
     ) -> Result<Cow<'a, str>, RdfXmlParseError> {
-        Ok(
-            attribute.normalized_value_with(self.xml_version, MAX_ENTITY_NESTING, |e| {
+        attribute
+            .normalized_value_with(self.xml_version, MAX_ENTITY_NESTING, |e| {
                 self.custom_entities.resolve(e)
-            })?,
-        )
+            })
+            .map_err(|error| self.entity_error(error))
     }
 
     fn convert_iri_attribute(
@@ -2141,26 +2147,88 @@ impl<R> InternalRdfXmlParser<R> {
         RdfVersion::V11
     }
 
-    fn decode_xml_entity(&mut self, event: &BytesRef<'_>) -> Result<(), Error> {
+    fn decode_xml_entity(&mut self, event: &BytesRef<'_>) -> Result<(), RdfXmlParseError> {
         if let Some(char_ref) = event.resolve_char_ref()? {
             self.text_buffer.push(char_ref);
             return Ok(());
         }
         let reference = event.xml_content(self.xml_version);
         let Some(value) = self.custom_entities.resolve(&reference) else {
-            return Err(EscapeError::UnrecognizedEntity(0..event.len(), reference.into()).into());
+            let error = EscapeError::UnrecognizedEntity(0..event.len(), reference.into());
+            return Err(self.entity_error(error));
         };
         self.text_buffer.push_str(value);
         Ok(())
     }
+
+    /// Reports a reference that could not be resolved. When the document
+    /// budget refused it, the error names the limit instead of an unknown entity.
+    fn entity_error(&self, error: impl Into<Error>) -> RdfXmlParseError {
+        if self
+            .custom_entities
+            .budget_exhausted
+            .load(Ordering::Relaxed)
+        {
+            RdfXmlSyntaxError::msg(format!(
+                "DTD entity expansion exceeds the {MAX_CUSTOM_ENTITY_EXPANSION_BYTES} byte limit"
+            ))
+            .into()
+        } else {
+            error.into().into()
+        }
+    }
 }
 
-#[derive(Default)]
-struct EntityRegistry(HashMap<String, String>);
+struct EntityRegistry {
+    entities: HashMap<String, String>,
+    /// Replacement bytes that custom entities may still produce.
+    /// Atomics, not `Cell`: `pyoxigraph` keeps this parser in a `Sync` pyclass.
+    budget: AtomicUsize,
+    /// Set when a reference was refused because it would exceed the budget.
+    budget_exhausted: AtomicBool,
+}
+
+impl Default for EntityRegistry {
+    fn default() -> Self {
+        Self {
+            entities: HashMap::new(),
+            budget: AtomicUsize::new(MAX_CUSTOM_ENTITY_EXPANSION_BYTES),
+            budget_exhausted: AtomicBool::new(false),
+        }
+    }
+}
 
 impl EntityRegistry {
+    /// Resolves without charging the budget. Prefix reads use it because callers
+    /// may read the prefixes any number of times, and each read only expands
+    /// stored values once.
+    fn lookup(&self, e: &str) -> Option<&str> {
+        resolve_xml_entity(e).or_else(|| self.entities.get(e).map(String::as_str))
+    }
+
+    /// Resolves a reference that is parsed into the document, charging the budget.
     fn resolve(&self, e: &str) -> Option<&str> {
-        resolve_xml_entity(e).or_else(|| self.0.get(e).map(String::as_str))
+        if let Some(builtin) = resolve_xml_entity(e) {
+            return Some(builtin);
+        }
+        let value = self.entities.get(e)?;
+        let len = value.len();
+        // Compare-and-subtract, so two shared borrows cannot both spend the
+        // same remaining bytes and slip past the limit.
+        let mut remaining = self.budget.load(Ordering::Relaxed);
+        while len <= remaining {
+            match self.budget.compare_exchange_weak(
+                remaining,
+                remaining - len,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => return Some(value.as_str()),
+                Err(observed) => remaining = observed,
+            }
+        }
+        self.budget_exhausted.store(true, Ordering::Relaxed);
+        None
     }
 }
 
@@ -2250,5 +2318,104 @@ mod tests {
         parse(129, false).unwrap_err();
         parse(128, true).unwrap();
         parse(129, true).unwrap_err();
+    }
+}
+
+#[cfg(test)]
+mod entity_budget_tests {
+    use super::*;
+
+    const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    const MIB: usize = 1024 * 1024;
+
+    fn parse(xml: &str) -> Result<Vec<Triple>, RdfXmlParseError> {
+        RdfXmlParser::new()
+            .for_reader(xml.as_bytes())
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    fn document(dtd: &str, value: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><!DOCTYPE rdf:RDF [{dtd}]>\
+             <rdf:RDF xmlns:rdf=\"{RDF_NS}\">\
+             <rdf:Description rdf:about=\"http://example.com/a\">\
+             <rdf:value>{value}</rdf:value>\
+             </rdf:Description></rdf:RDF>"
+        )
+    }
+
+    fn assert_budget_refused(result: &Result<Vec<Triple>, RdfXmlParseError>) {
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.to_string().contains("DTD entity expansion")),
+            "the expansion budget must refuse the document: {result:?}"
+        );
+    }
+
+    #[test]
+    fn content_references_share_one_document_budget() {
+        // Each entity is 1 MiB, which is the per-entity cap. The budget is 16 MiB.
+        let dtd = format!("<!ENTITY big \"{}\">", "a".repeat(MIB));
+        let references = |count: usize| "&big;".repeat(count);
+
+        let fits = parse(&document(&dtd, &references(15)));
+        assert_eq!(fits.map(|triples| triples.len()).ok(), Some(1));
+        assert_budget_refused(&parse(&document(&dtd, &references(17))));
+    }
+
+    #[test]
+    fn declarations_share_the_same_document_budget() {
+        let big = format!("<!ENTITY big \"{}\">", "a".repeat(MIB));
+        let declarations = |count: usize| {
+            (1..=count)
+                .map(|index| format!("<!ENTITY d{index} \"&big;\">"))
+                .collect::<Vec<_>>()
+                .concat()
+        };
+
+        // Fifteen declarations and the body reference together produce 16 MiB.
+        let fits = parse(&document(&format!("{big}{}", declarations(15)), "&d1;"));
+        assert_eq!(fits.map(|triples| triples.len()).ok(), Some(1));
+        // A sixteenth declaration would exceed the budget, so the document is refused.
+        assert_budget_refused(&parse(&document(
+            &format!("{big}{}", declarations(16)),
+            "&d1;",
+        )));
+    }
+
+    #[test]
+    fn reading_prefixes_does_not_spend_the_document_budget() {
+        // Each read expands the entity-valued `xmlns:ex` to 64 KiB. Three
+        // hundred reads would exhaust the 16 MiB budget if they were charged.
+        let value = format!("http://example.com/{}", "a".repeat(64 * 1024));
+        let xml = format!(
+            "<?xml version=\"1.0\"?><!DOCTYPE rdf:RDF [<!ENTITY ns \"{value}\">]>\
+             <rdf:RDF xmlns:rdf=\"{RDF_NS}\" xmlns:ex=\"&ns;\">\
+             <rdf:Description rdf:about=\"http://example.com/a\"><rdf:value>1</rdf:value></rdf:Description>\
+             <rdf:Description rdf:about=\"http://example.com/b\"><rdf:value>&ns;</rdf:value></rdf:Description>\
+             </rdf:RDF>"
+        );
+        let mut parser = RdfXmlParser::new().for_reader(xml.as_bytes());
+        parser.next().unwrap().unwrap();
+        for _ in 0..300 {
+            assert!(parser.prefixes().count() >= 1);
+        }
+        let triple = parser.next().unwrap().unwrap();
+        assert_eq!(triple.object.to_string(), format!("\"{value}\""));
+    }
+
+    #[test]
+    fn ordinary_custom_entities_still_expand() {
+        let xml = format!(
+            "<?xml version=\"1.0\"?><!DOCTYPE rdf:RDF [<!ENTITY ex \"http://example.com/\">]>\
+             <rdf:RDF xmlns:rdf=\"{RDF_NS}\">\
+             <rdf:Description rdf:about=\"&ex;a\"><rdf:value>&ex;</rdf:value></rdf:Description>\
+             </rdf:RDF>"
+        );
+        let triples = parse(&xml).unwrap();
+        assert_eq!(triples.len(), 1);
+        assert_eq!(triples[0].subject.to_string(), "<http://example.com/a>");
+        assert_eq!(triples[0].object.to_string(), "\"http://example.com/\"");
     }
 }
