@@ -221,6 +221,51 @@ impl PyStore {
         }
     }
 
+    /// Returns the number of quads matching a given pattern.
+    ///
+    /// This is faster than counting the results of :py:meth:`Store.quads_for_pattern`:
+    /// the matching quads are counted inside of the store without being converted
+    /// to Python objects.
+    ///
+    /// :param subject: the quad subject or :py:const:`None` to match everything.
+    /// :type subject: NamedNode or BlankNode or Triple or None
+    /// :param predicate: the quad predicate or :py:const:`None` to match everything.
+    /// :type predicate: NamedNode or None
+    /// :param object: the quad object or :py:const:`None` to match everything.
+    /// :type object: NamedNode or BlankNode or Literal or Triple or None
+    /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :return: the number of quads matching the pattern.
+    /// :rtype: int
+    /// :raises OSError: if an error happens during the quads lookup.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
+    /// >>> store.count_quads_for_pattern(NamedNode('http://example.com'), None, None, None)
+    /// 1
+    /// >>> store.count_quads_for_pattern(None, None, None, DefaultGraph())
+    /// 0
+    #[pyo3(signature = (subject, predicate, object, graph_name = None))]
+    fn count_quads_for_pattern(
+        &self,
+        subject: Option<PyNamedOrBlankNode>,
+        predicate: Option<PyNamedNode>,
+        object: Option<PyTerm>,
+        graph_name: Option<PyGraphName>,
+        py: Python<'_>,
+    ) -> PyResult<usize> {
+        py.detach(|| {
+            self.inner
+                .count_quads_for_pattern(
+                    subject.map(Into::into).as_ref(),
+                    predicate.map(Into::into).as_ref(),
+                    object.map(Into::into).as_ref(),
+                    graph_name.map(Into::into).as_ref(),
+                )
+                .map_err(map_storage_error)
+        })
+    }
+
     /// Executes a `SPARQL 1.1 query <https://www.w3.org/TR/sparql11-query/>`_.
     ///
     /// :param query: the query to execute.

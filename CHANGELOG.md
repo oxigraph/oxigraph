@@ -2,6 +2,8 @@
 
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
+- `oxigraph`: `Store::count_quads_for_pattern`, `Snapshot::count_quads_for_pattern` and `Transaction::count_quads_for_pattern`, returning how many quads match a pattern without decoding them.
+- Python: the `Store.count_quads_for_pattern` method, counting the quads matching a pattern without building the `Quad` objects.
 
 ### Fixed
 - Turtle, TriG, N-Triples, N-Quads, RDF/XML and SPARQL JSON and XML results: a triple term nested more than 128 deep is now a syntax error, the same limit as `Term::from_str`. Very deeply nested terms overflowed the stack when they were cloned, dropped or printed. A SPARQL XML results `<triple>` must have exactly one subject, predicate and object.

@@ -250,6 +250,29 @@ impl<'a> StorageReader<'a> {
         }
     }
 
+    pub fn count_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Result<usize, StorageError> {
+        match &self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReaderKind::RocksDb(reader) => {
+                let mut count = 0;
+                for quad in reader.quads_for_pattern(subject, predicate, object, graph_name) {
+                    quad?;
+                    count += 1;
+                }
+                Ok(count)
+            }
+            StorageReaderKind::Memory(reader) => Ok(reader
+                .quads_for_pattern(subject, predicate, object, graph_name)
+                .count()),
+        }
+    }
+
     pub fn triples_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
