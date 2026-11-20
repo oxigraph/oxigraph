@@ -189,13 +189,18 @@ pub enum Command {
         /// It can be an extension like "nt" or a MIME type like "application/n-triples".
         ///
         /// By default, the format is guessed from the results file extension.
-        #[arg(long, required_unless_present = "results_file")]
+        #[arg(long, required_unless_present_any = ["results_file", "explain_only"])]
         results_format: Option<String>,
         /// Print to stderr a human-readable explanation of the query evaluation
         ///
         /// Use the --stats option to print also query evaluation statistics.
         #[arg(long, conflicts_with = "explain_file")]
         explain: bool,
+        /// Only plan the query and print the explanation of the evaluation plan, without evaluating the query
+        ///
+        /// The explanation is printed to stderr, or written to the --explain-file file.
+        #[arg(long, conflicts_with_all = ["explain", "stats", "results_file"])]
+        explain_only: bool,
         /// Write to the given file an explanation of the query evaluation
         ///
         /// If the file extension is ".json" the JSON format is used, if ".txt" a human-readable format is used.
@@ -211,6 +216,11 @@ pub enum Command {
         /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
         #[arg(long)]
         union_default_graph: bool,
+        /// Cancel the query evaluation after the given number of seconds
+        ///
+        /// The explanation requested with --explain or --explain-file is still written, with the statistics gathered so far.
+        #[arg(long)]
+        timeout_s: Option<u64>,
     },
     /// Execute a SPARQL update against the store
     Update {

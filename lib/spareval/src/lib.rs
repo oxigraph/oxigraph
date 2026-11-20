@@ -626,6 +626,48 @@ impl PreparedQuery<'_> {
         self.evaluate(dataset, false).0
     }
 
+    /// Plans the query against the given [`QueryableDataset`] without evaluating it.
+    ///
+    /// The returned explanation contains the evaluation plan without statistics.
+    ///
+    /// ```
+    /// use oxrdf::Dataset;
+    /// use spareval::QueryEvaluator;
+    /// use spargebra::SparqlParser;
+    ///
+    /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
+    /// let explanation = QueryEvaluator::new().prepare(&query).plan(&Dataset::new())?;
+    /// let mut buf = Vec::new();
+    /// explanation.write_in_json(&mut buf)?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn plan<'b>(
+        self,
+        dataset: impl QueryableDataset<'b>,
+    ) -> Result<QueryExplanation, QueryEvaluationError> {
+        let start_planning = Timer::now();
+        let (pattern, base_iri) = match self.query {
+            Query::Select(query) => (&query.expression, query.base_iri.as_ref()),
+            Query::Ask(query) => (&query.expression, query.base_iri.as_ref()),
+            Query::Construct(query) => (&query.expression, query.base_iri.as_ref()),
+            Query::Describe(query) => (&query.pattern, query.base_iri.as_ref()),
+        };
+        let mut pattern = QueryExpression::from(pattern);
+        if !self.evaluator.without_optimizations {
+            pattern = Optimizer::optimize_query_expression(pattern);
+        }
+        let planning_duration = start_planning.elapsed();
+        let plan = self
+            .evaluator
+            .simple_evaluator(dataset, self.dataset, base_iri, true)?
+            .plan(&pattern);
+        Ok(QueryExplanation {
+            inner: plan,
+            with_stats: false,
+            planning_duration,
+        })
+    }
+
     pub fn explain<'b>(
         self,
         dataset: impl QueryableDataset<'b>,
