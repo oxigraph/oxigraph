@@ -752,6 +752,22 @@ where
             }
             if *function == sparql::DATATYPE {
                 let [p] = extract_parameters(function, parameters)?;
+                if let Some(e) = try_build_internal_expression_evaluator(p, context)? {
+                    // As STR: read the term itself, so a derived datatype such as
+                    // xsd:nonNegativeInteger is not reported as the primitive one
+                    // its value is parsed into
+                    let externalize = context.build_externalize_term();
+                    return Ok(Rc::new(move |tuple| {
+                        Ok(Some(ExpressionTerm::NamedNode(
+                            match externalize(try_or_ok!(e(tuple)?))? {
+                                Term::Literal(term) => term.datatype().clone(),
+                                Term::NamedNode(_) | Term::BlankNode(_) => return Ok(None),
+                                #[cfg(feature = "sparql-12")]
+                                Term::Triple(_) => return Ok(None),
+                            },
+                        )))
+                    }));
+                }
                 let e = build_expression_evaluator(p, context)?;
                 return Ok(Rc::new(move |tuple| {
                     Ok(Some(ExpressionTerm::NamedNode(

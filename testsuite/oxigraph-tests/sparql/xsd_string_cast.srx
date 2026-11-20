@@ -7,7 +7,7 @@
     <results>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#float">1.0E-7</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">0.0000001</literal>
             </binding>
             <binding name="s">
                 <literal>1.0E-7</literal>
@@ -15,7 +15,7 @@
         </result>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#double">1.0E-7</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">0.0000001</literal>
             </binding>
             <binding name="s">
                 <literal>1.0E-7</literal>
@@ -55,7 +55,7 @@
         </result>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#float">1.0E6</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#float">1000000</literal>
             </binding>
             <binding name="s">
                 <literal>1.0E6</literal>
@@ -63,7 +63,7 @@
         </result>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#double">1.0E6</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#double">1000000</literal>
             </binding>
             <binding name="s">
                 <literal>1.0E6</literal>
@@ -151,7 +151,7 @@
         </result>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">30000-01-02T03:04:05Z</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">30000-01-02T03:04:05-00:00</literal>
             </binding>
             <binding name="s">
                 <literal>30000-01-02T03:04:05Z</literal>
@@ -159,7 +159,7 @@
         </result>
         <result>
             <binding name="v">
-                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">2000-01-02T00:00:00Z</literal>
+                <literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">2000-01-01T24:00:00Z</literal>
             </binding>
             <binding name="s">
                 <literal>2000-01-02T00:00:00Z</literal>
