@@ -408,16 +408,37 @@ impl TryFrom<Double> for Decimal {
     type Error = TooLargeForDecimalError;
 
     #[inline]
-    #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn try_from(value: Double) -> Result<Self, Self::Error> {
-        let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
-        if (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
-            Ok(Self {
-                value: shifted as i128,
-            })
-        } else {
-            Err(TooLargeForDecimalError)
+        let value = f64::from(value);
+        if !value.is_finite() {
+            return Err(TooLargeForDecimalError);
         }
+        if !value.is_normal() {
+            // Zeros and subnormals all round to zero at this scale.
+            return Ok(Self::default());
+        }
+
+        // Scale the IEEE 754 significand exactly before applying the binary exponent.
+        let bits = value.to_bits();
+        let significand = (bits & ((1 << 52) - 1)) | (1 << 52);
+        let exponent =
+            i32::try_from((bits >> 52) & 0x7ff).map_err(|_| TooLargeForDecimalError)? - 1023 - 52;
+        let scaled = i128::from(significand) * DECIMAL_PART_POW;
+        let sign = if value.is_sign_negative() { -1 } else { 1 };
+        let value = match exponent {
+            ..=-1 => {
+                // Shifts of 127 or more all round to zero at this scale.
+                let shift = (-exponent).min(127);
+                // Adding half a unit minus one rounds to nearest with ties toward zero.
+                let half = 1_i128 << (shift - 1);
+                sign * ((scaled + half - 1) >> shift)
+            }
+            0..=126 => (sign * scaled)
+                .checked_mul(1_i128 << exponent)
+                .ok_or(TooLargeForDecimalError)?,
+            127.. => return Err(TooLargeForDecimalError),
+        };
+        Ok(Self { value })
     }
 }
 
@@ -1027,13 +1048,9 @@ mod tests {
         Decimal::try_from(Float::from(f32::NEG_INFINITY)).unwrap_err();
         Decimal::try_from(Float::from(f32::MIN)).unwrap_err();
         Decimal::try_from(Float::from(f32::MAX)).unwrap_err();
-        assert!(
-            Decimal::try_from(Float::from(1_672_507_300_000.))?
-                .checked_sub(Decimal::from(1_672_507_293_696_i64))
-                .unwrap()
-                .checked_abs()
-                .unwrap()
-                < Decimal::from(1)
+        assert_eq!(
+            Decimal::try_from(Float::from(1_672_507_300_000.))?,
+            Decimal::from(1_672_507_293_696_i64)
         );
         Ok(())
     }
@@ -1050,16 +1067,42 @@ mod tests {
         );
         assert_eq!(
             Decimal::try_from(Double::from(-123.1)).ok(),
-            Some(Decimal::from_str("-123.1")?)
+            Some(Decimal::from_str("-123.099999999999994316")?)
         );
-        assert!(
-            Decimal::try_from(Double::from(1_672_507_302_466.))?
-                .checked_sub(Decimal::from(1_672_507_302_466_i64))
-                .unwrap()
-                .checked_abs()
-                .unwrap()
-                < Decimal::from(1)
+        assert_eq!(
+            Decimal::try_from(Double::from(1_672_507_302_466.))?,
+            Decimal::from(1_672_507_302_466_i64)
         );
+        assert_eq!(
+            Decimal::try_from(Double::from(1.0 / 524_288.0))?,
+            Decimal::from_str("0.000001907348632812")?
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(-1.0 / 524_288.0))?,
+            Decimal::from_str("-0.000001907348632812")?
+        );
+        assert_eq!(Decimal::try_from(Double::from(7e-19))?, Decimal::STEP);
+        assert_eq!(
+            Decimal::try_from(Double::from(f64::MIN_POSITIVE))?,
+            Decimal::default()
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(f64::from_bits(1)))?,
+            Decimal::default()
+        );
+        for sign in [-1., 1.] {
+            let outside_range = 1.701_411_834_604_692_4e20_f64;
+            let inside_range = f64::from_bits(outside_range.to_bits() - 1);
+            Decimal::try_from(Double::from(sign * outside_range)).unwrap_err();
+            assert_eq!(
+                Decimal::try_from(Double::from(sign * inside_range))?,
+                Decimal::from_str(if sign < 0. {
+                    "-170141183460469211136"
+                } else {
+                    "170141183460469211136"
+                })?
+            );
+        }
         Decimal::try_from(Double::from(f64::NAN)).unwrap_err();
         Decimal::try_from(Double::from(f64::INFINITY)).unwrap_err();
         Decimal::try_from(Double::from(f64::NEG_INFINITY)).unwrap_err();
