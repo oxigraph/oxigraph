@@ -106,7 +106,11 @@ pub fn infer_query_expression_types(
                     .inner
                     .into_iter()
                     .filter(|(v, _)| variables.contains(v))
-                    .chain(aggregates.iter().map(|(v, _)| (v.clone(), VariableType::ANY))) //TODO: guess from aggregate
+                    .chain(
+                        aggregates
+                            .iter()
+                            .map(|(v, _)| (v.clone(), VariableType::ANY)),
+                    ) // TODO: guess from aggregate
                     .collect(),
             }
         }
