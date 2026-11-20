@@ -5,7 +5,10 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{
+    CancellationToken, QueryEvaluationError, SparqlEvaluator, UpdateEvaluationError,
+};
 use oxigraph::store::Store;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use oxigraph::store::StoreOptions;
@@ -782,5 +785,216 @@ fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
             .count(),
         1
     );
+    Ok(())
+}
+
+fn move_update(store: &Store, update: &str) -> Result<(), Box<dyn Error>> {
+    SparqlEvaluator::new()
+        .parse_update(update)?
+        .on_store(store)
+        .execute()?;
+    Ok(())
+}
+
+fn assert_move_replay(store: &Store) -> Result<(), Box<dyn Error>> {
+    let source = NamedNode::new_unchecked("urn:source");
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let new = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:new"),
+        destination.clone(),
+    );
+    let old = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:old"),
+        destination.clone(),
+    );
+    move_update(
+        store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    move_update(
+        store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(store.contains(&new)?);
+    assert!(!store.contains(&old)?);
+    assert!(!store.contains_named_graph(&source.into())?);
+    Ok(())
+}
+
+fn assert_move_replay_unchanged(store: &Store) -> Result<(), Box<dyn Error>> {
+    move_update(
+        store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    let quads = store.iter().collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        quads,
+        vec![Quad::new(
+            NamedNode::new_unchecked("urn:s"),
+            NamedNode::new_unchecked("urn:p"),
+            NamedNode::new_unchecked("urn:new"),
+            NamedNode::new_unchecked("urn:destination")
+        )]
+    );
+    Ok(())
+}
+
+#[test]
+fn test_move_silent_replay() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    assert_move_replay(&store)?;
+    assert_move_replay_unchanged(&store)
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_move_silent_replay_after_reopen() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    {
+        let store = Store::open(&dir)?;
+        assert_move_replay(&store)?;
+    }
+    let store = Store::open(&dir)?;
+    assert_move_replay_unchanged(&store)
+}
+
+#[test]
+fn test_move_missing_and_empty_source() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let source = NamedNode::new_unchecked("urn:source");
+    let old = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        NamedNode::new_unchecked("urn:old"),
+        destination.clone(),
+    );
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    move_update(
+        &store,
+        "MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(store.contains(&old)?);
+    assert!(move_update(&store, "INSERT DATA { <urn:s> <urn:p> <urn:rollback> }; MOVE GRAPH <urn:source> TO GRAPH <urn:destination>").is_err());
+    assert_eq!(
+        store.iter().collect::<Result<Vec<_>, _>>()?,
+        vec![old.clone()]
+    );
+    move_update(
+        &store,
+        "CREATE GRAPH <urn:source>; MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(!store.contains(&old)?);
+    assert!(!store.contains_named_graph(&source.clone().into())?);
+    assert!(store.contains_named_graph(&destination.clone().into())?);
+    move_update(
+        &store,
+        "DROP GRAPH <urn:destination>; CREATE GRAPH <urn:source>; MOVE SILENT GRAPH <urn:source> TO GRAPH <urn:destination>",
+    )?;
+    assert!(!store.contains_named_graph(&source.into())?);
+    assert!(store.contains_named_graph(&destination.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_respects_dataset_override() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:staging> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    let staging = NamedNode::new_unchecked("urn:staging");
+    let destination = NamedNode::new_unchecked("urn:destination");
+    let mut update =
+        SparqlEvaluator::new().parse_update("MOVE DEFAULT TO GRAPH <urn:destination>")?;
+    update
+        .using_datasets_mut()
+        .next()
+        .ok_or("MOVE should expose its query dataset")?
+        .set_default_graph(vec![staging.clone().into(), destination.clone().into()]);
+    assert_eq!(update.using_datasets().count(), 1);
+    update.on_store(&store).execute()?;
+    let new = NamedNode::new_unchecked("urn:new");
+    let subject = NamedNode::new_unchecked("urn:s");
+    let predicate = NamedNode::new_unchecked("urn:p");
+    assert_eq!(store.len()?, 2);
+    assert!(store.contains(&Quad::new(
+        subject.clone(),
+        predicate.clone(),
+        new.clone(),
+        staging
+    ))?);
+    assert!(store.contains(&Quad::new(subject, predicate, new, destination))?);
+    Ok(())
+}
+
+#[test]
+fn test_move_cancelled_before_execution_rolls_back() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+    let before = store.iter().collect::<Result<Vec<_>, _>>()?;
+    let token = CancellationToken::new();
+    token.cancel();
+    let result = SparqlEvaluator::new()
+        .with_cancellation_token(token)
+        .parse_update("MOVE GRAPH <urn:source> TO GRAPH <urn:destination>")?
+        .on_store(&store)
+        .execute();
+    assert!(
+        matches!(result, Err(UpdateEvaluationError::Unexpected(error)) if matches!(error.downcast_ref::<QueryEvaluationError>(), Some(QueryEvaluationError::Cancelled)))
+    );
+    assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, before);
+    Ok(())
+}
+
+#[test]
+fn test_self_moves_do_not_affect_transaction_selection() -> Result<(), Box<dyn Error>> {
+    let update = spargebra::SparqlParser::new()
+        .parse_update("MOVE DEFAULT TO DEFAULT; MOVE GRAPH <urn:g> TO GRAPH <urn:g>; DROP ALL")?;
+    assert!(matches!(
+        update.operations.as_slice(),
+        [spargebra::update::GraphUpdateOperation::Drop(_)]
+    ));
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_cancelled_move_preserves_graph_created_after_snapshot() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:source> { <urn:s> <urn:p> <urn:new> } }",
+    )?;
+    let mut transaction = store.start_transaction()?;
+    move_update(
+        &store,
+        "INSERT DATA { GRAPH <urn:destination> { <urn:s> <urn:p> <urn:old> } }",
+    )?;
+
+    let token = CancellationToken::new();
+    token.cancel();
+    assert!(
+        SparqlEvaluator::new()
+            .with_cancellation_token(token)
+            .parse_update("MOVE GRAPH <urn:source> TO GRAPH <urn:destination>")?
+            .on_transaction(&mut transaction)
+            .execute()
+            .is_err()
+    );
+    transaction.commit()?;
+    assert!(store.contains_named_graph(&NamedNode::new_unchecked("urn:destination").into())?);
+    assert_eq!(store.len()?, 2);
     Ok(())
 }

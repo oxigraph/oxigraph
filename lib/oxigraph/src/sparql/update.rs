@@ -19,7 +19,7 @@ use spargebra::term::{BlankNode, GraphName, GroundQuad, GroundTerm, NamedOrBlank
 use spargebra::term::{GroundTriple, Triple};
 use spargebra::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
-    GraphUpdateOperation, InsertDataOperation, LoadOperation, Update,
+    GraphUpdateOperation, InsertDataOperation, LoadOperation, MoveOperation, Update,
 };
 #[cfg(feature = "http-client")]
 use std::time::Duration;
@@ -59,12 +59,16 @@ impl PreparedSparqlUpdate {
         let using_datasets = update
             .operations
             .iter()
-            .map(|operation| {
-                if let GraphUpdateOperation::DeleteInsert(operation) = operation {
+            .map(|operation| match operation {
+                GraphUpdateOperation::DeleteInsert(operation) => {
                     Some(operation.using.clone().map(Into::into).unwrap_or_default())
-                } else {
-                    None
                 }
+                GraphUpdateOperation::Move(operation)
+                    if operation.source != operation.destination =>
+                {
+                    Some(QueryDatasetSpecification::new())
+                }
+                _ => None,
             })
             .collect();
         Self {
@@ -78,13 +82,13 @@ impl PreparedSparqlUpdate {
         }
     }
 
-    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert) and the copy step of non-self MOVE operations.
     #[inline]
     pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDatasetSpecification> {
         self.using_datasets.iter().filter_map(Option::as_ref)
     }
 
-    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert) and the copy step of non-self MOVE operations.
     #[inline]
     pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDatasetSpecification> {
         self.using_datasets.iter_mut().filter_map(Option::as_mut)
@@ -279,6 +283,12 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             GraphUpdateOperation::Clear(op) => self.eval_clear(op),
             GraphUpdateOperation::Create(op) => self.eval_create(op),
             GraphUpdateOperation::Drop(op) => self.eval_drop(op),
+            GraphUpdateOperation::Move(op) => self.eval_move(
+                op,
+                using_dataset
+                    .as_ref()
+                    .unwrap_or(&QueryDatasetSpecification::new()),
+            ),
         }
     }
 
@@ -367,6 +377,44 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 .insert_named_graph(operation.graph.clone().into());
             Ok(())
         }
+    }
+
+    fn eval_move(
+        &mut self,
+        operation: &MoveOperation,
+        using: &QueryDatasetSpecification,
+    ) -> Result<(), UpdateEvaluationError> {
+        if operation.source == operation.destination {
+            return Ok(());
+        }
+        if let GraphName::NamedNode(graph_name) = &operation.source {
+            if !self
+                .transaction
+                .reader()
+                .contains_named_graph(&graph_name.into())?
+            {
+                return if operation.silent {
+                    Ok(())
+                } else {
+                    Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
+                };
+            }
+        }
+        self.eval_drop(&DropOperation {
+            silent: true,
+            graph: operation.destination.clone().into(),
+        })?;
+        self.eval_delete_insert(&operation.copy_operation(), using)?;
+        if let GraphName::NamedNode(name) = &operation.destination {
+            self.transaction.insert_named_graph(name.clone().into());
+        }
+        match &operation.source {
+            GraphName::NamedNode(name) => {
+                self.transaction.remove_named_graph(&name.clone().into())?
+            }
+            GraphName::DefaultGraph => self.transaction.clear_graph(&OxGraphName::DefaultGraph)?,
+        }
+        Ok(())
     }
 
     fn eval_clear(&mut self, operation: &ClearOperation) -> Result<(), UpdateEvaluationError> {
@@ -486,6 +534,7 @@ impl WriteOnlyUpdateEvaluator<'_, '_> {
             GraphUpdateOperation::Clear(op) => self.eval_clear(op),
             GraphUpdateOperation::Create(op) => self.eval_create(op),
             GraphUpdateOperation::Drop(op) => self.eval_drop(op),
+            GraphUpdateOperation::Move(_) => unreachable!("MOVE requires a readable transaction"),
         }
     }
 

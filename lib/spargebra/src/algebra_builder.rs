@@ -13,7 +13,7 @@ use crate::term::{
 };
 use crate::update::{
     ClearOperation, CreateOperation, DeleteDataOperation, DeleteInsertOperation, DropOperation,
-    InsertDataOperation, LoadOperation, Update,
+    InsertDataOperation, LoadOperation, MoveOperation, Update, copy_graph,
 };
 use crate::vocab::sparql;
 use chumsky::span::{SimpleSpan, Span, Spanned, WrappingSpan};
@@ -1787,23 +1787,17 @@ impl<'a> AlgebraBuilder<'a> {
                     operations.push(copy_graph(from, to).into())
                 }
                 ast::Update1::Move { silent, from, to } => {
-                    // Rewriting defined by https://www.w3.org/TR/sparql11-update/#move
-                    let from = self.build_graph_name(from)?;
-                    let to = self.build_graph_name(to)?;
-                    if from != to {
-                        operations.extend([
-                            DropOperation {
-                                silent: true,
-                                graph: to.clone().into(),
-                            }
-                            .into(),
-                            copy_graph(from.clone(), to).into(),
-                            DropOperation {
+                    let source = self.build_graph_name(from)?;
+                    let destination = self.build_graph_name(to)?;
+                    if source != destination {
+                        operations.push(
+                            MoveOperation {
                                 silent,
-                                graph: from.into(),
+                                source,
+                                destination,
                             }
                             .into(),
-                        ])
+                        );
                     }
                 }
                 ast::Update1::Copy { from, to, .. } => {
@@ -3389,35 +3383,5 @@ impl<'a> FreshBlankNodeAllocator<'a> {
                 return BlankNode::new_unchecked(id);
             }
         }
-    }
-}
-
-fn copy_graph(
-    from: impl Into<GraphName>,
-    to: impl Into<GraphNamePattern>,
-) -> DeleteInsertOperation {
-    let bgp = QueryExpression::Bgp {
-        patterns: vec![TriplePattern::new(
-            Variable::new_unchecked("s"),
-            Variable::new_unchecked("p"),
-            Variable::new_unchecked("o"),
-        )],
-    };
-    DeleteInsertOperation {
-        delete: Vec::new(),
-        insert: vec![QuadTemplate::new(
-            Variable::new_unchecked("s"),
-            Variable::new_unchecked("p"),
-            Variable::new_unchecked("o"),
-            to,
-        )],
-        using: None,
-        pattern: Box::new(match from.into() {
-            GraphName::NamedNode(from) => QueryExpression::Graph {
-                name: from.into(),
-                inner: Box::new(bgp),
-            },
-            GraphName::DefaultGraph => bgp,
-        }),
     }
 }
