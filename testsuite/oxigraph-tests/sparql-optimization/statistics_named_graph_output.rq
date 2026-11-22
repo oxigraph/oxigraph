@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    GRAPH ex:g1 { ?s ex:p ?o }
+    LATERAL { ?s ex:q ?v }
+}

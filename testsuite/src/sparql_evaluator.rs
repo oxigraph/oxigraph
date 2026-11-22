@@ -9,7 +9,7 @@ use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
-    NamedNode, Term, TermRef, Triple, TripleRef, Variable,
+    NamedNode, NamedNodeRef, Quad, Term, TermRef, Triple, TripleRef, Variable,
 };
 use oxigraph::sparql::results::{
     QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
@@ -22,8 +22,8 @@ use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, Quer
 use spargebra::SparqlParser;
 use spargebra::algebra::QueryExpression;
 use spargebra::query::{Query, SelectQuery};
-use sparopt::Optimizer;
-use std::collections::HashMap;
+use sparopt::{Optimizer, Precision, Statistics};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::io;
 use std::str::FromStr;
@@ -712,21 +712,33 @@ fn load_to_dataset(
 }
 
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
-    let action = test.action.as_deref().context("No action found")?;
-    let actual = (&Optimizer::optimize_query_expression(
-        (&if let Query::Select(SelectQuery {
-            expression: pattern,
-            ..
-        }) = SparqlParser::new()
-            .with_base_iri(action)?
-            .parse_query(&read_file_to_string(action)?)?
-        {
-            pattern
-        } else {
-            bail!("Only SELECT queries are supported in query sparql-optimization tests")
-        })
-            .into(),
-    ))
+    let action = test
+        .action
+        .as_deref()
+        .or(test.query.as_deref())
+        .context("No action found")?;
+    let Query::Select(SelectQuery {
+        expression: pattern,
+        ..
+    }) = SparqlParser::new()
+        .with_base_iri(action)?
+        .parse_query(&read_file_to_string(action)?)?
+    else {
+        bail!("Only SELECT queries are supported in query sparql-optimization tests")
+    };
+    let pattern = (&pattern).into();
+    let actual = (&if test.data.is_none() && test.graph_data.is_empty() {
+        Optimizer::optimize_query_expression(pattern)
+    } else {
+        let mut dataset = Dataset::new();
+        if let Some(data) = &test.data {
+            load_to_dataset(data, &mut dataset, GraphName::DefaultGraph)?;
+        }
+        for (name, value) in &test.graph_data {
+            load_to_dataset(value, &mut dataset, name.clone())?;
+        }
+        Optimizer::optimize_query_expression_with(pattern, &DatasetStatistics(&dataset))
+    })
         .into();
     let result = test.result.as_ref().context("No tests result found")?;
     let Query::Select(SelectQuery {
@@ -758,4 +770,70 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         )
     );
     Ok(())
+}
+
+struct DatasetStatistics<'a>(&'a Dataset);
+
+impl DatasetStatistics<'_> {
+    fn quads(
+        &self,
+        predicate: Option<NamedNodeRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Quad> {
+        let named_graphs_only = graph_name.is_none();
+        self.0
+            .quads_for_pattern(None, predicate, None, graph_name)
+            .filter(move |quad| !named_graphs_only || !quad.graph_name.is_default_graph())
+    }
+}
+
+impl Statistics for DatasetStatistics<'_> {
+    fn quad_count(
+        &self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> Precision<u64> {
+        Precision::Exact(
+            self.quads(predicate, graph_name)
+                .filter(|quad| {
+                    subject.is_none_or(|subject| TermRef::from(&quad.subject) == subject)
+                        && object.is_none_or(|object| quad.object.as_ref() == object)
+                })
+                .count()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    fn distinct_subject_count(
+        &self,
+        predicate: Option<NamedNodeRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> Precision<u64> {
+        Precision::Exact(
+            self.quads(predicate, graph_name)
+                .map(|quad| quad.subject)
+                .collect::<HashSet<_>>()
+                .len()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    fn distinct_object_count(
+        &self,
+        predicate: Option<NamedNodeRef<'_>>,
+        graph_name: Option<GraphNameRef<'_>>,
+    ) -> Precision<u64> {
+        Precision::Exact(
+            self.quads(predicate, graph_name)
+                .map(|quad| quad.object)
+                .collect::<HashSet<_>>()
+                .len()
+                .try_into()
+                .unwrap(),
+        )
+    }
 }

@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?s ex:p ?o .
+    SERVICE ex:endpoint { ?s ex:q ?v }
+}

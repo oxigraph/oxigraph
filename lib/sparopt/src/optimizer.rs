@@ -1,11 +1,12 @@
 use crate::algebra::{
     Expression, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm, QueryExpression,
 };
+use crate::statistics::{NoStatistics, Statistics};
 use crate::type_inference::{
     VariableType, VariableTypes, infer_expression_type, infer_query_expression_types,
 };
-use oxrdf::Variable;
 use oxrdf::vocab::rdf;
+use oxrdf::{GraphNameRef, TermRef, Variable};
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
@@ -15,10 +16,19 @@ pub struct Optimizer;
 
 impl Optimizer {
     pub fn optimize_query_expression(query_expression: QueryExpression) -> QueryExpression {
+        Self::optimize_query_expression_with(query_expression, &NoStatistics)
+    }
+
+    /// Optimizes the query expression, using the statistics of the queried dataset to estimate cardinalities.
+    pub fn optimize_query_expression_with(
+        query_expression: QueryExpression,
+        statistics: &(impl Statistics + ?Sized),
+    ) -> QueryExpression {
         let input_types = VariableTypes::default();
         let query_expression = Self::normalize_pattern(query_expression, &input_types);
         let query_expression = Self::push_graph(query_expression, None, &input_types);
-        let query_expression = Self::reorder_joins(query_expression, &input_types, true);
+        let query_expression =
+            JoinReorderer { statistics }.reorder_joins(query_expression, &input_types, true);
         Self::push_filters(query_expression, Vec::new(), &input_types)
     }
 
@@ -814,8 +824,15 @@ impl Optimizer {
             ),
         }
     }
+}
 
+struct JoinReorderer<'a, S: ?Sized> {
+    statistics: &'a S,
+}
+
+impl<S: Statistics + ?Sized> JoinReorderer<'_, S> {
     fn reorder_joins(
+        &self,
         query_expression: QueryExpression,
         input_types: &VariableTypes,
         replan_for_loop_join_right: bool,
@@ -841,7 +858,7 @@ impl Optimizer {
                                     || has_for_loop_join_candidate(&e)))
                             .then(|| e.clone()),
                         );
-                        to_reorder.push(Self::reorder_joins(e, input_types, false));
+                        to_reorder.push(self.reorder_joins(e, input_types, false));
                     }
                 }
 
@@ -860,10 +877,16 @@ impl Optimizer {
                     .enumerate()
                     .filter(|(_, v)| **v)
                     .map(|(i, _)| i)
-                    .min_by_key(|i| estimate_query_expression_size(&to_reorder[*i], input_types))
+                    .min_by_key(|i| {
+                        estimate_query_expression_size(
+                            &to_reorder[*i],
+                            input_types,
+                            self.statistics,
+                        )
+                    })
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
-                    let mut output = Self::plan_join_operand(
+                    let mut output = self.plan_join_operand(
                         to_reorder[next_entry_id].clone(),
                         not_reordered[next_entry_id].take(),
                         input_types,
@@ -892,6 +915,7 @@ impl Optimizer {
                                     &output_types,
                                     &to_reorder[*i],
                                     input_types,
+                                    self.statistics,
                                 )
                             } else {
                                 estimate_join_cost(
@@ -905,6 +929,7 @@ impl Optimizer {
                                         ),
                                     },
                                     input_types,
+                                    self.statistics,
                                 )
                             }
                         })
@@ -915,7 +940,7 @@ impl Optimizer {
                         {
                             output = if is_fit_for_for_loop_join(&next, input_types, &output_types)
                             {
-                                let next = Self::plan_for_loop_join_right(
+                                let next = self.plan_for_loop_join_right(
                                     next,
                                     not_reordered[next_id].take(),
                                     input_types,
@@ -925,7 +950,7 @@ impl Optimizer {
                             } else {
                                 QueryExpression::join(
                                     output,
-                                    Self::plan_join_operand(
+                                    self.plan_join_operand(
                                         next,
                                         not_reordered[next_id].take(),
                                         input_types,
@@ -966,8 +991,8 @@ impl Optimizer {
                             &infer_query_expression_types(&right, input_types.clone()),
                             input_types,
                         );
-                        if estimate_query_expression_size(&left, input_types)
-                            <= estimate_query_expression_size(&right, input_types)
+                        if estimate_query_expression_size(&left, input_types, self.statistics)
+                            <= estimate_query_expression_size(&right, input_types, self.statistics)
                         {
                             QueryExpression::join(
                                 left,
@@ -988,8 +1013,8 @@ impl Optimizer {
             QueryExpression::Lateral { left, right } => {
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 QueryExpression::lateral(
-                    Self::reorder_joins(*left, input_types, replan_for_loop_join_right),
-                    Self::reorder_joins(*right, &left_types, replan_for_loop_join_right),
+                    self.reorder_joins(*left, input_types, replan_for_loop_join_right),
+                    self.reorder_joins(*right, &left_types, replan_for_loop_join_right),
                 )
             }
             QueryExpression::LeftJoin {
@@ -998,25 +1023,35 @@ impl Optimizer {
                 expression,
                 ..
             } => {
-                let left = Self::reorder_joins(*left, input_types, replan_for_loop_join_right);
+                let left = self.reorder_joins(*left, input_types, replan_for_loop_join_right);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
                     let initial_right_types =
                         infer_query_expression_types(&right, input_types.clone());
                     if has_common_variables(&left_types, &initial_right_types, input_types) {
-                        let lateral_cost = estimate_query_expression_size(&left, input_types)
-                            .saturating_mul(estimate_query_expression_size(&right, &left_types));
+                        let lateral_cost =
+                            estimate_query_expression_size(&left, input_types, self.statistics)
+                                .saturating_mul(estimate_query_expression_size(
+                                    &right,
+                                    &left_types,
+                                    self.statistics,
+                                ));
                         let keys =
                             join_key_variables(&left_types, &initial_right_types, input_types);
-                        let join_cost = estimate_query_expression_size(&left, input_types)
-                            .saturating_mul(estimate_query_expression_size(&right, input_types))
-                            .saturating_div(
-                                1_000_u64.saturating_pow(keys.len().try_into().unwrap()),
-                            );
+                        let join_cost =
+                            estimate_query_expression_size(&left, input_types, self.statistics)
+                                .saturating_mul(estimate_query_expression_size(
+                                    &right,
+                                    input_types,
+                                    self.statistics,
+                                ))
+                                .saturating_div(
+                                    1_000_u64.saturating_pow(keys.len().try_into().unwrap()),
+                                );
 
                         if lateral_cost <= join_cost.saturating_mul(100) {
-                            let right_for_lateral = Self::reorder_joins(
+                            let right_for_lateral = self.reorder_joins(
                                 (*right).clone(),
                                 &left_types,
                                 replan_for_loop_join_right,
@@ -1041,7 +1076,7 @@ impl Optimizer {
                         }
                     }
                 }
-                let right = Self::reorder_joins(*right, input_types, replan_for_loop_join_right);
+                let right = self.reorder_joins(*right, input_types, replan_for_loop_join_right);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::left_join(
                     left,
@@ -1053,9 +1088,9 @@ impl Optimizer {
                 )
             }
             QueryExpression::Minus { left, right, .. } => {
-                let left = Self::reorder_joins(*left, input_types, replan_for_loop_join_right);
+                let left = self.reorder_joins(*left, input_types, replan_for_loop_join_right);
                 let left_types = infer_query_expression_types(&left, input_types.clone());
-                let right = Self::reorder_joins(*right, input_types, replan_for_loop_join_right);
+                let right = self.reorder_joins(*right, input_types, replan_for_loop_join_right);
                 let right_types = infer_query_expression_types(&right, input_types.clone());
                 QueryExpression::minus(
                     left,
@@ -1066,7 +1101,7 @@ impl Optimizer {
                 )
             }
             QueryExpression::Graph { graph_name, inner } => QueryExpression::graph(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 graph_name,
             ),
             QueryExpression::Extend {
@@ -1074,44 +1109,44 @@ impl Optimizer {
                 expression,
                 variable,
             } => QueryExpression::extend(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 variable,
                 expression,
             ),
             QueryExpression::Filter { inner, expression } => QueryExpression::filter(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 expression,
             ),
             QueryExpression::Union { inner } => QueryExpression::union_all(
                 inner
                     .into_iter()
-                    .map(|c| Self::reorder_joins(c, input_types, replan_for_loop_join_right)),
+                    .map(|c| self.reorder_joins(c, input_types, replan_for_loop_join_right)),
             ),
             QueryExpression::Slice {
                 inner,
                 offset,
                 limit,
             } => QueryExpression::slice(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 offset,
                 limit,
             ),
-            QueryExpression::Distinct { inner } => QueryExpression::distinct(Self::reorder_joins(
+            QueryExpression::Distinct { inner } => QueryExpression::distinct(self.reorder_joins(
                 *inner,
                 input_types,
                 replan_for_loop_join_right,
             )),
-            QueryExpression::Reduced { inner } => QueryExpression::reduced(Self::reorder_joins(
+            QueryExpression::Reduced { inner } => QueryExpression::reduced(self.reorder_joins(
                 *inner,
                 input_types,
                 replan_for_loop_join_right,
             )),
             QueryExpression::Project { inner, variables } => QueryExpression::project(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 variables,
             ),
             QueryExpression::OrderBy { inner, expression } => QueryExpression::order_by(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 expression,
             ),
             QueryExpression::Service { .. } => {
@@ -1123,7 +1158,7 @@ impl Optimizer {
                 variables,
                 aggregates,
             } => QueryExpression::group(
-                Self::reorder_joins(*inner, input_types, replan_for_loop_join_right),
+                self.reorder_joins(*inner, input_types, replan_for_loop_join_right),
                 variables,
                 aggregates,
             ),
@@ -1131,13 +1166,14 @@ impl Optimizer {
     }
 
     fn plan_join_operand(
+        &self,
         planned: QueryExpression,
         not_reordered: Option<QueryExpression>,
         input_types: &VariableTypes,
     ) -> QueryExpression {
         match not_reordered {
             Some(not_reordered) if has_for_loop_join_candidate(&not_reordered) => {
-                Self::reorder_joins(not_reordered, input_types, true)
+                self.reorder_joins(not_reordered, input_types, true)
             }
             _ => planned,
         }
@@ -1145,13 +1181,14 @@ impl Optimizer {
 
     #[cfg(feature = "sep-0006")]
     fn plan_for_loop_join_right(
+        &self,
         planned: QueryExpression,
         not_reordered: Option<QueryExpression>,
         input_types: &VariableTypes,
         left_types: &VariableTypes,
     ) -> QueryExpression {
         if let Some(not_reordered) = not_reordered {
-            let replanned = Self::reorder_joins(not_reordered, left_types, true);
+            let replanned = self.reorder_joins(not_reordered, left_types, true);
             if is_fit_for_for_loop_join(&replanned, input_types, left_types) {
                 return replanned;
             }
@@ -1407,6 +1444,7 @@ fn join_key_variables(
 fn estimate_query_expression_size(
     expression: &QueryExpression,
     input_types: &VariableTypes,
+    statistics: &(impl Statistics + ?Sized),
 ) -> u64 {
     match expression {
         QueryExpression::Values { bindings, .. } => bindings.len().try_into().unwrap(),
@@ -1414,8 +1452,18 @@ fn estimate_query_expression_size(
             subject,
             predicate,
             object,
-            ..
+            graph_name,
         } => {
+            if let Some(size) = estimate_quad_pattern_size_from_statistics(
+                subject,
+                predicate,
+                object,
+                graph_name.as_ref(),
+                input_types,
+                statistics,
+            ) {
+                return size;
+            }
             let mut size = estimate_triple_pattern_size(
                 is_term_pattern_bound(subject, input_types),
                 is_named_node_pattern_bound(predicate, input_types),
@@ -1444,13 +1492,17 @@ fn estimate_query_expression_size(
             } else {
                 100
             })
-            .saturating_mul(estimate_query_expression_size(inner, input_types))
+            .saturating_mul(estimate_query_expression_size(
+                inner,
+                input_types,
+                statistics,
+            ))
         }
         QueryExpression::Join {
             left,
             right,
             algorithm,
-        } => estimate_join_cost(left, right, algorithm, input_types),
+        } => estimate_join_cost(left, right, algorithm, input_types, statistics),
         QueryExpression::LeftJoin {
             left,
             right,
@@ -1458,13 +1510,14 @@ fn estimate_query_expression_size(
             ..
         } => match algorithm {
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
-                let left_size = estimate_query_expression_size(left, input_types);
+                let left_size = estimate_query_expression_size(left, input_types, statistics);
                 max(
                     left_size,
                     left_size
                         .saturating_mul(estimate_query_expression_size(
                             right,
                             &infer_query_expression_types(right, input_types.clone()),
+                            statistics,
                         ))
                         .saturating_div(1_000_u64.saturating_pow(keys.len().try_into().unwrap())),
                 )
@@ -1476,28 +1529,34 @@ fn estimate_query_expression_size(
             &infer_query_expression_types(left, input_types.clone()),
             right,
             input_types,
+            statistics,
         ),
         QueryExpression::Union { inner } => inner
             .iter()
-            .map(|inner| estimate_query_expression_size(inner, input_types))
+            .map(|inner| estimate_query_expression_size(inner, input_types, statistics))
             .fold(0, u64::saturating_add),
-        QueryExpression::Minus { left, .. } => estimate_query_expression_size(left, input_types),
+        QueryExpression::Minus { left, .. } => {
+            estimate_query_expression_size(left, input_types, statistics)
+        }
         QueryExpression::Filter { inner, .. }
         | QueryExpression::Extend { inner, .. }
         | QueryExpression::OrderBy { inner, .. }
         | QueryExpression::Project { inner, .. }
         | QueryExpression::Distinct { inner, .. }
         | QueryExpression::Reduced { inner, .. }
-        | QueryExpression::Group { inner, .. }
-        | QueryExpression::Service { inner, .. } => {
-            estimate_query_expression_size(inner, input_types)
+        | QueryExpression::Group { inner, .. } => {
+            estimate_query_expression_size(inner, input_types, statistics)
+        }
+        QueryExpression::Service { inner, .. } => {
+            estimate_query_expression_size(inner, input_types, &NoStatistics)
         }
         QueryExpression::Slice {
             inner,
             offset,
             limit,
         } => {
-            let inner = estimate_query_expression_size(inner, input_types).saturating_sub(*offset);
+            let inner = estimate_query_expression_size(inner, input_types, statistics)
+                .saturating_sub(*offset);
             if let Some(limit) = limit {
                 min(inner, *limit)
             } else {
@@ -1512,11 +1571,16 @@ fn estimate_join_cost(
     right: &QueryExpression,
     algorithm: &JoinAlgorithm,
     input_types: &VariableTypes,
+    statistics: &(impl Statistics + ?Sized),
 ) -> u64 {
     match algorithm {
         JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
-            estimate_query_expression_size(left, input_types)
-                .saturating_mul(estimate_query_expression_size(right, input_types))
+            estimate_query_expression_size(left, input_types, statistics)
+                .saturating_mul(estimate_query_expression_size(
+                    right,
+                    input_types,
+                    statistics,
+                ))
                 .saturating_div(1_000_u64.saturating_pow(keys.len().try_into().unwrap()))
         }
     }
@@ -1527,9 +1591,73 @@ fn estimate_lateral_cost(
     left_types: &VariableTypes,
     right: &QueryExpression,
     input_types: &VariableTypes,
+    statistics: &(impl Statistics + ?Sized),
 ) -> u64 {
-    estimate_query_expression_size(left, input_types)
-        .saturating_mul(estimate_query_expression_size(right, left_types))
+    estimate_query_expression_size(left, input_types, statistics).saturating_mul(
+        estimate_query_expression_size(right, left_types, statistics),
+    )
+}
+
+fn estimate_quad_pattern_size_from_statistics(
+    subject: &TermPattern,
+    predicate: &NamedNodePattern,
+    object: &TermPattern,
+    graph_name: Option<&NamedNodePattern>,
+    input_types: &VariableTypes,
+    statistics: &(impl Statistics + ?Sized),
+) -> Option<u64> {
+    let subject_constant = term_pattern_constant(subject);
+    let predicate_constant = if let NamedNodePattern::NamedNode(predicate) = predicate {
+        Some(predicate.as_ref())
+    } else {
+        None
+    };
+    let object_constant = term_pattern_constant(object);
+    let graph_name_constant = match graph_name {
+        None => Some(GraphNameRef::DefaultGraph),
+        Some(NamedNodePattern::NamedNode(graph_name)) => Some(graph_name.as_ref().into()),
+        Some(NamedNodePattern::Variable(_)) => None,
+    };
+    let mut size = statistics
+        .quad_count(
+            subject_constant,
+            predicate_constant,
+            object_constant,
+            graph_name_constant,
+        )
+        .value()?;
+    if matches!(predicate, NamedNodePattern::Variable(v) if !input_types.get(v).undef)
+        || matches!(graph_name, Some(NamedNodePattern::Variable(v)) if !input_types.get(v).undef)
+    {
+        return None;
+    }
+    if subject_constant.is_none() && is_term_pattern_bound(subject, input_types) {
+        size = size.div_ceil(
+            statistics
+                .distinct_subject_count(predicate_constant, graph_name_constant)
+                .value()?
+                .max(1),
+        );
+    }
+    if object_constant.is_none() && is_term_pattern_bound(object, input_types) {
+        size = size.div_ceil(
+            statistics
+                .distinct_object_count(predicate_constant, graph_name_constant)
+                .value()?
+                .max(1),
+        );
+    }
+    Some(size.max(1))
+}
+
+fn term_pattern_constant(pattern: &TermPattern) -> Option<TermRef<'_>> {
+    match pattern {
+        TermPattern::NamedNode(term) => Some(term.into()),
+        TermPattern::Literal(term) => Some(term.into()),
+        TermPattern::Variable(_) => None,
+        #[cfg(feature = "sparql-12")]
+        TermPattern::Triple(_) => None,
+    }
 }
 
 fn estimate_triple_pattern_size(
@@ -1657,6 +1785,7 @@ mod tests {
                 limit,
             ),
             &VariableTypes::default(),
+            &NoStatistics,
         )
     }
 
