@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?s ex:many ?m .
+    ?s ex:single ?x .
+    ?s a ex:C .
+}

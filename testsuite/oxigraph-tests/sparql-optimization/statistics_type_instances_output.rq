@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?s a ex:Rare .
+    ?s a ex:Common .
+}

@@ -1,0 +1,6 @@
+@prefix ex: <http://example.com/> .
+
+ex:s1 a ex:Common, ex:Rare .
+ex:s2 a ex:Common .
+ex:s3 a ex:Common .
+ex:s4 a ex:Common .

@@ -2,6 +2,7 @@
 @prefix :      <https://github.com/oxigraph/oxigraph/tests/sparql-optimization/manifest#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:    <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
 @prefix ox:    <https://github.com/oxigraph/oxigraph/tests#> .
 
 <>  rdf:type mf:Manifest ;
@@ -42,6 +43,11 @@
     :lateral_subquery_input_bindings
     :lateral_union_reordering
     :lateral_filter_group_reordering
+    :statistics_join_order
+    :statistics_bound_subject
+    :statistics_type_instances
+    :statistics_named_graph
+    :statistics_service
     ) .
 
 
@@ -214,3 +220,28 @@
     mf:name "Group with a FILTER converted to LATERAL reorders its BGP by bound input" ;
     mf:action <lateral_filter_group_reordering_input.rq> ;
     mf:result <lateral_filter_group_reordering_output.rq> .
+
+:statistics_join_order rdf:type ox:QueryOptimizationTest ;
+    mf:name "Join reordering uses the triple count of each predicate" ;
+    mf:action [ qt:query <statistics_join_order_input.rq> ; qt:data <statistics_join_order.ttl> ] ;
+    mf:result <statistics_join_order_output.rq> .
+
+:statistics_bound_subject rdf:type ox:QueryOptimizationTest ;
+    mf:name "Join reordering uses the distinct subject count when the subject is bound" ;
+    mf:action [ qt:query <statistics_bound_subject_input.rq> ; qt:data <statistics_bound_subject.ttl> ] ;
+    mf:result <statistics_bound_subject_output.rq> .
+
+:statistics_type_instances rdf:type ox:QueryOptimizationTest ;
+    mf:name "Join reordering puts the class with the fewest instances first" ;
+    mf:action [ qt:query <statistics_type_instances_input.rq> ; qt:data <statistics_type_instances.ttl> ] ;
+    mf:result <statistics_type_instances_output.rq> .
+
+:statistics_named_graph rdf:type ox:QueryOptimizationTest ;
+    mf:name "Join reordering counts the triples of a named graph in this graph only" ;
+    mf:action [ qt:query <statistics_named_graph_input.rq> ; qt:data <statistics_named_graph.trig> ] ;
+    mf:result <statistics_named_graph_output.rq> .
+
+:statistics_service rdf:type ox:QueryOptimizationTest ;
+    mf:name "Join reordering does not use the statistics of the queried dataset inside SERVICE" ;
+    mf:action [ qt:query <statistics_service_input.rq> ; qt:data <statistics_service.ttl> ] ;
+    mf:result <statistics_service_output.rq> .

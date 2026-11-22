@@ -1,0 +1,10 @@
+@prefix ex: <http://example.com/> .
+
+ex:s1 a ex:C ;
+    ex:many ex:m1, ex:m2, ex:m3, ex:m4 ;
+    ex:single ex:x1 .
+ex:s2 ex:single ex:x2 .
+ex:s3 ex:single ex:x3 .
+ex:s4 ex:single ex:x4 .
+ex:s5 ex:single ex:x5 .
+ex:s6 ex:single ex:x6 .

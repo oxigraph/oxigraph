@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+SELECT * WHERE {
+    ?s ex:q ?v .
+    ?s ex:p ?o .
+}
