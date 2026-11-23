@@ -20,10 +20,10 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           component: rustfmt
       - run: cargo fmt -- --check
@@ -31,21 +31,21 @@ jobs:
   toml-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: taplo }
       - run: taplo check
 
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
           component: clippy
@@ -101,11 +101,11 @@ jobs:
   clippy_wasm_js:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
           target: wasm32-unknown-unknown
@@ -118,11 +118,11 @@ jobs:
   clippy_wasip1:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
           target: wasm32-wasip1
@@ -135,11 +135,11 @@ jobs:
   clippy_wasm_emscripten:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
           target: wasm32-unknown-emscripten
@@ -152,11 +152,11 @@ jobs:
   clippy_wasm_unknown:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
           target: wasm32-unknown-unknown
@@ -169,24 +169,24 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: cargo-deny }
       - run: cargo deny check
 
   semver_checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: $/.github/actions/setup-rust
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: cargo-semver-checks }
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@v6.1.0
         with:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
@@ -196,31 +196,31 @@ jobs:
   test_macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
       - run: cargo test --features rdf-12
 
   test_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
       - run: cargo test --features rdf-12
 
   test_linux_i686:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           target: i686-unknown-linux-gnu
       - run: sudo apt-get update && sudo apt-get install -y g++-multilib
@@ -252,13 +252,13 @@ jobs:
   test_linux_msv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
@@ -268,11 +268,11 @@ jobs:
   test_linux_address_sanitizer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: nightly
       - run: sudo apt-get update && sudo apt-get install -y llvm
@@ -283,12 +283,12 @@ jobs:
   test_linux_dynamic_linking:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: $/.github/actions/setup-rust
+      - uses: actions/cache@v6.1.0
         with:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-9.10.0
@@ -298,14 +298,14 @@ jobs:
   test_wasip1:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           target: wasm32-wasip1
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: "wasmtime" }
       - run: cargo test --target wasm32-wasip1 --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
         env:
@@ -315,11 +315,11 @@ jobs:
   rustdoc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: 1.95.0
       - run: cargo doc --no-deps
@@ -329,13 +329,13 @@ jobs:
   js:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           target: wasm32-unknown-unknown
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -350,12 +350,12 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: $/.github/actions/setup-rust
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.14"
       - run: uv run --locked -m unittest
@@ -378,17 +378,17 @@ jobs:
   python_msv_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.9"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
@@ -398,17 +398,17 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: typos-cli }
       - run: typos
 
   clang_fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y clang-format
@@ -435,18 +435,18 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@v6.1.0
         id: cache-corpus
         with:
           path: fuzz/corpus/${{ matrix.target }}
           key: fuzz-${{ matrix.target }}-${{ github.run_id }}
           restore-keys: |
             fuzz-${{ matrix.target }}
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           cache-key: ${{ matrix.target }}
       - run: cargo install cargo-fuzz || true
@@ -455,7 +455,7 @@ jobs:
         if: steps.cache-corpus.outputs.cache-hit != 'true'
       - run: cargo fuzz run ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }} -- -max_total_time=200 -timeout=5 -fork=1
       - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: fuzz-artifacts-${{ matrix.target }}
@@ -464,7 +464,7 @@ jobs:
   shellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -473,7 +473,7 @@ jobs:
   spec_links:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: python lints/test_spec_links.py
@@ -481,10 +481,10 @@ jobs:
   debian_compatibility:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
       - run: python lints/test_debian_compatibility.py
 
   codspeed:
@@ -493,21 +493,21 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: $/.github/actions/setup-rust
+      - uses: actions/cache@v6.1.0
         with:
           path: lib/oxigraph/benches/data
           key: bench-data-${{ hashFiles('lib/oxigraph/benches/data') }}
           restore-keys: |
             bench-data
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
-      - uses: CodSpeedHQ/action@78102a468f96d8e0ccb92d0ec49425753fc42062 # v5.6.0
+      - uses: CodSpeedHQ/action@v5.6.0
         with:
           run: cargo codspeed run
           mode: simulation
@@ -518,15 +518,15 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: $/.github/actions/setup-rust
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph-testsuite
-      - uses: CodSpeedHQ/action@78102a468f96d8e0ccb92d0ec49425753fc42062 # v5.6.0
+      - uses: CodSpeedHQ/action@v5.6.0
         with:
           run: cargo codspeed run
           mode: simulation
@@ -537,19 +537,19 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: true
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           component: llvm-tools-preview
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@v2.87.31
         with: { tool: cargo-llvm-cov }
       - run: cargo llvm-cov --features oxrdfio/async-tokio,sparesults/async-tokio --codecov --output-path codecov.json
         env:
           PYO3_PYTHON: /usr/bin/python3
-      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+      - uses: codecov/codecov-action@v7.1.1
         with:
           files: codecov.json
           flags: rust
@@ -561,7 +561,9 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+      - uses: zizmorcore/zizmor-action@v0.9.0
+        with:
+          strict-collection: true
