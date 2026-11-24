@@ -258,7 +258,7 @@ impl<R: Read> ReaderJsonQueryResultsParserOutput<R> {
         let mut json_parser = ReaderJsonParser::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_parser.parse_next()?)? {
+            if let Some(result) = inner.read_event(json_parser.parse_next().transpose()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -286,10 +286,9 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_parser.parse_next()?;
-                if event == JsonEvent::Eof {
+                let Some(event) = self.json_parser.parse_next().transpose()? else {
                     return Ok(None);
-                }
+                };
                 if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
@@ -315,7 +314,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonQueryResultsParserOutput<R> {
         let mut json_parser = TokioAsyncReaderJsonParser::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_parser.parse_next().await?)? {
+            if let Some(result) = inner.read_event(json_parser.parse_next().await.transpose()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -347,10 +346,9 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_parser.parse_next().await?;
-                if event == JsonEvent::Eof {
+                let Some(event) = self.json_parser.parse_next().await.transpose()? else {
                     return Ok(None);
-                }
+                };
                 if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
@@ -375,7 +373,7 @@ impl<'a> SliceJsonQueryResultsParserOutput<'a> {
         let mut json_parser = SliceJsonParser::new(slice);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_parser.parse_next()?)? {
+            if let Some(result) = inner.read_event(json_parser.next().transpose()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -403,10 +401,9 @@ impl SliceJsonSolutionsParser<'_> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_parser.parse_next()?;
-                if event == JsonEvent::Eof {
+                let Some(event) = self.json_parser.next().transpose()? else {
                     return Ok(None);
-                }
+                };
                 if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
@@ -466,7 +463,7 @@ enum JsonInnerReaderState {
     },
     AfterBindings,
     BeforeBoolean,
-    AfterRoot,
+    AfterRoot(bool),
     Ignore {
         level: usize,
         after: JsonInnerReaderStateAfterIgnore,
@@ -497,8 +494,16 @@ impl JsonInnerReader {
 
     fn read_event(
         &mut self,
-        event: JsonEvent<'_>,
+        event: Option<JsonEvent<'_>>,
     ) -> Result<Option<JsonInnerQueryResults>, QueryResultsSyntaxError> {
+        let Some(event) = event else {
+            if let JsonInnerReaderState::AfterRoot(value) = self.state {
+                return Ok(Some(JsonInnerQueryResults::Boolean(value)));
+            }
+            return Err(QueryResultsSyntaxError::msg(
+                "Unexpected end of SPARQL JSON results",
+            ));
+        };
         match &mut self.state {
             JsonInnerReaderState::Start => {
                 if event == JsonEvent::StartObject {
@@ -539,8 +544,8 @@ impl JsonInnerReader {
                     }
                 },
                 JsonEvent::EndObject => {
-                    if self.boolean.is_some() {
-                        self.state = JsonInnerReaderState::AfterRoot;
+                    if let Some(value) = self.boolean.take() {
+                        self.state = JsonInnerReaderState::AfterRoot(value);
                         Ok(None)
                     } else {
                         Err(QueryResultsSyntaxError::msg(
@@ -771,20 +776,9 @@ impl JsonInnerReader {
                     Err(QueryResultsSyntaxError::msg("Unexpected boolean value"))
                 }
             }
-            JsonInnerReaderState::AfterRoot => {
-                if event == JsonEvent::Eof {
-                    let value = self.boolean.ok_or_else(|| {
-                        QueryResultsSyntaxError::msg(
-                            "SPARQL JSON results must contain a 'boolean' key",
-                        )
-                    })?;
-                    Ok(Some(JsonInnerQueryResults::Boolean(value)))
-                } else {
-                    Err(QueryResultsSyntaxError::msg(
-                        "Extra JSON is not allowed at the end of the document",
-                    ))
-                }
-            }
+            JsonInnerReaderState::AfterRoot(_) => Err(QueryResultsSyntaxError::msg(
+                "Extra JSON is not allowed at the end of the document",
+            )),
             #[expect(clippy::ref_patterns)]
             &mut JsonInnerReaderState::Ignore {
                 ref mut level,
@@ -797,8 +791,7 @@ impl JsonInnerReader {
                     | JsonEvent::Number(_)
                     | JsonEvent::Boolean(_)
                     | JsonEvent::Null
-                    | JsonEvent::ObjectKey(_)
-                    | JsonEvent::Eof => *level,
+                    | JsonEvent::ObjectKey(_) => *level,
                 };
                 self.state = if level == 0 {
                     match after {

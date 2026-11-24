@@ -99,8 +99,8 @@ fn read_blank_node_map(url: &str) -> Result<BTreeMap<String, String>> {
     let mut result = BTreeMap::new();
     let mut current_key = None;
     let mut parser = ReaderJsonParser::new(read_file(url)?);
-    loop {
-        match parser.parse_next()? {
+    while let Some(event) = parser.parse_next().transpose()? {
+        match event {
             JsonEvent::StartObject => {
                 nesting += 1;
                 ensure!(nesting == 1, "Nested objects in blank node maps");
@@ -117,8 +117,8 @@ fn read_blank_node_map(url: &str) -> Result<BTreeMap<String, String>> {
                 );
             }
             JsonEvent::EndObject => nesting -= 1,
-            JsonEvent::Eof => return Ok(result),
             _ => bail!("Blank node maps must be a JSON object of strings"),
         }
     }
+    Ok(result)
 }

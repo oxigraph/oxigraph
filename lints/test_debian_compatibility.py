@@ -9,17 +9,13 @@ TARGET_DEBIAN_VERSIONS = ["sid"]
 IGNORE_PACKAGES = {"oxigraph-js", "oxigraph-testsuite", "pyoxigraph", "sparql-smith"}
 ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
-    "oxhttp",
-    "oxstr",
     "geo",
-    "oxiri",
-    "wkt",
-    "quick-xml",
-    "getrandom",
-    "rand",
-    "chumsky",
-    "logos",
     "js-sys",
+    "json-event-parser",
+    "oxiri",
+    "oxstr",
+    "quick-xml",
+    "wkt",
 }
 
 base_path = Path(__file__).parent.parent

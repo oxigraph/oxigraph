@@ -233,7 +233,6 @@ enum JsonLdExpansionState {
 /// Applies the [Expansion Algorithm](https://www.w3.org/TR/json-ld-api/#expansion-algorithms)
 pub struct JsonLdExpansionConverter {
     state: Vec<JsonLdExpansionState>,
-    is_end: bool,
     streaming: bool,
     lenient: bool,
     base_url: Option<Iri<OxString>>,
@@ -260,7 +259,6 @@ impl JsonLdExpansionConverter {
                 in_included: false,
                 extra_node: None,
             }],
-            is_end: false,
             streaming,
             lenient,
             base_url,
@@ -273,10 +271,6 @@ impl JsonLdExpansionConverter {
             },
             root_context,
         }
-    }
-
-    pub fn is_end(&self) -> bool {
-        self.is_end
     }
 
     pub fn with_load_document_callback(
@@ -301,13 +295,6 @@ impl JsonLdExpansionConverter {
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
-        if event == JsonEvent::Eof {
-            self.is_end = true;
-            if self.state.is_empty() {
-                return;
-            }
-        }
-
         // Large hack to fetch the last state but keep it if we are in an array
         let state = self.state.pop().expect("Empty stack");
         match state {
@@ -519,9 +506,7 @@ impl JsonLdExpansionConverter {
                             });
                         }
                     }
-                    JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
-                        unreachable!()
-                    }
+                    JsonEvent::EndObject | JsonEvent::ObjectKey(_) => unreachable!(),
                 }
             }
             JsonLdExpansionState::ObjectOrContainerStart {
@@ -566,7 +551,6 @@ impl JsonLdExpansionConverter {
                         buffer.last_mut().unwrap().1.push(to_owned_event(event));
                         depth += 1;
                     }
-                    JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 {
                     // We look for @context
@@ -818,7 +802,6 @@ impl JsonLdExpansionConverter {
                         buffer.push(to_owned_event(event));
                         depth += 1;
                     }
-                    JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 {
                     active_context = self.new_context(&active_context, buffer, errors);
@@ -896,7 +879,6 @@ impl JsonLdExpansionConverter {
                         buffer.push(to_owned_event(event));
                         depth += 1;
                     }
-                    JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 && is_single_id_or_value.is_none() {
                     is_single_id_or_value = Some(seen_id);
@@ -1339,9 +1321,7 @@ impl JsonLdExpansionConverter {
                             });
                         }
                     }
-                    JsonEvent::ObjectKey(_) | JsonEvent::EndObject | JsonEvent::Eof => {
-                        unreachable!()
-                    }
+                    JsonEvent::ObjectKey(_) | JsonEvent::EndObject => unreachable!(),
                 }
             }
             JsonLdExpansionState::ObjectId {
@@ -1660,8 +1640,7 @@ impl JsonLdExpansionConverter {
                     | JsonEvent::Boolean(_)
                     | JsonEvent::StartArray
                     | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::Eof => unreachable!(),
+                    | JsonEvent::StartObject => unreachable!(),
                 }
             }
             JsonLdExpansionState::ReverseStart { active_context } => {
@@ -1747,8 +1726,7 @@ impl JsonLdExpansionConverter {
                     | JsonEvent::Boolean(_)
                     | JsonEvent::StartArray
                     | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::Eof => unreachable!(),
+                    | JsonEvent::StartObject => unreachable!(),
                 }
             }
             JsonLdExpansionState::Value {
@@ -2040,7 +2018,6 @@ impl JsonLdExpansionConverter {
                         nesting -= 1;
                         value.push(JsonEvent::EndObject)
                     }
-                    JsonEvent::Eof => unreachable!(),
                 }
                 self.state.push(if nesting == 0 {
                     JsonLdExpansionState::Value {
@@ -2379,9 +2356,7 @@ impl JsonLdExpansionConverter {
                         },
                     )
                 }
-                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
-                    unreachable!()
-                }
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) => unreachable!(),
             },
             JsonLdExpansionState::IndexedGraphContainerElementWaitingForGraph {
                 active_property,
@@ -2595,7 +2570,7 @@ impl JsonLdExpansionConverter {
                         }
                     });
                 }
-                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) => unreachable!(),
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
                 | JsonEvent::Boolean(_)
@@ -2650,7 +2625,6 @@ impl JsonLdExpansionConverter {
                         nesting -= 1;
                         value.push(JsonEvent::EndObject)
                     }
-                    JsonEvent::Eof => unreachable!(),
                 }
                 if nesting > 0 {
                     self.state
@@ -2689,7 +2663,6 @@ impl JsonLdExpansionConverter {
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
                 }
-                JsonEvent::Eof => unreachable!(),
             },
         }
     }
@@ -3068,6 +3041,5 @@ fn to_owned_event(event: JsonEvent<'_>) -> JsonEvent<'static> {
         JsonEvent::StartObject => JsonEvent::StartObject,
         JsonEvent::EndObject => JsonEvent::EndObject,
         JsonEvent::ObjectKey(k) => JsonEvent::ObjectKey(Cow::Owned(k.into())),
-        JsonEvent::Eof => JsonEvent::Eof,
     }
 }
