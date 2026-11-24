@@ -1503,12 +1503,7 @@ pub fn is_keyword(value: &str) -> bool {
 }
 
 fn json_slice_to_node(data: &[u8]) -> Result<JsonNode, JsonSyntaxError> {
-    let mut parser = SliceJsonParser::new(data);
-    json_node_from_events(std::iter::from_fn(|| match parser.parse_next() {
-        Ok(JsonEvent::Eof) => None,
-        Ok(event) => Some(Ok(event)),
-        Err(e) => Some(Err(e)),
-    }))
+    json_node_from_events(SliceJsonParser::new(data))
 }
 
 enum BuildingObjectOrArrayNode {
@@ -1558,7 +1553,6 @@ pub fn json_node_from_events<'a>(
                 }
                 None
             }
-            JsonEvent::Eof => unreachable!(),
         } {
             return Ok(result);
         }

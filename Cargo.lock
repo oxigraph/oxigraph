@@ -1380,9 +1380,9 @@ dependencies = [
 
 [[package]]
 name = "json-event-parser"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "574b0cd5e90ee2ba03a66d0611fc9a09c9a0c28b2ecc2dc8a181dd31a53ca5d7"
+checksum = "a121688e494b9dce01de697297fba5cf6ef2324d76cd052125dfe5c01839d094"
 dependencies = [
  "tokio",
 ]

@@ -379,9 +379,8 @@ fn are_json_equals(left: &str, right: &str) -> Result<bool> {
     fn json_to_node(data: &str) -> Result<JsonNode> {
         let mut stack = Vec::new();
         let mut current_keys = Vec::new();
-        let mut parser = SliceJsonParser::new(data.as_bytes());
-        loop {
-            if let Some(node) = match parser.parse_next()? {
+        for event in SliceJsonParser::new(data.as_bytes()) {
+            if let Some(node) = match event? {
                 JsonEvent::String(s) => Some(JsonNode::String(s.into())),
                 JsonEvent::Number(n) => Some(JsonNode::Number(n.into())),
                 JsonEvent::Boolean(b) => Some(JsonNode::Boolean(b)),
@@ -399,7 +398,6 @@ fn are_json_equals(left: &str, right: &str) -> Result<bool> {
                     current_keys.push(key.into());
                     None
                 }
-                JsonEvent::Eof => None,
             } {
                 match stack.pop() {
                     Some(JsonNode::Array(mut l)) => {
@@ -417,6 +415,7 @@ fn are_json_equals(left: &str, right: &str) -> Result<bool> {
                 }
             }
         }
+        bail!("Missing JSON value")
     }
 
     Ok(json_to_node(left)? == json_to_node(right)?)

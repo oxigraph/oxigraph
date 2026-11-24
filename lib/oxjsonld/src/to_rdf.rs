@@ -179,8 +179,6 @@ impl JsonLdParser {
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderJsonLdParser<R> {
         ReaderJsonLdParser {
-            results: Vec::new(),
-            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: ReaderJsonParser::new(reader),
         }
@@ -230,8 +228,6 @@ impl JsonLdParser {
         reader: R,
     ) -> TokioAsyncReaderJsonLdParser<R> {
         TokioAsyncReaderJsonLdParser {
-            results: Vec::new(),
-            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: TokioAsyncReaderJsonParser::new(reader),
         }
@@ -273,8 +269,6 @@ impl JsonLdParser {
     /// ```
     pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceJsonLdParser<'_> {
         SliceJsonLdParser {
-            results: Vec::new(),
-            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: SliceJsonParser::new(slice.as_ref()),
         }
@@ -293,7 +287,9 @@ impl JsonLdParser {
                 state: vec![JsonLdToRdfState::Graph(Some(GraphName::DefaultGraph))],
                 lenient: self.lenient,
             },
-            json_error: false,
+            results: Vec::new(),
+            errors: Vec::new(),
+            is_end: false,
         }
     }
 }
@@ -336,8 +332,6 @@ impl JsonLdParser {
 /// ```
 #[must_use]
 pub struct ReaderJsonLdParser<R: Read> {
-    results: Vec<Quad>,
-    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: ReaderJsonParser<R>,
 }
@@ -347,20 +341,15 @@ impl<R: Read> Iterator for ReaderJsonLdParser<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(error) = self.errors.pop() {
-                return Some(Err(error.into()));
-            } else if let Some(quad) = self.results.pop() {
-                return Some(Ok(quad));
-            } else if self.inner.is_end() {
+            if let Some(result) = self.inner.pop_result() {
+                return Some(result.map_err(Into::into));
+            }
+            if self.inner.is_end {
                 return None;
             }
-            let step = self.parse_step();
-            if let Err(e) = step {
-                return Some(Err(e));
+            if let Err(error) = self.inner.parse_event(self.json_parser.parse_next()) {
+                return Some(Err(error.into()));
             }
-            // We make sure to have data in the right order
-            self.results.reverse();
-            self.errors.reverse();
         }
     }
 }
@@ -475,15 +464,6 @@ impl<R: Read> ReaderJsonLdParser<R> {
     pub fn base_iri(&self) -> Option<&str> {
         self.inner.base_iri()
     }
-
-    fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
-        self.inner
-            .parse_event(event, &mut self.results, &mut self.errors);
-        Ok(())
-    }
 }
 
 /// Parses a JSON-LD file from a [`AsyncRead`] implementation.
@@ -529,8 +509,6 @@ impl<R: Read> ReaderJsonLdParser<R> {
 #[cfg(feature = "async-tokio")]
 #[must_use]
 pub struct TokioAsyncReaderJsonLdParser<R: AsyncRead + Unpin> {
-    results: Vec<Quad>,
-    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: TokioAsyncReaderJsonParser<R>,
 }
@@ -540,19 +518,15 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// Reads the next quad or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Quad, JsonLdParseError>> {
         loop {
-            if let Some(error) = self.errors.pop() {
-                return Some(Err(error.into()));
-            } else if let Some(quad) = self.results.pop() {
-                return Some(Ok(quad));
-            } else if self.inner.is_end() {
+            if let Some(result) = self.inner.pop_result() {
+                return Some(result.map_err(Into::into));
+            }
+            if self.inner.is_end {
                 return None;
             }
-            if let Err(e) = self.parse_step().await {
-                return Some(Err(e));
+            if let Err(error) = self.inner.parse_event(self.json_parser.parse_next().await) {
+                return Some(Err(error.into()));
             }
-            // We make sure to have data in the right order
-            self.results.reverse();
-            self.errors.reverse();
         }
     }
 
@@ -615,15 +589,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     pub fn base_iri(&self) -> Option<&str> {
         self.inner.base_iri()
     }
-
-    async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().await.inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
-        self.inner
-            .parse_event(event, &mut self.results, &mut self.errors);
-        Ok(())
-    }
 }
 
 /// Parses a JSON-LD file from a byte slice.
@@ -664,8 +629,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 /// ```
 #[must_use]
 pub struct SliceJsonLdParser<'a> {
-    results: Vec<Quad>,
-    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: SliceJsonParser<'a>,
 }
@@ -675,20 +638,15 @@ impl Iterator for SliceJsonLdParser<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(error) = self.errors.pop() {
-                return Some(Err(error));
-            } else if let Some(quad) = self.results.pop() {
-                return Some(Ok(quad));
-            } else if self.inner.is_end() {
+            if let Some(result) = self.inner.pop_result() {
+                return Some(result);
+            }
+            if self.inner.is_end {
                 return None;
             }
-            if let Err(e) = self.parse_step() {
-                // I/O errors cannot happen
-                return Some(Err(e));
+            if let Err(error) = self.inner.parse_event(self.json_parser.next()) {
+                return Some(Err(error.into()));
             }
-            // We make sure to have data in the right order
-            self.results.reverse();
-            self.errors.reverse();
         }
     }
 }
@@ -803,15 +761,6 @@ impl SliceJsonLdParser<'_> {
     pub fn base_iri(&self) -> Option<&str> {
         self.inner.base_iri()
     }
-
-    fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
-        let event = self.json_parser.parse_next().inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
-        self.inner
-            .parse_event(event, &mut self.results, &mut self.errors);
-        Ok(())
-    }
 }
 
 /// Iterator on the file prefixes.
@@ -849,25 +798,34 @@ struct InternalJsonLdParser {
     expansion: JsonLdExpansionConverter,
     expended_events: Vec<JsonLdEvent>,
     to_rdf: JsonLdToRdfConverter,
-    json_error: bool,
+    results: Vec<Quad>,
+    errors: Vec<JsonLdSyntaxError>,
+    is_end: bool,
 }
 
 impl InternalJsonLdParser {
-    fn parse_event(
-        &mut self,
-        event: JsonEvent<'_>,
-        results: &mut Vec<Quad>,
-        errors: &mut Vec<JsonLdSyntaxError>,
-    ) {
-        self.expansion
-            .convert_event(event, &mut self.expended_events, errors);
-        for event in self.expended_events.drain(..) {
-            self.to_rdf.convert_event(event, results);
+    fn pop_result(&mut self) -> Option<Result<Quad, JsonLdSyntaxError>> {
+        if let Some(error) = self.errors.pop() {
+            return Some(Err(error));
         }
+        self.results.pop().map(Ok)
     }
 
-    fn is_end(&self) -> bool {
-        self.json_error || self.expansion.is_end()
+    fn parse_event<E>(&mut self, event: Option<Result<JsonEvent<'_>, E>>) -> Result<(), E> {
+        let Some(event) = event.transpose().inspect_err(|_| self.is_end = true)? else {
+            self.is_end = true;
+            return Ok(());
+        };
+
+        self.expansion
+            .convert_event(event, &mut self.expended_events, &mut self.errors);
+        for event in self.expended_events.drain(..) {
+            self.to_rdf.convert_event(event, &mut self.results);
+        }
+        // Pop buffered results in the order they were produced.
+        self.results.reverse();
+        self.errors.reverse();
+        Ok(())
     }
 
     fn base_iri(&self) -> Option<&str> {
