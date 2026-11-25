@@ -110,6 +110,7 @@ impl Dataset {
     /// assert_eq!(vec![Triple::new(ex.clone(), ex.clone(), ex)], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[inline]
     pub fn graph(&self, graph_name: &GraphName) -> GraphView<'_> {
         GraphView {
             dataset: self,
@@ -144,6 +145,7 @@ impl Dataset {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[inline]
     pub fn graph_mut(&mut self, graph_name: impl Into<GraphName>) -> GraphViewMut<'_> {
         GraphViewMut {
             dataset: self,
@@ -152,6 +154,7 @@ impl Dataset {
     }
 
     /// Returns all the quads contained by the dataset.
+    #[inline]
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             dataset: self,
@@ -199,7 +202,7 @@ impl Dataset {
     fn matching_ids(&self, ids: Option<[Option<TermId>; 4]>) -> Matches<'_> {
         let mut result = Matches {
             order: 3,
-            inner: None,
+            inner: btree_set::Range::default(),
         };
         let Some(ids) = ids else {
             return result;
@@ -215,7 +218,7 @@ impl Dataset {
             .unwrap();
         let prefix = ORDERS[order].map(|component| ids[component].unwrap_or(TermId::MIN));
         result.order = order;
-        result.inner = Some(self.indexes[order].range(prefix_range(&prefix[..bound])));
+        result.inner = self.indexes[order].range(prefix_range(&prefix[..bound]));
         result
     }
 
@@ -226,11 +229,13 @@ impl Dataset {
     }
 
     /// Returns the number of quads in this dataset.
+    #[inline]
     pub fn len(&self) -> usize {
         self.indexes[3].len()
     }
 
     /// Checks if this dataset contains a quad.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.indexes[3].is_empty()
     }
@@ -337,6 +342,7 @@ impl Dataset {
         n.clone()
     }
 
+    #[inline]
     fn graph_id(&self, graph: &GraphName) -> Option<TermId> {
         match graph {
             GraphName::DefaultGraph => Some(TermId::MIN),
@@ -1115,6 +1121,8 @@ impl Eq for Dataset {}
 impl<'a> IntoIterator for &'a Dataset {
     type Item = Quad;
     type IntoIter = Iter<'a>;
+
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -1169,6 +1177,7 @@ pub struct GraphView<'a> {
 
 impl<'a> GraphView<'a> {
     /// Returns all the triples contained by the graph.
+    #[inline]
     pub fn iter(&self) -> GraphViewIter<'a> {
         GraphViewIter {
             dataset: self.dataset,
@@ -1266,11 +1275,13 @@ impl<'a> GraphView<'a> {
     }
 
     /// Returns the number of triples in this graph.
+    #[inline]
     pub fn len(&self) -> usize {
         self.iter().count()
     }
 
     /// Checks if this graph contains a triple.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.matching(None, None, None).next().is_none()
     }
@@ -1305,6 +1316,7 @@ impl<'a> IntoIterator for GraphView<'a> {
     type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -1314,6 +1326,7 @@ impl<'a> IntoIterator for &GraphView<'a> {
     type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -1374,6 +1387,7 @@ impl GraphViewMut<'_> {
     }
 
     /// Returns all the triples contained by the graph
+    #[inline]
     pub fn iter(&self) -> GraphViewIter<'_> {
         self.read().iter()
     }
@@ -1455,11 +1469,13 @@ impl GraphViewMut<'_> {
     }
 
     /// Returns the number of triples in this graph.
+    #[inline]
     pub fn len(&self) -> usize {
         self.read().len()
     }
 
     /// Checks if this graph contains a triple.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.read().is_empty()
     }
@@ -1483,6 +1499,7 @@ impl<'a> IntoIterator for &'a GraphViewMut<'_> {
     type Item = Triple;
     type IntoIter = GraphViewIter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -1490,13 +1507,15 @@ impl<'a> IntoIterator for &'a GraphViewMut<'_> {
 
 struct Matches<'a> {
     order: usize,
-    inner: Option<btree_set::Range<'a, [TermId; 4]>>,
+    inner: btree_set::Range<'a, [TermId; 4]>,
 }
 
 impl Iterator for Matches<'_> {
     type Item = [TermId; 4];
+
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let indexed = self.inner.as_mut()?.next()?;
+        let indexed = self.inner.next()?;
         let mut ids = [TermId::MIN; 4];
         for (position, component) in ORDERS[self.order].iter().enumerate() {
             ids[*component] = indexed[position];
@@ -1504,8 +1523,14 @@ impl Iterator for Matches<'_> {
         Some(ids)
     }
 
+    #[inline]
     fn count(self) -> usize {
-        self.inner.map_or(0, Iterator::count)
+        self.inner.count()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
 
@@ -1516,10 +1541,19 @@ pub struct Iter<'a> {
 }
 impl Iterator for Iter<'_> {
     type Item = Quad;
+
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|ids| self.dataset.decode(*ids))
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
 }
+
+impl ExactSizeIterator for Iter<'_> {}
 
 /// Iterator returned by [`GraphView::iter`].
 pub struct GraphViewIter<'a> {
@@ -1529,12 +1563,20 @@ pub struct GraphViewIter<'a> {
 
 impl Iterator for GraphViewIter<'_> {
     type Item = Triple;
+
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|ids| self.dataset.decode_triple(ids))
     }
 
+    #[inline]
     fn count(self) -> usize {
         self.inner.count()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
 
