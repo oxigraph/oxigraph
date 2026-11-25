@@ -1107,7 +1107,7 @@ fn build_literal(
         #[cfg(feature = "sparql-12")]
         if let Some(direction) = direction {
             if let Some(datatype) = datatype {
-                if datatype.as_ref() != rdf::DIR_LANG_STRING {
+                if datatype != rdf::DIR_LANG_STRING {
                     return Err(QueryResultsSyntaxError::msg(format!(
                         "its:dir value '{direction}' provided with the datatype {datatype}"
                     )));
@@ -1123,7 +1123,7 @@ fn build_literal(
             });
         }
         if let Some(datatype) = datatype {
-            if datatype.as_ref() != rdf::LANG_STRING {
+            if datatype != rdf::LANG_STRING {
                 return Err(QueryResultsSyntaxError::msg(format!(
                     "xml:lang value '{lang}' provided with the datatype {datatype}"
                 )));

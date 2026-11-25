@@ -59,17 +59,13 @@ impl BlankNode {
     pub fn into_string(self) -> OxString {
         self.id
     }
-
-    #[inline]
-    pub fn as_ref(&self) -> BlankNodeRef<'_> {
-        BlankNodeRef { id: &self.id }
-    }
 }
 
 impl fmt::Display for BlankNode {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
+        f.write_str("_:")?;
+        f.write_str(&self.id)
     }
 }
 
@@ -88,97 +84,6 @@ impl Default for BlankNode {
                 };
             }
         }
-    }
-}
-
-/// A borrowed RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
-///
-/// The common way to create a new blank node is to use the [`BlankNode::default`] trait method.
-///
-/// It is also possible to create a blank node from a blank node identifier using the [`BlankNodeRef::new`] function.
-/// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
-///
-/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
-/// ```
-/// use oxrdf::BlankNodeRef;
-///
-/// assert_eq!("_:a122", BlankNodeRef::new("a122")?.to_string());
-/// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct BlankNodeRef<'a> {
-    id: &'a str,
-}
-
-impl<'a> BlankNodeRef<'a> {
-    /// Creates a blank node from a unique identifier.
-    ///
-    /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
-    ///
-    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default`].
-    /// that creates a random ID that could be easily inlined by Oxigraph stores.
-    pub fn new(id: &'a str) -> Result<Self, BlankNodeIdParseError> {
-        validate_blank_node_identifier(id)?;
-        Ok(Self::new_unchecked(id))
-    }
-
-    /// Creates a blank node from a unique identifier without validation.
-    ///
-    /// It is the caller's responsibility to ensure that `id` is a valid blank node identifier
-    /// according to N-Triples, Turtle, and SPARQL grammars.
-    ///
-    /// [`BlankNodeRef::new`) is a safe version of this constructor and should be used for untrusted data.
-    #[inline]
-    pub fn new_unchecked(id: &'a str) -> Self {
-        Self { id }
-    }
-
-    /// Returns the underlying ID of this blank node.
-    #[inline]
-    pub const fn as_str(self) -> &'a str {
-        self.id
-    }
-
-    #[inline]
-    pub fn into_owned(self) -> BlankNode {
-        BlankNode {
-            id: OxString::new_owned(self.id),
-        }
-    }
-}
-
-impl fmt::Display for BlankNodeRef<'_> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "_:{}", self.as_str())
-    }
-}
-
-impl<'a> From<&'a BlankNode> for BlankNodeRef<'a> {
-    #[inline]
-    fn from(node: &'a BlankNode) -> Self {
-        node.as_ref()
-    }
-}
-
-impl<'a> From<BlankNodeRef<'a>> for BlankNode {
-    #[inline]
-    fn from(node: BlankNodeRef<'a>) -> Self {
-        node.into_owned()
-    }
-}
-
-impl PartialEq<BlankNode> for BlankNodeRef<'_> {
-    #[inline]
-    fn eq(&self, other: &BlankNode) -> bool {
-        *self == other.as_ref()
-    }
-}
-
-impl PartialEq<BlankNodeRef<'_>> for BlankNode {
-    #[inline]
-    fn eq(&self, other: &BlankNodeRef<'_>) -> bool {
-        self.as_ref() == *other
     }
 }
 
@@ -249,13 +154,6 @@ pub struct BlankNodeIdParseError;
 #[cfg(feature = "serde")]
 impl Serialize for BlankNode {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.as_ref().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for BlankNodeRef<'_> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[derive(Serialize)]
         #[serde(rename = "BlankNode")]
         struct Value<'a> {
@@ -296,18 +194,6 @@ mod tests {
         BlankNode::new(".").unwrap_err();
         BlankNode::new("a.").unwrap_err();
         BlankNode::new("a.a").unwrap();
-    }
-
-    #[test]
-    fn test_equals() {
-        assert_eq!(
-            BlankNode::new("100a").unwrap(),
-            BlankNodeRef::new("100a").unwrap()
-        );
-        assert_eq!(
-            BlankNode::new("zzz").unwrap(),
-            BlankNodeRef::new("zzz").unwrap()
-        );
     }
 
     #[test]

@@ -4,6 +4,9 @@
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
 - `sparopt`: the `Statistics` trait and `Optimizer::optimize_query_expression_with`. The join reordering then estimates the size of each quad pattern from the number of matching quads, and of distinct subjects and objects of its predicate, in the queried graph. Without statistics, the estimates don't change.
 
+### Changed
+- `oxrdf`: Removed the model's `*Ref` types. Pass Rust references such as `&Quad` to dataset and graph lookups. `sparopt::Statistics` and `sparesults::QuerySolution` lookups also use ordinary references.
+
 ### Fixed
 - RDF/XML: the serializer no longer writes a typed node when the type IRI can only be split inside its local name, like `http://example.org/1Class`, unless that namespace has a declared prefix. It writes `rdf:type` as a property instead of inventing the `http://example.org/1` namespace.
 - Turtle, TriG, N-Triples, N-Quads, RDF/XML and SPARQL JSON and XML results: a triple term nested more than 128 deep is now a syntax error, the same limit as `Term::from_str`. Very deeply nested terms overflowed the stack when they were cloned, dropped or printed. A SPARQL XML results `<triple>` must have exactly one subject, predicate and object.

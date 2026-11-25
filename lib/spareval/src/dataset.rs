@@ -1,9 +1,6 @@
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
-use oxrdf::{
-    BlankNode, Dataset, GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, Quad,
-    Term,
-};
+use oxrdf::{BlankNode, Dataset, GraphName, Literal, NamedNode, Quad, Term};
 #[cfg(feature = "sparql-12")]
 use oxrdf::{NamedOrBlankNode, Triple};
 use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
@@ -16,7 +13,6 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use std::convert::Infallible;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
-use std::iter::empty;
 use std::mem::discriminant;
 
 /// A [RDF dataset](https://www.w3.org/TR/sparql11-query/#rdfDataset) that can be queried using SPARQL
@@ -175,87 +171,33 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
             })
         }
 
-        let graph_name = if let Some(graph_name) = graph_name {
-            Some(if let Some(graph_name) = graph_name {
-                match graph_name {
-                    Term::NamedNode(s) => s.as_ref().into(),
-                    Term::BlankNode(s) => s.as_ref().into(),
-                    Term::Literal(_) => {
-                        let empty: Box<dyn Iterator<Item = Result<_, _>>> = Box::new(empty());
-                        return empty;
-                    }
-                    #[cfg(feature = "sparql-12")]
-                    Term::Triple(_) => return Box::new(empty()),
-                }
-            } else {
-                GraphNameRef::DefaultGraph
-            })
-        } else {
-            None
-        };
-        if let Some(subject) = subject {
+        let matching = || {
+            let graph_name = match graph_name {
+                Some(Some(Term::NamedNode(node))) => Some(GraphName::NamedNode(node.clone())),
+                Some(Some(Term::BlankNode(node))) => Some(GraphName::BlankNode(node.clone())),
+                Some(Some(_)) => return None,
+                Some(None) => Some(GraphName::DefaultGraph),
+                None => None,
+            };
             let subject = match subject {
-                Term::NamedNode(s) => NamedOrBlankNodeRef::from(s.as_ref()),
-                Term::BlankNode(s) => s.as_ref().into(),
-                Term::Literal(_) => {
-                    return Box::new(empty());
-                }
-                #[cfg(feature = "sparql-12")]
-                Term::Triple(_) => return Box::new(empty()),
+                Some(Term::NamedNode(node)) => Some(node.clone().into()),
+                Some(Term::BlankNode(node)) => Some(node.clone().into()),
+                Some(_) => return None,
+                None => None,
             };
-            let predicate = predicate.cloned();
-            let object = object.cloned();
-            let graph_name = graph_name.map(GraphNameRef::into_owned);
-            Box::new(
-                self.quads_for_subject(subject)
-                    .filter(move |q| {
-                        predicate.as_ref().is_none_or(|t| *t == q.predicate)
-                            && object.as_ref().is_none_or(|t| *t == q.object)
-                            && graph_name.as_ref().map_or_else(
-                                || !q.graph_name.is_default_graph(),
-                                |t| *t == q.graph_name,
-                            )
-                    })
-                    .map(quad_to_result),
-            )
-        } else if let Some(object) = object {
-            let predicate = predicate.cloned();
-            let graph_name = graph_name.map(GraphNameRef::into_owned);
-            Box::new(
-                self.quads_for_object(object)
-                    .filter(move |q| {
-                        predicate.as_ref().is_none_or(|t| *t == q.predicate)
-                            && graph_name.as_ref().map_or_else(
-                                || !q.graph_name.is_default_graph(),
-                                |t| *t == q.graph_name,
-                            )
-                    })
-                    .map(quad_to_result),
-            )
-        } else if let Some(predicate) = predicate {
-            let Term::NamedNode(predicate) = predicate else {
-                return Box::new(empty());
+            let predicate = match predicate {
+                Some(Term::NamedNode(node)) => Some(node),
+                Some(_) => return None,
+                None => None,
             };
-            let graph_name = graph_name.map(GraphNameRef::into_owned);
-            Box::new(
-                self.quads_for_predicate(predicate)
-                    .filter(move |q| {
-                        graph_name.as_ref().map_or_else(
-                            || !q.graph_name.is_default_graph(),
-                            |t| *t == q.graph_name,
-                        )
-                    })
+            let named_graphs_only = graph_name.is_none();
+            Some(
+                self.quads_for_pattern(subject.as_ref(), predicate, object, graph_name.as_ref())
+                    .filter(move |quad| !named_graphs_only || !quad.graph_name.is_default_graph())
                     .map(quad_to_result),
             )
-        } else if let Some(graph_name) = graph_name {
-            Box::new(self.quads_for_graph_name(graph_name).map(quad_to_result))
-        } else {
-            Box::new(
-                self.iter()
-                    .filter(|q| !q.graph_name.is_default_graph())
-                    .map(quad_to_result),
-            )
-        }
+        };
+        matching().into_iter().flatten()
     }
 
     fn internalize_term(&self, term: Term) -> Result<Term, Infallible> {

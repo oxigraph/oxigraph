@@ -1,4 +1,4 @@
-use oxrdf::{GraphNameRef, NamedNodeRef, TermRef};
+use oxrdf::{GraphName, NamedNode, Term};
 
 /// A statistic value, that is either exact, an estimate, or unknown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -27,10 +27,10 @@ pub trait Statistics {
     /// The number of quads matching the pattern, `None` matching any term.
     fn quad_count(
         &self,
-        _subject: Option<TermRef<'_>>,
-        _predicate: Option<NamedNodeRef<'_>>,
-        _object: Option<TermRef<'_>>,
-        _graph_name: Option<GraphNameRef<'_>>,
+        _subject: Option<&Term>,
+        _predicate: Option<&NamedNode>,
+        _object: Option<&Term>,
+        _graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
         Precision::Absent
     }
@@ -38,8 +38,8 @@ pub trait Statistics {
     /// The number of distinct subjects of the triples with this predicate, `None` for any predicate.
     fn distinct_subject_count(
         &self,
-        _predicate: Option<NamedNodeRef<'_>>,
-        _graph_name: Option<GraphNameRef<'_>>,
+        _predicate: Option<&NamedNode>,
+        _graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
         Precision::Absent
     }
@@ -47,8 +47,8 @@ pub trait Statistics {
     /// The number of distinct objects of the triples with this predicate, `None` for any predicate.
     fn distinct_object_count(
         &self,
-        _predicate: Option<NamedNodeRef<'_>>,
-        _graph_name: Option<GraphNameRef<'_>>,
+        _predicate: Option<&NamedNode>,
+        _graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
         Precision::Absent
     }

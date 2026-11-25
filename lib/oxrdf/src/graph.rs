@@ -12,7 +12,7 @@
 //! graph.insert(triple.clone());
 //!
 //! // simple filter
-//! let results: Vec<_> = graph.triples_for_subject(&ex).collect();
+//! let results: Vec<_> = graph.triples_for_subject(&ex.clone().into()).collect();
 //! assert_eq!(vec![triple], results);
 //!
 //! // Print
@@ -46,7 +46,7 @@ use std::fmt;
 /// graph.insert(triple.clone());
 ///
 /// // simple filter
-/// let results: Vec<_> = graph.triples_for_subject(&ex).collect();
+/// let results: Vec<_> = graph.triples_for_subject(&ex.clone().into()).collect();
 /// assert_eq!(vec![triple], results);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
@@ -62,11 +62,11 @@ impl Graph {
     }
 
     fn graph(&self) -> GraphView<'_> {
-        self.dataset.graph(GraphNameRef::DefaultGraph)
+        self.dataset.graph(&GraphName::DefaultGraph)
     }
 
     fn graph_mut(&mut self) -> GraphViewMut<'_> {
-        self.dataset.graph_mut(GraphNameRef::DefaultGraph)
+        self.dataset.graph_mut(GraphName::DefaultGraph)
     }
 
     /// Returns all the triples contained by the graph.
@@ -76,88 +76,72 @@ impl Graph {
         }
     }
 
-    pub fn triples_for_subject<'a, 'b, S: Into<NamedOrBlankNodeRef<'b>>>(
+    pub fn triples_for_subject<'a>(
         &'a self,
-        subject: S,
-    ) -> impl Iterator<Item = Triple> + 'a + use<'a, S> {
+        subject: &NamedOrBlankNode,
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         self.graph().triples_for_subject(subject)
     }
 
-    pub fn objects_for_subject_predicate<
-        'a,
-        'b,
-        S: Into<NamedOrBlankNodeRef<'b>>,
-        P: Into<NamedNodeRef<'b>>,
-    >(
+    pub fn objects_for_subject_predicate<'a>(
         &'a self,
-        subject: S,
-        predicate: P,
-    ) -> impl Iterator<Item = Term> + 'a + use<'a, S, P> {
+        subject: &NamedOrBlankNode,
+        predicate: &NamedNode,
+    ) -> impl Iterator<Item = Term> + use<'a> {
         self.graph()
             .objects_for_subject_predicate(subject, predicate)
     }
 
-    pub fn object_for_subject_predicate<'a, 'b>(
-        &'a self,
-        subject: impl Into<NamedOrBlankNodeRef<'b>>,
-        predicate: impl Into<NamedNodeRef<'b>>,
+    pub fn object_for_subject_predicate(
+        &self,
+        subject: &NamedOrBlankNode,
+        predicate: &NamedNode,
     ) -> Option<Term> {
         self.graph()
-            .objects_for_subject_predicate(subject, predicate)
-            .next()
+            .object_for_subject_predicate(subject, predicate)
     }
 
-    pub fn predicates_for_subject_object<
-        'a,
-        'b,
-        S: Into<NamedOrBlankNodeRef<'b>>,
-        O: Into<TermRef<'b>>,
-    >(
+    pub fn predicates_for_subject_object<'a>(
         &'a self,
-        subject: S,
-        object: O,
-    ) -> impl Iterator<Item = NamedNode> + 'a + use<'a, S, O> {
+        subject: &NamedOrBlankNode,
+        object: &Term,
+    ) -> impl Iterator<Item = NamedNode> + use<'a> {
         self.graph().predicates_for_subject_object(subject, object)
     }
 
-    pub fn triples_for_predicate<'a, 'b, P: Into<NamedNodeRef<'b>>>(
+    pub fn triples_for_predicate<'a>(
         &'a self,
-        predicate: P,
-    ) -> impl Iterator<Item = Triple> + 'a + use<'a, P> {
+        predicate: &NamedNode,
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         self.graph().triples_for_predicate(predicate)
     }
 
-    pub fn subjects_for_predicate_object<
-        'a,
-        'b,
-        P: Into<NamedNodeRef<'b>>,
-        O: Into<TermRef<'b>>,
-    >(
+    pub fn subjects_for_predicate_object<'a>(
         &'a self,
-        predicate: P,
-        object: O,
-    ) -> impl Iterator<Item = NamedOrBlankNode> + 'a + use<'a, P, O> {
+        predicate: &NamedNode,
+        object: &Term,
+    ) -> impl Iterator<Item = NamedOrBlankNode> + use<'a> {
         self.graph()
             .subjects_for_predicate_object(predicate, object)
     }
 
-    pub fn subject_for_predicate_object<'a, 'b>(
-        &'a self,
-        predicate: impl Into<NamedNodeRef<'b>>,
-        object: impl Into<TermRef<'b>>,
+    pub fn subject_for_predicate_object(
+        &self,
+        predicate: &NamedNode,
+        object: &Term,
     ) -> Option<NamedOrBlankNode> {
         self.graph().subject_for_predicate_object(predicate, object)
     }
 
-    pub fn triples_for_object<'a, 'b, O: Into<TermRef<'b>>>(
+    pub fn triples_for_object<'a>(
         &'a self,
-        object: O,
-    ) -> impl Iterator<Item = Triple> + 'a + use<'a, O> {
+        object: &Term,
+    ) -> impl Iterator<Item = Triple> + use<'a> {
         self.graph().triples_for_object(object)
     }
 
     /// Checks if the graph contains the given triple.
-    pub fn contains<'a>(&self, triple: impl Into<TripleRef<'a>>) -> bool {
+    pub fn contains(&self, triple: &Triple) -> bool {
         self.graph().contains(triple)
     }
 
@@ -177,7 +161,7 @@ impl Graph {
     }
 
     /// Removes a concrete triple from the graph.
-    pub fn remove<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> bool {
+    pub fn remove(&mut self, triple: &Triple) -> bool {
         self.graph_mut().remove(triple)
     }
 

@@ -2733,10 +2733,10 @@ impl<T> TupleSelector<T> {
         Ok(match term_pattern {
             TermPattern::Variable(variable) => Self::Variable(encode_variable(variables, variable)),
             TermPattern::NamedNode(term) => {
-                Self::Constant(dataset.internalize_term(term.as_ref().into())?)
+                Self::Constant(dataset.internalize_term(term.clone().into())?)
             }
             TermPattern::Literal(term) => {
-                Self::Constant(dataset.internalize_term(term.as_ref().into())?)
+                Self::Constant(dataset.internalize_term(term.clone().into())?)
             }
             #[cfg(feature = "sparql-12")]
             TermPattern::Triple(triple) => {
@@ -2782,7 +2782,7 @@ impl<T> TupleSelector<T> {
                 Self::Variable(encode_variable(variables, variable))
             }
             NamedNodePattern::NamedNode(term) => {
-                Self::Constant(dataset.internalize_term(term.as_ref().into())?)
+                Self::Constant(dataset.internalize_term(term.clone().into())?)
             }
         })
     }

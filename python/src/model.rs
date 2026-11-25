@@ -86,7 +86,7 @@ impl PyNamedNode {
 
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
-        named_node_repr(self.inner.as_ref(), &mut buffer);
+        named_node_repr(&self.inner, &mut buffer);
         buffer
     }
 
@@ -198,7 +198,7 @@ impl PyBlankNode {
 
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
-        blank_node_repr(self.inner.as_ref(), &mut buffer);
+        blank_node_repr(&self.inner, &mut buffer);
         buffer
     }
 
@@ -431,7 +431,7 @@ impl PyLiteral {
 
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
-        literal_repr(self.inner.as_ref(), &mut buffer);
+        literal_repr(&self.inner, &mut buffer);
         buffer
     }
 
@@ -797,7 +797,7 @@ impl PyTriple {
 
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
-        triple_repr(self.inner.as_ref(), &mut buffer);
+        triple_repr(&self.inner, &mut buffer);
         buffer
     }
 
@@ -1015,13 +1015,13 @@ impl PyQuad {
     fn __repr__(&self) -> String {
         let mut buffer = String::new();
         buffer.push_str("<Quad subject=");
-        term_repr(self.inner.subject.as_ref().into(), &mut buffer);
+        subject_repr(&self.inner.subject, &mut buffer);
         buffer.push_str(" predicate=");
-        named_node_repr(self.inner.predicate.as_ref(), &mut buffer);
+        named_node_repr(&self.inner.predicate, &mut buffer);
         buffer.push_str(" object=");
-        term_repr(self.inner.object.as_ref(), &mut buffer);
+        term_repr(&self.inner.object, &mut buffer);
         buffer.push_str(" graph_name=");
-        graph_name_repr(self.inner.graph_name.as_ref(), &mut buffer);
+        graph_name_repr(&self.inner.graph_name, &mut buffer);
         buffer.push('>');
         buffer
     }
@@ -1184,81 +1184,19 @@ impl fmt::Display for PyVariable {
     }
 }
 
-#[derive(FromPyObject)]
-pub struct PyNamedNodeRef<'a>(PyRef<'a, PyNamedNode>);
-
-impl<'a> From<&'a PyNamedNodeRef<'a>> for NamedNodeRef<'a> {
-    fn from(value: &'a PyNamedNodeRef<'a>) -> Self {
-        value.0.inner.as_ref()
-    }
-}
-
-#[derive(FromPyObject)]
-pub enum PyNamedOrBlankNodeRef<'a> {
-    NamedNode(PyRef<'a, PyNamedNode>),
-    BlankNode(PyRef<'a, PyBlankNode>),
-}
-
-impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
-    fn from(value: &'a PyNamedOrBlankNodeRef<'a>) -> Self {
-        match value {
-            PyNamedOrBlankNodeRef::NamedNode(value) => value.inner.as_ref().into(),
-            PyNamedOrBlankNodeRef::BlankNode(value) => value.inner.as_ref().into(),
-        }
-    }
-}
-
-#[derive(FromPyObject)]
-pub enum PyTermRef<'a> {
-    NamedNode(PyRef<'a, PyNamedNode>),
-    BlankNode(PyRef<'a, PyBlankNode>),
-    Literal(PyRef<'a, PyLiteral>),
-    #[cfg(feature = "rdf-12")]
-    Triple(PyRef<'a, PyTriple>),
-}
-
-impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
-    fn from(value: &'a PyTermRef<'a>) -> Self {
-        match value {
-            PyTermRef::NamedNode(value) => value.inner.as_ref().into(),
-            PyTermRef::BlankNode(value) => value.inner.as_ref().into(),
-            PyTermRef::Literal(value) => value.inner.as_ref().into(),
-            #[cfg(feature = "rdf-12")]
-            PyTermRef::Triple(value) => (&value.inner).into(),
-        }
-    }
-}
-
-#[derive(FromPyObject)]
-pub enum PyGraphNameRef<'a> {
-    NamedNode(PyRef<'a, PyNamedNode>),
-    BlankNode(PyRef<'a, PyBlankNode>),
-    DefaultGraph(PyRef<'a, PyDefaultGraph>),
-}
-
-impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
-    fn from(value: &'a PyGraphNameRef<'a>) -> Self {
-        match value {
-            PyGraphNameRef::NamedNode(value) => value.inner.as_ref().into(),
-            PyGraphNameRef::BlankNode(value) => value.inner.as_ref().into(),
-            PyGraphNameRef::DefaultGraph(_) => Self::DefaultGraph,
-        }
-    }
-}
-
-fn named_node_repr(node: NamedNodeRef<'_>, buffer: &mut String) {
+fn named_node_repr(node: &NamedNode, buffer: &mut String) {
     buffer.push_str("<NamedNode value=");
     buffer.push_str(node.as_str());
     buffer.push('>');
 }
 
-fn blank_node_repr(node: BlankNodeRef<'_>, buffer: &mut String) {
+fn blank_node_repr(node: &BlankNode, buffer: &mut String) {
     buffer.push_str("<BlankNode value=");
     buffer.push_str(node.as_str());
     buffer.push('>');
 }
 
-fn literal_repr(literal: LiteralRef<'_>, buffer: &mut String) {
+fn literal_repr(literal: &Literal, buffer: &mut String) {
     buffer.push_str("<Literal value=");
     buffer.push_str(literal.value());
     if let Some(language) = literal.language() {
@@ -1279,31 +1217,38 @@ fn literal_repr(literal: LiteralRef<'_>, buffer: &mut String) {
     buffer.push('>');
 }
 
-pub fn term_repr(term: TermRef<'_>, buffer: &mut String) {
+pub fn term_repr(term: &Term, buffer: &mut String) {
     match term {
-        TermRef::NamedNode(node) => named_node_repr(node, buffer),
-        TermRef::BlankNode(node) => blank_node_repr(node, buffer),
-        TermRef::Literal(literal) => literal_repr(literal, buffer),
+        Term::NamedNode(node) => named_node_repr(node, buffer),
+        Term::BlankNode(node) => blank_node_repr(node, buffer),
+        Term::Literal(literal) => literal_repr(literal, buffer),
         #[cfg(feature = "rdf-12")]
-        TermRef::Triple(triple) => triple_repr(triple.as_ref(), buffer),
+        Term::Triple(triple) => triple_repr(triple, buffer),
     }
 }
 
-fn graph_name_repr(term: GraphNameRef<'_>, buffer: &mut String) {
+fn graph_name_repr(term: &GraphName, buffer: &mut String) {
     match term {
-        GraphNameRef::NamedNode(node) => named_node_repr(node, buffer),
-        GraphNameRef::BlankNode(node) => blank_node_repr(node, buffer),
-        GraphNameRef::DefaultGraph => buffer.push_str("<DefaultGraph>"),
+        GraphName::NamedNode(node) => named_node_repr(node, buffer),
+        GraphName::BlankNode(node) => blank_node_repr(node, buffer),
+        GraphName::DefaultGraph => buffer.push_str("<DefaultGraph>"),
     }
 }
 
-fn triple_repr(triple: TripleRef<'_>, buffer: &mut String) {
+fn subject_repr(subject: &NamedOrBlankNode, buffer: &mut String) {
+    match subject {
+        NamedOrBlankNode::NamedNode(node) => named_node_repr(node, buffer),
+        NamedOrBlankNode::BlankNode(node) => blank_node_repr(node, buffer),
+    }
+}
+
+fn triple_repr(triple: &Triple, buffer: &mut String) {
     buffer.push_str("<Triple subject=");
-    term_repr(triple.subject.into(), buffer);
+    subject_repr(&triple.subject, buffer);
     buffer.push_str(" predicate=");
-    named_node_repr(triple.predicate, buffer);
+    named_node_repr(&triple.predicate, buffer);
     buffer.push_str(" object=");
-    term_repr(triple.object, buffer);
+    term_repr(&triple.object, buffer);
     buffer.push('>');
 }
 
