@@ -1,6 +1,6 @@
 //! Definition of [`QuerySolution`] structure and associated utility constructions.
 
-use oxrdf::{Term, Variable, VariableRef};
+use oxrdf::{Term, Variable};
 use std::fmt;
 use std::iter::Zip;
 use std::ops::Index;
@@ -26,15 +26,21 @@ pub struct QuerySolution {
 }
 
 impl QuerySolution {
-    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str), [`Variable`] or [`VariableRef`]).
+    /// Returns a value for a given position in the tuple ([`usize`](std::usize)) or a given variable name ([`&str`](std::str), [`Variable`] or [`&Variable`](Variable)).
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new("foo")?, Variable::new("bar")?], vec![Some(Literal::from(1).into()), None]));
-    /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
-    /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
+    /// let solution = QuerySolution::from((
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
+    /// let foo = Variable::new("foo")?;
+    /// assert_eq!(solution.get(&foo), Some(&Literal::from(1).into()));
+    /// assert_eq!(Some(&solution[&foo]), solution.get(&foo));
+    /// assert_eq!(solution.get("foo"), solution.get(foo));
+    /// assert_eq!(solution.get(1), None);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
@@ -191,31 +197,23 @@ impl Index<&str> for QuerySolution {
     }
 }
 
-impl Index<VariableRef<'_>> for QuerySolution {
+impl Index<&Variable> for QuerySolution {
     type Output = Term;
 
     #[expect(clippy::panic)]
     #[inline]
-    fn index(&self, index: VariableRef<'_>) -> &Self::Output {
+    fn index(&self, index: &Variable) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The variable {index} is not set in this solution"))
     }
 }
+
 impl Index<Variable> for QuerySolution {
     type Output = Term;
 
     #[inline]
     fn index(&self, index: Variable) -> &Self::Output {
-        self.index(index.as_ref())
-    }
-}
-
-impl Index<&Variable> for QuerySolution {
-    type Output = Term;
-
-    #[inline]
-    fn index(&self, index: &Variable) -> &Self::Output {
-        self.index(index.as_ref())
+        self.index(&index)
     }
 }
 
@@ -303,23 +301,16 @@ impl VariableSolutionIndex for &str {
     }
 }
 
-impl VariableSolutionIndex for VariableRef<'_> {
-    #[inline]
-    fn index(self, solution: &QuerySolution) -> Option<usize> {
-        solution.variables.iter().position(|v| *v == self)
-    }
-}
-
 impl VariableSolutionIndex for &Variable {
     #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
-        self.as_ref().index(solution)
+        VariableSolutionIndex::index(self.as_str(), solution)
     }
 }
 
 impl VariableSolutionIndex for Variable {
     #[inline]
     fn index(self, solution: &QuerySolution) -> Option<usize> {
-        self.as_ref().index(solution)
+        VariableSolutionIndex::index(&self, solution)
     }
 }

@@ -219,7 +219,7 @@ impl PyQuerySolution {
             buffer.push(' ');
             buffer.push_str(k.as_str());
             buffer.push('=');
-            term_repr(v.as_ref(), &mut buffer)
+            term_repr(v, &mut buffer)
         }
         buffer.push('>');
         buffer

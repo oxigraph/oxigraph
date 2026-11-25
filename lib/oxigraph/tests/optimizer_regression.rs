@@ -19,7 +19,7 @@
 #![expect(clippy::panic, clippy::panic_in_result_fn)]
 
 use oxigraph::model::vocab::rdf;
-use oxigraph::model::{Literal, NamedNode, NamedNodeRef, QuadRef};
+use oxigraph::model::{GraphName, Literal, NamedNode, Quad};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde_json::Value;
@@ -45,12 +45,12 @@ SELECT * WHERE {
 #[test]
 fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::Error>> {
     let store = Store::new()?;
-    let person_type = NamedNodeRef::new("http://schema.org/Person")?;
-    let order_type = NamedNodeRef::new("http://schema.org/Order")?;
-    let address_country = NamedNodeRef::new("http://schema.org/addressCountry")?;
-    let segment = NamedNodeRef::new("http://example.org/segment")?;
-    let customer = NamedNodeRef::new("http://schema.org/customer")?;
-    let total_price = NamedNodeRef::new("http://schema.org/totalPrice")?;
+    let person_type = NamedNode::new("http://schema.org/Person")?;
+    let order_type = NamedNode::new("http://schema.org/Order")?;
+    let address_country = NamedNode::new("http://schema.org/addressCountry")?;
+    let segment = NamedNode::new("http://example.org/segment")?;
+    let customer = NamedNode::new("http://schema.org/customer")?;
+    let total_price = NamedNode::new("http://schema.org/totalPrice")?;
     let country = Literal::new_simple_literal("FR");
     let seg = Literal::new_simple_literal("retail");
 
@@ -59,33 +59,24 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
         .collect();
 
     for p in &persons {
-        store.insert(
-            QuadRef::new(
-                p,
-                &rdf::TYPE,
-                person_type,
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            )
-            .into_owned(),
-        )?;
-        store.insert(
-            QuadRef::new(
-                p,
-                address_country,
-                country.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            )
-            .into_owned(),
-        )?;
-        store.insert(
-            QuadRef::new(
-                p,
-                segment,
-                seg.as_ref(),
-                oxigraph::model::GraphNameRef::DefaultGraph,
-            )
-            .into_owned(),
-        )?;
+        store.insert(Quad::new(
+            p.clone(),
+            rdf::TYPE,
+            person_type.clone(),
+            GraphName::DefaultGraph,
+        ))?;
+        store.insert(Quad::new(
+            p.clone(),
+            address_country.clone(),
+            country.clone(),
+            GraphName::DefaultGraph,
+        ))?;
+        store.insert(Quad::new(
+            p.clone(),
+            segment.clone(),
+            seg.clone(),
+            GraphName::DefaultGraph,
+        ))?;
     }
     let mut order_idx = 0;
     for p in &persons {
@@ -93,33 +84,24 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
             let order = NamedNode::new(format!("http://example.org/order/{order_idx}"))?;
             order_idx += 1;
             let price = Literal::new_simple_literal(format!("{}", 10 + order_idx));
-            store.insert(
-                QuadRef::new(
-                    &order,
-                    &rdf::TYPE,
-                    order_type,
-                    oxigraph::model::GraphNameRef::DefaultGraph,
-                )
-                .into_owned(),
-            )?;
-            store.insert(
-                QuadRef::new(
-                    &order,
-                    customer,
-                    p.as_ref(),
-                    oxigraph::model::GraphNameRef::DefaultGraph,
-                )
-                .into_owned(),
-            )?;
-            store.insert(
-                QuadRef::new(
-                    &order,
-                    total_price,
-                    price.as_ref(),
-                    oxigraph::model::GraphNameRef::DefaultGraph,
-                )
-                .into_owned(),
-            )?;
+            store.insert(Quad::new(
+                order.clone(),
+                rdf::TYPE,
+                order_type.clone(),
+                GraphName::DefaultGraph,
+            ))?;
+            store.insert(Quad::new(
+                order.clone(),
+                customer.clone(),
+                p.clone(),
+                GraphName::DefaultGraph,
+            ))?;
+            store.insert(Quad::new(
+                order.clone(),
+                total_price.clone(),
+                price,
+                GraphName::DefaultGraph,
+            ))?;
         }
     }
 

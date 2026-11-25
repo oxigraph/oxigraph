@@ -6,7 +6,7 @@ use crate::type_inference::{
     VariableType, VariableTypes, infer_expression_type, infer_query_expression_types,
 };
 use oxrdf::vocab::rdf;
-use oxrdf::{GraphNameRef, TermRef, Variable};
+use oxrdf::{GraphName, Term, Variable};
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{NamedNodePattern, TermPattern};
 use spargebra::vocab::sparql;
@@ -16,11 +16,18 @@ pub struct Optimizer;
 
 impl Optimizer {
     pub fn optimize_query_expression(query_expression: QueryExpression) -> QueryExpression {
-        Self::optimize_query_expression_with(query_expression, &NoStatistics)
+        Self::optimize(query_expression, &NoStatistics)
     }
 
     /// Optimizes the query expression, using the statistics of the queried dataset to estimate cardinalities.
     pub fn optimize_query_expression_with(
+        query_expression: QueryExpression,
+        statistics: &(impl Statistics + ?Sized),
+    ) -> QueryExpression {
+        Self::optimize(query_expression, statistics)
+    }
+
+    fn optimize(
         query_expression: QueryExpression,
         statistics: &(impl Statistics + ?Sized),
     ) -> QueryExpression {
@@ -1608,22 +1615,22 @@ fn estimate_quad_pattern_size_from_statistics(
 ) -> Option<u64> {
     let subject_constant = term_pattern_constant(subject);
     let predicate_constant = if let NamedNodePattern::NamedNode(predicate) = predicate {
-        Some(predicate.as_ref())
+        Some(predicate)
     } else {
         None
     };
     let object_constant = term_pattern_constant(object);
     let graph_name_constant = match graph_name {
-        None => Some(GraphNameRef::DefaultGraph),
-        Some(NamedNodePattern::NamedNode(graph_name)) => Some(graph_name.as_ref().into()),
+        None => Some(GraphName::DefaultGraph),
+        Some(NamedNodePattern::NamedNode(graph_name)) => Some(graph_name.clone().into()),
         Some(NamedNodePattern::Variable(_)) => None,
     };
     let mut size = statistics
         .quad_count(
-            subject_constant,
+            subject_constant.as_ref(),
             predicate_constant,
-            object_constant,
-            graph_name_constant,
+            object_constant.as_ref(),
+            graph_name_constant.as_ref(),
         )
         .value()?;
     if matches!(predicate, NamedNodePattern::Variable(v) if !input_types.get(v).undef)
@@ -1634,7 +1641,7 @@ fn estimate_quad_pattern_size_from_statistics(
     if subject_constant.is_none() && is_term_pattern_bound(subject, input_types) {
         size = size.div_ceil(
             statistics
-                .distinct_subject_count(predicate_constant, graph_name_constant)
+                .distinct_subject_count(predicate_constant, graph_name_constant.as_ref())
                 .value()?
                 .max(1),
         );
@@ -1642,7 +1649,7 @@ fn estimate_quad_pattern_size_from_statistics(
     if object_constant.is_none() && is_term_pattern_bound(object, input_types) {
         size = size.div_ceil(
             statistics
-                .distinct_object_count(predicate_constant, graph_name_constant)
+                .distinct_object_count(predicate_constant, graph_name_constant.as_ref())
                 .value()?
                 .max(1),
         );
@@ -1650,10 +1657,10 @@ fn estimate_quad_pattern_size_from_statistics(
     Some(size.max(1))
 }
 
-fn term_pattern_constant(pattern: &TermPattern) -> Option<TermRef<'_>> {
+fn term_pattern_constant(pattern: &TermPattern) -> Option<Term> {
     match pattern {
-        TermPattern::NamedNode(term) => Some(term.into()),
-        TermPattern::Literal(term) => Some(term.into()),
+        TermPattern::NamedNode(term) => Some(term.clone().into()),
+        TermPattern::Literal(term) => Some(term.clone().into()),
         TermPattern::Variable(_) => None,
         #[cfg(feature = "sparql-12")]
         TermPattern::Triple(_) => None,

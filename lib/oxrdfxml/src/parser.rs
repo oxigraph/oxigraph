@@ -1693,7 +1693,7 @@ impl<R> InternalRdfXmlParser<R> {
                         .into(),
                     None => self
                         .new_literal(
-                            OxString::new(""),
+                            OxString::default(),
                             language,
                             #[cfg(feature = "rdf-12")]
                             base_direction,
@@ -1887,7 +1887,7 @@ impl<R> InternalRdfXmlParser<R> {
                 Triple::new(
                     statement_id.clone(),
                     rdf::PREDICATE,
-                    triple.predicate.as_ref(),
+                    triple.predicate.clone(),
                 ),
             );
             self.emit_triple(

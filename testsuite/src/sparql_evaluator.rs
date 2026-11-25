@@ -8,8 +8,8 @@ use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
 use oxigraph::model::{
-    BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
-    NamedNode, NamedNodeRef, Quad, Term, TermRef, Triple, TripleRef, Variable,
+    BlankNode, Dataset, Graph, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term, Triple,
+    Variable,
 };
 use oxigraph::sparql::results::{
     QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
@@ -349,44 +349,48 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
         QueryResults::Boolean(value) => {
             let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            graph.insert(TripleRef::new(&result_set, &rdf::TYPE, &rs::RESULT_SET));
-            graph.insert(TripleRef::new(
-                &result_set,
-                &rs::BOOLEAN,
-                &Literal::from(value),
-            ));
+            graph.insert(Triple::new(result_set.clone(), rdf::TYPE, rs::RESULT_SET));
+            graph.insert(Triple::new(result_set, rs::BOOLEAN, Literal::from(value)));
             graph
         }
         QueryResults::Solutions(solutions) => {
             let mut graph = Graph::new();
             let result_set = BlankNode::default();
-            graph.insert(TripleRef::new(&result_set, &rdf::TYPE, &rs::RESULT_SET));
+            graph.insert(Triple::new(result_set.clone(), rdf::TYPE, rs::RESULT_SET));
             for variable in solutions.variables() {
-                graph.insert(TripleRef::new(
-                    &result_set,
-                    &rs::RESULT_VARIABLE,
-                    LiteralRef::new_simple_literal(variable.as_str()),
+                graph.insert(Triple::new(
+                    result_set.clone(),
+                    rs::RESULT_VARIABLE,
+                    Literal::new_simple_literal(variable.clone().into_string()),
                 ));
             }
             for (i, solution) in solutions.enumerate() {
                 let solution = solution?;
                 let solution_id = BlankNode::default();
-                graph.insert(TripleRef::new(&result_set, &rs::SOLUTION, &solution_id));
+                graph.insert(Triple::new(
+                    result_set.clone(),
+                    rs::SOLUTION,
+                    solution_id.clone(),
+                ));
                 for (variable, value) in &solution {
                     let binding = BlankNode::default();
-                    graph.insert(TripleRef::new(&solution_id, &rs::BINDING, &binding));
-                    graph.insert(TripleRef::new(&binding, &rs::VALUE, value));
-                    graph.insert(TripleRef::new(
-                        &binding,
-                        &rs::VARIABLE,
-                        LiteralRef::new_simple_literal(variable.as_str()),
+                    graph.insert(Triple::new(
+                        solution_id.clone(),
+                        rs::BINDING,
+                        binding.clone(),
+                    ));
+                    graph.insert(Triple::new(binding.clone(), rs::VALUE, value.clone()));
+                    graph.insert(Triple::new(
+                        binding,
+                        rs::VARIABLE,
+                        Literal::new_simple_literal(variable.clone().into_string()),
                     ));
                 }
                 if with_order {
-                    graph.insert(TripleRef::new(
-                        &solution_id,
-                        &rs::INDEX,
-                        &Literal::from((i + 1) as i128),
+                    graph.insert(Triple::new(
+                        solution_id,
+                        rs::INDEX,
+                        Literal::from((i + 1) as i128),
                     ));
                 }
             }
@@ -449,35 +453,34 @@ fn compare_solutions(expected: &[(Variable, Term)], actual: &[(Variable, Term)])
         && expected.iter().zip(actual).all(
             move |((expected_variable, expected_value), (actual_variable, actual_value))| {
                 expected_variable == actual_variable
-                    && compare_terms(
-                        expected_value.as_ref(),
-                        actual_value.as_ref(),
-                        &mut bnode_map,
-                    )
+                    && compare_terms(expected_value, actual_value, &mut bnode_map)
             },
         )
 }
 
 fn compare_terms<'a>(
-    expected: TermRef<'a>,
-    actual: TermRef<'a>,
-    bnode_map: &mut HashMap<BlankNodeRef<'a>, BlankNodeRef<'a>>,
+    expected: &'a Term,
+    actual: &'a Term,
+    bnode_map: &mut HashMap<&'a BlankNode, &'a BlankNode>,
 ) -> bool {
     match (expected, actual) {
-        (TermRef::BlankNode(expected), TermRef::BlankNode(actual)) => {
+        (Term::BlankNode(expected), Term::BlankNode(actual)) => {
             expected == *bnode_map.entry(actual).or_insert(expected)
         }
         #[cfg(feature = "rdf-12")]
-        (TermRef::Triple(expected), TermRef::Triple(actual)) => {
-            compare_terms(
-                expected.subject.as_ref().into(),
-                actual.subject.as_ref().into(),
-                bnode_map,
-            ) && compare_terms(
-                expected.predicate.as_ref().into(),
-                actual.predicate.as_ref().into(),
-                bnode_map,
-            ) && compare_terms(expected.object.as_ref(), actual.object.as_ref(), bnode_map)
+        (Term::Triple(expected), Term::Triple(actual)) => {
+            let subjects_match = if let (
+                NamedOrBlankNode::BlankNode(expected),
+                NamedOrBlankNode::BlankNode(actual),
+            ) = (&expected.subject, &actual.subject)
+            {
+                expected == *bnode_map.entry(actual).or_insert(expected)
+            } else {
+                expected.subject == actual.subject
+            };
+            subjects_match
+                && expected.predicate == actual.predicate
+                && compare_terms(&expected.object, &actual.object, bnode_map)
         }
         (expected, actual) => expected == actual,
     }
@@ -509,7 +512,9 @@ impl StaticQueryResults {
             .map(|q| Ok(Triple::from(q?)))
             .collect::<Result<Graph>>()?;
 
-        if let Some(result_set) = graph.subject_for_predicate_object(&rdf::TYPE, &rs::RESULT_SET) {
+        if let Some(result_set) =
+            graph.subject_for_predicate_object(&rdf::TYPE, &rs::RESULT_SET.into())
+        {
             if let Some(bool) = graph.object_for_subject_predicate(&result_set, &rs::BOOLEAN) {
                 // Boolean query
                 Ok(Self::Boolean(bool == Literal::from(true)))
@@ -532,12 +537,14 @@ impl StaticQueryResults {
                         let Term::BlankNode(solution) = object else {
                             bail!("Invalid rs:solution: {object}")
                         };
+                        let solution = solution.into();
                         let mut bindings = graph
                             .objects_for_subject_predicate(&solution, &rs::BINDING)
                             .map(|object| {
                                 let Term::BlankNode(binding) = object else {
                                     bail!("Invalid rs:binding: {object}")
                                 };
+                                let binding: NamedOrBlankNode = binding.into();
                                 let (Some(Term::Literal(variable)), Some(value)) = (
                                     graph.object_for_subject_predicate(&binding, &rs::VARIABLE),
                                     graph.object_for_subject_predicate(&binding, &rs::VALUE),
@@ -642,11 +649,11 @@ fn results_diff(expected: StaticQueryResults, actual: StaticQueryResults) -> Str
             StaticQueryResults::Graph(actual) => {
                 let expected = expected
                     .into_iter()
-                    .map(|t| t.in_graph(GraphNameRef::DefaultGraph))
+                    .map(|t| t.in_graph(GraphName::DefaultGraph))
                     .collect();
                 let actual = actual
                     .into_iter()
-                    .map(|t| t.in_graph(GraphNameRef::DefaultGraph))
+                    .map(|t| t.in_graph(GraphName::DefaultGraph))
                     .collect();
                 dataset_diff(&expected, &actual)
             }
@@ -777,12 +784,14 @@ struct DatasetStatistics<'a>(&'a Dataset);
 impl DatasetStatistics<'_> {
     fn quads(
         &self,
-        predicate: Option<NamedNodeRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        subject: Option<&NamedOrBlankNode>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
     ) -> impl Iterator<Item = Quad> {
         let named_graphs_only = graph_name.is_none();
         self.0
-            .quads_for_pattern(None, predicate, None, graph_name)
+            .quads_for_pattern(subject, predicate, object, graph_name)
             .filter(move |quad| !named_graphs_only || !quad.graph_name.is_default_graph())
     }
 }
@@ -790,17 +799,19 @@ impl DatasetStatistics<'_> {
 impl Statistics for DatasetStatistics<'_> {
     fn quad_count(
         &self,
-        subject: Option<TermRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
-        object: Option<TermRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        subject: Option<&Term>,
+        predicate: Option<&NamedNode>,
+        object: Option<&Term>,
+        graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
+        let subject = match subject {
+            Some(Term::NamedNode(node)) => Some(node.clone().into()),
+            Some(Term::BlankNode(node)) => Some(node.clone().into()),
+            Some(_) => return Precision::Exact(0),
+            None => None,
+        };
         Precision::Exact(
-            self.quads(predicate, graph_name)
-                .filter(|quad| {
-                    subject.is_none_or(|subject| TermRef::from(&quad.subject) == subject)
-                        && object.is_none_or(|object| quad.object.as_ref() == object)
-                })
+            self.quads(subject.as_ref(), predicate, object, graph_name)
                 .count()
                 .try_into()
                 .unwrap(),
@@ -809,11 +820,11 @@ impl Statistics for DatasetStatistics<'_> {
 
     fn distinct_subject_count(
         &self,
-        predicate: Option<NamedNodeRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        predicate: Option<&NamedNode>,
+        graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
         Precision::Exact(
-            self.quads(predicate, graph_name)
+            self.quads(None, predicate, None, graph_name)
                 .map(|quad| quad.subject)
                 .collect::<HashSet<_>>()
                 .len()
@@ -824,11 +835,11 @@ impl Statistics for DatasetStatistics<'_> {
 
     fn distinct_object_count(
         &self,
-        predicate: Option<NamedNodeRef<'_>>,
-        graph_name: Option<GraphNameRef<'_>>,
+        predicate: Option<&NamedNode>,
+        graph_name: Option<&GraphName>,
     ) -> Precision<u64> {
         Precision::Exact(
-            self.quads(predicate, graph_name)
+            self.quads(None, predicate, None, graph_name)
                 .map(|quad| quad.object)
                 .collect::<HashSet<_>>()
                 .len()

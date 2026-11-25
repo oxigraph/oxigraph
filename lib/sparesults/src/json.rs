@@ -1015,7 +1015,7 @@ impl JsonInnerTermReader {
                                 #[cfg(feature = "sparql-12")]
                                 if let Some(direction) = self.direction.take() {
                                     if let Some(datatype) = &self.datatype {
-                                        if datatype.as_ref() != rdf::DIR_LANG_STRING {
+                                        if *datatype != rdf::DIR_LANG_STRING {
                                             return Err(QueryResultsSyntaxError::msg(format!(
                                                 "xml:lang value '{lang}' and its:dir value '{direction}' provided with the datatype {datatype}"
                                             )));
@@ -1032,7 +1032,7 @@ impl JsonInnerTermReader {
                                     })?.into()))
                                 }
                                 if let Some(datatype) = &self.datatype {
-                                    if datatype.as_ref() != rdf::LANG_STRING {
+                                    if *datatype != rdf::LANG_STRING {
                                         return Err(QueryResultsSyntaxError::msg(format!(
                                             "xml:lang value '{lang}' provided with the datatype {datatype}"
                                         )));

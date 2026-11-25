@@ -1,4 +1,4 @@
-use crate::named_node::{NamedNode, NamedNodeRef};
+use crate::named_node::NamedNode;
 use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
@@ -156,7 +156,13 @@ impl Literal {
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
     #[inline]
     pub fn value(&self) -> &str {
-        self.as_ref().value()
+        match &self.0 {
+            LiteralContent::String(value)
+            | LiteralContent::TypedLiteral { value, .. }
+            | LiteralContent::LanguageTaggedString { value, .. } => value,
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString { value, .. } => value,
+        }
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
@@ -177,7 +183,12 @@ impl Literal {
     /// They are normalized to lowercase by this implementation.
     #[inline]
     pub fn language(&self) -> Option<&str> {
-        self.as_ref().language()
+        match &self.0 {
+            LiteralContent::LanguageTaggedString { language, .. } => Some(language),
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString { language, .. } => Some(language),
+            _ => None,
+        }
     }
 
     /// The literal [base direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction) if it is a [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction).
@@ -186,7 +197,11 @@ impl Literal {
     #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn direction(&self) -> Option<BaseDirection> {
-        self.as_ref().direction()
+        if let LiteralContent::DirectionalLanguageTaggedString { direction, .. } = &self.0 {
+            Some(*direction)
+        } else {
+            None
+        }
     }
 
     /// The literal [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
@@ -202,30 +217,6 @@ impl Literal {
             LiteralContent::DirectionalLanguageTaggedString { .. } => &RDF_DIR_LANG_STRING,
             LiteralContent::TypedLiteral { datatype, .. } => datatype,
         }
-    }
-
-    #[inline]
-    pub fn as_ref(&self) -> LiteralRef<'_> {
-        LiteralRef(match &self.0 {
-            LiteralContent::String(value) => LiteralRefContent::String(value),
-            LiteralContent::LanguageTaggedString { value, language } => {
-                LiteralRefContent::LanguageTaggedString { value, language }
-            }
-            #[cfg(feature = "rdf-12")]
-            LiteralContent::DirectionalLanguageTaggedString {
-                value,
-                language,
-                direction,
-            } => LiteralRefContent::DirectionalLanguageTaggedString {
-                value,
-                language,
-                direction: *direction,
-            },
-            LiteralContent::TypedLiteral { value, datatype } => LiteralRefContent::TypedLiteral {
-                value,
-                datatype: datatype.as_ref(),
-            },
-        })
     }
 
     /// Extract components from this literal (value, datatype, language tag and base direction).
@@ -270,7 +261,27 @@ impl Literal {
 impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
+        match &self.0 {
+            LiteralContent::String(value) => print_quoted_str(value, f),
+            LiteralContent::LanguageTaggedString { value, language } => {
+                print_quoted_str(value, f)?;
+                f.write_char('@')?;
+                f.write_str(language)
+            }
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => {
+                print_quoted_str(value, f)?;
+                write!(f, "@{language}--{direction}")
+            }
+            LiteralContent::TypedLiteral { value, datatype } => {
+                print_quoted_str(value, f)?;
+                write!(f, "^^{datatype}")
+            }
+        }
     }
 }
 
@@ -549,240 +560,6 @@ impl From<DayTimeDuration> for Literal {
     }
 }
 
-/// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
-///
-/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
-/// ```
-/// use oxrdf::LiteralRef;
-/// use oxrdf::vocab::xsd;
-///
-/// assert_eq!(
-///     "\"foo\\nbar\"",
-///     LiteralRef::new_simple_literal("foo\nbar").to_string()
-/// );
-///
-/// assert_eq!(
-///     r#""1999-01-01"^^<http://www.w3.org/2001/XMLSchema#date>"#,
-///     LiteralRef::new_typed_literal("1999-01-01", xsd::DATE.as_ref()).to_string()
-/// );
-/// ```
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct LiteralRef<'a>(LiteralRefContent<'a>);
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-enum LiteralRefContent<'a> {
-    String(&'a str),
-    LanguageTaggedString {
-        value: &'a str,
-        language: &'a str,
-    },
-    #[cfg(feature = "rdf-12")]
-    DirectionalLanguageTaggedString {
-        value: &'a str,
-        language: &'a str,
-        direction: BaseDirection,
-    },
-    TypedLiteral {
-        value: &'a str,
-        datatype: NamedNodeRef<'a>,
-    },
-}
-
-impl<'a> LiteralRef<'a> {
-    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
-    #[inline]
-    pub const fn new_simple_literal(value: &'a str) -> Self {
-        LiteralRef(LiteralRefContent::String(value))
-    }
-
-    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
-    #[inline]
-    pub fn new_typed_literal(value: &'a str, datatype: impl Into<NamedNodeRef<'a>>) -> Self {
-        let datatype = datatype.into();
-        LiteralRef(if datatype == xsd::STRING {
-            LiteralRefContent::String(value)
-        } else {
-            LiteralRefContent::TypedLiteral { value, datatype }
-        })
-    }
-
-    /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
-    ///
-    /// It is the responsibility of the caller to check that `language`
-    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
-    /// and is lowercase.
-    ///
-    /// [`Literal::new_language_tagged_literal`] is a safe version of this constructor and should be used for untrusted data.
-    #[inline]
-    pub const fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
-        LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })
-    }
-
-    /// Builds an RDF [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string).
-    ///
-    /// It is the responsibility of the caller to check that `language`
-    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
-    /// and is lowercase.
-    ///
-    /// [`Literal::new_directional_language_tagged_literal`] is a safe version of this constructor and should be used for untrusted data.
-    #[cfg(feature = "rdf-12")]
-    #[inline]
-    pub const fn new_directional_language_tagged_literal_unchecked(
-        value: &'a str,
-        language: &'a str,
-        direction: BaseDirection,
-    ) -> Self {
-        LiteralRef(LiteralRefContent::DirectionalLanguageTaggedString {
-            value,
-            language,
-            direction,
-        })
-    }
-
-    /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
-    #[inline]
-    pub const fn value(self) -> &'a str {
-        match self.0 {
-            LiteralRefContent::String(value)
-            | LiteralRefContent::LanguageTaggedString { value, .. }
-            | LiteralRefContent::TypedLiteral { value, .. } => value,
-            #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString { value, .. } => value,
-        }
-    }
-
-    /// The literal [language tag](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag) if it is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
-    ///
-    /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
-    /// They are normalized to lowercase by this implementation.
-    #[inline]
-    pub const fn language(self) -> Option<&'a str> {
-        match self.0 {
-            LiteralRefContent::LanguageTaggedString { language, .. } => Some(language),
-            #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString { language, .. } => Some(language),
-            _ => None,
-        }
-    }
-
-    /// The literal [base direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction) if it is a [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction).
-    ///
-    /// The two possible base directions are left-to-right (`ltr`) and right-to-left (`rtl`).
-    #[cfg(feature = "rdf-12")]
-    #[inline]
-    pub const fn direction(self) -> Option<BaseDirection> {
-        match self.0 {
-            LiteralRefContent::DirectionalLanguageTaggedString { direction, .. } => Some(direction),
-            _ => None,
-        }
-    }
-
-    /// The literal [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
-    ///
-    /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
-    /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
-    #[inline]
-    pub const fn datatype(self) -> NamedNodeRef<'a> {
-        match self.0 {
-            LiteralRefContent::String(_) => XSD_STRING.as_ref(),
-            LiteralRefContent::LanguageTaggedString { .. } => RDF_LANG_STRING.as_ref(),
-            #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString { .. } => {
-                RDF_DIR_LANG_STRING.as_ref()
-            }
-            LiteralRefContent::TypedLiteral { datatype, .. } => datatype,
-        }
-    }
-
-    #[inline]
-    pub fn into_owned(self) -> Literal {
-        Literal(match self.0 {
-            LiteralRefContent::String(value) => LiteralContent::String(OxString::new_owned(value)),
-            LiteralRefContent::LanguageTaggedString { value, language } => {
-                LiteralContent::LanguageTaggedString {
-                    value: OxString::new_owned(value),
-                    language: OxString::new_owned(language),
-                }
-            }
-            #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString {
-                value,
-                language,
-                direction,
-            } => LiteralContent::DirectionalLanguageTaggedString {
-                value: OxString::new_owned(value),
-                language: OxString::new_owned(language),
-                direction,
-            },
-            LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
-                value: OxString::new_owned(value),
-                datatype: datatype.into_owned(),
-            },
-        })
-    }
-}
-
-impl fmt::Display for LiteralRef<'_> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            LiteralRefContent::String(value) => print_quoted_str(value, f),
-            LiteralRefContent::LanguageTaggedString { value, language } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{language}")
-            }
-            #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString {
-                value,
-                language,
-                direction,
-            } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{language}--{direction}")
-            }
-            LiteralRefContent::TypedLiteral { value, datatype } => {
-                print_quoted_str(value, f)?;
-                write!(f, "^^{datatype}")
-            }
-        }
-    }
-}
-
-impl<'a> From<&'a Literal> for LiteralRef<'a> {
-    #[inline]
-    fn from(node: &'a Literal) -> Self {
-        node.as_ref()
-    }
-}
-
-impl<'a> From<LiteralRef<'a>> for Literal {
-    #[inline]
-    fn from(node: LiteralRef<'a>) -> Self {
-        node.into_owned()
-    }
-}
-
-impl<'a> From<&'a str> for LiteralRef<'a> {
-    #[inline]
-    fn from(value: &'a str) -> Self {
-        LiteralRef(LiteralRefContent::String(value))
-    }
-}
-
-impl PartialEq<Literal> for LiteralRef<'_> {
-    #[inline]
-    fn eq(&self, other: &Literal) -> bool {
-        *self == other.as_ref()
-    }
-}
-
-impl PartialEq<LiteralRef<'_>> for Literal {
-    #[inline]
-    fn eq(&self, other: &LiteralRef<'_>) -> bool {
-        self.as_ref() == *other
-    }
-}
-
 #[inline]
 pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
@@ -831,14 +608,6 @@ impl fmt::Display for BaseDirection {
 impl Serialize for Literal {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.as_ref().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for LiteralRef<'_> {
-    #[inline]
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[expect(clippy::struct_field_names)]
         #[derive(Serialize)]
         #[serde(rename = "Literal")]
@@ -852,38 +621,15 @@ impl Serialize for LiteralRef<'_> {
             #[serde(skip_serializing_if = "Option::is_none")]
             datatype: Option<&'a str>,
         }
-        match self.0 {
-            LiteralRefContent::String(value) => Value {
-                value,
-                language: None,
-                #[cfg(feature = "rdf-12")]
-                direction: None,
-                datatype: None,
-            },
-            LiteralRefContent::LanguageTaggedString { value, language } => Value {
-                value,
-                language: Some(language),
-                #[cfg(feature = "rdf-12")]
-                direction: None,
-                datatype: None,
-            },
+        Value {
+            value: self.value(),
+            language: self.language(),
             #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString {
-                value,
-                language,
-                direction,
-            } => Value {
-                value,
-                language: Some(language),
-                direction: Some(direction),
-                datatype: None,
-            },
-            LiteralRefContent::TypedLiteral { value, datatype } => Value {
-                value,
-                language: None,
-                #[cfg(feature = "rdf-12")]
-                direction: None,
-                datatype: Some(datatype.as_str()),
+            direction: self.direction(),
+            datatype: if let LiteralContent::TypedLiteral { datatype, .. } = &self.0 {
+                Some(datatype.as_str())
+            } else {
+                None
             },
         }
         .serialize(serializer)
@@ -942,18 +688,6 @@ mod tests {
         assert_eq!(
             Literal::new_simple_literal("foo"),
             Literal::new_typed_literal("foo", xsd::STRING)
-        );
-        assert_eq!(
-            Literal::new_simple_literal("foo"),
-            LiteralRef::new_typed_literal("foo", xsd::STRING.as_ref())
-        );
-        assert_eq!(
-            LiteralRef::new_simple_literal("foo"),
-            Literal::new_typed_literal("foo", xsd::STRING)
-        );
-        assert_eq!(
-            LiteralRef::new_simple_literal("foo"),
-            LiteralRef::new_typed_literal("foo", xsd::STRING.as_ref())
         );
     }
 

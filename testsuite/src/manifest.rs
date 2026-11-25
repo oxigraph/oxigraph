@@ -99,15 +99,17 @@ impl TestManifest {
                 bail!("Invalid test identifier. Got {test_node}");
             };
 
-            if self
-                .graph
-                .contains(TripleRef::new(&test_node, &rdft::APPROVAL, &rdft::REJECTED))
-            {
+            let test_subject = NamedOrBlankNode::from(test_node.clone());
+            if self.graph.contains(&Triple::new(
+                test_subject.clone(),
+                rdft::APPROVAL,
+                rdft::REJECTED,
+            )) {
                 continue; // We do not run rejected tests
             }
             let name = if let Some(Term::Literal(c)) = self
                 .graph
-                .object_for_subject_predicate(&test_node, &mf::NAME)
+                .object_for_subject_predicate(&test_subject, &mf::NAME)
             {
                 Some(c.into_value())
             } else {
@@ -115,7 +117,7 @@ impl TestManifest {
             };
             let kinds = self
                 .graph
-                .objects_for_subject_predicate(&test_node, &rdf::TYPE)
+                .objects_for_subject_predicate(&test_subject, &rdf::TYPE)
                 .map(|c| {
                     if let Term::NamedNode(c) = c {
                         Ok(c)
@@ -129,7 +131,7 @@ impl TestManifest {
                 .collect::<Result<Vec<_>>>()?;
             let comment = if let Some(Term::Literal(c)) = self
                 .graph
-                .object_for_subject_predicate(&test_node, &rdfs::COMMENT)
+                .object_for_subject_predicate(&test_subject, &rdfs::COMMENT)
             {
                 Some(c.into_value())
             } else {
@@ -137,12 +139,13 @@ impl TestManifest {
             };
             let (action, query, update, data, graph_data, service_data) = match self
                 .graph
-                .object_for_subject_predicate(&test_node, &mf::ACTION)
+                .object_for_subject_predicate(&test_subject, &mf::ACTION)
             {
                 Some(Term::NamedNode(n)) => {
                     (Some(n.into_string()), None, None, None, vec![], vec![])
                 }
                 Some(Term::BlankNode(n)) => {
+                    let n = n.into();
                     let query = match self.graph.object_for_subject_predicate(&n, &qt::QUERY) {
                         Some(Term::NamedNode(q)) => Some(q.into_string()),
                         _ => None,
@@ -166,40 +169,7 @@ impl TestManifest {
                             self.graph
                                 .objects_for_subject_predicate(&n, &ut::GRAPH_DATA),
                         )
-                        .filter_map(|g| match g {
-                            Term::NamedNode(q) => {
-                                let q_str = q.clone().into_string();
-                                Some(Ok((q, q_str)))
-                            }
-                            Term::BlankNode(node) => {
-                                if let Some(Term::NamedNode(graph)) =
-                                    self.graph.object_for_subject_predicate(&node, &ut::GRAPH)
-                                {
-                                    Some(Ok(
-                                        if let Some(Term::Literal(name)) = self
-                                            .graph
-                                            .object_for_subject_predicate(&node, &rdfs::LABEL)
-                                        {
-                                            (
-                                                match NamedNode::new(name.into_value()) {
-                                                    Ok(graph) => graph,
-                                                    Err(e) => return Some(Err(e)),
-                                                },
-                                                graph.clone().into_string(),
-                                            )
-                                        } else {
-                                            let graph_str = graph.clone().into_string();
-                                            (graph, graph_str)
-                                        },
-                                    ))
-                                } else {
-                                    None
-                                }
-                            }
-                            Term::Literal(_) => None,
-                            #[cfg(feature = "rdf-12")]
-                            Term::Triple(_) => None,
-                        })
+                        .filter_map(|term| self.graph_data(term).transpose())
                         .collect::<Result<_, _>>()?;
                     let service_data =
                         self.graph
@@ -234,55 +204,25 @@ impl TestManifest {
             };
             let (result, result_graph_data) = match self
                 .graph
-                .object_for_subject_predicate(&test_node, &mf::RESULT)
+                .object_for_subject_predicate(&test_subject, &mf::RESULT)
             {
                 Some(Term::NamedNode(n)) => (Some(n.into_string()), Vec::new()),
-                Some(Term::BlankNode(n)) => (
-                    if let Some(Term::NamedNode(result)) =
-                        self.graph.object_for_subject_predicate(&n, &ut::DATA)
-                    {
-                        Some(result.into_string())
-                    } else {
-                        None
-                    },
-                    self.graph
-                        .objects_for_subject_predicate(&n, &ut::GRAPH_DATA)
-                        .filter_map(|g| match g {
-                            Term::NamedNode(q) => {
-                                let q_str = q.clone().into_string();
-                                Some(Ok((q, q_str)))
-                            }
-                            Term::BlankNode(node) => {
-                                if let Some(Term::NamedNode(graph)) =
-                                    self.graph.object_for_subject_predicate(&node, &ut::GRAPH)
-                                {
-                                    Some(Ok(
-                                        if let Some(Term::Literal(name)) = self
-                                            .graph
-                                            .object_for_subject_predicate(&node, &rdfs::LABEL)
-                                        {
-                                            (
-                                                match NamedNode::new(name.into_value()) {
-                                                    Ok(graph) => graph,
-                                                    Err(e) => return Some(Err(e)),
-                                                },
-                                                graph.clone().into_string(),
-                                            )
-                                        } else {
-                                            let graph_str = graph.clone().into_string();
-                                            (graph, graph_str)
-                                        },
-                                    ))
-                                } else {
-                                    None
-                                }
-                            }
-                            Term::Literal(_) => None,
-                            #[cfg(feature = "rdf-12")]
-                            Term::Triple(_) => None,
-                        })
-                        .collect::<Result<_, _>>()?,
-                ),
+                Some(Term::BlankNode(n)) => {
+                    let n = n.into();
+                    (
+                        if let Some(Term::NamedNode(result)) =
+                            self.graph.object_for_subject_predicate(&n, &ut::DATA)
+                        {
+                            Some(result.into_string())
+                        } else {
+                            None
+                        },
+                        self.graph
+                            .objects_for_subject_predicate(&n, &ut::GRAPH_DATA)
+                            .filter_map(|term| self.graph_data(term).transpose())
+                            .collect::<Result<_, _>>()?,
+                    )
+                }
                 Some(Term::Literal(l)) => (Some(l.into_value()), Vec::new()),
                 #[cfg(feature = "rdf-12")]
                 Some(Term::Triple(_)) => bail!("invalid result"),
@@ -290,11 +230,11 @@ impl TestManifest {
             };
             let mut option = match self
                 .graph
-                .object_for_subject_predicate(&test_node, &jld::OPTION)
+                .object_for_subject_predicate(&test_subject, &jld::OPTION)
             {
                 Some(Term::BlankNode(option)) => self
                     .graph
-                    .triples_for_subject(&option)
+                    .triples_for_subject(&option.into())
                     .map(|t| (t.predicate, t.object))
                     .collect(),
                 Some(_) => bail!("invalid option"),
@@ -302,14 +242,14 @@ impl TestManifest {
             };
             if let Some(hash_algorithm) = self
                 .graph
-                .object_for_subject_predicate(&test_node, &rdfc::HASH_ALGORITHM)
+                .object_for_subject_predicate(&test_subject, &rdfc::HASH_ALGORITHM)
             {
                 option.insert(rdfc::HASH_ALGORITHM, hash_algorithm);
             }
-            let lax_cardinality = self.graph.contains(TripleRef::new(
-                &test_node,
-                &mf::RESULT_CARDINALITY,
-                &mf::LAX_CARDINALITY,
+            let lax_cardinality = self.graph.contains(&Triple::new(
+                test_subject,
+                mf::RESULT_CARDINALITY,
+                mf::LAX_CARDINALITY,
             ));
             return Ok(Some(Test {
                 id: test_node,
@@ -330,6 +270,32 @@ impl TestManifest {
         }
     }
 
+    fn graph_data(&self, term: Term) -> Result<Option<(NamedNode, OxString)>, IriParseError> {
+        if let Term::NamedNode(node) = term {
+            let source = node.clone().into_string();
+            return Ok(Some((node, source)));
+        }
+        let Term::BlankNode(node) = term else {
+            return Ok(None);
+        };
+        let node = node.into();
+        let Some(Term::NamedNode(graph)) =
+            self.graph.object_for_subject_predicate(&node, &ut::GRAPH)
+        else {
+            return Ok(None);
+        };
+        Ok(Some(
+            if let Some(Term::Literal(name)) =
+                self.graph.object_for_subject_predicate(&node, &rdfs::LABEL)
+            {
+                (NamedNode::new(name.into_value())?, graph.into_string())
+            } else {
+                let source = graph.clone().into_string();
+                (graph, source)
+            },
+        ))
+    }
+
     fn load_next_manifest(&mut self) -> Result<Option<()>> {
         let Some(url) = self.manifests_to_do.pop_front() else {
             return Ok(None);
@@ -339,7 +305,7 @@ impl TestManifest {
 
         let manifests = self
             .graph
-            .subjects_for_predicate_object(&rdf::TYPE, &mf::MANIFEST)
+            .subjects_for_predicate_object(&rdf::TYPE, &mf::MANIFEST.into())
             .collect::<Vec<_>>();
         if manifests.len() != 1 {
             bail!("The file should contain a single manifest");
@@ -362,7 +328,7 @@ impl TestManifest {
             )?;
             manifest = self
                 .graph
-                .subject_for_predicate_object(&rdf::TYPE, &mf::MANIFEST)
+                .subject_for_predicate_object(&rdf::TYPE, &mf::MANIFEST.into())
                 .context("no manifest found")?;
         }
 

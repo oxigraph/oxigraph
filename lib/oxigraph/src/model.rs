@@ -13,7 +13,7 @@
 //! graph.insert(triple.clone());
 //!
 //! // simple filter
-//! let results: Vec<_> = graph.triples_for_subject(&ex).collect();
+//! let results: Vec<_> = graph.triples_for_subject(&ex.clone().into()).collect();
 //! assert_eq!(vec![triple], results);
 //! ```
 

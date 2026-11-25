@@ -14,18 +14,15 @@ mod triple;
 mod variable;
 pub mod vocab;
 
-pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
+pub use crate::blank_node::{BlankNode, BlankNodeIdParseError};
 pub use crate::dataset::Dataset;
 pub use crate::graph::Graph;
 #[cfg(feature = "rdf-12")]
 pub use crate::literal::BaseDirection;
-pub use crate::literal::{Literal, LiteralRef};
-pub use crate::named_node::{NamedNode, NamedNodeRef};
+pub use crate::literal::Literal;
+pub use crate::named_node::NamedNode;
 pub use crate::parser::TermParseError;
-pub use crate::triple::{
-    GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
-    Triple, TripleRef, TryFromTermError,
-};
-pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
+pub use crate::triple::{GraphName, NamedOrBlankNode, Quad, Term, Triple, TryFromTermError};
+pub use crate::variable::{Variable, VariableNameParseError};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;

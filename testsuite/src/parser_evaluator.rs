@@ -179,7 +179,7 @@ fn evaluate_eval_test(
 
 fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
     let mut profile = JsonLdProfileSet::empty();
-    if test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST) {
+    if test.kinds.contains(&jld::STREAM_TEST) {
         profile |= JsonLdProfile::Streaming;
     }
     let mut processing_mode = JsonLdProcessingMode::JsonLd1_1;
@@ -199,11 +199,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
             None
         }
     });
-    if test
-        .kinds
-        .iter()
-        .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
-    {
+    if test.kinds.contains(&jld::POSITIVE_EVALUATION_TEST) {
         let action = test.action.as_deref().context("No action found")?;
         let mut actual_dataset = parse_json_ld(action, profile, processing_mode, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
@@ -218,11 +214,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
             dataset_diff(&expected_dataset, &actual_dataset)
         );
         Ok(())
-    } else if test
-        .kinds
-        .iter()
-        .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
-    {
+    } else if test.kinds.contains(&jld::NEGATIVE_EVALUATION_TEST) {
         let action = test.action.as_deref().context("No action found")?;
         let result = parse_json_ld(action, profile, processing_mode, base_url)?;
         ensure!(
@@ -239,11 +231,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
             test.result,
         );
         Ok(())
-    } else if test
-        .kinds
-        .iter()
-        .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
-    {
+    } else if test.kinds.contains(&jld::POSITIVE_SYNTAX_TEST) {
         let action = test.action.as_deref().context("No action found")?;
         parse_json_ld(action, profile, processing_mode, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
