@@ -154,7 +154,7 @@ impl DateTime {
         self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
-        self.checked_add_duration(Duration::from(rhs.into()))
+        self.checked_add_duration(rhs.into())
     }
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
@@ -162,10 +162,10 @@ impl DateTime {
     /// Returns `None` in case of overflow ([`FODT0001`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0001)).
     #[inline]
     #[must_use]
-    pub fn checked_add_day_time_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
-            timestamp: self.timestamp.checked_add_seconds(rhs.all_seconds())?,
+            timestamp: self.timestamp.checked_add_seconds(rhs.as_seconds())?,
         })
     }
 
@@ -195,7 +195,7 @@ impl DateTime {
         self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
-        self.checked_sub_duration(Duration::from(rhs.into()))
+        self.checked_sub_duration(rhs.into())
     }
 
     /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
@@ -424,7 +424,7 @@ impl Time {
     #[inline]
     #[must_use]
     pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
-        self.checked_add_duration(Duration::from(rhs.into()))
+        self.checked_add_duration(rhs.into())
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
@@ -455,7 +455,7 @@ impl Time {
     #[inline]
     #[must_use]
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
-        self.checked_sub_duration(Duration::from(rhs.into()))
+        self.checked_sub_duration(rhs.into())
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
@@ -670,7 +670,7 @@ impl Date {
         self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
-        self.checked_add_duration(Duration::from(rhs.into()))
+        self.checked_add_duration(rhs.into())
     }
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
@@ -679,7 +679,7 @@ impl Date {
     #[inline]
     #[must_use]
     pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
-        self.checked_add_duration(Duration::from(rhs.into()))
+        self.checked_add_duration(rhs.into())
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
@@ -704,7 +704,7 @@ impl Date {
         self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
-        self.checked_sub_duration(Duration::from(rhs.into()))
+        self.checked_sub_duration(rhs.into())
     }
 
     /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
@@ -713,7 +713,7 @@ impl Date {
     #[inline]
     #[must_use]
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
-        self.checked_sub_duration(Duration::from(rhs.into()))
+        self.checked_sub_duration(rhs.into())
     }
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
