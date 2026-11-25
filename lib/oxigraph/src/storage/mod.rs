@@ -250,6 +250,17 @@ impl<'a> StorageReader<'a> {
         }
     }
 
+    pub fn count_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Result<usize, StorageError> {
+        self.quads_for_pattern(subject, predicate, object, graph_name)
+            .try_fold(0, |count, quad| quad.map(|_| count + 1))
+    }
+
     pub fn triples_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,

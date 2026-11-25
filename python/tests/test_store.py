@@ -107,6 +107,45 @@ class TestStore(unittest.TestCase):
             {Quad(foo, bar, baz, DefaultGraph())},
         )
 
+    def test_count_quads_for_pattern(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz, DefaultGraph()))
+        store.add(Quad(foo, bar, baz, graph))
+        store.add(Quad(bar, bar, baz, graph))
+        self.assertEqual(store.count_quads_for_pattern(None, None, None), 3)
+        self.assertEqual(store.count_quads_for_pattern(foo, None, None), 2)
+        self.assertEqual(store.count_quads_for_pattern(None, None, None, graph), 2)
+        self.assertEqual(store.count_quads_for_pattern(None, None, None, DefaultGraph()), 1)
+        self.assertEqual(store.count_quads_for_pattern(foo, bar, baz, graph), 1)
+        self.assertEqual(store.count_quads_for_pattern(baz, None, None), 0)
+        self.assertEqual(
+            store.count_quads_for_pattern(None, None, None, NamedNode("http://other")),
+            0,
+        )
+
+    def test_count_quads_for_pattern_matches_quads_for_pattern(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz, DefaultGraph()))
+        store.add(Quad(foo, bar, baz, graph))
+        store.add(Quad(bar, bar, triple, graph))
+        patterns: list[tuple] = [
+            (None, None, None, None),
+            (foo, None, None, None),
+            (None, bar, None, None),
+            (None, None, baz, None),
+            (None, None, None, graph),
+            (None, None, None, DefaultGraph()),
+            (foo, bar, baz, graph),
+            (bar, bar, triple, None),
+            (baz, None, None, None),
+        ]
+        for pattern in patterns:
+            with self.subTest(pattern=pattern):
+                self.assertEqual(
+                    store.count_quads_for_pattern(*pattern),
+                    len(list(store.quads_for_pattern(*pattern))),
+                )
+
     def test_ask_query(self) -> None:
         store = Store()
         store.add(Quad(foo, foo, foo))
