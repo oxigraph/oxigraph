@@ -61,15 +61,18 @@ impl Graph {
         Self::default()
     }
 
+    #[inline]
     fn graph(&self) -> GraphView<'_> {
         self.dataset.graph(&GraphName::DefaultGraph)
     }
 
+    #[inline]
     fn graph_mut(&mut self) -> GraphViewMut<'_> {
         self.dataset.graph_mut(GraphName::DefaultGraph)
     }
 
     /// Returns all the triples contained by the graph.
+    #[inline]
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             inner: self.graph().iter(),
@@ -146,11 +149,13 @@ impl Graph {
     }
 
     /// Returns the number of triples in this graph.
+    #[inline]
     pub fn len(&self) -> usize {
         self.dataset.len()
     }
 
     /// Checks if this graph contains a triple.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.dataset.is_empty()
     }
@@ -217,6 +222,7 @@ impl<'a> IntoIterator for &'a Graph {
     type Item = Triple;
     type IntoIter = Iter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -250,7 +256,13 @@ pub struct Iter<'a> {
 impl Iterator for Iter<'_> {
     type Item = Triple;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
