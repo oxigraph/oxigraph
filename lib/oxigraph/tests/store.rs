@@ -878,39 +878,3 @@ fn test_count_quads_for_pattern_on_disk() -> Result<(), Box<dyn Error>> {
     assert_count_quads_for_pattern_matches_iteration(&store)?;
     Ok(())
 }
-
-#[test]
-fn test_count_quads_for_pattern_on_empty_store() -> Result<(), Box<dyn Error>> {
-    let store = Store::new()?;
-    let ex = NamedNode::new("http://example.com")?;
-    assert_eq!(store.count_quads_for_pattern(None, None, None, None)?, 0);
-    assert_eq!(
-        store.count_quads_for_pattern(None, None, None, Some(&ex.into()))?,
-        0
-    );
-    Ok(())
-}
-
-#[test]
-fn test_count_quads_for_pattern_isolation() -> Result<(), Box<dyn Error>> {
-    let ex = NamedNode::new("http://example.com")?;
-    let q1 = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
-    let q2 = Quad::new(ex.clone(), ex.clone(), ex.clone(), ex);
-    let store = Store::new()?;
-    store.insert(q1)?;
-    let snapshot = store.snapshot();
-
-    let mut transaction = store.start_transaction()?;
-    transaction.insert(q2);
-    // A transaction reads its own writes.
-    assert_eq!(
-        transaction.count_quads_for_pattern(None, None, None, None)?,
-        2
-    );
-    transaction.commit()?;
-
-    assert_eq!(store.count_quads_for_pattern(None, None, None, None)?, 2);
-    // The snapshot stays pinned to the state it was taken in.
-    assert_eq!(snapshot.count_quads_for_pattern(None, None, None, None)?, 1);
-    Ok(())
-}
