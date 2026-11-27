@@ -107,6 +107,15 @@ class TestStore(unittest.TestCase):
             {Quad(foo, bar, baz, DefaultGraph())},
         )
 
+    def test_count_quads_for_pattern(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz, DefaultGraph()))
+        store.add(Quad(foo, bar, baz, graph))
+        self.assertEqual(store.count_quads_for_pattern(None, None, None), 2)
+        self.assertEqual(store.count_quads_for_pattern(foo, None, None), 2)
+        self.assertEqual(store.count_quads_for_pattern(None, None, None, graph), 1)
+        self.assertEqual(store.count_quads_for_pattern(foo, None, None, DefaultGraph()), 1)
+
     def test_ask_query(self) -> None:
         store = Store()
         store.add(Quad(foo, foo, foo))

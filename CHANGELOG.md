@@ -3,6 +3,8 @@
 ### Added
 - `sparopt`: `GraphPattern::join_order_variables`, exposing the join / variable-elimination order chosen by `Optimizer::optimize_graph_pattern` for consumption by external execution engines (e.g. worst-case-optimal join executors).
 - `sparopt`: the `Statistics` trait and `Optimizer::optimize_query_expression_with`. The join reordering then estimates the size of each quad pattern from the number of matching quads, and of distinct subjects and objects of its predicate, in the queried graph. Without statistics, the estimates don't change.
+- `oxigraph`: `Store::count_quads_for_pattern`, `Snapshot::count_quads_for_pattern` and `Transaction::count_quads_for_pattern`, returning how many quads match a pattern without building the `Quad`s.
+- Python: the `Store.count_quads_for_pattern` method, counting the quads matching a pattern without building the `Quad` objects.
 
 ### Changed
 - `oxrdf`: Removed the model's `*Ref` types. Pass Rust references such as `&Quad` to dataset and graph lookups. `sparopt::Statistics` and `sparesults::QuerySolution` lookups also use ordinary references.

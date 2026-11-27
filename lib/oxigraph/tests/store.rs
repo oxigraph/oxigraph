@@ -784,3 +784,97 @@ fn test_snapshot_is_pinned_to_one_state() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+fn insert_count_quads_for_pattern_data(store: &Store) -> Result<(), Box<dyn Error>> {
+    let s = NamedNode::new("http://example.com/s")?;
+    let s2 = NamedNode::new("http://example.com/s2")?;
+    let p = NamedNode::new("http://example.com/p")?;
+    let o = NamedNode::new("http://example.com/o")?;
+    let g = NamedNode::new("http://example.com/g")?;
+    // The same triple in the default graph and in a named graph.
+    store.insert(Quad::new(
+        s.clone(),
+        p.clone(),
+        o.clone(),
+        GraphName::DefaultGraph,
+    ))?;
+    store.insert(Quad::new(s.clone(), p.clone(), o.clone(), g.clone()))?;
+    store.insert(Quad::new(s2, p.clone(), o, g.clone()))?;
+    store.insert(Quad::new(s, p, Literal::new_simple_literal("o2"), g))?;
+    Ok(())
+}
+
+/// `count_quads_for_pattern` must return exactly what `quads_for_pattern` yields,
+/// for every combination of bound, unbound and unmatched components.
+fn assert_count_quads_for_pattern_matches_iteration(store: &Store) -> Result<(), Box<dyn Error>> {
+    let missing = NamedNode::new("http://example.com/missing")?;
+    let subjects = [
+        None,
+        Some(NamedOrBlankNode::from(NamedNode::new(
+            "http://example.com/s",
+        )?)),
+        Some(NamedOrBlankNode::from(NamedNode::new(
+            "http://example.com/s2",
+        )?)),
+        Some(NamedOrBlankNode::from(missing.clone())),
+    ];
+    let predicates = [
+        None,
+        Some(NamedNode::new("http://example.com/p")?),
+        Some(missing.clone()),
+    ];
+    let objects = [
+        None,
+        Some(Term::from(NamedNode::new("http://example.com/o")?)),
+        Some(Term::from(Literal::new_simple_literal("o2"))),
+        Some(Term::from(missing.clone())),
+    ];
+    let graph_names = [
+        None,
+        Some(GraphName::DefaultGraph),
+        Some(GraphName::from(NamedNode::new("http://example.com/g")?)),
+        Some(GraphName::from(missing)),
+    ];
+
+    for subject in &subjects {
+        for predicate in &predicates {
+            for object in &objects {
+                for graph_name in &graph_names {
+                    let subject = subject.as_ref();
+                    let predicate = predicate.as_ref();
+                    let object = object.as_ref();
+                    let graph_name = graph_name.as_ref();
+                    assert_eq!(
+                        store.count_quads_for_pattern(subject, predicate, object, graph_name)?,
+                        store
+                            .quads_for_pattern(subject, predicate, object, graph_name)
+                            .collect::<Result<Vec<_>, _>>()?
+                            .len(),
+                        "pattern ({subject:?}, {predicate:?}, {object:?}, {graph_name:?})"
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_count_quads_for_pattern() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    insert_count_quads_for_pattern_data(&store)?;
+    assert_eq!(store.count_quads_for_pattern(None, None, None, None)?, 4);
+    assert_count_quads_for_pattern_matches_iteration(&store)?;
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_count_quads_for_pattern_on_disk() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::new()?;
+    let store = Store::open(&dir)?;
+    insert_count_quads_for_pattern_data(&store)?;
+    assert_eq!(store.count_quads_for_pattern(None, None, None, None)?, 4);
+    assert_count_quads_for_pattern_matches_iteration(&store)?;
+    Ok(())
+}
