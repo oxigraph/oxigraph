@@ -728,7 +728,7 @@ enum RdfXmlState {
     },
     Rdf {
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")]
         base_direction: Option<BaseDirection>,
         #[cfg(feature = "rdf-12")]
@@ -736,7 +736,7 @@ enum RdfXmlState {
     },
     NodeElt {
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")]
         base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
@@ -748,7 +748,7 @@ enum RdfXmlState {
         // Resource, Literal or Empty property element
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")]
         base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
@@ -765,7 +765,7 @@ enum RdfXmlState {
     ParseTypeCollectionPropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")]
         base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
@@ -781,7 +781,7 @@ enum RdfXmlState {
     ParseTypeLiteralPropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")]
         base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
@@ -799,7 +799,7 @@ enum RdfXmlState {
     ParseTypeTriplePropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         base_direction: Option<BaseDirection>,
         subject: NamedOrBlankNode,
         id_attr: Option<NamedNode>,
@@ -1009,14 +1009,18 @@ impl<R> InternalRdfXmlParser<R> {
                     "lang" => {
                         let mut tag = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         tag.make_mut().make_ascii_lowercase();
-                        language = Some(if self.lenient || tag.is_empty() {
-                            tag
+                        language = Some(if tag.is_empty() {
+                            None
+                        } else if self.lenient {
+                            Some(tag)
                         } else {
-                            LanguageTag::parse(tag.clone())
-                                .map_err(|error| {
-                                    RdfXmlSyntaxError::invalid_language_tag(tag, error)
-                                })?
-                                .into_inner()
+                            Some(
+                                LanguageTag::parse(tag.clone())
+                                    .map_err(|error| {
+                                        RdfXmlSyntaxError::invalid_language_tag(tag, error)
+                                    })?
+                                    .into_inner(),
+                            )
                         });
                     }
                     "base" => {
@@ -1339,7 +1343,7 @@ impl<R> InternalRdfXmlParser<R> {
                             self.emit_property_attrs(
                                 &object,
                                 property_attrs,
-                                language.as_ref(),
+                                language.as_ref().map(Option::as_ref),
                                 #[cfg(feature = "rdf-12")]
                                 base_direction,
                                 results,
@@ -1561,7 +1565,7 @@ impl<R> InternalRdfXmlParser<R> {
         &mut self,
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         id_attr: Option<NamedNode>,
         node_id_attr: Option<BlankNode>,
@@ -1596,7 +1600,7 @@ impl<R> InternalRdfXmlParser<R> {
         self.emit_property_attrs(
             &subject,
             property_attrs,
-            language.as_ref(),
+            language.as_ref().map(Option::as_ref),
             #[cfg(feature = "rdf-12")]
             base_direction,
             results,
@@ -1626,7 +1630,7 @@ impl<R> InternalRdfXmlParser<R> {
         &mut self,
         iri: NamedNode,
         base_iri: Option<Iri<OxString>>,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         #[cfg(feature = "rdf-12")] rdf_version: Option<RdfVersion>,
         subject: NamedOrBlankNode,
@@ -1842,15 +1846,14 @@ impl<R> InternalRdfXmlParser<R> {
     fn new_literal(
         &self,
         value: OxString,
-        language: Option<OxString>,
+        language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         datatype: Option<NamedNode>,
     ) -> Literal {
         if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
-        } else if let Some(language) = language
-            .or_else(|| self.current_language().map(ToOwned::to_owned))
-            .filter(|l| !l.is_empty())
+        } else if let Some(language) =
+            language.unwrap_or_else(|| self.current_language().map(ToOwned::to_owned))
         {
             #[cfg(feature = "rdf-12")]
             if let Some(base_direction) = base_direction {
@@ -1916,7 +1919,7 @@ impl<R> InternalRdfXmlParser<R> {
         &mut self,
         subject: &NamedOrBlankNode,
         literal_attributes: Vec<(NamedNode, OxString)>,
-        language: Option<&OxString>,
+        language: Option<Option<&OxString>>,
         #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         results: &mut Vec<Triple>,
     ) {
@@ -1926,10 +1929,7 @@ impl<R> InternalRdfXmlParser<R> {
                 Triple::new(
                     subject.clone(),
                     literal_predicate,
-                    if let Some(language) = language
-                        .or_else(|| self.current_language())
-                        .filter(|l| !l.is_empty())
-                    {
+                    if let Some(language) = language.unwrap_or_else(|| self.current_language()) {
                         #[cfg(feature = "rdf-12")]
                         if let Some(base_direction) =
                             base_direction.or_else(|| self.current_base_direction())
@@ -2057,13 +2057,13 @@ impl<R> InternalRdfXmlParser<R> {
                 | RdfXmlState::ParseTypeCollectionPropertyElt { language, .. }
                 | RdfXmlState::ParseTypeLiteralPropertyElt { language, .. } => {
                     if let Some(language) = language {
-                        return Some(language).filter(|l| !l.is_empty());
+                        return language.as_ref();
                     }
                 }
                 #[cfg(feature = "rdf-12")]
                 RdfXmlState::ParseTypeTriplePropertyElt { language, .. } => {
                     if let Some(language) = language {
-                        return Some(language).filter(|l| !l.is_empty());
+                        return language.as_ref();
                     }
                 }
             }
