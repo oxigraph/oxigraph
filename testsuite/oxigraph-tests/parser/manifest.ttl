@@ -17,6 +17,9 @@
 		<#langtag_with_numbers_ttl>
 		<#xml_entities>
 		<#xml_nested_entities>
+		<#xml_entity_forward_reference>
+		<#xml_entity_first_declaration>
+		<#xml_recursive_entities>
 		<#xml_single_quoted_entities>
 		<#literal_value_space>
 		<#bad_parentheses>
@@ -97,6 +100,23 @@
 	mf:name "custom XML entities with nested definitions" ;
 	mf:action <xml_nested_entities.rdf> ;
 	mf:result <xml_nested_entities.nt> .
+
+<#xml_entity_forward_reference>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "custom XML entity referring to an entity declared after it" ;
+	mf:action <xml_entity_forward_reference.rdf> ;
+	mf:result <xml_entity_forward_reference.nt> .
+
+<#xml_entity_first_declaration>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "custom XML entity declared twice, the first declaration is binding" ;
+	mf:action <xml_entity_first_declaration.rdf> ;
+	mf:result <xml_entity_first_declaration.nt> .
+
+<#xml_recursive_entities>
+	rdf:type rdft:TestXMLNegativeSyntax ;
+	mf:name "custom XML entities referring to each other" ;
+	mf:action <xml_recursive_entities.rdf> .
 
 <#xml_single_quoted_entities>
 	rdf:type rdft:TestXMLEval ;
