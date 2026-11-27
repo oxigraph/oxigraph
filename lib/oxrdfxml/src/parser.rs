@@ -899,7 +899,10 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn parse_doctype(&mut self, dt: &BytesText<'_>) -> Result<(), RdfXmlParseError> {
         // we extract entities
-        for input in dt.xml_content(self.xml_version).split('<').skip(1) {
+        let content = dt.xml_content(self.xml_version);
+        let mut names = Vec::new();
+        let mut declarations = HashMap::new();
+        for input in content.split('<').skip(1) {
             if let Some(input) = input.strip_prefix("!ENTITY") {
                 let input = input.trim_start().strip_prefix('%').unwrap_or(input);
                 let (entity_name, input) = input.trim_start().split_once(|c: char| c.is_ascii_whitespace()).ok_or_else(|| {
@@ -924,18 +927,15 @@ impl<R> InternalRdfXmlParser<R> {
                     RdfXmlSyntaxError::msg("<!ENTITY declarations values should end with >")
                 })?;
 
-                // Resolves custom entities within the current entity definition.
-                let entity_value = unescape_with(entity_value, |e| self.custom_entities.resolve(e))
-                    .map_err(Error::from)?;
-                if entity_value.len() > MAX_ENTITY_SIZE {
-                    return Err(RdfXmlSyntaxError::msg(format!(
-                        "The unescaped entity declaration is too long, it is capped at {MAX_ENTITY_SIZE} bytes"
-                    )).into());
-                }
-                self.custom_entities
-                    .0
-                    .insert(entity_name.to_owned(), entity_value.to_string());
+                // The first declaration is binding
+                names.push(entity_name);
+                declarations.entry(entity_name).or_insert(entity_value);
             }
+        }
+        // Entities are resolved once all are declared, an entity value may refer to a later one
+        for name in names {
+            self.custom_entities
+                .expand(name, &declarations, &mut Vec::new())?;
         }
         Ok(())
     }
@@ -2161,6 +2161,47 @@ struct EntityRegistry(HashMap<String, String>);
 impl EntityRegistry {
     fn resolve(&self, e: &str) -> Option<&str> {
         resolve_xml_entity(e).or_else(|| self.0.get(e).map(String::as_str))
+    }
+
+    /// Adds the entity `name` from `declarations`, after the entities its value refers to.
+    fn expand<'a>(
+        &mut self,
+        name: &'a str,
+        declarations: &HashMap<&'a str, &'a str>,
+        parents: &mut Vec<&'a str>,
+    ) -> Result<(), RdfXmlParseError> {
+        let Some(value) = declarations.get(name) else {
+            return Ok(()); // Not declared, unescaping the value referring to it fails
+        };
+        if self.0.contains_key(name) {
+            return Ok(());
+        }
+        if parents.contains(&name) {
+            return Err(
+                RdfXmlSyntaxError::msg(format!("The entity {name} refers to itself")).into(),
+            );
+        }
+        if parents.len() >= MAX_ENTITY_NESTING {
+            return Err(RdfXmlSyntaxError::msg(format!(
+                "Too many nested entities, the limit is {MAX_ENTITY_NESTING}"
+            ))
+            .into());
+        }
+        parents.push(name);
+        for reference in value.split('&').skip(1) {
+            if let Some((reference, _)) = reference.split_once(';') {
+                self.expand(reference, declarations, parents)?;
+            }
+        }
+        parents.pop();
+        let value = unescape_with(value, |e| self.resolve(e)).map_err(Error::from)?;
+        if value.len() > MAX_ENTITY_SIZE {
+            return Err(RdfXmlSyntaxError::msg(format!(
+                "The unescaped entity declaration is too long, it is capped at {MAX_ENTITY_SIZE} bytes"
+            )).into());
+        }
+        self.0.insert(name.to_owned(), value.into_owned());
+        Ok(())
     }
 }
 
