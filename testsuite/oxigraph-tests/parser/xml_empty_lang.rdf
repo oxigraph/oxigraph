@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:lang="de">
+	<rdf:Description rdf:about="http://example.com/a">
+	    <rdf:value xml:lang="">plain</rdf:value>
+	    <rdf:value>german</rdf:value>
+	</rdf:Description>
+	<rdf:Description rdf:about="http://example.com/b" xml:lang="" rdf:value="plain attribute">
+	    <rdf:value>plain</rdf:value>
+	</rdf:Description>
+</rdf:RDF>

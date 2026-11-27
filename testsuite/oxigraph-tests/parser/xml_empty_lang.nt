@@ -1,0 +1,4 @@
+<http://example.com/a> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> "plain" .
+<http://example.com/a> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> "german"@de .
+<http://example.com/b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> "plain attribute" .
+<http://example.com/b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> "plain" .
