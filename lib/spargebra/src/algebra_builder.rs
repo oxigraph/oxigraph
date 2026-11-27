@@ -1611,16 +1611,16 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_literal(&mut self, literal: ast::Literal<'a>) -> Result<Literal, AlgebraBuilderError> {
         Ok(match literal {
             ast::Literal::Boolean(v) => {
-                Literal::new_typed_literal(if v { "true" } else { "false" }, xsd::BOOLEAN)
+                Literal::new_typed_literal_unchecked(if v { "true" } else { "false" }, xsd::BOOLEAN)
             }
             ast::Literal::Integer(v) => {
-                Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER)
+                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::INTEGER)
             }
             ast::Literal::Decimal(v) => {
-                Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL)
+                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::DECIMAL)
             }
             ast::Literal::Double(v) => {
-                Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE)
+                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::DOUBLE)
             }
             ast::Literal::String(v) => Literal::new_simple_literal(Self::build_string(v)?),
             ast::Literal::LangString(v, l) => Literal::new_language_tagged_literal(
@@ -1655,7 +1655,12 @@ impl<'a> AlgebraBuilder<'a> {
                 )
             })?,
             ast::Literal::Typed(v, t) => {
+                let span = match t {
+                    ast::Iri::IriRef(iri) => iri.span,
+                    ast::Iri::PrefixedName(name) => name.span,
+                };
                 Literal::new_typed_literal(Self::build_string(v)?, self.build_named_node(t)?)
+                    .map_err(|e| AlgebraBuilderError::new(span, e.to_string()))?
             }
         })
     }

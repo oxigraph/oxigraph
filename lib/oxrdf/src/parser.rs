@@ -86,23 +86,23 @@ impl FromStr for Literal {
     ///     Literal::new_typed_literal(
     ///         "2020",
     ///         NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear")?
-    ///     )
+    ///     )?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("true")?,
-    ///     Literal::new_typed_literal("true", xsd::BOOLEAN)
+    ///     Literal::new_typed_literal("true", xsd::BOOLEAN)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("+122")?,
-    ///     Literal::new_typed_literal("+122", xsd::INTEGER)
+    ///     Literal::new_typed_literal("+122", xsd::INTEGER)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("-122.23")?,
-    ///     Literal::new_typed_literal("-122.23", xsd::DECIMAL)
+    ///     Literal::new_typed_literal("-122.23", xsd::DECIMAL)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("-122e+1")?,
-    ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)
+    ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)?
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -376,7 +376,9 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         ))
                     } else if let Some(remain) = remain.strip_prefix("^^") {
                         let (datatype, remain) = read_named_node(remain)?;
-                        Ok((Literal::new_typed_literal(value, datatype), remain))
+                        let literal = Literal::new_typed_literal(value, datatype)
+                            .map_err(|e| TermParseError::msg(e.to_string()))?;
+                        Ok((literal, remain))
                     } else {
                         Ok((Literal::new_simple_literal(value), remain))
                     };
@@ -405,9 +407,15 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         }
         Err(TermParseError::msg("Unexpected literal end"))
     } else if let Some(remain) = s.strip_prefix("true") {
-        Ok((Literal::new_typed_literal("true", xsd::BOOLEAN), remain))
+        Ok((
+            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN),
+            remain,
+        ))
     } else if let Some(remain) = s.strip_prefix("false") {
-        Ok((Literal::new_typed_literal("false", xsd::BOOLEAN), remain))
+        Ok((
+            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN),
+            remain,
+        ))
     } else {
         let input = s.as_bytes();
         if input.is_empty() {
@@ -449,7 +457,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
             if count_exponent > 0 {
                 Ok((
-                    Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::DOUBLE),
+                    Literal::new_typed_literal_unchecked(
+                        OxString::new_owned(&s[..cursor]),
+                        xsd::DOUBLE,
+                    ),
                     &s[cursor..],
                 ))
             } else {
@@ -460,7 +471,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         } else if with_dot {
             if count_after > 0 {
                 Ok((
-                    Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::DECIMAL),
+                    Literal::new_typed_literal_unchecked(
+                        OxString::new_owned(&s[..cursor]),
+                        xsd::DECIMAL,
+                    ),
                     &s[cursor..],
                 ))
             } else {
@@ -470,7 +484,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
         } else if count_before > 0 {
             Ok((
-                Literal::new_typed_literal(OxString::new_owned(&s[..cursor]), xsd::INTEGER),
+                Literal::new_typed_literal_unchecked(
+                    OxString::new_owned(&s[..cursor]),
+                    xsd::INTEGER,
+                ),
                 &s[cursor..],
             ))
         } else {
@@ -636,7 +653,7 @@ mod tests {
             Triple::new(
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),
-                Literal::new_typed_literal("1.2e3", xsd::DOUBLE),
+                Literal::new_typed_literal_unchecked("1.2e3", xsd::DOUBLE),
             )
         );
     }

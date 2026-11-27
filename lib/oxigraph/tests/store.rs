@@ -107,19 +107,19 @@ fn quads(graph_name: impl Into<GraphName>) -> Vec<Quad> {
         Quad::new(
             paris.clone(),
             population,
-            Literal::new_typed_literal("2000000", xsd::INTEGER),
+            Literal::new_typed_literal_unchecked("2000000", xsd::INTEGER),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             start_date,
-            Literal::new_typed_literal("-300", xsd::G_YEAR),
+            Literal::new_typed_literal_unchecked("-300", xsd::G_YEAR),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             url,
-            Literal::new_typed_literal("https://www.paris.fr/", xsd::ANY_URI),
+            Literal::new_typed_literal_unchecked("https://www.paris.fr/", xsd::ANY_URI),
             graph_name.clone(),
         ),
         Quad::new(

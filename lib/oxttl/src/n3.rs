@@ -869,6 +869,7 @@ enum Predicate {
 }
 
 struct N3Recognizer {
+    lenient: bool,
     stack: Vec<N3State>,
     terms: Vec<N3Term>,
     predicates: Vec<Predicate>,
@@ -1191,29 +1192,40 @@ impl RuleRecognizer for N3Recognizer {
                         }
                         N3Token::Integer(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER)
-                                    .into(),
+                                Literal::new_typed_literal_unchecked(
+                                    OxString::new_owned(v),
+                                    xsd::INTEGER,
+                                )
+                                .into(),
                             );
                         }
                         N3Token::Decimal(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL)
-                                    .into(),
+                                Literal::new_typed_literal_unchecked(
+                                    OxString::new_owned(v),
+                                    xsd::DECIMAL,
+                                )
+                                .into(),
                             );
                         }
                         N3Token::Double(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE)
-                                    .into(),
+                                Literal::new_typed_literal_unchecked(
+                                    OxString::new_owned(v),
+                                    xsd::DOUBLE,
+                                )
+                                .into(),
                             );
                         }
                         N3Token::PlainKeyword("true") => {
-                            self.terms
-                                .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
+                            self.terms.push(
+                                Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
+                            );
                         }
                         N3Token::PlainKeyword("false") => {
-                            self.terms
-                                .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
+                            self.terms.push(
+                                Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
+                            );
                         }
                         N3Token::Punctuation("{") => {
                             self.contexts.push(BlankNode::default());
@@ -1328,39 +1340,45 @@ impl RuleRecognizer for N3Recognizer {
                         self.terms.push(Literal::new_simple_literal(value).into());
                     }
                 },
-                N3State::LiteralExpectDatatype { value } => match token {
-                    N3Token::IriRef(datatype) => {
-                        self.terms.push(
-                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
-                                .into(),
-                        );
-                        return;
-                    }
-                    N3Token::PrefixedName {
-                        prefix,
-                        local,
-                        might_be_invalid_iri,
-                    } => match resolve_local_name(
-                        prefix,
-                        &local,
-                        might_be_invalid_iri,
-                        &context.prefixes,
-                    ) {
-                        Ok(datatype) => {
-                            self.terms
-                                .push(Literal::new_typed_literal(value, datatype).into());
-                            return;
+                N3State::LiteralExpectDatatype { value } => {
+                    let datatype = match token {
+                        N3Token::IriRef(datatype) => NamedNode::new_unchecked(datatype),
+                        N3Token::PrefixedName {
+                            prefix,
+                            local,
+                            might_be_invalid_iri,
+                        } => match resolve_local_name(
+                            prefix,
+                            &local,
+                            might_be_invalid_iri,
+                            &context.prefixes,
+                        ) {
+                            Ok(datatype) => datatype,
+                            Err(e) => {
+                                self.error(errors, e);
+                                return;
+                            }
+                        },
+                        _ => {
+                            errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
+                            self.stack.clear();
+                            continue;
                         }
-                        Err(e) => {
-                            self.error(errors, e);
-                            return;
+                    };
+                    let literal = if self.lenient {
+                        Literal::new_typed_literal_unchecked(value, datatype)
+                    } else {
+                        match Literal::new_typed_literal(value, datatype) {
+                            Ok(literal) => literal,
+                            Err(e) => {
+                                self.error(errors, e.to_string());
+                                return;
+                            }
                         }
-                    },
-                    _ => {
-                        errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
-                        self.stack.clear();
-                    }
-                },
+                    };
+                    self.terms.push(literal.into());
+                    return;
+                }
                 // [24]  formulaContent  ::=  ( n3Statement ( "." formulaContent? ) ? ) | ( sparqlDirective formulaContent? )
                 N3State::FormulaContent => match token {
                     N3Token::Punctuation("}") => {
@@ -1441,13 +1459,14 @@ impl RuleRecognizer for N3Recognizer {
 
 impl N3Recognizer {
     fn new_parser(
-        unchecked: bool,
+        lenient: bool,
         base_iri: Option<Iri<OxString>>,
         prefixes: HashMap<OxString, Iri<OxString>>,
     ) -> Parser<Self> {
         Parser::new(
-            Lexer::new(N3Lexer::new(N3LexerMode::N3, unchecked), Some(b"#")),
+            Lexer::new(N3Lexer::new(N3LexerMode::N3, lenient), Some(b"#")),
             Self {
+                lenient,
                 stack: vec![N3State::N3Doc],
                 terms: Vec::new(),
                 predicates: Vec::new(),

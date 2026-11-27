@@ -1174,7 +1174,7 @@ impl<S: StrLookup> Decoder for S {
             )
             .into()),
             EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
-                Ok(Literal::new_typed_literal(
+                Ok(Literal::new_typed_literal_unchecked(
                     *value,
                     NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
                 )
@@ -1183,7 +1183,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => Ok(Literal::new_typed_literal(
+            } => Ok(Literal::new_typed_literal_unchecked(
                 get_required_str(self, value_id)?,
                 NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
             )

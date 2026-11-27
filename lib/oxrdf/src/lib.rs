@@ -19,7 +19,7 @@ pub use crate::dataset::Dataset;
 pub use crate::graph::Graph;
 #[cfg(feature = "rdf-12")]
 pub use crate::literal::BaseDirection;
-pub use crate::literal::Literal;
+pub use crate::literal::{Literal, MalformedLangStringLiteral};
 pub use crate::named_node::NamedNode;
 pub use crate::parser::TermParseError;
 pub use crate::triple::{GraphName, NamedOrBlankNode, Quad, Term, Triple, TryFromTermError};

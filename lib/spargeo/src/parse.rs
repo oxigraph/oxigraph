@@ -63,13 +63,13 @@ pub fn parse_geo_json_literal(value: &str) -> Option<Geometry> {
 pub fn result_to_wkt_literal(geom: &Geometry) -> Literal {
     let wkt_body = geom.wkt_string();
     let value = oxformat!("<{CRS84_URI}> {wkt_body}");
-    Literal::new_typed_literal(value, geosparql::WKT_LITERAL)
+    Literal::new_typed_literal_unchecked(value, geosparql::WKT_LITERAL)
 }
 
 /// Serialize a geometry as a `geoJSONLiteral`.
 pub fn result_to_geojson_literal(geom: &Geometry) -> Literal {
     let gj = GeoJsonGeometry::from(geom);
-    Literal::new_typed_literal(gj.to_string(), geosparql::GEO_JSON_LITERAL)
+    Literal::new_typed_literal_unchecked(gj.to_string(), geosparql::GEO_JSON_LITERAL)
 }
 
 #[cfg(test)]
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn extract_argument_wkt_literal() {
-        let lit = OxLiteral::new_typed_literal("POINT(1 2)", geosparql::WKT_LITERAL);
+        let lit = OxLiteral::new_typed_literal_unchecked("POINT(1 2)", geosparql::WKT_LITERAL);
         let geom = extract_argument(&Term::Literal(lit)).expect("parses");
         assert!(matches!(geom, Geometry::Point(_)));
     }

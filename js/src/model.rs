@@ -181,7 +181,7 @@ pub fn to_literal(value: &JsValue) -> Result<Literal, JsValue> {
             )
             .map_err(JsError::from)?
         }
-        _ => Literal::new_typed_literal(literal_value, datatype),
+        _ => Literal::new_typed_literal_unchecked(literal_value, datatype),
     })
 }
 

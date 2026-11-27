@@ -289,12 +289,13 @@ impl PyLiteral {
     fn from_value(value: &Bound<'_, PyAny>, datatype: Option<PyNamedNode>) -> PyResult<Self> {
         Ok(if let Some(datatype) = datatype {
             Literal::new_typed_literal(value.extract::<OxStringInput>()?, datatype)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?
         } else if let Ok(value) = value.extract::<OxStringInput>() {
             Literal::new_simple_literal(value)
         } else if let Ok(value) = value.extract::<bool>() {
             value.into()
         } else if let Ok(value) = value.extract::<Bound<'_, PyInt>>() {
-            Literal::new_typed_literal(value.to_string(), xsd::INTEGER)
+            Literal::new_typed_literal_unchecked(value.to_string(), xsd::INTEGER)
         } else if let Ok(value) = value.extract::<f64>() {
             value.into()
         } else {

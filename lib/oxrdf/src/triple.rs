@@ -640,7 +640,7 @@ impl<'a> From<&'a Quad> for &'a Triple {
     }
 }
 
-/// An error return by some [`TryFrom<Term>`](TryFrom)  implementations.
+/// An error return by some [`TryFrom<Term>`](TryFrom) implementations.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{term} can not be converted to a {target}")]
 pub struct TryFromTermError {

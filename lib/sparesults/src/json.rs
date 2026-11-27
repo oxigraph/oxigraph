@@ -1051,6 +1051,7 @@ impl JsonInnerTermReader {
                                 }
                                 if let Some(datatype) = self.datatype.take() {
                                     Literal::new_typed_literal(value, datatype)
+                                        .map_err(|e| QueryResultsSyntaxError::msg(e.to_string()))?
                                 } else {
                                     Literal::new_simple_literal(value)
                                 }
