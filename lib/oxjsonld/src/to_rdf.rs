@@ -1245,7 +1245,7 @@ impl JsonLdToRdfConverter {
                         Literal::new_language_tagged_literal(value, language).ok()?
                     }
                 } else if let Some(datatype) = r#type {
-                    Literal::new_typed_literal(value, datatype)
+                    Literal::new_typed_literal(value, datatype).ok()?
                 } else {
                     Literal::new_simple_literal(value)
                 }
@@ -1261,10 +1261,10 @@ impl JsonLdToRdfConverter {
                 .unwrap_or(RdfJsonNumber::Double(value));
                 match value {
                     RdfJsonNumber::Integer(value) => {
-                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::INTEGER))
+                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::INTEGER)).ok()?
                     }
                     RdfJsonNumber::Double(value) => {
-                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::DOUBLE))
+                        Literal::new_typed_literal(value, r#type.unwrap_or(xsd::DOUBLE)).ok()?
                     }
                 }
             }
@@ -1276,6 +1276,7 @@ impl JsonLdToRdfConverter {
                     if value { "true" } else { "false" },
                     r#type.unwrap_or(xsd::BOOLEAN),
                 )
+                .ok()?
             }
         })
     }
@@ -1283,7 +1284,7 @@ impl JsonLdToRdfConverter {
     fn convert_json(value: Vec<JsonEvent<'static>>) -> Literal {
         let mut writer = WriterJsonSerializer::new(Vec::new());
         serialize_canonical_json(value, &mut writer);
-        Literal::new_typed_literal(
+        Literal::new_typed_literal_unchecked(
             String::from_utf8(writer.finish().unwrap()).unwrap(),
             #[cfg(feature = "rdf-12")]
             rdf::JSON,

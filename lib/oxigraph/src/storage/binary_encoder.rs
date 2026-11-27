@@ -938,20 +938,24 @@ mod tests {
                 BaseDirection::Rtl,
             )
             .into(),
-            Literal::new_typed_literal("-1.32", xsd::DECIMAL).into(),
-            Literal::new_typed_literal("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
-            Literal::new_typed_literal("2020-01-01", xsd::DATE).into(),
-            Literal::new_typed_literal("01:01:01Z", xsd::TIME).into(),
-            Literal::new_typed_literal("2020-01", xsd::G_YEAR_MONTH).into(),
-            Literal::new_typed_literal("2020", xsd::G_YEAR).into(),
-            Literal::new_typed_literal("--01-01", xsd::G_MONTH_DAY).into(),
-            Literal::new_typed_literal("--01", xsd::G_MONTH).into(),
-            Literal::new_typed_literal("---01", xsd::G_DAY).into(),
-            Literal::new_typed_literal("PT1S", xsd::DURATION).into(),
-            Literal::new_typed_literal("PT1S", xsd::DAY_TIME_DURATION).into(),
-            Literal::new_typed_literal("P1Y", xsd::YEAR_MONTH_DURATION).into(),
-            Literal::new_typed_literal("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
-            Literal::new_typed_literal(
+            Literal::new_typed_literal_unchecked("-1.32", xsd::DECIMAL).into(),
+            Literal::new_typed_literal_unchecked("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
+            Literal::new_typed_literal_unchecked("2020-01-01", xsd::DATE).into(),
+            Literal::new_typed_literal_unchecked("01:01:01Z", xsd::TIME).into(),
+            Literal::new_typed_literal_unchecked("2020-01", xsd::G_YEAR_MONTH).into(),
+            Literal::new_typed_literal_unchecked("2020", xsd::G_YEAR).into(),
+            Literal::new_typed_literal_unchecked("--01-01", xsd::G_MONTH_DAY).into(),
+            Literal::new_typed_literal_unchecked("--01", xsd::G_MONTH).into(),
+            Literal::new_typed_literal_unchecked("---01", xsd::G_DAY).into(),
+            Literal::new_typed_literal_unchecked("PT1S", xsd::DURATION).into(),
+            Literal::new_typed_literal_unchecked("PT1S", xsd::DAY_TIME_DURATION).into(),
+            Literal::new_typed_literal_unchecked("P1Y", xsd::YEAR_MONTH_DURATION).into(),
+            Literal::new_typed_literal_unchecked(
+                "-foo",
+                NamedNode::new_unchecked("http://foo.com"),
+            )
+            .into(),
+            Literal::new_typed_literal_unchecked(
                 "-foo-thisisaverybigtypedliteralwiththefoodatatype",
                 NamedNode::new_unchecked("http://foo.com"),
             )

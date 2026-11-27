@@ -3,7 +3,7 @@ use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
-use oxstr::OxString;
+use oxstr::{OxString, oxformat};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;
@@ -18,7 +18,7 @@ static RDF_DIR_LANG_STRING: NamedNode = rdf::DIR_LANG_STRING;
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// # use oxilangtag::LanguageTagParseError;
+/// # use std::error::Error;
 /// use oxrdf::Literal;
 /// use oxrdf::vocab::xsd;
 ///
@@ -29,14 +29,14 @@ static RDF_DIR_LANG_STRING: NamedNode = rdf::DIR_LANG_STRING;
 ///
 /// assert_eq!(
 ///     r#""1999-01-01"^^<http://www.w3.org/2001/XMLSchema#date>"#,
-///     Literal::new_typed_literal("1999-01-01", xsd::DATE).to_string()
+///     Literal::new_typed_literal("1999-01-01", xsd::DATE)?.to_string()
 /// );
 ///
 /// assert_eq!(
 ///     r#""foo"@en"#,
 ///     Literal::new_language_tagged_literal("foo", "en")?.to_string()
 /// );
-/// # Result::<_, LanguageTagParseError>::Ok(())
+/// # Result::<_, Box<dyn Error>>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Literal(LiteralContent);
@@ -68,8 +68,34 @@ impl Literal {
     }
 
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
+    ///
+    /// Returns an error for `rdf:langString` and, with the `rdf-12` feature, `rdf:dirLangString`.
     #[inline]
-    pub fn new_typed_literal(value: impl Into<OxString>, datatype: impl Into<NamedNode>) -> Self {
+    pub fn new_typed_literal(
+        value: impl Into<OxString>,
+        datatype: impl Into<NamedNode>,
+    ) -> Result<Self, MalformedLangStringLiteral> {
+        let datatype = datatype.into();
+        if datatype == rdf::LANG_STRING {
+            return Err(MalformedLangStringLiteral);
+        }
+        #[cfg(feature = "rdf-12")]
+        if datatype == rdf::DIR_LANG_STRING {
+            return Err(MalformedLangStringLiteral);
+        }
+        Ok(Self::new_typed_literal_unchecked(value, datatype))
+    }
+
+    /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
+    ///
+    /// It is the responsibility of the caller to check that `datatype` is not `rdf:langString` or `rdf:dirLangString`.
+    ///
+    /// [`Literal::new_typed_literal`] is a safe version of this constructor and should be used for untrusted data.
+    #[inline]
+    pub fn new_typed_literal_unchecked(
+        value: impl Into<OxString>,
+        datatype: impl Into<NamedNode>,
+    ) -> Self {
         let value = value.into();
         let datatype = datatype.into();
         Self(if datatype == xsd::STRING {
@@ -288,7 +314,7 @@ impl fmt::Display for Literal {
 impl<'a> From<&'a str> for Literal {
     #[inline]
     fn from(value: &'a str) -> Self {
-        Self(LiteralContent::String(OxString::new_owned(value)))
+        Literal::new_simple_literal(OxString::new_owned(value))
     }
 }
 
@@ -302,98 +328,74 @@ impl From<String> for Literal {
 impl From<OxString> for Literal {
     #[inline]
     fn from(value: OxString) -> Self {
-        Self(LiteralContent::String(value))
+        Literal::new_simple_literal(value)
     }
 }
 
 impl From<bool> for Literal {
     #[inline]
     fn from(value: bool) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: if value { "true" } else { "false" }.into(),
-            datatype: xsd::BOOLEAN,
-        })
+        Literal::new_typed_literal_unchecked(if value { "true" } else { "false" }, xsd::BOOLEAN)
     }
 }
 
 impl From<i128> for Literal {
     #[inline]
     fn from(value: i128) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<i64> for Literal {
     #[inline]
     fn from(value: i64) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<i32> for Literal {
     #[inline]
     fn from(value: i32) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<i16> for Literal {
     #[inline]
     fn from(value: i16) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<u64> for Literal {
     #[inline]
     fn from(value: u64) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<u32> for Literal {
     #[inline]
     fn from(value: u32) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<u16> for Literal {
     #[inline]
     fn from(value: u16) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: value.to_string().into(),
-            datatype: xsd::INTEGER,
-        })
+        Literal::new_typed_literal_unchecked(oxformat!("{value}"), xsd::INTEGER)
     }
 }
 
 impl From<f32> for Literal {
     #[inline]
     fn from(value: f32) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: {
+        Literal::new_typed_literal_unchecked(
+            {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    Float::from(value).to_string().into()
+                    oxformat!("{}", Float::from(value))
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f32::INFINITY {
@@ -401,22 +403,22 @@ impl From<f32> for Literal {
                 } else if value == f32::NEG_INFINITY {
                     OxString::new("-INF")
                 } else {
-                    value.to_string().into()
+                    oxformat!("{value}")
                 }
             },
-            datatype: xsd::FLOAT,
-        })
+            xsd::FLOAT,
+        )
     }
 }
 
 impl From<f64> for Literal {
     #[inline]
     fn from(value: f64) -> Self {
-        Self(LiteralContent::TypedLiteral {
-            value: {
+        Literal::new_typed_literal_unchecked(
+            {
                 #[cfg(feature = "oxsdatatypes")]
                 {
-                    Double::from(value).to_string().into()
+                    oxformat!("{}", Double::from(value))
                 }
                 #[cfg(not(feature = "oxsdatatypes"))]
                 if value == f64::INFINITY {
@@ -424,11 +426,11 @@ impl From<f64> for Literal {
                 } else if value == f64::NEG_INFINITY {
                     OxString::new("-INF")
                 } else {
-                    value.to_string().into()
+                    oxformat!("{value}")
                 }
             },
-            datatype: xsd::DOUBLE,
-        })
+            xsd::DOUBLE,
+        )
     }
 }
 
@@ -444,7 +446,7 @@ impl From<Boolean> for Literal {
 impl From<Float> for Literal {
     #[inline]
     fn from(value: Float) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::FLOAT)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::FLOAT)
     }
 }
 
@@ -452,7 +454,7 @@ impl From<Float> for Literal {
 impl From<Double> for Literal {
     #[inline]
     fn from(value: Double) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DOUBLE)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::DOUBLE)
     }
 }
 
@@ -460,7 +462,7 @@ impl From<Double> for Literal {
 impl From<Integer> for Literal {
     #[inline]
     fn from(value: Integer) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::INTEGER)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::INTEGER)
     }
 }
 
@@ -468,7 +470,7 @@ impl From<Integer> for Literal {
 impl From<Decimal> for Literal {
     #[inline]
     fn from(value: Decimal) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DECIMAL)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::DECIMAL)
     }
 }
 
@@ -476,7 +478,7 @@ impl From<Decimal> for Literal {
 impl From<DateTime> for Literal {
     #[inline]
     fn from(value: DateTime) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DATE_TIME)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::DATE_TIME)
     }
 }
 
@@ -484,7 +486,7 @@ impl From<DateTime> for Literal {
 impl From<Time> for Literal {
     #[inline]
     fn from(value: Time) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::TIME)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::TIME)
     }
 }
 
@@ -492,7 +494,7 @@ impl From<Time> for Literal {
 impl From<Date> for Literal {
     #[inline]
     fn from(value: Date) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DATE)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::DATE)
     }
 }
 
@@ -500,7 +502,7 @@ impl From<Date> for Literal {
 impl From<GYearMonth> for Literal {
     #[inline]
     fn from(value: GYearMonth) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::G_YEAR_MONTH)
+        Self::new_typed_literal_unchecked(value.to_string(), xsd::G_YEAR_MONTH)
     }
 }
 
@@ -508,7 +510,7 @@ impl From<GYearMonth> for Literal {
 impl From<GYear> for Literal {
     #[inline]
     fn from(value: GYear) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::G_YEAR)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::G_YEAR)
     }
 }
 
@@ -516,7 +518,7 @@ impl From<GYear> for Literal {
 impl From<GMonthDay> for Literal {
     #[inline]
     fn from(value: GMonthDay) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::G_MONTH_DAY)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::G_MONTH_DAY)
     }
 }
 
@@ -524,7 +526,7 @@ impl From<GMonthDay> for Literal {
 impl From<GMonth> for Literal {
     #[inline]
     fn from(value: GMonth) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::G_MONTH)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::G_MONTH)
     }
 }
 
@@ -532,7 +534,7 @@ impl From<GMonth> for Literal {
 impl From<GDay> for Literal {
     #[inline]
     fn from(value: GDay) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::G_DAY)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::G_DAY)
     }
 }
 
@@ -540,7 +542,7 @@ impl From<GDay> for Literal {
 impl From<Duration> for Literal {
     #[inline]
     fn from(value: Duration) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DURATION)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::DURATION)
     }
 }
 
@@ -548,7 +550,7 @@ impl From<Duration> for Literal {
 impl From<YearMonthDuration> for Literal {
     #[inline]
     fn from(value: YearMonthDuration) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::YEAR_MONTH_DURATION)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::YEAR_MONTH_DURATION)
     }
 }
 
@@ -556,7 +558,7 @@ impl From<YearMonthDuration> for Literal {
 impl From<DayTimeDuration> for Literal {
     #[inline]
     fn from(value: DayTimeDuration) -> Self {
-        Self::new_typed_literal(value.to_string(), xsd::DAY_TIME_DURATION)
+        Self::new_typed_literal_unchecked(oxformat!("{value}"), xsd::DAY_TIME_DURATION)
     }
 }
 
@@ -669,15 +671,18 @@ impl<'de> Deserialize<'de> for Literal {
             }
             Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
         } else if let Some(datatype) = datatype {
-            Ok(Literal::new_typed_literal(
-                value,
-                NamedNode::new(datatype).map_err(de::Error::custom)?,
-            ))
+            Literal::new_typed_literal(value, NamedNode::new(datatype).map_err(de::Error::custom)?)
+                .map_err(de::Error::custom)
         } else {
             Ok(Literal::new_simple_literal(value))
         }
     }
 }
+
+/// Error returned by [`Literal::new_typed_literal`] when used with `rdf:langString` or `rdf:dirLangString`.
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("rdf:langString and rdf:dirLangString literals must have a language tag")]
+pub struct MalformedLangStringLiteral;
 
 #[cfg(test)]
 mod tests {
@@ -687,8 +692,15 @@ mod tests {
     fn test_simple_literal_equality() {
         assert_eq!(
             Literal::new_simple_literal("foo"),
-            Literal::new_typed_literal("foo", xsd::STRING)
+            Literal::new_typed_literal_unchecked("foo", xsd::STRING)
         );
+    }
+
+    #[test]
+    fn typed_literal_requires_language_tag() {
+        Literal::new_typed_literal("foo", rdf::LANG_STRING).unwrap_err();
+        #[cfg(feature = "rdf-12")]
+        Literal::new_typed_literal("foo", rdf::DIR_LANG_STRING).unwrap_err();
     }
 
     #[test]
@@ -712,7 +724,7 @@ mod tests {
         assert_eq!(simple, simple2);
 
         // Typed literal
-        let typed = Literal::new_typed_literal("foo", xsd::BOOLEAN);
+        let typed = Literal::new_typed_literal_unchecked("foo", xsd::BOOLEAN);
         let j = serde_json::to_string(&typed).unwrap();
         assert_eq!(
             "{\"value\":\"foo\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",

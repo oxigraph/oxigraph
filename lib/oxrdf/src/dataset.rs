@@ -1687,8 +1687,11 @@ mod tests {
             BlankNode::new_unchecked("a").into(),
             Literal::new_simple_literal("a").into(),
             Literal::new_language_tagged_literal_unchecked("a", "en").into(),
-            Literal::new_typed_literal("a", NamedNode::new_unchecked("http://example.com/type"))
-                .into(),
+            Literal::new_typed_literal_unchecked(
+                "a",
+                NamedNode::new_unchecked("http://example.com/type"),
+            )
+            .into(),
         ];
         #[cfg(feature = "rdf-12")]
         let objects = {

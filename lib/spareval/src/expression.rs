@@ -1539,9 +1539,9 @@ where
                     let ExpressionTerm::NamedNode(datatype) = try_or_ok!(datatype(tuple)?) else {
                         return Ok(None);
                     };
-                    Ok(Some(
-                        Term::from(Literal::new_typed_literal(value, datatype)).into(),
-                    ))
+                    Ok(Literal::new_typed_literal(value, datatype)
+                        .ok()
+                        .map(|literal| Term::from(literal).into()))
                 }));
             }
             if *function == sparql::IS_IRI || *function == sparql::IS_URI {

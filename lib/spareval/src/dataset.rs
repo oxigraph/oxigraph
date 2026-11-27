@@ -513,7 +513,7 @@ impl From<ExpressionTerm> for Term {
             #[cfg(feature = "sep-0002")]
             ExpressionTerm::DayTimeDurationLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::OtherTypedLiteral { value, datatype } => {
-                Literal::new_typed_literal(value, datatype).into()
+                Literal::new_typed_literal_unchecked(value, datatype).into()
             }
             #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(t) => Triple::from(*t).into(),

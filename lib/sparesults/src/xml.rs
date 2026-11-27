@@ -1139,11 +1139,12 @@ fn build_literal(
                 "its:dir can only be present alongside xml:lang",
             ));
         }
-        Ok(if let Some(datatype) = datatype {
+        if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
+                .map_err(|e| QueryResultsSyntaxError::msg(e.to_string()))
         } else {
-            Literal::new_simple_literal(value)
-        })
+            Ok(Literal::new_simple_literal(value))
+        }
     }
 }
 

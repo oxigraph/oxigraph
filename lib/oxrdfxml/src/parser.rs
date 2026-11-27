@@ -1693,7 +1693,7 @@ impl<R> InternalRdfXmlParser<R> {
                             #[cfg(feature = "rdf-12")]
                             base_direction,
                             datatype_attr,
-                        )
+                        )?
                         .into(),
                     None => self
                         .new_literal(
@@ -1702,7 +1702,7 @@ impl<R> InternalRdfXmlParser<R> {
                             #[cfg(feature = "rdf-12")]
                             base_direction,
                             datatype_attr,
-                        )
+                        )?
                         .into(),
                 };
                 let triple = Triple::new(subject, iri, object);
@@ -1772,7 +1772,7 @@ impl<R> InternalRdfXmlParser<R> {
                     let triple = Triple::new(
                         subject,
                         iri,
-                        Literal::new_typed_literal(
+                        Literal::new_typed_literal_unchecked(
                             String::from_utf8(object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
@@ -1849,24 +1849,29 @@ impl<R> InternalRdfXmlParser<R> {
         language: Option<Option<OxString>>,
         #[cfg(feature = "rdf-12")] base_direction: Option<BaseDirection>,
         datatype: Option<NamedNode>,
-    ) -> Literal {
-        if let Some(datatype) = datatype {
-            Literal::new_typed_literal(value, datatype)
+    ) -> Result<Literal, RdfXmlSyntaxError> {
+        Ok(if let Some(datatype) = datatype {
+            if self.lenient {
+                Literal::new_typed_literal_unchecked(value, datatype)
+            } else {
+                Literal::new_typed_literal(value, datatype)
+                    .map_err(|e| RdfXmlSyntaxError::msg(e.to_string()))?
+            }
         } else if let Some(language) =
             language.unwrap_or_else(|| self.current_language().map(ToOwned::to_owned))
         {
             #[cfg(feature = "rdf-12")]
             if let Some(base_direction) = base_direction {
-                return Literal::new_directional_language_tagged_literal_unchecked(
+                return Ok(Literal::new_directional_language_tagged_literal_unchecked(
                     value,
                     language,
                     base_direction,
-                );
+                ));
             }
             Literal::new_language_tagged_literal_unchecked(value, language)
         } else {
             Literal::new_simple_literal(value)
-        }
+        })
     }
 
     fn reify_and_annotation(

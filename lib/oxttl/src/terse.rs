@@ -632,30 +632,44 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::INTEGER,
+                            )
+                            .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::Decimal(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::DECIMAL,
+                            )
+                            .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::Double(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::DOUBLE,
+                            )
+                            .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
+                        );
                         self.emit_quad(results);
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
+                        );
                         self.emit_quad(results);
                     }
                     #[cfg(feature = "rdf-12")]
@@ -785,54 +799,52 @@ impl RuleRecognizer for TriGRecognizer {
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 },
-                TriGState::LiteralExpectDatatype { value, emit } => match token {
-                    N3Token::IriRef(datatype) => {
-                        if !self.lenient && datatype == rdf::LANG_STRING.as_str() {
-                            errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
+                TriGState::LiteralExpectDatatype { value, emit } => {
+                    let datatype = match token {
+                        N3Token::IriRef(datatype) => NamedNode::new_unchecked(datatype),
+                        N3Token::PrefixedName {
+                            prefix,
+                            local,
+                            might_be_invalid_iri,
+                        } => match resolve_local_name(
+                            prefix,
+                            &local,
+                            might_be_invalid_iri,
+                            &context.prefixes,
+                        ) {
+                            Ok(datatype) => datatype,
+                            Err(e) => {
+                                self.error(errors, e);
+                                return;
+                            }
+                        },
+                        _ => {
+                            self.error(errors, "Expecting a datatype IRI after ^^, found TOKEN");
+                            self.recognize_next(
+                                TokenOrLineJump::Token(token),
+                                context,
+                                results,
+                                errors,
+                            );
+                            return;
                         }
-                        #[cfg(feature = "rdf-12")]
-                        if !self.lenient && datatype == rdf::DIR_LANG_STRING.as_str() {
-                            errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
+                    };
+                    let literal = if self.lenient {
+                        Literal::new_typed_literal_unchecked(value, datatype)
+                    } else {
+                        match Literal::new_typed_literal(value, datatype) {
+                            Ok(literal) => literal,
+                            Err(e) => {
+                                self.error(errors, e.to_string());
+                                return;
+                            }
                         }
-                        self.cur_object.push(
-                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
-                                .into(),
-                        );
-                        if emit {
-                            self.emit_quad(results);
-                        }
+                    };
+                    self.cur_object.push(literal.into());
+                    if emit {
+                        self.emit_quad(results);
                     }
-                    N3Token::PrefixedName {
-                        prefix,
-                        local,
-                        might_be_invalid_iri,
-                    } => match resolve_local_name(
-                        prefix,
-                        &local,
-                        might_be_invalid_iri,
-                        &context.prefixes,
-                    ) {
-                        Ok(t) => {
-                            if !self.lenient && t == rdf::LANG_STRING {
-                                errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
-                            }
-                            #[cfg(feature = "rdf-12")]
-                            if !self.lenient && t == rdf::DIR_LANG_STRING {
-                                errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
-                            }
-                            self.cur_object
-                                .push(Literal::new_typed_literal(value, t).into());
-                            if emit {
-                                self.emit_quad(results);
-                            }
-                        }
-                        Err(e) => self.error(errors, e),
-                    },
-                    _ => {
-                        self.error(errors, "Expecting a datatype IRI after ^^, found TOKEN");
-                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
-                    }
-                },
+                }
                 // [29] reifiedTriple 	::= 	'<<' rtSubject verb rtObject reifier? '>>'
                 #[cfg(feature = "rdf-12")]
                 TriGState::SubjectReifiedTripleEnd => {
@@ -1044,26 +1056,40 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::INTEGER).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::INTEGER,
+                            )
+                            .into(),
                         );
                     }
                     N3Token::Decimal(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DECIMAL).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::DECIMAL,
+                            )
+                            .into(),
                         );
                     }
                     N3Token::Double(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal(OxString::new_owned(v), xsd::DOUBLE).into(),
+                            Literal::new_typed_literal_unchecked(
+                                OxString::new_owned(v),
+                                xsd::DOUBLE,
+                            )
+                            .into(),
                         );
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
+                        );
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object
-                            .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
+                        self.cur_object.push(
+                            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
+                        );
                     }
                     N3Token::Punctuation("<<(") => {
                         if self.too_many_nested_triple_terms() {

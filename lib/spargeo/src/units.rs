@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn extract_units_iri_from_any_uri_literal() {
-        let lit = OxLiteral::new_typed_literal(
+        let lit = OxLiteral::new_typed_literal_unchecked(
             "http://www.opengis.net/def/uom/OGC/1.0/kilometre",
             xsd::ANY_URI,
         );
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn extract_units_iri_rejects_string_typed_literal() {
-        let lit = OxLiteral::new_typed_literal(
+        let lit = OxLiteral::new_typed_literal_unchecked(
             "http://www.opengis.net/def/uom/OGC/1.0/metre",
             xsd::STRING,
         );

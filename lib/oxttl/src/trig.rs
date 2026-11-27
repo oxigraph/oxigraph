@@ -1577,13 +1577,13 @@ mod tests {
         serializer.serialize_quad(&Quad::new(
             BlankNode::new_unchecked("b"),
             NamedNode::new_unchecked("http://example.com/p2"),
-            Literal::new_typed_literal("true", xsd::BOOLEAN),
+            Literal::new_typed_literal("true", xsd::BOOLEAN).map_err(io::Error::other)?,
             GraphName::DefaultGraph,
         ))?;
         serializer.serialize_quad(&Quad::new(
             BlankNode::new_unchecked("b"),
             NamedNode::new_unchecked("http://example.org/p2"),
-            Literal::new_typed_literal("false", xsd::BOOLEAN),
+            Literal::new_typed_literal("false", xsd::BOOLEAN).map_err(io::Error::other)?,
             NamedNode::new_unchecked("http://example.com/g2"),
         ))?;
         assert_eq!(

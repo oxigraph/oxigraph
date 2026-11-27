@@ -878,7 +878,7 @@ mod tests {
                 ],
                 vec![
                     Some(BlankNode::new_unchecked("b1").into()),
-                    Some(Literal::new_typed_literal("123", xsd::INTEGER).into()),
+                    Some(Literal::new_typed_literal_unchecked("123", xsd::INTEGER).into()),
                 ],
                 vec![
                     None,

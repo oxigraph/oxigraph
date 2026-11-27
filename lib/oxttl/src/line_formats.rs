@@ -6,7 +6,6 @@ use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, to_lowercase};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
-use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxstr::OxString;
 
@@ -238,16 +237,20 @@ impl RuleRecognizer for NQuadsRecognizer {
             NQuadsState::ExpectLiteralDatatype { value } => match token {
                 TokenOrLineJump::Token(token) => match token {
                     N3Token::IriRef(d) => {
-                        if !self.lenient && d == *rdf::LANG_STRING.as_str() {
-                            errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
-                        }
-                        #[cfg(feature = "rdf-12")]
-                        if !self.lenient && d == *rdf::DIR_LANG_STRING.as_str() {
-                            errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
-                        }
-                        self.objects.push(
-                            Literal::new_typed_literal(value, NamedNode::new_unchecked(d)).into(),
-                        );
+                        let datatype = NamedNode::new_unchecked(d);
+                        let literal = if self.lenient {
+                            Literal::new_typed_literal_unchecked(value, datatype)
+                        } else {
+                            match Literal::new_typed_literal(value, datatype) {
+                                Ok(literal) => literal,
+                                Err(e) => {
+                                    errors.push(e.to_string().into());
+                                    self.set_error_recovery_state();
+                                    return;
+                                }
+                            }
+                        };
+                        self.objects.push(literal.into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                     }
