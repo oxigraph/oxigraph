@@ -13,6 +13,7 @@
 		<#bad_lang>
 		<#language_normalization_ttl>
 		<#language_normalization_xml>
+		<#xml_empty_lang>
 		<#langtag_with_numbers_nt>
 		<#langtag_with_numbers_ttl>
 		<#xml_entities>
@@ -69,6 +70,12 @@
 	mf:name "language case normalization" ;
 	mf:action <language_normalization.rdf> ;
 	mf:result <language_normalization.nt> .
+
+<#xml_empty_lang>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "empty xml:lang removes the language" ;
+	mf:action <xml_empty_lang.rdf> ;
+	mf:result <xml_empty_lang.nt> .
 
 <#langtag_with_numbers_nt>
 	rdf:type rdft:TestNTriplesPositiveSyntax ;

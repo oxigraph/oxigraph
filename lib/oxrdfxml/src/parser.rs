@@ -1009,7 +1009,7 @@ impl<R> InternalRdfXmlParser<R> {
                     "lang" => {
                         let mut tag = OxStr::from(self.convert_attribute(&attribute)?).into_owned();
                         tag.make_mut().make_ascii_lowercase();
-                        language = Some(if self.lenient {
+                        language = Some(if self.lenient || tag.is_empty() {
                             tag
                         } else {
                             LanguageTag::parse(tag.clone())
@@ -1848,8 +1848,9 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Literal {
         if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
-        } else if let Some(language) =
-            language.or_else(|| self.current_language().map(ToOwned::to_owned))
+        } else if let Some(language) = language
+            .or_else(|| self.current_language().map(ToOwned::to_owned))
+            .filter(|l| !l.is_empty())
         {
             #[cfg(feature = "rdf-12")]
             if let Some(base_direction) = base_direction {
@@ -1925,7 +1926,10 @@ impl<R> InternalRdfXmlParser<R> {
                 Triple::new(
                     subject.clone(),
                     literal_predicate,
-                    if let Some(language) = language.or_else(|| self.current_language()) {
+                    if let Some(language) = language
+                        .or_else(|| self.current_language())
+                        .filter(|l| !l.is_empty())
+                    {
                         #[cfg(feature = "rdf-12")]
                         if let Some(base_direction) =
                             base_direction.or_else(|| self.current_base_direction())
@@ -2053,13 +2057,13 @@ impl<R> InternalRdfXmlParser<R> {
                 | RdfXmlState::ParseTypeCollectionPropertyElt { language, .. }
                 | RdfXmlState::ParseTypeLiteralPropertyElt { language, .. } => {
                     if let Some(language) = language {
-                        return Some(language);
+                        return Some(language).filter(|l| !l.is_empty());
                     }
                 }
                 #[cfg(feature = "rdf-12")]
                 RdfXmlState::ParseTypeTriplePropertyElt { language, .. } => {
                     if let Some(language) = language {
-                        return Some(language);
+                        return Some(language).filter(|l| !l.is_empty());
                     }
                 }
             }
