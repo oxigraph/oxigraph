@@ -475,17 +475,15 @@ impl From<ExpressionTerm> for Term {
             ExpressionTerm::BlankNode(t) => t.into(),
             ExpressionTerm::StringLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::LangStringLiteral { value, language } => {
-                Literal::new_language_tagged_literal_unchecked(value, language).into()
+                Literal::new_language_tagged_unchecked(value, language).into()
             }
             #[cfg(feature = "sparql-12")]
             ExpressionTerm::DirLangStringLiteral {
                 value,
                 language,
                 direction,
-            } => Literal::new_directional_language_tagged_literal_unchecked(
-                value, language, direction,
-            )
-            .into(),
+            } => Literal::new_directional_language_tagged_unchecked(value, language, direction)
+                .into(),
             ExpressionTerm::BooleanLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::IntegerLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::DecimalLiteral(value) => Literal::from(value).into(),
@@ -513,7 +511,7 @@ impl From<ExpressionTerm> for Term {
             #[cfg(feature = "sep-0002")]
             ExpressionTerm::DayTimeDurationLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::OtherTypedLiteral { value, datatype } => {
-                Literal::new_typed_literal_unchecked(value, datatype).into()
+                Literal::new_typed_unchecked(value, datatype).into()
             }
             #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(t) => Triple::from(*t).into(),

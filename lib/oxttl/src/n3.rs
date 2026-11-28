@@ -1192,40 +1192,29 @@ impl RuleRecognizer for N3Recognizer {
                         }
                         N3Token::Integer(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal_unchecked(
-                                    OxString::new_owned(v),
-                                    xsd::INTEGER,
-                                )
-                                .into(),
+                                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::INTEGER)
+                                    .into(),
                             );
                         }
                         N3Token::Decimal(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal_unchecked(
-                                    OxString::new_owned(v),
-                                    xsd::DECIMAL,
-                                )
-                                .into(),
+                                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DECIMAL)
+                                    .into(),
                             );
                         }
                         N3Token::Double(v) => {
                             self.terms.push(
-                                Literal::new_typed_literal_unchecked(
-                                    OxString::new_owned(v),
-                                    xsd::DOUBLE,
-                                )
-                                .into(),
+                                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DOUBLE)
+                                    .into(),
                             );
                         }
                         N3Token::PlainKeyword("true") => {
-                            self.terms.push(
-                                Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
-                            );
+                            self.terms
+                                .push(Literal::new_typed_unchecked("true", xsd::BOOLEAN).into());
                         }
                         N3Token::PlainKeyword("false") => {
-                            self.terms.push(
-                                Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
-                            );
+                            self.terms
+                                .push(Literal::new_typed_unchecked("false", xsd::BOOLEAN).into());
                         }
                         N3Token::Punctuation("{") => {
                             self.contexts.push(BlankNode::default());
@@ -1324,11 +1313,8 @@ impl RuleRecognizer for N3Recognizer {
                             return;
                         }
                         self.terms.push(
-                            Literal::new_language_tagged_literal_unchecked(
-                                value,
-                                to_lowercase(language),
-                            )
-                            .into(),
+                            Literal::new_language_tagged_unchecked(value, to_lowercase(language))
+                                .into(),
                         );
                         return;
                     }
@@ -1337,7 +1323,7 @@ impl RuleRecognizer for N3Recognizer {
                         return;
                     }
                     _ => {
-                        self.terms.push(Literal::new_simple_literal(value).into());
+                        self.terms.push(Literal::new_simple(value).into());
                     }
                 },
                 N3State::LiteralExpectDatatype { value } => {
@@ -1366,9 +1352,9 @@ impl RuleRecognizer for N3Recognizer {
                         }
                     };
                     let literal = if self.lenient {
-                        Literal::new_typed_literal_unchecked(value, datatype)
+                        Literal::new_typed_unchecked(value, datatype)
                     } else {
-                        match Literal::new_typed_literal(value, datatype) {
+                        match Literal::new_typed(value, datatype) {
                             Ok(literal) => literal,
                             Err(e) => {
                                 self.error(errors, e.to_string());

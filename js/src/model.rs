@@ -150,19 +150,17 @@ pub fn to_literal(value: &JsValue) -> Result<Literal, JsValue> {
         .as_string()
         .ok_or_else(|| format_err!("Literal must have a string value"))?;
     Ok(match datatype.as_str() {
-        "http://www.w3.org/2001/XMLSchema#string" => Literal::new_simple_literal(literal_value),
-        "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => {
-            Literal::new_language_tagged_literal(
-                literal_value,
-                reflect_get(value, &LANGUAGE)?.as_string().ok_or_else(|| {
-                    format_err!("Literal with rdf:langString datatype must have a language")
-                })?,
-            )
-            .map_err(JsError::from)?
-        }
+        "http://www.w3.org/2001/XMLSchema#string" => Literal::new_simple(literal_value),
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged(
+            literal_value,
+            reflect_get(value, &LANGUAGE)?.as_string().ok_or_else(|| {
+                format_err!("Literal with rdf:langString datatype must have a language")
+            })?,
+        )
+        .map_err(JsError::from)?,
         #[cfg(feature = "rdf-12")]
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" => {
-            Literal::new_directional_language_tagged_literal(
+            Literal::new_directional_language_tagged(
                 literal_value,
                 reflect_get(value, &LANGUAGE)?.as_string().ok_or_else(|| {
                     format_err!("Literal with rdf:dirLangString datatype must have a language")
@@ -181,7 +179,7 @@ pub fn to_literal(value: &JsValue) -> Result<Literal, JsValue> {
             )
             .map_err(JsError::from)?
         }
-        _ => Literal::new_typed_literal_unchecked(literal_value, datatype),
+        _ => Literal::new_typed_unchecked(literal_value, datatype),
     })
 }
 

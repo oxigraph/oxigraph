@@ -632,44 +632,33 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::INTEGER,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::INTEGER)
+                                .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::Decimal(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::DECIMAL,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DECIMAL)
+                                .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::Double(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::DOUBLE,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DOUBLE)
+                                .into(),
                         );
                         self.emit_quad(results);
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object.push(
-                            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
-                        );
+                        self.cur_object
+                            .push(Literal::new_typed_unchecked("true", xsd::BOOLEAN).into());
                         self.emit_quad(results);
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object.push(
-                            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
-                        );
+                        self.cur_object
+                            .push(Literal::new_typed_unchecked("false", xsd::BOOLEAN).into());
                         self.emit_quad(results);
                     }
                     #[cfg(feature = "rdf-12")]
@@ -756,13 +745,13 @@ impl RuleRecognizer for TriGRecognizer {
                     } => {
                         self.cur_object.push(
                             if let Some(direction) = direction {
-                                Literal::new_directional_language_tagged_literal_unchecked(
+                                Literal::new_directional_language_tagged_unchecked(
                                     value,
                                     to_lowercase(language),
                                     direction,
                                 )
                             } else {
-                                Literal::new_language_tagged_literal_unchecked(
+                                Literal::new_language_tagged_unchecked(
                                     value,
                                     to_lowercase(language),
                                 )
@@ -776,11 +765,8 @@ impl RuleRecognizer for TriGRecognizer {
                     #[cfg(not(feature = "rdf-12"))]
                     N3Token::LangTag { language } => {
                         self.cur_object.push(
-                            Literal::new_language_tagged_literal_unchecked(
-                                value,
-                                to_lowercase(language),
-                            )
-                            .into(),
+                            Literal::new_language_tagged_unchecked(value, to_lowercase(language))
+                                .into(),
                         );
                         if emit {
                             self.emit_quad(results);
@@ -791,8 +777,7 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(TriGState::LiteralExpectDatatype { value, emit });
                     }
                     _ => {
-                        self.cur_object
-                            .push(Literal::new_simple_literal(value).into());
+                        self.cur_object.push(Literal::new_simple(value).into());
                         if emit {
                             self.emit_quad(results);
                         }
@@ -830,9 +815,9 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                     };
                     let literal = if self.lenient {
-                        Literal::new_typed_literal_unchecked(value, datatype)
+                        Literal::new_typed_unchecked(value, datatype)
                     } else {
-                        match Literal::new_typed_literal(value, datatype) {
+                        match Literal::new_typed(value, datatype) {
                             Ok(literal) => literal,
                             Err(e) => {
                                 self.error(errors, e.to_string());
@@ -1056,40 +1041,29 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     N3Token::Integer(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::INTEGER,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::INTEGER)
+                                .into(),
                         );
                     }
                     N3Token::Decimal(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::DECIMAL,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DECIMAL)
+                                .into(),
                         );
                     }
                     N3Token::Double(v) => {
                         self.cur_object.push(
-                            Literal::new_typed_literal_unchecked(
-                                OxString::new_owned(v),
-                                xsd::DOUBLE,
-                            )
-                            .into(),
+                            Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DOUBLE)
+                                .into(),
                         );
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object.push(
-                            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN).into(),
-                        );
+                        self.cur_object
+                            .push(Literal::new_typed_unchecked("true", xsd::BOOLEAN).into());
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object.push(
-                            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN).into(),
-                        );
+                        self.cur_object
+                            .push(Literal::new_typed_unchecked("false", xsd::BOOLEAN).into());
                     }
                     N3Token::Punctuation("<<(") => {
                         if self.too_many_nested_triple_terms() {
@@ -1154,7 +1128,7 @@ impl RuleRecognizer for TriGRecognizer {
             }
             [.., TriGState::LiteralPossibleSuffix { value, emit: true }] => {
                 self.cur_object
-                    .push(Literal::new_simple_literal(value.clone()).into());
+                    .push(Literal::new_simple(value.clone()).into());
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }

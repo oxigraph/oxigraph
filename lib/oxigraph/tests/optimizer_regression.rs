@@ -51,8 +51,8 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
     let segment = NamedNode::new("http://example.org/segment")?;
     let customer = NamedNode::new("http://schema.org/customer")?;
     let total_price = NamedNode::new("http://schema.org/totalPrice")?;
-    let country = Literal::new_simple_literal("FR");
-    let seg = Literal::new_simple_literal("retail");
+    let country = Literal::new_simple("FR");
+    let seg = Literal::new_simple("retail");
 
     let persons: Vec<NamedNode> = (0..N_PERSONS)
         .map(|i| NamedNode::new(format!("http://example.org/person/{i}")).unwrap())
@@ -83,7 +83,7 @@ fn optional_on_foreign_key_is_not_quadratic() -> Result<(), Box<dyn std::error::
         for _ in 0..ORDERS_PER_PERSON {
             let order = NamedNode::new(format!("http://example.org/order/{order_idx}"))?;
             order_idx += 1;
-            let price = Literal::new_simple_literal(format!("{}", 10 + order_idx));
+            let price = Literal::new_simple(format!("{}", 10 + order_idx));
             store.insert(Quad::new(
                 order.clone(),
                 rdf::TYPE,

@@ -232,7 +232,7 @@ impl QueryEvaluator {
     ///     }
     ///
     ///     fn finish(&mut self) -> Option<Term> {
-    ///         Some(Literal::new_simple_literal(take(&mut self.value)).into())
+    ///         Some(Literal::new_simple(take(&mut self.value)).into())
     ///     }
     /// }
     ///
@@ -254,7 +254,7 @@ impl QueryEvaluator {
     /// {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("r"),
-    ///         Some(&Literal::new_simple_literal("1 2 3").into())
+    ///         Some(&Literal::new_simple("1 2 3").into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -1314,7 +1314,7 @@ mod tests {
         );
 
         // dateTime literal has no EBV
-        let dt = Literal::new_typed_literal_unchecked("2020-01-01T00:00:00Z", xsd::DATE_TIME);
+        let dt = Literal::new_typed_unchecked("2020-01-01T00:00:00Z", xsd::DATE_TIME);
         let expr = Expression::from(dt);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&expr, std::iter::empty()),
@@ -1325,8 +1325,8 @@ mod tests {
     #[test]
     fn evaluate_effective_boolean_value_expression_boolean_lexical_forms() {
         let evaluator = QueryEvaluator::new();
-        let one = Expression::from(Literal::new_typed_literal_unchecked("1", xsd::BOOLEAN));
-        let zero = Expression::from(Literal::new_typed_literal_unchecked("0", xsd::BOOLEAN));
+        let one = Expression::from(Literal::new_typed_unchecked("1", xsd::BOOLEAN));
+        let zero = Expression::from(Literal::new_typed_unchecked("0", xsd::BOOLEAN));
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&one, std::iter::empty()),
             Some(true)

@@ -694,23 +694,23 @@ mod tests {
         );
         assert_eq!(
             Triple::from_terms(
-                Literal::new_simple_literal("foo"),
+                Literal::new_simple("foo"),
                 NamedNode::new_unchecked("http://example.com/p"),
                 NamedNode::new_unchecked("http://example.com/o"),
             )
             .unwrap_err()
             .into_term(),
-            Term::from(Literal::new_simple_literal("foo"))
+            Term::from(Literal::new_simple("foo"))
         );
         assert_eq!(
             Triple::from_terms(
                 NamedNode::new_unchecked("http://example.com/s"),
-                Literal::new_simple_literal("foo"),
+                Literal::new_simple("foo"),
                 NamedNode::new_unchecked("http://example.com/o"),
             )
             .unwrap_err()
             .into_term(),
-            Term::from(Literal::new_simple_literal("foo"))
+            Term::from(Literal::new_simple("foo"))
         );
         Ok(())
     }
@@ -735,7 +735,7 @@ mod tests {
         let triple = Triple::new(
             BlankNode::new_unchecked("s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::new_simple("foo"),
         );
         let jsn = serde_json::to_string(&triple)?;
         assert_eq!(
@@ -778,7 +778,7 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::new_simple("foo"),
         );
         let jsn = serde_json::to_string(&triple)?;
         let deserialized: Triple = serde_json::from_reader(jsn.as_bytes())?;
@@ -843,7 +843,7 @@ mod tests {
         let quad = Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::new_simple("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;
@@ -919,7 +919,7 @@ mod tests {
         let quad = Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::new_simple("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;

@@ -1113,14 +1113,10 @@ fn build_literal(
                     )));
                 }
             }
-            return Literal::new_directional_language_tagged_literal(
-                value,
-                lang.clone(),
-                direction,
-            )
-            .map_err(|e| {
-                QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
-            });
+            return Literal::new_directional_language_tagged(value, lang.clone(), direction)
+                .map_err(|e| {
+                    QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
+                });
         }
         if let Some(datatype) = datatype {
             if datatype != rdf::LANG_STRING {
@@ -1129,7 +1125,7 @@ fn build_literal(
                 )));
             }
         }
-        Literal::new_language_tagged_literal(value, lang.clone()).map_err(|e| {
+        Literal::new_language_tagged(value, lang.clone()).map_err(|e| {
             QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
         })
     } else {
@@ -1140,10 +1136,10 @@ fn build_literal(
             ));
         }
         if let Some(datatype) = datatype {
-            Literal::new_typed_literal(value, datatype)
+            Literal::new_typed(value, datatype)
                 .map_err(|e| QueryResultsSyntaxError::msg(e.to_string()))
         } else {
-            Ok(Literal::new_simple_literal(value))
+            Ok(Literal::new_simple(value))
         }
     }
 }

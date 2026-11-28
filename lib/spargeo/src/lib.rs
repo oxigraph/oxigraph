@@ -204,7 +204,7 @@ fn geof_convex_hull(args: &[Term]) -> Option<Term> {
 fn geof_get_srid(args: &[Term]) -> Option<Term> {
     let args: &[Term; 1] = args.try_into().ok()?;
     extract_argument(&args[0])?;
-    Some(Literal::new_typed_literal_unchecked(CRS84_URI, xsd::ANY_URI).into())
+    Some(Literal::new_typed_unchecked(CRS84_URI, xsd::ANY_URI).into())
 }
 
 /// <http://www.opengis.net/def/function/geosparql/isEmpty>.

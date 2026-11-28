@@ -31,7 +31,7 @@ use tokio::io::AsyncWrite;
 /// serializer.serialize_triple(&Triple::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -119,7 +119,7 @@ impl RdfXmlSerializer {
     /// serializer.serialize_triple(&Triple::new(
     ///     NamedNode::new("http://example.com#me")?,
     ///     NamedNode::new("http://schema.org/name")?,
-    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -154,7 +154,7 @@ impl RdfXmlSerializer {
     /// serializer.serialize_triple(&Triple::new(
     ///     NamedNode::new("http://example.com#me")?,
     ///     NamedNode::new("http://schema.org/name")?,
-    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
     /// )).await?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -218,7 +218,7 @@ impl RdfXmlSerializer {
 /// serializer.serialize_triple(&Triple::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -276,7 +276,7 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 /// serializer.serialize_triple(&Triple::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 /// )).await?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:its=\"http://www.w3.org/2005/11/its\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",

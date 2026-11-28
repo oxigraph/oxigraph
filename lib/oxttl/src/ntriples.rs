@@ -772,7 +772,7 @@ mod tests {
             [Triple::new(
                 NamedNode::new_unchecked("foo"),
                 NamedNode::new_unchecked("bar"),
-                Literal::new_language_tagged_literal_unchecked("baz", "toolonglangtag"),
+                Literal::new_language_tagged_unchecked("baz", "toolonglangtag"),
             )]
         )
     }

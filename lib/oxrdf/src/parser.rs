@@ -73,36 +73,33 @@ impl FromStr for Literal {
     /// use oxrdf::{Literal, NamedNode};
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(
-    ///     Literal::from_str("\"ex\\n\"")?,
-    ///     Literal::new_simple_literal("ex\n")
-    /// );
+    /// assert_eq!(Literal::from_str("\"ex\\n\"")?, Literal::new_simple("ex\n"));
     /// assert_eq!(
     ///     Literal::from_str("\"ex\"@en")?,
-    ///     Literal::new_language_tagged_literal("ex", "en")?
+    ///     Literal::new_language_tagged("ex", "en")?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>")?,
-    ///     Literal::new_typed_literal(
+    ///     Literal::new_typed(
     ///         "2020",
     ///         NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear")?
     ///     )?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("true")?,
-    ///     Literal::new_typed_literal("true", xsd::BOOLEAN)?
+    ///     Literal::new_typed("true", xsd::BOOLEAN)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("+122")?,
-    ///     Literal::new_typed_literal("+122", xsd::INTEGER)?
+    ///     Literal::new_typed("+122", xsd::INTEGER)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("-122.23")?,
-    ///     Literal::new_typed_literal("-122.23", xsd::DECIMAL)?
+    ///     Literal::new_typed("-122.23", xsd::DECIMAL)?
     /// );
     /// assert_eq!(
     ///     Literal::from_str("-122e+1")?,
-    ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)?
+    ///     Literal::new_typed("-122e+1", xsd::DOUBLE)?
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -124,7 +121,7 @@ impl FromStr for Term {
     /// use oxrdf::*;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Term::from_str("\"ex\"")?, Literal::new_simple_literal("ex"));
+    /// assert_eq!(Term::from_str("\"ex\"")?, Literal::new_simple("ex"));
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
@@ -150,7 +147,7 @@ impl FromStr for Triple {
     ///     Triple::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple_literal("o")
+    ///         Literal::new_simple("o")
     ///     )
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -178,7 +175,7 @@ impl FromStr for Quad {
     ///     Quad::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple_literal("o"),
+    ///         Literal::new_simple("o"),
     ///         GraphName::DefaultGraph
     ///     )
     /// );
@@ -187,7 +184,7 @@ impl FromStr for Quad {
     ///     Quad::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple_literal("o"),
+    ///         Literal::new_simple("o"),
     ///         NamedNode::new("http://example.com/g")?
     ///     )
     /// );
@@ -347,7 +344,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         if let Some((language, direction)) = language.split_once("--") {
                             let language = OxString::new_owned(language);
                             return Ok((
-                                Literal::new_directional_language_tagged_literal(value, language.clone(), match direction {
+                                Literal::new_directional_language_tagged(value, language.clone(), match direction {
                                     "ltr" => BaseDirection::Ltr,
                                     "rtl" => BaseDirection::Rtl,
                                     _ => return Err(TermParseError(TermParseErrorKind::Msg(format!("The only two possible base directions are 'rtl' and 'ltr', found '{direction}'"))))
@@ -364,7 +361,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         }
                         let language = OxString::new_owned(language);
                         Ok((
-                            Literal::new_language_tagged_literal(value, language.clone()).map_err(
+                            Literal::new_language_tagged(value, language.clone()).map_err(
                                 |error| {
                                     TermParseError(TermParseErrorKind::LanguageTag {
                                         value: language,
@@ -376,11 +373,11 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         ))
                     } else if let Some(remain) = remain.strip_prefix("^^") {
                         let (datatype, remain) = read_named_node(remain)?;
-                        let literal = Literal::new_typed_literal(value, datatype)
+                        let literal = Literal::new_typed(value, datatype)
                             .map_err(|e| TermParseError::msg(e.to_string()))?;
                         Ok((literal, remain))
                     } else {
-                        Ok((Literal::new_simple_literal(value), remain))
+                        Ok((Literal::new_simple(value), remain))
                     };
                 }
                 '\\' => {
@@ -407,15 +404,9 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         }
         Err(TermParseError::msg("Unexpected literal end"))
     } else if let Some(remain) = s.strip_prefix("true") {
-        Ok((
-            Literal::new_typed_literal_unchecked("true", xsd::BOOLEAN),
-            remain,
-        ))
+        Ok((Literal::new_typed_unchecked("true", xsd::BOOLEAN), remain))
     } else if let Some(remain) = s.strip_prefix("false") {
-        Ok((
-            Literal::new_typed_literal_unchecked("false", xsd::BOOLEAN),
-            remain,
-        ))
+        Ok((Literal::new_typed_unchecked("false", xsd::BOOLEAN), remain))
     } else {
         let input = s.as_bytes();
         if input.is_empty() {
@@ -457,10 +448,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
             if count_exponent > 0 {
                 Ok((
-                    Literal::new_typed_literal_unchecked(
-                        OxString::new_owned(&s[..cursor]),
-                        xsd::DOUBLE,
-                    ),
+                    Literal::new_typed_unchecked(OxString::new_owned(&s[..cursor]), xsd::DOUBLE),
                     &s[cursor..],
                 ))
             } else {
@@ -471,10 +459,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         } else if with_dot {
             if count_after > 0 {
                 Ok((
-                    Literal::new_typed_literal_unchecked(
-                        OxString::new_owned(&s[..cursor]),
-                        xsd::DECIMAL,
-                    ),
+                    Literal::new_typed_unchecked(OxString::new_owned(&s[..cursor]), xsd::DECIMAL),
                     &s[cursor..],
                 ))
             } else {
@@ -484,10 +469,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             }
         } else if count_before > 0 {
             Ok((
-                Literal::new_typed_literal_unchecked(
-                    OxString::new_owned(&s[..cursor]),
-                    xsd::INTEGER,
-                ),
+                Literal::new_typed_unchecked(OxString::new_owned(&s[..cursor]), xsd::INTEGER),
                 &s[cursor..],
             ))
         } else {
@@ -634,7 +616,7 @@ mod tests {
     fn triple_term_parsing() {
         assert_eq!(
             Term::from_str("\"ex\\u00E9\\U000000E9\"").unwrap(),
-            Literal::new_simple_literal("ex\u{e9}\u{e9}")
+            Literal::new_simple("ex\u{e9}\u{e9}")
         );
         assert_eq!(
             Term::from_str("<http://example.com/\\u00E9\\U000000E9>").unwrap(),
@@ -645,7 +627,7 @@ mod tests {
             Triple::new(
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),
-                Literal::new_simple_literal("o"),
+                Literal::new_simple("o"),
             )
         );
         assert_eq!(
@@ -653,7 +635,7 @@ mod tests {
             Triple::new(
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),
-                Literal::new_typed_literal_unchecked("1.2e3", xsd::DOUBLE),
+                Literal::new_typed_unchecked("1.2e3", xsd::DOUBLE),
             )
         );
     }

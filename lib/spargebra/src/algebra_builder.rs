@@ -1611,27 +1611,29 @@ impl<'a> AlgebraBuilder<'a> {
     fn build_literal(&mut self, literal: ast::Literal<'a>) -> Result<Literal, AlgebraBuilderError> {
         Ok(match literal {
             ast::Literal::Boolean(v) => {
-                Literal::new_typed_literal_unchecked(if v { "true" } else { "false" }, xsd::BOOLEAN)
+                Literal::new_typed_unchecked(if v { "true" } else { "false" }, xsd::BOOLEAN)
             }
             ast::Literal::Integer(v) => {
-                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::INTEGER)
+                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::INTEGER)
             }
             ast::Literal::Decimal(v) => {
-                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::DECIMAL)
+                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DECIMAL)
             }
             ast::Literal::Double(v) => {
-                Literal::new_typed_literal_unchecked(OxString::new_owned(v), xsd::DOUBLE)
+                Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DOUBLE)
             }
-            ast::Literal::String(v) => Literal::new_simple_literal(Self::build_string(v)?),
-            ast::Literal::LangString(v, l) => Literal::new_language_tagged_literal(
-                Self::build_string(v)?,
-                OxString::new_owned(l.inner),
-            )
-            .map_err(|e| {
-                AlgebraBuilderError::new(l.span, format!("Invalid language tag '{}': {e}", l.inner))
-            })?,
+            ast::Literal::String(v) => Literal::new_simple(Self::build_string(v)?),
+            ast::Literal::LangString(v, l) => {
+                Literal::new_language_tagged(Self::build_string(v)?, OxString::new_owned(l.inner))
+                    .map_err(|e| {
+                    AlgebraBuilderError::new(
+                        l.span,
+                        format!("Invalid language tag '{}': {e}", l.inner),
+                    )
+                })?
+            }
             #[cfg(feature = "sparql-12")]
-            ast::Literal::DirLangString(v, l) => Literal::new_directional_language_tagged_literal(
+            ast::Literal::DirLangString(v, l) => Literal::new_directional_language_tagged(
                 Self::build_string(v)?,
                 OxString::new_owned(l.inner.0),
                 match l.inner.1 {
@@ -1659,7 +1661,7 @@ impl<'a> AlgebraBuilder<'a> {
                     ast::Iri::IriRef(iri) => iri.span,
                     ast::Iri::PrefixedName(name) => name.span,
                 };
-                Literal::new_typed_literal(Self::build_string(v)?, self.build_named_node(t)?)
+                Literal::new_typed(Self::build_string(v)?, self.build_named_node(t)?)
                     .map_err(|e| AlgebraBuilderError::new(span, e.to_string()))?
             }
         })

@@ -288,14 +288,14 @@ impl From<PyLiteral> for Term {
 impl PyLiteral {
     fn from_value(value: &Bound<'_, PyAny>, datatype: Option<PyNamedNode>) -> PyResult<Self> {
         Ok(if let Some(datatype) = datatype {
-            Literal::new_typed_literal(value.extract::<OxStringInput>()?, datatype)
+            Literal::new_typed(value.extract::<OxStringInput>()?, datatype)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?
         } else if let Ok(value) = value.extract::<OxStringInput>() {
-            Literal::new_simple_literal(value)
+            Literal::new_simple(value)
         } else if let Ok(value) = value.extract::<bool>() {
             value.into()
         } else if let Ok(value) = value.extract::<Bound<'_, PyInt>>() {
-            Literal::new_typed_literal_unchecked(value.to_string(), xsd::INTEGER)
+            Literal::new_typed_unchecked(value.to_string(), xsd::INTEGER)
         } else if let Ok(value) = value.extract::<f64>() {
             value.into()
         } else {
@@ -327,7 +327,7 @@ impl PyLiteral {
                         ));
                     }
                 }
-                return Ok(Literal::new_directional_language_tagged_literal(
+                return Ok(Literal::new_directional_language_tagged(
                     value.extract::<OxStringInput>()?,
                     language,
                     direction,
@@ -342,12 +342,11 @@ impl PyLiteral {
                     ));
                 }
             }
-            return Ok(Literal::new_language_tagged_literal(
-                value.extract::<OxStringInput>()?,
-                language,
-            )
-            .map_err(|e| PyValueError::new_err(e.to_string()))?
-            .into());
+            return Ok(
+                Literal::new_language_tagged(value.extract::<OxStringInput>()?, language)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?
+                    .into(),
+            );
         }
         if direction.is_some() {
             return Err(PyValueError::new_err(
@@ -374,7 +373,7 @@ impl PyLiteral {
                 }
             }
             Ok(
-                Literal::new_language_tagged_literal(value.extract::<OxStringInput>()?, language)
+                Literal::new_language_tagged(value.extract::<OxStringInput>()?, language)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?
                     .into(),
             )
