@@ -150,7 +150,7 @@ pub fn to_literal(value: &JsValue) -> Result<Literal, JsValue> {
         .as_string()
         .ok_or_else(|| format_err!("Literal must have a string value"))?;
     Ok(match datatype.as_str() {
-        "http://www.w3.org/2001/XMLSchema#string" => Literal::new_simple(literal_value),
+        "http://www.w3.org/2001/XMLSchema#string" => literal_value.into(),
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged(
             literal_value,
             reflect_get(value, &LANGUAGE)?.as_string().ok_or_else(|| {

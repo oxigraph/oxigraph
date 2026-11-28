@@ -1053,7 +1053,7 @@ impl JsonInnerTermReader {
                                     Literal::new_typed(value, datatype)
                                         .map_err(|e| QueryResultsSyntaxError::msg(e.to_string()))?
                                 } else {
-                                    Literal::new_simple(value)
+                                    value.into()
                                 }
                             }.into()))
                         }

@@ -1622,7 +1622,7 @@ impl<'a> AlgebraBuilder<'a> {
             ast::Literal::Double(v) => {
                 Literal::new_typed_unchecked(OxString::new_owned(v), xsd::DOUBLE)
             }
-            ast::Literal::String(v) => Literal::new_simple(Self::build_string(v)?),
+            ast::Literal::String(v) => Self::build_string(v)?.into(),
             ast::Literal::LangString(v, l) => {
                 Literal::new_language_tagged(Self::build_string(v)?, OxString::new_owned(l.inner))
                     .map_err(|e| {

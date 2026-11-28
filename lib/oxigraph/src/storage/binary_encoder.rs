@@ -857,7 +857,7 @@ mod tests {
             BlankNode::new_unchecked("1234567890").into(),
             BlankNode::new_unchecked("bnode").into(),
             BlankNode::new_unchecked("foo-bnode-thisisaverylargeblanknode").into(),
-            Literal::new_simple("literal").into(),
+            Literal::from("literal").into(),
             BlankNode::new_unchecked("foo-literal-thisisaverylargestringliteral").into(),
             Literal::from(true).into(),
             Literal::from(false).into(),

@@ -22,7 +22,7 @@ static RDF_DIR_LANG_STRING: NamedNode = rdf::DIR_LANG_STRING;
 /// use oxrdf::Literal;
 /// use oxrdf::vocab::xsd;
 ///
-/// assert_eq!("\"foo\\nbar\"", Literal::new_simple("foo\nbar").to_string());
+/// assert_eq!("\"foo\\nbar\"", Literal::from("foo\nbar").to_string());
 ///
 /// assert_eq!(
 ///     r#""1999-01-01"^^<http://www.w3.org/2001/XMLSchema#date>"#,
@@ -58,12 +58,6 @@ enum LiteralContent {
 }
 
 impl Literal {
-    /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
-    #[inline]
-    pub fn new_simple(value: impl Into<OxString>) -> Self {
-        Self(LiteralContent::String(value.into()))
-    }
-
     /// Builds an RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) with a [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     ///
     /// Returns an error for `rdf:langString` and, with the `rdf-12` feature, `rdf:dirLangString`.
@@ -173,10 +167,10 @@ impl Literal {
         })
     }
 
-    #[deprecated(note = "Use Literal::new_simple instead")]
+    #[deprecated(note = "Use Literal::from with a string instead")]
     #[inline]
     pub fn new_simple_literal(value: impl Into<OxString>) -> Self {
-        Self::new_simple(value)
+        Self::from(value.into())
     }
 
     #[deprecated(note = "Use Literal::new_typed instead")]
@@ -360,21 +354,21 @@ impl fmt::Display for Literal {
 impl<'a> From<&'a str> for Literal {
     #[inline]
     fn from(value: &'a str) -> Self {
-        Literal::new_simple(OxString::new_owned(value))
+        OxString::new_owned(value).into()
     }
 }
 
 impl From<String> for Literal {
     #[inline]
     fn from(value: String) -> Self {
-        Self::new_simple(value)
+        OxString::from(value).into()
     }
 }
 
 impl From<OxString> for Literal {
     #[inline]
     fn from(value: OxString) -> Self {
-        Literal::new_simple(value)
+        Self(LiteralContent::String(value))
     }
 }
 
@@ -718,7 +712,7 @@ impl<'de> Deserialize<'de> for Literal {
             Literal::new_typed(value, NamedNode::new(datatype).map_err(de::Error::custom)?)
                 .map_err(de::Error::custom)
         } else {
-            Ok(Literal::new_simple(value))
+            Ok(value.into())
         }
     }
 }
@@ -735,7 +729,7 @@ mod tests {
     #[test]
     fn test_simple_literal_equality() {
         assert_eq!(
-            Literal::new_simple("foo"),
+            Literal::from("foo"),
             Literal::new_typed_unchecked("foo", xsd::STRING)
         );
     }
@@ -761,7 +755,7 @@ mod tests {
     #[cfg(feature = "serde")]
     fn test_serde() {
         // Simple literal
-        let simple = Literal::new_simple("foo");
+        let simple = Literal::from("foo");
         let j = serde_json::to_string(&simple).unwrap();
         assert_eq!("{\"value\":\"foo\"}", j);
         let simple2: Literal = serde_json::from_str(&j).unwrap();

@@ -1114,7 +1114,7 @@ mod tests {
         serializer.serialize_triple(&Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple("foo"),
+            Literal::from("foo"),
         ))?;
         serializer.serialize_triple(&Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),

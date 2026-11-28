@@ -1245,7 +1245,7 @@ impl JsonLdToRdfConverter {
                 } else if let Some(datatype) = r#type {
                     Literal::new_typed(value, datatype).ok()?
                 } else {
-                    Literal::new_simple(value)
+                    value.into()
                 }
             }
             JsonLdValue::Number(value) => {

@@ -777,7 +777,7 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(TriGState::LiteralExpectDatatype { value, emit });
                     }
                     _ => {
-                        self.cur_object.push(Literal::new_simple(value).into());
+                        self.cur_object.push(Literal::from(value).into());
                         if emit {
                             self.emit_quad(results);
                         }
@@ -1127,8 +1127,7 @@ impl RuleRecognizer for TriGRecognizer {
                 );
             }
             [.., TriGState::LiteralPossibleSuffix { value, emit: true }] => {
-                self.cur_object
-                    .push(Literal::new_simple(value.clone()).into());
+                self.cur_object.push(Literal::from(value.clone()).into());
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }

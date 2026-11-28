@@ -232,7 +232,7 @@ impl QueryEvaluator {
     ///     }
     ///
     ///     fn finish(&mut self) -> Option<Term> {
-    ///         Some(Literal::new_simple(take(&mut self.value)).into())
+    ///         Some(Literal::from(take(&mut self.value)).into())
     ///     }
     /// }
     ///
@@ -254,7 +254,7 @@ impl QueryEvaluator {
     /// {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("r"),
-    ///         Some(&Literal::new_simple("1 2 3").into())
+    ///         Some(&Literal::from("1 2 3").into())
     ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())

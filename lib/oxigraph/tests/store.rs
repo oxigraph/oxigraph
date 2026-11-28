@@ -125,7 +125,7 @@ fn quads(graph_name: impl Into<GraphName>) -> Vec<Quad> {
         Quad::new(
             paris.clone(),
             postal_code,
-            Literal::new_simple("75001"),
+            Literal::from("75001"),
             graph_name,
         ),
     ]
@@ -800,7 +800,7 @@ fn insert_count_quads_for_pattern_data(store: &Store) -> Result<(), Box<dyn Erro
     ))?;
     store.insert(Quad::new(s.clone(), p.clone(), o.clone(), g.clone()))?;
     store.insert(Quad::new(s2, p.clone(), o, g.clone()))?;
-    store.insert(Quad::new(s, p, Literal::new_simple("o2"), g))?;
+    store.insert(Quad::new(s, p, Literal::from("o2"), g))?;
     Ok(())
 }
 
@@ -826,7 +826,7 @@ fn assert_count_quads_for_pattern_matches_iteration(store: &Store) -> Result<(),
     let objects = [
         None,
         Some(Term::from(NamedNode::new("http://example.com/o")?)),
-        Some(Term::from(Literal::new_simple("o2"))),
+        Some(Term::from(Literal::from("o2"))),
         Some(Term::from(missing.clone())),
     ];
     let graph_names = [

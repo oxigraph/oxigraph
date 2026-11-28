@@ -361,7 +361,7 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
                 graph.insert(Triple::new(
                     result_set.clone(),
                     rs::RESULT_VARIABLE,
-                    Literal::new_simple(variable.clone().into_string()),
+                    Literal::from(variable.clone().into_string()),
                 ));
             }
             for (i, solution) in solutions.enumerate() {
@@ -383,7 +383,7 @@ fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
                     graph.insert(Triple::new(
                         binding,
                         rs::VARIABLE,
-                        Literal::new_simple(variable.clone().into_string()),
+                        Literal::from(variable.clone().into_string()),
                     ));
                 }
                 if with_order {

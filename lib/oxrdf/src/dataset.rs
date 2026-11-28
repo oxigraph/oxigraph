@@ -1685,7 +1685,7 @@ mod tests {
         let objects: Vec<Term> = vec![
             NamedNode::new_unchecked("http://example.com/a").into(),
             BlankNode::new_unchecked("a").into(),
-            Literal::new_simple("a").into(),
+            Literal::from("a").into(),
             Literal::new_language_tagged_unchecked("a", "en").into(),
             Literal::new_typed_unchecked("a", NamedNode::new_unchecked("http://example.com/type"))
                 .into(),
@@ -1806,7 +1806,7 @@ mod tests {
         let missing = Quad::new(
             NamedNode::new_unchecked("http://missing/s"),
             NamedNode::new_unchecked("http://missing/p"),
-            Literal::new_simple("missing"),
+            Literal::from("missing"),
             NamedNode::new_unchecked("http://missing/g"),
         );
         let queries = [
@@ -1931,7 +1931,7 @@ mod tests {
             dataset.insert(Quad::new(
                 NamedNode::new_unchecked(subject.to_owned()),
                 NamedNode::new_unchecked("http://example.com/p".to_owned()),
-                Literal::new_simple("shared value".to_owned()),
+                Literal::from("shared value".to_owned()),
                 NamedNode::new_unchecked(format!("http://example.com/graph/{i}")),
             ));
         }

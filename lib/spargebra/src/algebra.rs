@@ -1384,7 +1384,7 @@ impl AggregateExpression {
                 }
                 expr.fmt_sse(f)?;
                 for v in scalarvals.values() {
-                    write!(f, " {}", Literal::new_simple(v.clone()))?;
+                    write!(f, " {}", Literal::from(v.clone()))?;
                 }
                 f.write_str(")")
             }
@@ -1437,12 +1437,7 @@ impl fmt::Display for AggregateExpression {
                 }
                 expr.fmt(f)?;
                 for (k, v) in scalarvals {
-                    write!(
-                        f,
-                        "; {} = {}",
-                        k.to_uppercase(),
-                        Literal::new_simple(v.clone())
-                    )?;
+                    write!(f, "; {} = {}", k.to_uppercase(), Literal::from(v.clone()))?;
                 }
                 f.write_char(')')
             }

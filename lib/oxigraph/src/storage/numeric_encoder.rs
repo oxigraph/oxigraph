@@ -1068,9 +1068,11 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
-            EncodedTerm::SmallStringLiteral(value) => Ok(Literal::new_simple(*value).into()),
+            EncodedTerm::SmallStringLiteral(value) => {
+                Ok(Literal::from(OxString::from(*value)).into())
+            }
             EncodedTerm::BigStringLiteral { value_id } => {
-                Ok(Literal::new_simple(get_required_str(self, value_id)?).into())
+                Ok(Literal::from(get_required_str(self, value_id)?).into())
             }
             EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
                 Ok(Literal::new_language_tagged_unchecked(*value, *language).into())

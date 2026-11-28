@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn extract_units_iri_rejects_simple_literal() {
-        let lit = OxLiteral::new_simple("http://www.opengis.net/def/uom/OGC/1.0/metre");
+        let lit = "http://www.opengis.net/def/uom/OGC/1.0/metre".into();
         assert!(extract_units_iri(&Term::Literal(lit)).is_none());
     }
 

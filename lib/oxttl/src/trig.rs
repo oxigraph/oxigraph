@@ -1355,7 +1355,7 @@ impl fmt::Display for TurtleTerm<'_> {
                         write!(
                             f,
                             "{}^^{}",
-                            Literal::new_simple(v.clone().into_value()),
+                            Literal::from(v.clone().into_value()),
                             TurtleNamedNode {
                                 node: v.datatype(),
                                 prefixes: self.prefixes,
@@ -1559,7 +1559,7 @@ mod tests {
         serializer.serialize_quad(&Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple("foo"),
+            Literal::from("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         ))?;
         serializer.serialize_quad(&Quad::new(

@@ -73,7 +73,7 @@ impl FromStr for Literal {
     /// use oxrdf::{Literal, NamedNode};
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Literal::from_str("\"ex\\n\"")?, Literal::new_simple("ex\n"));
+    /// assert_eq!(Literal::from_str("\"ex\\n\"")?, Literal::from("ex\n"));
     /// assert_eq!(
     ///     Literal::from_str("\"ex\"@en")?,
     ///     Literal::new_language_tagged("ex", "en")?
@@ -121,7 +121,7 @@ impl FromStr for Term {
     /// use oxrdf::*;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Term::from_str("\"ex\"")?, Literal::new_simple("ex"));
+    /// assert_eq!(Term::from_str("\"ex\"")?, Literal::from("ex"));
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, TermParseError> {
@@ -147,7 +147,7 @@ impl FromStr for Triple {
     ///     Triple::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple("o")
+    ///         Literal::from("o")
     ///     )
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -175,7 +175,7 @@ impl FromStr for Quad {
     ///     Quad::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple("o"),
+    ///         Literal::from("o"),
     ///         GraphName::DefaultGraph
     ///     )
     /// );
@@ -184,7 +184,7 @@ impl FromStr for Quad {
     ///     Quad::new(
     ///         BlankNode::new("a")?,
     ///         NamedNode::new("http://example.com/p")?,
-    ///         Literal::new_simple("o"),
+    ///         Literal::from("o"),
     ///         NamedNode::new("http://example.com/g")?
     ///     )
     /// );
@@ -377,7 +377,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                             .map_err(|e| TermParseError::msg(e.to_string()))?;
                         Ok((literal, remain))
                     } else {
-                        Ok((Literal::new_simple(value), remain))
+                        Ok((value.into(), remain))
                     };
                 }
                 '\\' => {
@@ -616,7 +616,7 @@ mod tests {
     fn triple_term_parsing() {
         assert_eq!(
             Term::from_str("\"ex\\u00E9\\U000000E9\"").unwrap(),
-            Literal::new_simple("ex\u{e9}\u{e9}")
+            Literal::from("ex\u{e9}\u{e9}")
         );
         assert_eq!(
             Term::from_str("<http://example.com/\\u00E9\\U000000E9>").unwrap(),
@@ -627,7 +627,7 @@ mod tests {
             Triple::new(
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),
-                Literal::new_simple("o"),
+                Literal::from("o"),
             )
         );
         assert_eq!(

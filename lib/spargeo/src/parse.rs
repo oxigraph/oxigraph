@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn extract_argument_rejects_plain_string() {
-        let lit = OxLiteral::new_simple("POINT(1 2)");
+        let lit = "POINT(1 2)".into();
         assert!(extract_argument(&Term::Literal(lit)).is_none());
     }
 

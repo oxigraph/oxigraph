@@ -1323,7 +1323,7 @@ impl RuleRecognizer for N3Recognizer {
                         return;
                     }
                     _ => {
-                        self.terms.push(Literal::new_simple(value).into());
+                        self.terms.push(Literal::from(value).into());
                     }
                 },
                 N3State::LiteralExpectDatatype { value } => {

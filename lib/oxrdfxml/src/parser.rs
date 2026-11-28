@@ -1870,7 +1870,7 @@ impl<R> InternalRdfXmlParser<R> {
             }
             Literal::new_language_tagged_unchecked(value, language)
         } else {
-            Literal::new_simple(value)
+            value.into()
         })
     }
 
@@ -1952,7 +1952,7 @@ impl<R> InternalRdfXmlParser<R> {
                             Literal::new_language_tagged_unchecked(literal_value, language.clone())
                         }
                     } else {
-                        Literal::new_simple(literal_value)
+                        literal_value.into()
                     },
                 ),
             );

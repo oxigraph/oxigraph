@@ -850,17 +850,17 @@ mod tests {
             vec![
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
-                    Some(Literal::new_simple("String").into()),
+                    Some(Literal::from("String").into()),
                 ],
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
-                    Some(Literal::new_simple("String-with-dquote\"").into()),
+                    Some(Literal::from("String-with-dquote\"").into()),
                 ],
                 vec![
                     Some(BlankNode::new_unchecked("b0").into()),
-                    Some(Literal::new_simple("Blank node").into()),
+                    Some(Literal::from("Blank node").into()),
                 ],
-                vec![None, Some(Literal::new_simple("Missing 'x'").into())],
+                vec![None, Some(Literal::from("Missing 'x'").into())],
                 vec![None, None],
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
@@ -874,7 +874,7 @@ mod tests {
                     Some(BlankNode::new_unchecked("b1").into()),
                     Some(Literal::new_typed_unchecked("123", xsd::INTEGER).into()),
                 ],
-                vec![None, Some(Literal::new_simple("escape,\t\r\n").into())],
+                vec![None, Some(Literal::from("escape,\t\r\n").into())],
                 #[cfg(feature = "sparql-12")]
                 vec![
                     None,

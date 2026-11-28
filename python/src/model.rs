@@ -291,7 +291,7 @@ impl PyLiteral {
             Literal::new_typed(value.extract::<OxStringInput>()?, datatype)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?
         } else if let Ok(value) = value.extract::<OxStringInput>() {
-            Literal::new_simple(value)
+            OxString::from(value).into()
         } else if let Ok(value) = value.extract::<bool>() {
             value.into()
         } else if let Ok(value) = value.extract::<Bound<'_, PyInt>>() {
