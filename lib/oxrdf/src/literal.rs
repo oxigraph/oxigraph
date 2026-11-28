@@ -351,10 +351,10 @@ impl fmt::Display for Literal {
     }
 }
 
-impl<'a> From<&'a str> for Literal {
+impl From<&'static str> for Literal {
     #[inline]
-    fn from(value: &'a str) -> Self {
-        OxString::new_owned(value).into()
+    fn from(value: &'static str) -> Self {
+        OxString::from(value).into()
     }
 }
 
