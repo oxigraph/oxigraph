@@ -1486,7 +1486,7 @@ where
                     };
                     Ok(Some(
                         Term::from(try_or_ok!(
-                            Literal::new_language_tagged_literal(value, language).ok()
+                            Literal::new_language_tagged(value, language).ok()
                         ))
                         .into(),
                     ))
@@ -1518,10 +1518,8 @@ where
                     };
                     Ok(Some(
                         Term::from(try_or_ok!(
-                            Literal::new_directional_language_tagged_literal(
-                                value, language, direction,
-                            )
-                            .ok()
+                            Literal::new_directional_language_tagged(value, language, direction,)
+                                .ok()
                         ))
                         .into(),
                     ))
@@ -1539,7 +1537,7 @@ where
                     let ExpressionTerm::NamedNode(datatype) = try_or_ok!(datatype(tuple)?) else {
                         return Ok(None);
                     };
-                    Ok(Literal::new_typed_literal(value, datatype)
+                    Ok(Literal::new_typed(value, datatype)
                         .ok()
                         .map(|literal| Term::from(literal).into()))
                 }));

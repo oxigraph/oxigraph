@@ -195,16 +195,13 @@ impl RuleRecognizer for NQuadsRecognizer {
                 }) => {
                     self.objects.push(
                         if let Some(direction) = direction {
-                            Literal::new_directional_language_tagged_literal_unchecked(
+                            Literal::new_directional_language_tagged_unchecked(
                                 value,
                                 to_lowercase(language),
                                 direction,
                             )
                         } else {
-                            Literal::new_language_tagged_literal_unchecked(
-                                value,
-                                to_lowercase(language),
-                            )
+                            Literal::new_language_tagged_unchecked(value, to_lowercase(language))
                         }
                         .into(),
                     );
@@ -214,11 +211,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                 #[cfg(not(feature = "rdf-12"))]
                 TokenOrLineJump::Token(N3Token::LangTag { language }) => {
                     self.objects.push(
-                        Literal::new_language_tagged_literal_unchecked(
-                            value,
-                            to_lowercase(language),
-                        )
-                        .into(),
+                        Literal::new_language_tagged_unchecked(value, to_lowercase(language))
+                            .into(),
                     );
                     self.stack
                         .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
@@ -228,7 +222,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         .push(NQuadsState::ExpectLiteralDatatype { value });
                 }
                 _ => {
-                    self.objects.push(Literal::new_simple_literal(value).into());
+                    self.objects.push(Literal::from(value).into());
                     self.stack
                         .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                     self.recognize_next(token, context, results, errors)
@@ -239,9 +233,9 @@ impl RuleRecognizer for NQuadsRecognizer {
                     N3Token::IriRef(d) => {
                         let datatype = NamedNode::new_unchecked(d);
                         let literal = if self.lenient {
-                            Literal::new_typed_literal_unchecked(value, datatype)
+                            Literal::new_typed_unchecked(value, datatype)
                         } else {
-                            match Literal::new_typed_literal(value, datatype) {
+                            match Literal::new_typed(value, datatype) {
                                 Ok(literal) => literal,
                                 Err(e) => {
                                     errors.push(e.to_string().into());
@@ -368,8 +362,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 errors.push("Triples must be followed by a dot".into())
             }
             [NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value }] => {
-                self.objects
-                    .push(Literal::new_simple_literal(value.clone()).into());
+                self.objects.push(Literal::from(value.clone()).into());
                 self.emit_quad(results, GraphName::DefaultGraph);
                 errors.push("Triples must be followed by a dot".into())
             }

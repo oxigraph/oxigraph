@@ -37,7 +37,7 @@ use tokio::io::AsyncWrite;
 /// serializer.serialize_quad(&Quad::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 ///     GraphName::DefaultGraph
 /// ))?;
 /// assert_eq!(
@@ -130,7 +130,7 @@ impl JsonLdSerializer {
     /// serializer.serialize_quad(&Quad::new(
     ///     NamedNode::new("http://example.com#me")?,
     ///     NamedNode::new("http://schema.org/name")?,
-    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
     ///     GraphName::DefaultGraph
     /// ))?;
     /// assert_eq!(
@@ -167,7 +167,7 @@ impl JsonLdSerializer {
     /// serializer.serialize_quad(&Quad::new(
     ///     NamedNode::new("http://example.com#me")?,
     ///     NamedNode::new("http://schema.org/name")?,
-    ///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
     ///     GraphName::DefaultGraph
     /// )).await?;
     /// assert_eq!(
@@ -220,7 +220,7 @@ impl JsonLdSerializer {
 /// serializer.serialize_quad(&Quad::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 ///     GraphName::DefaultGraph
 /// ))?;
 /// assert_eq!(
@@ -299,7 +299,7 @@ impl<W: Write> WriterJsonLdSerializer<W> {
 /// serializer.serialize_quad(&Quad::new(
 ///     NamedNode::new("http://example.com#me")?,
 ///     NamedNode::new("http://schema.org/name")?,
-///     Literal::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     Literal::new_language_tagged_unchecked("Foo Bar", "en"),
 ///     GraphName::DefaultGraph
 /// )).await?;
 /// assert_eq!(

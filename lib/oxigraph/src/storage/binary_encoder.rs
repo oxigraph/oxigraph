@@ -857,7 +857,7 @@ mod tests {
             BlankNode::new_unchecked("1234567890").into(),
             BlankNode::new_unchecked("bnode").into(),
             BlankNode::new_unchecked("foo-bnode-thisisaverylargeblanknode").into(),
-            Literal::new_simple_literal("literal").into(),
+            Literal::from("literal").into(),
             BlankNode::new_unchecked("foo-literal-thisisaverylargestringliteral").into(),
             Literal::from(true).into(),
             Literal::from(false).into(),
@@ -866,96 +866,84 @@ mod tests {
             Literal::from(1.2_f32).into(),
             Literal::from(1.2_f64).into(),
             Literal::from("foo-string").into(),
-            Literal::new_language_tagged_literal_unchecked("foo-fr", "fr").into(),
-            Literal::new_language_tagged_literal_unchecked(
+            Literal::new_language_tagged_unchecked("foo-fr", "fr").into(),
+            Literal::new_language_tagged_unchecked(
                 "foo-fr-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr",
             )
             .into(),
-            Literal::new_language_tagged_literal_unchecked(
+            Literal::new_language_tagged_unchecked(
                 "foo-big",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
             )
             .into(),
-            Literal::new_language_tagged_literal_unchecked(
+            Literal::new_language_tagged_unchecked(
                 "foo-big-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
-                "foo-fr",
-                "fr",
-                BaseDirection::Ltr,
-            )
-            .into(),
+            Literal::new_directional_language_tagged_unchecked("foo-fr", "fr", BaseDirection::Ltr)
+                .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-fr-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr",
                 BaseDirection::Ltr,
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-big",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
                 BaseDirection::Ltr,
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-big-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
                 BaseDirection::Ltr,
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
-                "foo-fr",
-                "fr",
-                BaseDirection::Rtl,
-            )
-            .into(),
+            Literal::new_directional_language_tagged_unchecked("foo-fr", "fr", BaseDirection::Rtl)
+                .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-fr-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr",
                 BaseDirection::Rtl,
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-big",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
                 BaseDirection::Rtl,
             )
             .into(),
             #[cfg(feature = "rdf-12")]
-            Literal::new_directional_language_tagged_literal_unchecked(
+            Literal::new_directional_language_tagged_unchecked(
                 "foo-big-literal-thisisaverylargelanguagetaggedstringliteral",
                 "fr-FR-Latn-x-foo-bar-baz-bat-aaaa-bbbb-cccc",
                 BaseDirection::Rtl,
             )
             .into(),
-            Literal::new_typed_literal_unchecked("-1.32", xsd::DECIMAL).into(),
-            Literal::new_typed_literal_unchecked("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
-            Literal::new_typed_literal_unchecked("2020-01-01", xsd::DATE).into(),
-            Literal::new_typed_literal_unchecked("01:01:01Z", xsd::TIME).into(),
-            Literal::new_typed_literal_unchecked("2020-01", xsd::G_YEAR_MONTH).into(),
-            Literal::new_typed_literal_unchecked("2020", xsd::G_YEAR).into(),
-            Literal::new_typed_literal_unchecked("--01-01", xsd::G_MONTH_DAY).into(),
-            Literal::new_typed_literal_unchecked("--01", xsd::G_MONTH).into(),
-            Literal::new_typed_literal_unchecked("---01", xsd::G_DAY).into(),
-            Literal::new_typed_literal_unchecked("PT1S", xsd::DURATION).into(),
-            Literal::new_typed_literal_unchecked("PT1S", xsd::DAY_TIME_DURATION).into(),
-            Literal::new_typed_literal_unchecked("P1Y", xsd::YEAR_MONTH_DURATION).into(),
-            Literal::new_typed_literal_unchecked(
-                "-foo",
-                NamedNode::new_unchecked("http://foo.com"),
-            )
-            .into(),
-            Literal::new_typed_literal_unchecked(
+            Literal::new_typed_unchecked("-1.32", xsd::DECIMAL).into(),
+            Literal::new_typed_unchecked("2020-01-01T01:01:01Z", xsd::DATE_TIME).into(),
+            Literal::new_typed_unchecked("2020-01-01", xsd::DATE).into(),
+            Literal::new_typed_unchecked("01:01:01Z", xsd::TIME).into(),
+            Literal::new_typed_unchecked("2020-01", xsd::G_YEAR_MONTH).into(),
+            Literal::new_typed_unchecked("2020", xsd::G_YEAR).into(),
+            Literal::new_typed_unchecked("--01-01", xsd::G_MONTH_DAY).into(),
+            Literal::new_typed_unchecked("--01", xsd::G_MONTH).into(),
+            Literal::new_typed_unchecked("---01", xsd::G_DAY).into(),
+            Literal::new_typed_unchecked("PT1S", xsd::DURATION).into(),
+            Literal::new_typed_unchecked("PT1S", xsd::DAY_TIME_DURATION).into(),
+            Literal::new_typed_unchecked("P1Y", xsd::YEAR_MONTH_DURATION).into(),
+            Literal::new_typed_unchecked("-foo", NamedNode::new_unchecked("http://foo.com")).into(),
+            Literal::new_typed_unchecked(
                 "-foo-thisisaverybigtypedliteralwiththefoodatatype",
                 NamedNode::new_unchecked("http://foo.com"),
             )

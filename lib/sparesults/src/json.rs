@@ -1021,7 +1021,7 @@ impl JsonInnerTermReader {
                                             )));
                                         }
                                     }
-                                    return Ok(Some(Literal::new_directional_language_tagged_literal(
+                                    return Ok(Some(Literal::new_directional_language_tagged(
                                         value,
                                         lang.clone(),
                                         direction
@@ -1038,7 +1038,7 @@ impl JsonInnerTermReader {
                                         )));
                                     }
                                 }
-                                Literal::new_language_tagged_literal(value, lang.clone())
+                                Literal::new_language_tagged(value, lang.clone())
                                     .map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
                                             "Invalid xml:lang value '{lang}': {e}"
@@ -1050,10 +1050,10 @@ impl JsonInnerTermReader {
                                     return Err(QueryResultsSyntaxError::msg("its:dir can only be present alongside xml:lang"))
                                 }
                                 if let Some(datatype) = self.datatype.take() {
-                                    Literal::new_typed_literal(value, datatype)
+                                    Literal::new_typed(value, datatype)
                                         .map_err(|e| QueryResultsSyntaxError::msg(e.to_string()))?
                                 } else {
-                                    Literal::new_simple_literal(value)
+                                    value.into()
                                 }
                             }.into()))
                         }

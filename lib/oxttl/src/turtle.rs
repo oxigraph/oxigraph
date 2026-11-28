@@ -1114,12 +1114,12 @@ mod tests {
         serializer.serialize_triple(&Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::from("foo"),
         ))?;
         serializer.serialize_triple(&Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p2"),
-            Literal::new_language_tagged_literal_unchecked("foo", "en"),
+            Literal::new_language_tagged_unchecked("foo", "en"),
         ))?;
         serializer.serialize_triple(&Triple::new(
             BlankNode::new_unchecked("b"),

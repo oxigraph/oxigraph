@@ -25,6 +25,8 @@
 	    <#missing_dot_at_end_of_triple_with_string_end_nt>
 	    <#missing_dot_at_end_of_triple_with_string_end_ttl>
 	    <#do_not_recover_on_wrong_subject_nq>
+	    <#recover_in_named_graph>
+	    <#recover_in_nested_formula>
 	) .
 
 <#invalid_iri_nt>
@@ -134,3 +136,15 @@
 	mf:name "On wrong subject do not consider the predicate as an other candidate subject" ;
 	mf:action <do_not_recover_on_wrong_subject.nq> ;
 	mf:result <iri_spo.nt> .
+
+<#recover_in_named_graph>
+	rdf:type ox:TestTriGRecovery ;
+	mf:name "Recover from lexer and syntax errors within a named graph" ;
+	mf:action <recover_in_named_graph.trig> ;
+	mf:result <recover_in_named_graph_output.trig> .
+
+<#recover_in_nested_formula>
+	rdf:type ox:TestN3Recovery ;
+	mf:name "Recover from lexer and syntax errors within a nested formula" ;
+	mf:action <recover_in_nested_formula.n3> ;
+	mf:result <recover_in_nested_formula_output.n3> .

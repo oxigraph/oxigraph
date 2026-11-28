@@ -42,7 +42,7 @@ use tokio::io::AsyncWrite;
 /// // solutions
 /// let mut buffer = Vec::new();
 /// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-/// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
+/// serializer.serialize(once((&Variable::new("foo")?, &Literal::from("test").into())))?;
 /// serializer.finish()?;
 /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -133,7 +133,7 @@ impl QueryResultsSerializer {
     /// let xml_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
     /// let mut serializer = xml_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::from("test").into())))?;
     /// serializer.finish()?;
     /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -182,7 +182,7 @@ impl QueryResultsSerializer {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?]).await?;
-    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into()))).await?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::from("test").into()))).await?;
     /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
@@ -245,7 +245,7 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 /// )?;
 /// serializer.serialize(once((
 ///     &Variable::new("foo")?,
-///     &Literal::new_simple_literal("test").into(),
+///     &Literal::from("test").into(),
 /// )))?;
 /// serializer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
@@ -275,7 +275,7 @@ impl<W: Write> WriterSolutionsSerializer<W> {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?])?;
-    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into())))?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::from("test").into())))?;
     /// serializer.serialize(&QuerySolution::from((vec![Variable::new("bar")?], vec![Some(Literal::from("test").into())])))?;
     /// serializer.finish()?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
@@ -335,7 +335,7 @@ impl<W: Write> WriterSolutionsSerializer<W> {
 /// serializer
 ///     .serialize(once((
 ///         &Variable::new("foo")?,
-///         &Literal::new_simple_literal("test").into(),
+///         &Literal::from("test").into(),
 ///     )))
 ///     .await?;
 /// serializer.finish().await?;
@@ -372,7 +372,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterSolutionsSerializer<W> {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new("foo")?, Variable::new("bar")?]).await?;
-    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::new_simple_literal("test").into()))).await?;
+    /// serializer.serialize(once((&Variable::new("foo")?, &Literal::from("test").into()))).await?;
     /// serializer.serialize(&QuerySolution::from((vec![Variable::new("bar")?], vec![Some(Literal::from("test").into())]))).await?;
     /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);

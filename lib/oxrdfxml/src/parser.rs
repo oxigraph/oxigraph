@@ -1772,7 +1772,7 @@ impl<R> InternalRdfXmlParser<R> {
                     let triple = Triple::new(
                         subject,
                         iri,
-                        Literal::new_typed_literal_unchecked(
+                        Literal::new_typed_unchecked(
                             String::from_utf8(object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
@@ -1852,9 +1852,9 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Result<Literal, RdfXmlSyntaxError> {
         Ok(if let Some(datatype) = datatype {
             if self.lenient {
-                Literal::new_typed_literal_unchecked(value, datatype)
+                Literal::new_typed_unchecked(value, datatype)
             } else {
-                Literal::new_typed_literal(value, datatype)
+                Literal::new_typed(value, datatype)
                     .map_err(|e| RdfXmlSyntaxError::msg(e.to_string()))?
             }
         } else if let Some(language) =
@@ -1862,15 +1862,15 @@ impl<R> InternalRdfXmlParser<R> {
         {
             #[cfg(feature = "rdf-12")]
             if let Some(base_direction) = base_direction {
-                return Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                return Ok(Literal::new_directional_language_tagged_unchecked(
                     value,
                     language,
                     base_direction,
                 ));
             }
-            Literal::new_language_tagged_literal_unchecked(value, language)
+            Literal::new_language_tagged_unchecked(value, language)
         } else {
-            Literal::new_simple_literal(value)
+            value.into()
         })
     }
 
@@ -1939,26 +1939,20 @@ impl<R> InternalRdfXmlParser<R> {
                         if let Some(base_direction) =
                             base_direction.or_else(|| self.current_base_direction())
                         {
-                            Literal::new_directional_language_tagged_literal_unchecked(
+                            Literal::new_directional_language_tagged_unchecked(
                                 literal_value,
                                 language.clone(),
                                 base_direction,
                             )
                         } else {
-                            Literal::new_language_tagged_literal_unchecked(
-                                literal_value,
-                                language.clone(),
-                            )
+                            Literal::new_language_tagged_unchecked(literal_value, language.clone())
                         }
                         #[cfg(not(feature = "rdf-12"))]
                         {
-                            Literal::new_language_tagged_literal_unchecked(
-                                literal_value,
-                                language.clone(),
-                            )
+                            Literal::new_language_tagged_unchecked(literal_value, language.clone())
                         }
                     } else {
-                        Literal::new_simple_literal(literal_value)
+                        literal_value.into()
                     },
                 ),
             );

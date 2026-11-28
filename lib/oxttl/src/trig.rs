@@ -1355,7 +1355,7 @@ impl fmt::Display for TurtleTerm<'_> {
                         write!(
                             f,
                             "{}^^{}",
-                            Literal::new_simple_literal(v.clone().into_value()),
+                            Literal::from(v.clone().into_value()),
                             TurtleNamedNode {
                                 node: v.datatype(),
                                 prefixes: self.prefixes,
@@ -1559,13 +1559,13 @@ mod tests {
         serializer.serialize_quad(&Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            Literal::new_simple_literal("foo"),
+            Literal::from("foo"),
             NamedNode::new_unchecked("http://example.com/g"),
         ))?;
         serializer.serialize_quad(&Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p2"),
-            Literal::new_language_tagged_literal_unchecked("foo", "en"),
+            Literal::new_language_tagged_unchecked("foo", "en"),
             NamedNode::new_unchecked("http://example.com/g"),
         ))?;
         serializer.serialize_quad(&Quad::new(
@@ -1577,13 +1577,13 @@ mod tests {
         serializer.serialize_quad(&Quad::new(
             BlankNode::new_unchecked("b"),
             NamedNode::new_unchecked("http://example.com/p2"),
-            Literal::new_typed_literal("true", xsd::BOOLEAN).map_err(io::Error::other)?,
+            Literal::new_typed("true", xsd::BOOLEAN).map_err(io::Error::other)?,
             GraphName::DefaultGraph,
         ))?;
         serializer.serialize_quad(&Quad::new(
             BlankNode::new_unchecked("b"),
             NamedNode::new_unchecked("http://example.org/p2"),
-            Literal::new_typed_literal("false", xsd::BOOLEAN).map_err(io::Error::other)?,
+            Literal::new_typed("false", xsd::BOOLEAN).map_err(io::Error::other)?,
             NamedNode::new_unchecked("http://example.com/g2"),
         ))?;
         assert_eq!(

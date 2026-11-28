@@ -850,20 +850,17 @@ mod tests {
             vec![
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
-                    Some(Literal::new_simple_literal("String").into()),
+                    Some(Literal::from("String").into()),
                 ],
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
-                    Some(Literal::new_simple_literal("String-with-dquote\"").into()),
+                    Some(Literal::from("String-with-dquote\"").into()),
                 ],
                 vec![
                     Some(BlankNode::new_unchecked("b0").into()),
-                    Some(Literal::new_simple_literal("Blank node").into()),
+                    Some(Literal::from("Blank node").into()),
                 ],
-                vec![
-                    None,
-                    Some(Literal::new_simple_literal("Missing 'x'").into()),
-                ],
+                vec![None, Some(Literal::from("Missing 'x'").into())],
                 vec![None, None],
                 vec![
                     Some(NamedNode::new_unchecked("http://example/x").into()),
@@ -871,24 +868,18 @@ mod tests {
                 ],
                 vec![
                     Some(BlankNode::new_unchecked("b1").into()),
-                    Some(
-                        Literal::new_language_tagged_literal_unchecked("String-with-lang", "en")
-                            .into(),
-                    ),
+                    Some(Literal::new_language_tagged_unchecked("String-with-lang", "en").into()),
                 ],
                 vec![
                     Some(BlankNode::new_unchecked("b1").into()),
-                    Some(Literal::new_typed_literal_unchecked("123", xsd::INTEGER).into()),
+                    Some(Literal::new_typed_unchecked("123", xsd::INTEGER).into()),
                 ],
-                vec![
-                    None,
-                    Some(Literal::new_simple_literal("escape,\t\r\n").into()),
-                ],
+                vec![None, Some(Literal::from("escape,\t\r\n").into())],
                 #[cfg(feature = "sparql-12")]
                 vec![
                     None,
                     Some(
-                        Literal::new_directional_language_tagged_literal_unchecked(
+                        Literal::new_directional_language_tagged_unchecked(
                             "String-with-dir",
                             "en",
                             BaseDirection::Ltr,

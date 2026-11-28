@@ -1069,23 +1069,23 @@ impl<S: StrLookup> Decoder for S {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
             }
             EncodedTerm::SmallStringLiteral(value) => {
-                Ok(Literal::new_simple_literal(*value).into())
+                Ok(Literal::from(OxString::from(*value)).into())
             }
             EncodedTerm::BigStringLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
+                Ok(Literal::from(get_required_str(self, value_id)?).into())
             }
             EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(*value, *language).into())
+                Ok(Literal::new_language_tagged_unchecked(*value, *language).into())
             }
             EncodedTerm::SmallBigLangStringLiteral { value, language_id } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(
+                Ok(Literal::new_language_tagged_unchecked(
                     *value,
                     get_required_str(self, language_id)?,
                 )
                 .into())
             }
             EncodedTerm::BigSmallLangStringLiteral { value_id, language } => {
-                Ok(Literal::new_language_tagged_literal_unchecked(
+                Ok(Literal::new_language_tagged_unchecked(
                     get_required_str(self, value_id)?,
                     *language,
                 )
@@ -1094,14 +1094,14 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => Ok(Literal::new_language_tagged_literal_unchecked(
+            } => Ok(Literal::new_language_tagged_unchecked(
                 get_required_str(self, value_id)?,
                 get_required_str(self, language_id)?,
             )
             .into()),
             #[cfg(feature = "rdf-12")]
             EncodedTerm::LtrSmallSmallDirLangStringLiteral { value, language } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     *value,
                     *language,
                     BaseDirection::Ltr,
@@ -1110,7 +1110,7 @@ impl<S: StrLookup> Decoder for S {
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::LtrSmallBigDirLangStringLiteral { value, language_id } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     *value,
                     get_required_str(self, language_id)?,
                     BaseDirection::Ltr,
@@ -1119,7 +1119,7 @@ impl<S: StrLookup> Decoder for S {
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::LtrBigSmallDirLangStringLiteral { value_id, language } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     get_required_str(self, value_id)?,
                     *language,
                     BaseDirection::Ltr,
@@ -1130,7 +1130,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::LtrBigBigDirLangStringLiteral {
                 value_id,
                 language_id,
-            } => Ok(Literal::new_directional_language_tagged_literal_unchecked(
+            } => Ok(Literal::new_directional_language_tagged_unchecked(
                 get_required_str(self, value_id)?,
                 get_required_str(self, language_id)?,
                 BaseDirection::Ltr,
@@ -1138,7 +1138,7 @@ impl<S: StrLookup> Decoder for S {
             .into()),
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallSmallDirLangStringLiteral { value, language } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     *value,
                     *language,
                     BaseDirection::Rtl,
@@ -1147,7 +1147,7 @@ impl<S: StrLookup> Decoder for S {
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallBigDirLangStringLiteral { value, language_id } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     *value,
                     get_required_str(self, language_id)?,
                     BaseDirection::Rtl,
@@ -1156,7 +1156,7 @@ impl<S: StrLookup> Decoder for S {
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlBigSmallDirLangStringLiteral { value_id, language } => {
-                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                Ok(Literal::new_directional_language_tagged_unchecked(
                     get_required_str(self, value_id)?,
                     *language,
                     BaseDirection::Rtl,
@@ -1167,14 +1167,14 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::RtlBigBigDirLangStringLiteral {
                 value_id,
                 language_id,
-            } => Ok(Literal::new_directional_language_tagged_literal_unchecked(
+            } => Ok(Literal::new_directional_language_tagged_unchecked(
                 get_required_str(self, value_id)?,
                 get_required_str(self, language_id)?,
                 BaseDirection::Rtl,
             )
             .into()),
             EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
-                Ok(Literal::new_typed_literal_unchecked(
+                Ok(Literal::new_typed_unchecked(
                     *value,
                     NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
                 )
@@ -1183,7 +1183,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => Ok(Literal::new_typed_literal_unchecked(
+            } => Ok(Literal::new_typed_unchecked(
                 get_required_str(self, value_id)?,
                 NamedNode::new_unchecked(get_required_str(self, datatype_id)?),
             )

@@ -94,38 +94,38 @@ fn quads(graph_name: impl Into<GraphName>) -> Vec<Quad> {
         Quad::new(
             paris.clone(),
             name.clone(),
-            Literal::new_language_tagged_literal_unchecked("Paris", "fr"),
+            Literal::new_language_tagged_unchecked("Paris", "fr"),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             name,
-            Literal::new_language_tagged_literal_unchecked("la ville lumi\u{E8}re", "fr"),
+            Literal::new_language_tagged_unchecked("la ville lumi\u{E8}re", "fr"),
             graph_name.clone(),
         ),
         Quad::new(paris.clone(), country, france, graph_name.clone()),
         Quad::new(
             paris.clone(),
             population,
-            Literal::new_typed_literal_unchecked("2000000", xsd::INTEGER),
+            Literal::new_typed_unchecked("2000000", xsd::INTEGER),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             start_date,
-            Literal::new_typed_literal_unchecked("-300", xsd::G_YEAR),
+            Literal::new_typed_unchecked("-300", xsd::G_YEAR),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             url,
-            Literal::new_typed_literal_unchecked("https://www.paris.fr/", xsd::ANY_URI),
+            Literal::new_typed_unchecked("https://www.paris.fr/", xsd::ANY_URI),
             graph_name.clone(),
         ),
         Quad::new(
             paris.clone(),
             postal_code,
-            Literal::new_simple_literal("75001"),
+            Literal::from("75001"),
             graph_name,
         ),
     ]
@@ -800,7 +800,7 @@ fn insert_count_quads_for_pattern_data(store: &Store) -> Result<(), Box<dyn Erro
     ))?;
     store.insert(Quad::new(s.clone(), p.clone(), o.clone(), g.clone()))?;
     store.insert(Quad::new(s2, p.clone(), o, g.clone()))?;
-    store.insert(Quad::new(s, p, Literal::new_simple_literal("o2"), g))?;
+    store.insert(Quad::new(s, p, Literal::from("o2"), g))?;
     Ok(())
 }
 
@@ -826,7 +826,7 @@ fn assert_count_quads_for_pattern_matches_iteration(store: &Store) -> Result<(),
     let objects = [
         None,
         Some(Term::from(NamedNode::new("http://example.com/o")?)),
-        Some(Term::from(Literal::new_simple_literal("o2"))),
+        Some(Term::from(Literal::from("o2"))),
         Some(Term::from(missing.clone())),
     ];
     let graph_names = [

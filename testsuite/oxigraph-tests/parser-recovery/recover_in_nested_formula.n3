@@ -1,0 +1,16 @@
+@prefix ex: <http://example.com/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+{
+    {
+        ex:s ex:p "bad"^^rdf:langString, { <http:// /s> ex:p "skipped" . } .
+        ex:s ex:p "inner formula" .
+        <http:// /s> ex:p "invalid IRI" .
+        ex:s missing:p "unresolved prefix" .
+        ex:s ex:p "missing datatype"^^ .
+        ex:s ex:p "good after errors" .
+        ex:s ex:p "missing datatype at close"^^
+    } ex:p ex:inner .
+    ex:s ex:p "outer formula" .
+} ex:p ex:outer .
+ex:s ex:p "default graph" .
