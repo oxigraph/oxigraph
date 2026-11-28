@@ -65,14 +65,14 @@ impl Literal {
     pub fn new_typed(
         value: impl Into<OxString>,
         datatype: impl Into<NamedNode>,
-    ) -> Result<Self, MalformedLangStringLiteral> {
+    ) -> Result<Self, MalformedLanguageTaggedLiteral> {
         let datatype = datatype.into();
         if datatype == rdf::LANG_STRING {
-            return Err(MalformedLangStringLiteral);
+            return Err(MalformedLanguageTaggedLiteral);
         }
         #[cfg(feature = "rdf-12")]
         if datatype == rdf::DIR_LANG_STRING {
-            return Err(MalformedLangStringLiteral);
+            return Err(MalformedLanguageTaggedLiteral);
         }
         Ok(Self::new_typed_unchecked(value, datatype))
     }
@@ -720,7 +720,7 @@ impl<'de> Deserialize<'de> for Literal {
 /// Error returned by [`Literal::new_typed`] when used with `rdf:langString` or `rdf:dirLangString`.
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("rdf:langString and rdf:dirLangString literals must have a language tag")]
-pub struct MalformedLangStringLiteral;
+pub struct MalformedLanguageTaggedLiteral;
 
 #[cfg(test)]
 mod tests {
