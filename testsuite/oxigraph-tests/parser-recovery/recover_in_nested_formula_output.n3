@@ -1,0 +1,10 @@
+@prefix ex: <http://example.com/> .
+
+{
+    {
+        ex:s ex:p "inner formula" .
+        ex:s ex:p "good after errors" .
+    } ex:p ex:inner .
+    ex:s ex:p "outer formula" .
+} ex:p ex:outer .
+ex:s ex:p "default graph" .

@@ -45,13 +45,17 @@ impl RuleRecognizer for TriGRecognizer {
     type Context = TriGRecognizerContext;
 
     fn set_error_recovery_state(&mut self) {
-        self.stack.clear();
         self.cur_subject.clear();
         self.cur_predicate.clear();
         self.cur_object.clear();
         #[cfg(feature = "rdf-12")]
         self.cur_reifier.clear();
-        self.cur_graph = GraphName::DefaultGraph;
+        let graph_end = self
+            .stack
+            .iter()
+            .rposition(|state| matches!(state, TriGState::WrappedGraphPossibleEnd));
+        self.stack.truncate(graph_end.map_or(0, |index| index + 1));
+        self.stack.push(TriGState::RecoverStatement);
     }
 
     fn recognize_next(
@@ -64,6 +68,11 @@ impl RuleRecognizer for TriGRecognizer {
         let token = match token {
             TokenOrLineJump::Token(token) => token,
             TokenOrLineJump::LineJump => return,
+        };
+        let boundary = if let N3Token::Punctuation(punctuation @ ("." | "}")) = token {
+            Some(punctuation)
+        } else {
+            None
         };
         if let Some(rule) = self.stack.pop() {
             match rule {
@@ -323,13 +332,10 @@ impl RuleRecognizer for TriGRecognizer {
                 }
                 TriGState::WrappedGraphPossibleEnd => {
                     self.cur_subject.pop();
-                    match token {
-                        N3Token::Punctuation("}") => (),
-                        N3Token::Punctuation(".") => {
-                            self.stack.push(TriGState::WrappedGraphPossibleEnd);
-                            self.stack.push(TriGState::Triples);
-                        }
-                        _ => {
+                    if token != N3Token::Punctuation("}") {
+                        self.stack.push(TriGState::WrappedGraphPossibleEnd);
+                        self.stack.push(TriGState::Triples);
+                        if token != N3Token::Punctuation(".") {
                             errors.push(
                                 "A '}' or a '.' is expected at the end of a graph block".into(),
                             );
@@ -338,9 +344,12 @@ impl RuleRecognizer for TriGRecognizer {
                                 context,
                                 results,
                                 errors,
-                            )
+                            );
                         }
                     }
+                }
+                TriGState::RecoverStatement => {
+                    self.stack.push(TriGState::RecoverStatement);
                 }
                 // [16] triples 	::= 	(subject predicateObjectList) | (blankNodePropertyList predicateObjectList?) | (reifiedTriple predicateObjectList?)
                 // [20] 	subject 	::= 	iri | BlankNode | collection
@@ -553,7 +562,6 @@ impl RuleRecognizer for TriGRecognizer {
                     self.stack.push(TriGState::AnnotationBlock { with_reifier });
                     if token != N3Token::Punctuation("|}") {
                         self.error(errors, "Annotations should end with '|}'");
-                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 // [19] 	verb 	::= 	predicate | 'a'
@@ -786,48 +794,35 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::LiteralExpectDatatype { value, emit } => {
                     let datatype = match token {
-                        N3Token::IriRef(datatype) => NamedNode::new_unchecked(datatype),
+                        N3Token::IriRef(datatype) => Ok(NamedNode::new_unchecked(datatype)),
                         N3Token::PrefixedName {
                             prefix,
                             local,
                             might_be_invalid_iri,
-                        } => match resolve_local_name(
+                        } => resolve_local_name(
                             prefix,
                             &local,
                             might_be_invalid_iri,
                             &context.prefixes,
-                        ) {
-                            Ok(datatype) => datatype,
-                            Err(e) => {
-                                self.error(errors, e);
-                                return;
-                            }
-                        },
-                        _ => {
-                            self.error(errors, "Expecting a datatype IRI after ^^, found TOKEN");
-                            self.recognize_next(
-                                TokenOrLineJump::Token(token),
-                                context,
-                                results,
-                                errors,
-                            );
-                            return;
-                        }
+                        )
+                        .map_err(RuleRecognizerError::from),
+                        _ => Err("Expecting a datatype IRI after ^^, found TOKEN".into()),
                     };
-                    let literal = if self.lenient {
-                        Literal::new_typed_unchecked(value, datatype)
-                    } else {
-                        match Literal::new_typed(value, datatype) {
-                            Ok(literal) => literal,
-                            Err(e) => {
-                                self.error(errors, e.to_string());
-                                return;
+                    let literal = datatype.and_then(|datatype| {
+                        if self.lenient {
+                            Ok(Literal::new_typed_unchecked(value, datatype))
+                        } else {
+                            Literal::new_typed(value, datatype).map_err(|e| e.to_string().into())
+                        }
+                    });
+                    match literal {
+                        Ok(literal) => {
+                            self.cur_object.push(literal.into());
+                            if emit {
+                                self.emit_quad(results);
                             }
                         }
-                    };
-                    self.cur_object.push(literal.into());
-                    if emit {
-                        self.emit_quad(results);
+                        Err(e) => self.error(errors, e),
                     }
                 }
                 // [29] reifiedTriple 	::= 	'<<' rtSubject verb rtObject reifier? '>>'
@@ -839,7 +834,6 @@ impl RuleRecognizer for TriGRecognizer {
                             errors,
                             "Expecting '>>' to close a reified triple, found TOKEN",
                         );
-                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 #[cfg(feature = "rdf-12")]
@@ -853,7 +847,6 @@ impl RuleRecognizer for TriGRecognizer {
                             errors,
                             "Expecting '>>' to close a reified triple, found TOKEN",
                         );
-                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 #[cfg(feature = "rdf-12")]
@@ -872,7 +865,6 @@ impl RuleRecognizer for TriGRecognizer {
                             errors,
                             "Expecting ')>>' to close a triple term, found TOKEN",
                         );
-                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 #[cfg(feature = "rdf-12")]
@@ -1099,9 +1091,22 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                 }
             }
-        } else if token == N3Token::Punctuation(".") || token == N3Token::Punctuation("}") {
-            // TODO: be smarter depending if we are in '{' or not
-            self.stack.push(TriGState::TriGDoc);
+        }
+        // The token that exposed the error may also end the statement.
+        if let Some(boundary) = boundary
+            && matches!(self.stack.last(), Some(TriGState::RecoverStatement))
+        {
+            self.stack.pop();
+            if self.stack.is_empty() {
+                self.stack.push(TriGState::TriGDoc);
+            } else {
+                self.recognize_next(
+                    TokenOrLineJump::Token(N3Token::Punctuation(boundary)),
+                    context,
+                    results,
+                    errors,
+                );
+            }
         }
     }
 
@@ -1112,7 +1117,7 @@ impl RuleRecognizer for TriGRecognizer {
         errors: &mut Vec<RuleRecognizerError>,
     ) {
         match &*self.stack {
-            [] | [TriGState::TriGDoc] => {
+            [] | [TriGState::TriGDoc | TriGState::RecoverStatement] => {
                 debug_assert!(
                     self.cur_subject.is_empty(),
                     "The cur_subject stack must be empty if the state stack is empty"
@@ -1173,11 +1178,7 @@ impl TriGRecognizer {
         msg: impl Into<RuleRecognizerError>,
     ) {
         errors.push(msg.into());
-        self.stack.clear();
-        self.cur_subject.clear();
-        self.cur_predicate.clear();
-        self.cur_object.clear();
-        self.cur_graph = GraphName::DefaultGraph;
+        self.set_error_recovery_state();
     }
 
     /// A triple term only nests in the object of another one, so the open ones are on top of the stack.
@@ -1223,6 +1224,7 @@ enum TriGState {
     },
     WrappedGraph,
     WrappedGraphPossibleEnd,
+    RecoverStatement,
     GraphName,
     GraphNameAnonEnd,
     Triples,

@@ -887,10 +887,36 @@ impl RuleRecognizer for N3Recognizer {
     type Context = N3RecognizerContext;
 
     fn set_error_recovery_state(&mut self) {
-        self.stack.clear();
-        self.terms.clear();
-        self.predicates.clear();
-        self.contexts.clear();
+        // Keep the enclosing formula and the part of the outer statement that opened it.
+        while let Some(state) = self.stack.pop() {
+            match state {
+                N3State::FormulaContent => {
+                    self.stack.push(state);
+                    break;
+                }
+                N3State::FormulaContentExpectDot {
+                    terms_len,
+                    predicates_len,
+                } => {
+                    self.terms.truncate(terms_len);
+                    self.predicates.truncate(predicates_len);
+                    self.stack.push(N3State::FormulaContent);
+                    break;
+                }
+                N3State::RecoverStatement { .. } => {
+                    self.stack.push(state);
+                    return;
+                }
+                _ => {}
+            }
+        }
+        if self.stack.is_empty() {
+            self.terms.clear();
+            self.predicates.clear();
+            self.contexts.clear();
+        }
+        self.stack
+            .push(N3State::RecoverStatement { nested_formulas: 0 });
     }
 
     fn recognize_next(
@@ -959,7 +985,8 @@ impl RuleRecognizer for N3Recognizer {
                     if let N3Token::IriRef(iri) = token {
                         context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
                     } else {
-                        self.error(errors, "The BASE keyword should be followed by an IRI")
+                        self.error(errors, "The BASE keyword should be followed by an IRI");
+                        continue;
                     }
                     return;
                 }
@@ -970,10 +997,13 @@ impl RuleRecognizer for N3Recognizer {
                                 name: OxString::new_owned(prefix),
                             });
                         }
-                        _ => self.error(
-                            errors,
-                            "The PREFIX keyword should be followed by a prefix like 'ex:'",
-                        ),
+                        _ => {
+                            self.error(
+                                errors,
+                                "The PREFIX keyword should be followed by a prefix like 'ex:'",
+                            );
+                            continue;
+                        }
                     }
                     return;
                 }
@@ -981,7 +1011,8 @@ impl RuleRecognizer for N3Recognizer {
                     if let N3Token::IriRef(iri) = token {
                         context.prefixes.insert(name, Iri::parse_unchecked(iri));
                     } else {
-                        self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
+                        self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI");
+                        continue;
                     }
                     return;
                 }
@@ -1098,12 +1129,12 @@ impl RuleRecognizer for N3Recognizer {
                         .push(Predicate::Inverted(self.terms.pop().unwrap()));
                 }
                 N3State::AfterVerbIs => {
-                    match token {
-                        N3Token::PlainKeyword("of") => {
-                            self.predicates
-                                .push(Predicate::Inverted(self.terms.pop().unwrap()));
-                        }
-                        _ => self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'"),
+                    if token == N3Token::PlainKeyword("of") {
+                        self.predicates
+                            .push(Predicate::Inverted(self.terms.pop().unwrap()));
+                    } else {
+                        self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'");
+                        continue;
                     }
                     return;
                 }
@@ -1220,7 +1251,10 @@ impl RuleRecognizer for N3Recognizer {
                             self.contexts.push(BlankNode::default());
                             self.stack.push(N3State::FormulaContent);
                         }
-                        _ => self.error(errors, "TOKEN is not a valid RDF value"),
+                        _ => {
+                            self.error(errors, "TOKEN is not a valid RDF value");
+                            continue;
+                        }
                     }
                     return;
                 }
@@ -1269,10 +1303,13 @@ impl RuleRecognizer for N3Recognizer {
                             }
                             Err(e) => self.error(errors, e),
                         },
-                        _ => self.error(
-                            errors,
-                            "The '[ id' construction should be followed by an IRI",
-                        ),
+                        _ => {
+                            self.error(
+                                errors,
+                                "The '[ id' construction should be followed by an IRI",
+                            );
+                            continue;
+                        }
                     }
                     return;
                 }
@@ -1346,8 +1383,7 @@ impl RuleRecognizer for N3Recognizer {
                             }
                         },
                         _ => {
-                            errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
-                            self.stack.clear();
+                            self.error(errors, "Expecting a datatype IRI after '^^, found TOKEN");
                             continue;
                         }
                     };
@@ -1366,45 +1402,45 @@ impl RuleRecognizer for N3Recognizer {
                     return;
                 }
                 // [24]  formulaContent  ::=  ( n3Statement ( "." formulaContent? ) ? ) | ( sparqlDirective formulaContent? )
-                N3State::FormulaContent => match token {
-                    N3Token::Punctuation("}") => {
-                        self.terms.push(self.contexts.pop().unwrap().into());
+                N3State::FormulaContent => {
+                    let (next, expect_dot) = match token {
+                        N3Token::Punctuation("}") => {
+                            self.terms.push(self.contexts.pop().unwrap().into());
+                            return;
+                        }
+                        N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("base") => {
+                            (N3State::BaseExpectIri, false)
+                        }
+                        N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("prefix") => {
+                            (N3State::PrefixExpectPrefix, false)
+                        }
+                        N3Token::LangTag {
+                            language: "prefix",
+                            #[cfg(feature = "rdf-12")]
+                                direction: None,
+                        } => (N3State::PrefixExpectPrefix, true),
+                        N3Token::LangTag {
+                            language: "base",
+                            #[cfg(feature = "rdf-12")]
+                                direction: None,
+                        } => (N3State::BaseExpectIri, true),
+                        _ => (N3State::Triples, true),
+                    };
+                    self.stack.push(if expect_dot {
+                        N3State::FormulaContentExpectDot {
+                            terms_len: self.terms.len(),
+                            predicates_len: self.predicates.len(),
+                        }
+                    } else {
+                        N3State::FormulaContent
+                    });
+                    let starts_triples = matches!(next, N3State::Triples);
+                    self.stack.push(next);
+                    if !starts_triples {
                         return;
                     }
-                    N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("base") => {
-                        self.stack.push(N3State::FormulaContent);
-                        self.stack.push(N3State::BaseExpectIri);
-                        return;
-                    }
-                    N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("prefix") => {
-                        self.stack.push(N3State::FormulaContent);
-                        self.stack.push(N3State::PrefixExpectPrefix);
-                        return;
-                    }
-                    N3Token::LangTag {
-                        language: "prefix",
-                        #[cfg(feature = "rdf-12")]
-                            direction: None,
-                    } => {
-                        self.stack.push(N3State::FormulaContentExpectDot);
-                        self.stack.push(N3State::PrefixExpectPrefix);
-                        return;
-                    }
-                    N3Token::LangTag {
-                        language: "base",
-                        #[cfg(feature = "rdf-12")]
-                            direction: None,
-                    } => {
-                        self.stack.push(N3State::FormulaContentExpectDot);
-                        self.stack.push(N3State::BaseExpectIri);
-                        return;
-                    }
-                    _ => {
-                        self.stack.push(N3State::FormulaContentExpectDot);
-                        self.stack.push(N3State::Triples);
-                    }
-                },
-                N3State::FormulaContentExpectDot => match token {
+                }
+                N3State::FormulaContentExpectDot { .. } => match token {
                     N3Token::Punctuation("}") => {
                         self.terms.push(self.contexts.pop().unwrap().into());
                         return;
@@ -1418,11 +1454,26 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::FormulaContent);
                     }
                 },
+                N3State::RecoverStatement {
+                    mut nested_formulas,
+                } => {
+                    match token {
+                        N3Token::Punctuation("{") => nested_formulas += 1,
+                        N3Token::Punctuation("}") if nested_formulas > 0 => nested_formulas -= 1,
+                        N3Token::Punctuation("}") if !self.contexts.is_empty() => continue,
+                        N3Token::Punctuation(".") if nested_formulas == 0 => {
+                            if self.stack.is_empty() {
+                                self.stack.push(N3State::N3Doc);
+                            }
+                            return;
+                        }
+                        _ => {}
+                    }
+                    self.stack
+                        .push(N3State::RecoverStatement { nested_formulas });
+                    return;
+                }
             }
-        }
-        // Empty stack
-        if token == N3Token::Punctuation(".") {
-            self.stack.push(N3State::N3Doc);
         }
     }
 
@@ -1433,7 +1484,7 @@ impl RuleRecognizer for N3Recognizer {
         errors: &mut Vec<RuleRecognizerError>,
     ) {
         match &*self.stack {
-            [] | [N3State::N3Doc] => {}
+            [] | [N3State::N3Doc] | [.., N3State::RecoverStatement { .. }] => {}
             _ => errors.push("Unexpected end".into()), // TODO
         }
     }
@@ -1471,7 +1522,7 @@ impl N3Recognizer {
         msg: impl Into<RuleRecognizerError>,
     ) {
         errors.push(msg.into());
-        self.stack.clear();
+        self.set_error_recovery_state();
     }
 
     fn quad(
@@ -1498,7 +1549,9 @@ enum N3State {
     N3DocExpectDot,
     BaseExpectIri,
     PrefixExpectPrefix,
-    PrefixExpectIri { name: OxString },
+    PrefixExpectIri {
+        name: OxString,
+    },
     Triples,
     TriplesMiddle,
     TriplesEnd,
@@ -1513,17 +1566,29 @@ enum N3State {
     AfterVerbIs,
     Path,
     PathFollowUp,
-    PathAfterIndicator { is_inverse: bool },
+    PathAfterIndicator {
+        is_inverse: bool,
+    },
     PathItem,
     PropertyListMiddle,
     PropertyListEnd,
     IriPropertyList,
     CollectionBeginning,
     CollectionPossibleEnd,
-    LiteralPossibleSuffix { value: OxString },
-    LiteralExpectDatatype { value: OxString },
+    LiteralPossibleSuffix {
+        value: OxString,
+    },
+    LiteralExpectDatatype {
+        value: OxString,
+    },
     FormulaContent,
-    FormulaContentExpectDot,
+    FormulaContentExpectDot {
+        terms_len: usize,
+        predicates_len: usize,
+    },
+    RecoverStatement {
+        nested_formulas: usize,
+    },
 }
 
 /// Iterator on the file prefixes.

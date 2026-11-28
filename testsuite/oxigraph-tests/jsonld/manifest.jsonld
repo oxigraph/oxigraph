@@ -84,6 +84,13 @@
       "purpose": "The datatype has priority.",
       "input": "default_language_and_type_mapping.jsonld",
       "expect": "default_language_and_type_mapping.nq"
+    },
+    {
+      "@id": "#explicit_lang_string_datatype",
+      "@type": "https://github.com/oxigraph/oxigraph/tests#TestUncheckedJsonLd",
+      "name": "Preserve explicitly typed literals with reserved language string datatypes",
+      "input": "explicit_lang_string_datatype.jsonld",
+      "expect": "explicit_lang_string_datatype_output.nq"
     }
   ]
 }

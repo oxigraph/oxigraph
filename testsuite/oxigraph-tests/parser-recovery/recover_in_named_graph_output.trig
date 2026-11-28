@@ -1,0 +1,8 @@
+@prefix ex: <http://example.com/> .
+
+ex:g {
+    ex:s ex:p "good" .
+    ex:s ex:p "missing dot" .
+    ex:s ex:p "good after errors" .
+}
+ex:s ex:p "default graph" .

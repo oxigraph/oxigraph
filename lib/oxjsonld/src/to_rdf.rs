@@ -1212,7 +1212,7 @@ impl JsonLdToRdfConverter {
         } else {
             None
         };
-        Some(match value {
+        let (value, datatype) = match value {
             JsonLdValue::String(value) => {
                 if let Some(language) = language {
                     #[cfg(feature = "rdf-12")]
@@ -1237,16 +1237,16 @@ impl JsonLdToRdfConverter {
                     if r#type.is_some_and(|t| t != rdf::LANG_STRING) {
                         return None; // Expansion already returns an error
                     }
-                    if self.lenient {
-                        Literal::new_language_tagged_unchecked(value, language)
+                    return if self.lenient {
+                        Some(Literal::new_language_tagged_unchecked(value, language))
                     } else {
-                        Literal::new_language_tagged(value, language).ok()?
-                    }
-                } else if let Some(datatype) = r#type {
-                    Literal::new_typed(value, datatype).ok()?
-                } else {
-                    value.into()
+                        Literal::new_language_tagged(value, language).ok()
+                    };
                 }
+                let Some(datatype) = r#type else {
+                    return Some(value.into());
+                };
+                (value, datatype)
             }
             JsonLdValue::Number(value) => {
                 if language.is_some() {
@@ -1258,25 +1258,25 @@ impl JsonLdToRdfConverter {
                 )
                 .unwrap_or(RdfJsonNumber::Double(value));
                 match value {
-                    RdfJsonNumber::Integer(value) => {
-                        Literal::new_typed(value, r#type.unwrap_or(xsd::INTEGER)).ok()?
-                    }
-                    RdfJsonNumber::Double(value) => {
-                        Literal::new_typed(value, r#type.unwrap_or(xsd::DOUBLE)).ok()?
-                    }
+                    RdfJsonNumber::Integer(value) => (value, r#type.unwrap_or(xsd::INTEGER)),
+                    RdfJsonNumber::Double(value) => (value, r#type.unwrap_or(xsd::DOUBLE)),
                 }
             }
             JsonLdValue::Boolean(value) => {
                 if language.is_some() {
                     return None; // Expansion already returns an error
                 }
-                Literal::new_typed(
-                    if value { "true" } else { "false" },
+                (
+                    if value { "true" } else { "false" }.into(),
                     r#type.unwrap_or(xsd::BOOLEAN),
                 )
-                .ok()?
             }
-        })
+        };
+        if self.lenient {
+            Some(Literal::new_typed_unchecked(value, datatype))
+        } else {
+            Literal::new_typed(value, datatype).ok()
+        }
     }
 
     fn convert_json(value: Vec<JsonEvent<'static>>) -> Literal {

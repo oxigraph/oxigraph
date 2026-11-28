@@ -103,12 +103,29 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         |t| evaluate_eval_test(t, RdfFormat::Turtle, true, false),
     );
     evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#TestTriGRecovery",
+        |t| evaluate_eval_test(t, RdfFormat::TriG, true, false),
+    );
+    evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestN3Recovery",
         |t| evaluate_n3_eval_test(t, true),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestUncheckedTurtle",
         |t| evaluate_eval_test(t, RdfFormat::Turtle, true, true),
+    );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#TestUncheckedJsonLd",
+        |t| {
+            evaluate_eval_test(
+                t,
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+                false,
+                true,
+            )
+        },
     );
 }
 

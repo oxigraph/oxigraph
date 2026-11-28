@@ -1,0 +1,13 @@
+{
+  "@context": {
+    "ex": "http://example.com/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  },
+  "@id": "ex:s",
+  "ex:p": [
+    {"@value": "a string", "@type": "rdf:langString"},
+    {"@value": 42, "@type": "rdf:langString"},
+    {"@value": 1.5, "@type": "rdf:dirLangString"},
+    {"@value": true, "@type": "rdf:dirLangString"}
+  ]
+}
